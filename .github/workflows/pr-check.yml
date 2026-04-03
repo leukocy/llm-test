@@ -1,0 +1,240 @@
+name: Pull Request Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+jobs:
+  # ============================================
+  # PR 代码变更检查
+  # ============================================
+  pr-changes:
+    name: PR Changes Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+        with:
+          files: |
+            **/*.py
+            requirements*.txt
+            .github/workflows/*.yml
+
+      - name: List changed Python files
+        run: |
+          echo "Changed Python files:"
+          echo '${{ steps.changed-files.outputs.all_changed_files }}'
+
+      - name: Check for hardcoded secrets
+        run: |
+          echo "Checking for potential secrets in changed files..."
+          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            if [[ "$file" == *.py ]]; then
+              if grep -iE "(api_key|secret|password|token)\s*=\s*['\"][^'\"]*['\"]" "$file" 2>/dev/null; then
+                echo "::warning::Potential hardcoded secret found in $file"
+              fi
+            fi
+          done
+
+  # ============================================
+  # 代码差异分析
+  # ============================================
+  diff-check:
+    name: Code Diff Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install diff-quality
+        run: pip install diff-cover
+
+      - name: Check code coverage diff
+        run: |
+          echo "Coverage diff check would run here if coverage data is available"
+          echo "This requires coverage.xml from previous runs"
+
+  # ============================================
+  # PR 描述模板检查
+  # ============================================
+  pr-description-check:
+    name: PR Description Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check PR description
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const description = pr.body || '';
+
+            // Check for required sections
+            const requiredSections = ['## Summary', '## Changes'];
+            const missingSections = requiredSections.filter(section =>
+              !description.includes(section)
+            );
+
+            if (missingSections.length > 0) {
+              core.warning(`PR description is missing sections: ${missingSections.join(', ')}`);
+              core.warning('Please include ## Summary and ## Changes in your PR description');
+            }
+
+            // Check for issue references
+            if (!description.includes('Closes') && !description.includes('Fixes')) {
+              core.notice('Consider linking this PR to related issues using "Closes #123" or "Fixes #456"');
+            }
+
+      - name: Comment on PR with suggestions
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const description = pr.body || '';
+
+            let comment = '';
+
+            // Check for breaking changes
+            if (description.toLowerCase().includes('!') || description.includes('BREAKING')) {
+              comment += '⚠️ **Breaking Change Detected**\n\nThis PR contains breaking changes. Please ensure:\n';
+              comment += '- Migration guide is included\n';
+              comment += '- Version is bumped appropriately\n\n';
+            }
+
+            // Check for tests
+            const files = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
+            });
+
+            const hasTestChanges = files.data.some(f =>
+              f.filename.includes('test_') || f.filename.startsWith('tests/')
+            );
+
+            if (!hasTestChanges) {
+              comment += '🧪 **No Test Changes**\n\nThis PR does not include test changes. ';
+              comment += 'Please add tests for new functionality or bug fixes.\n\n';
+            }
+
+            if (comment) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: comment
+              });
+            }
+
+  # ============================================
+  # 标签检查
+  # ============================================
+  label-check:
+    name: Label Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check PR labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const labels = pr.labels.map(l => l.name);
+
+            const requiredLabels = []; // Add required labels if needed
+            const missingLabels = requiredLabels.filter(l => !labels.includes(l));
+
+            if (missingLabels.length > 0) {
+              core.warning(`Missing required labels: ${missingLabels.join(', ')}`);
+            }
+
+            // Suggest labels based on files changed
+            const files = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
+            });
+
+            const suggestedLabels = [];
+
+            if (files.data.some(f => f.filename.includes('test'))) {
+              suggestedLabels.push('tests');
+            }
+            if (files.data.some(f => f.filename.includes('doc'))) {
+              suggestedLabels.push('documentation');
+            }
+            if (files.data.some(f => f.filename.startsWith('core/'))) {
+              suggestedLabels.push('core');
+            }
+            if (files.data.some(f => f.filename.startsWith('ui/'))) {
+              suggestedLabels.push('ui');
+            }
+
+            if (suggestedLabels.length > 0) {
+              core.notice(`Consider adding labels: ${suggestedLabels.join(', ')}`);
+            }
+
+  # ============================================
+  # 合并前检查
+  # ============================================
+  pre-merge-check:
+    name: Pre-Merge Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Check mergeability
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+
+            if (!pr.mergeable) {
+              core.setFailed('PR has merge conflicts');
+            }
+
+            if (pr.draft) {
+              core.notice('This is a draft PR');
+            }
+
+            // Check PR age
+            const createdDate = new Date(pr.created_at);
+            const now = new Date();
+            const daysOld = Math.floor((now - createdDate) / (1000 * 60 * 60 * 24));
+
+            if (daysOld > 30) {
+              core.warning(`PR is ${daysOld} days old. Consider updating or closing.`);
+            }
+
+            // Check for requested reviewers
+            if (pr.requested_reviewers && pr.requested_reviewers.length > 0) {
+              core.notice(`Awaiting review from: ${pr.requested_reviewers.map(r => r.login).join(', ')}`);
+            }

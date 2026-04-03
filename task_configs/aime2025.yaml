@@ -1,0 +1,66 @@
+# AIME 2025 任务配置
+# 竞赛数学评测
+
+task: aime2025
+task_alias: "AIME 2025 (竞赛数学)"
+tag:
+  - math
+  - competition
+  - olympiad
+description: ""
+
+# 数据集配置
+dataset_path: opencompass/AIME2025
+dataset_local_path: datasets/aime2025
+test_split: test
+
+# Prompt 模板
+system_prompt: |
+  Solve the following math problem from AIME (American Invitational Mathematics Examination).
+  Think step by step and show your reasoning process.
+  IMPORTANT: The answer MUST be an integer between 000 and 999 (inclusive).
+  Put your final answer in \boxed{}.
+
+doc_to_text: "Problem: {{problem}}\n\nSolution:"
+doc_to_target: "{{answer}}"
+
+# 评估配置
+output_type: generate_until
+num_fewshot: 0  # AIME 通常 0-shot
+
+# 评分指标
+metric_list:
+  - metric: exact_match
+    aggregation: mean
+    higher_is_better: true
+    ignore_case: true
+
+# 生成配置
+generation_kwargs:
+  until:
+    - "Problem:"
+    - "</s>"
+    - "<|im_end|>"
+  do_sample: false
+  temperature: 0.0
+  max_tokens: 2048
+
+# 答案过滤器
+filter_list:
+  - name: "boxed-extract"
+    filter:
+      - function: "regex"
+        regex_pattern: "\\\\boxed\\{(\\d{1,3})\\}"
+        group_select: 1
+      - function: "take_first"
+  - name: "number-extract"
+    filter:
+      - function: "regex"
+        regex_pattern: "(\\d{1,3})"
+        group_select: -1
+      - function: "take_first"
+
+metadata:
+  version: 1.0
+  source: https://huggingface.co/datasets/opencompass/AIME2025
+  answer_range: "0-999"

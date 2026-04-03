@@ -1,0 +1,10 @@
+[logger]
+# 设置日志级别为 error，只显示错误
+level = "error"
+
+# 禁用消息日志
+messageFormat = "%(message)s"
+
+[server]
+# 禁用文件监视器的警告
+fileWatcherType = "none"

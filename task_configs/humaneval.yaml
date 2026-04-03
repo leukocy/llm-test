@@ -1,0 +1,53 @@
+# HumanEval 任务配置
+# 代码生成评测
+
+task: humaneval
+task_alias: "HumanEval (代码生成)"
+tag:
+  - code
+  - python
+  - generation
+description: ""
+
+# 数据集配置
+dataset_path: openai_humaneval
+dataset_local_path: datasets/humaneval
+test_split: test
+
+# Prompt 模板
+doc_to_text: "{{prompt}}"
+doc_to_target: "{{canonical_solution}}"
+
+# 评估配置
+output_type: generate_until
+num_fewshot: 0
+
+# 评分指标
+metric_list:
+  - metric: pass@1
+    aggregation: mean
+    higher_is_better: true
+
+# 生成配置
+generation_kwargs:
+  until:
+    - "\nclass"
+    - "\ndef"
+    - "\n#"
+    - "\nif __name__"
+    - "</s>"
+    - "<|im_end|>"
+  do_sample: false
+  temperature: 0.0
+  max_tokens: 512
+
+# 代码执行配置
+execution:
+  language: python
+  timeout: 10
+  sandbox: true
+
+metadata:
+  version: 1.0
+  source: https://github.com/openai/human-eval
+  metric: pass@k

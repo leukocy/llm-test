@@ -1,0 +1,267 @@
+# pyproject.toml - Project configuration for llm-test
+
+[project]
+name = "llm-test"
+version = "2.0.0"
+description = "LLM 性能基准测试平台 V2 - LLM Performance Benchmarking Platform"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "llm-test contributors"}
+]
+keywords = ["llm", "benchmark", "performance", "testing", "evaluation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+]
+
+dependencies = [
+    "streamlit>=1.30.0,<2.0.0",
+    "pandas>=2.0.0,<3.0.0",
+    "numpy>=1.24.0",
+    "plotly>=5.18.0",
+    "matplotlib>=3.7.0",
+    "httpx>=0.24.0,<1.0.0",
+    "requests>=2.31.0",
+    "transformers>=4.40.0,<5.0.0",
+    "huggingface-hub>=0.19.0",
+    "jinja2>=3.1.0",
+    "PyYAML>=6.0.0",
+    "scipy>=1.11.0,<2.0.0",
+    "openpyxl>=3.1.0,<4.0.0",
+    "xlsxwriter>=3.1.0,<4.0.0",
+    "websockets>=12.0",
+    "psutil>=5.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0,<8.0.0",
+    "pytest-cov>=4.1.0,<5.0.0",
+    "pytest-asyncio>=0.21.0,<1.0.0",
+    "black>=23.0.0,<25.0.0",
+    "ruff>=0.1.0,<1.0.0",
+    "mypy>=1.0.0,<2.0.0",
+    "pre-commit>=3.5.0,<4.0.0",
+]
+server = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "sse-starlette>=1.6.0",
+    "SQLAlchemy>=2.0.0",
+]
+ml = [
+    "torch>=2.0.0,<3.0.0",
+    "transformers>=4.40.0,<5.0.0",
+]
+all = [
+    "llm-test[dev,server,ml]",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-username/llm-test"
+Documentation = "https://llm-test.readthedocs.io"
+Repository = "https://github.com/your-username/llm-test"
+Issues = "https://github.com/your-username/llm-test/issues"
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# ============================================
+# Tool configurations
+# ============================================
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["tests*", "docs*", "api_tests*"]
+
+# Ruff configuration for LLM Test Platform
+[tool.ruff]
+# Target Python version
+target-version = "py310"
+
+# Line length to enforce
+line-length = 100
+
+# Exclude directories
+exclude = [
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "build",
+    "dist",
+    "*.egg-info",
+    "raw_data",
+    "quality_results",
+    "api_tests",
+    "app_old.py",
+    "tokenizers",
+]
+
+[tool.ruff.lint]
+# Enable specific rule sets
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+]
+
+# Ignore specific rules (global, for all files)
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+    "B008",   # Do not perform function calls in argument defaults
+    "SIM102", # Nested if statements (code style preference)
+    "SIM105", # Use `contextlib.suppress(...)`
+    "SIM108", # Use ternary instead of if-else (code style preference)
+    "SIM113", # Use enumerate (code style preference)
+    "SIM117", # Nested with statements (code style preference)
+    "UP007",  # Use `X | Y` for union types
+    "UP035",  # Deprecated typing imports (typing.Dict vs dict)
+    "E402",   # Module level import not at top of file (Streamlit requires late imports)
+    "F401",   # Unused imports (optional dependencies)
+    "E741",   # Ambiguous variable name `l` (common for loop variables)
+    "F841",   # Local variable assigned but never used (exception handling)
+    "E712",   # Comparison to False/True (common in tests)
+    "E731",   # Do not assign a lambda expression (test convenience)
+    "ARG001", # Unused function argument (interface compatibility)
+    "ARG002", # Unused method argument (interface compatibility)
+    "ARG005", # Unused lambda argument (test stubs)
+    "B007",   # Unused loop variable
+    "B023",   # Function definition does not bind loop variable (closure design)
+]
+
+# Allow autofix for safe rules
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "core", "ui", "utils", "evaluators"]
+
+[tool.ruff.lint.per-file-ignores]
+"app_old.py" = ["ALL"]
+"tests/conftest.py" = ["F401"]
+
+[tool.ruff.format]
+# Use double quotes
+quote-style = "double"
+
+# Indent style
+indent-style = "space"
+
+# Skip magic trailing comma
+skip-magic-trailing-comma = false
+
+# Line ending
+line-ending = "auto"
+
+# isort configuration
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+skip_gitignore = true
+
+# mypy configuration
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+strict_equality = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "streamlit.*",
+    "plotly.*",
+    "transformers.*",
+    "torch.*",
+]
+ignore_missing_imports = true
+
+# pytest configuration
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--showlocals",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "security: marks tests as security tests",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+# coverage configuration
+[tool.coverage.run]
+source = ["core", "evaluators", "utils"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/site-packages/*",
+]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "@abc.abstractmethod",
+]
+precision = 2
+show_missing = true
+skip_covered = false
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+# bandit configuration
+[tool.bandit]
+exclude_dirs = ["tests", "api_tests"]
+skips = ["B101"]  # Allow assert statements in tests

@@ -1,0 +1,47 @@
+# GPQA Diamond 任务配置
+# 研究生级科学问答
+
+task: gpqa_diamond
+task_alias: "GPQA Diamond (科学推理)"
+tag:
+  - science
+  - multiple_choice
+  - graduate_level
+description: |
+  Answer the following graduate-level science question.
+  Choose the best answer from the given options.
+
+# 数据集配置
+dataset_path: Idavidrein/gpqa
+dataset_name: gpqa_diamond
+dataset_local_path: datasets/gpqa
+test_split: train
+
+# Prompt 模板
+doc_to_text: |
+  Question: {{Question}}
+  
+  A. {{choice_a}}
+  B. {{choice_b}}
+  C. {{choice_c}}
+  D. {{choice_d}}
+  
+  Answer:
+
+doc_to_target: "{{answer}}"
+doc_to_choice: ["A", "B", "C", "D"]
+
+# 评估配置
+output_type: multiple_choice
+num_fewshot: 0
+
+# 评分指标
+metric_list:
+  - metric: accuracy
+    aggregation: mean
+    higher_is_better: true
+
+metadata:
+  version: 1.0
+  source: https://huggingface.co/datasets/Idavidrein/gpqa
+  difficulty: graduate_level

@@ -1,0 +1,16 @@
+# Development dependencies for LLM Test Platform
+
+# Testing
+pytest>=7.0.0,<8.0.0
+pytest-asyncio>=0.21.0,<1.0.0
+pytest-cov>=4.1.0,<5.0.0
+
+# Code quality
+ruff>=0.1.0,<1.0.0
+black>=23.0.0,<25.0.0
+mypy>=1.0.0,<2.0.0
+pre-commit>=3.5.0,<4.0.0
+
+# Type stubs
+types-requests
+types-pyyaml

@@ -1,0 +1,87 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+
+# Logs
+*.log
+
+# CSV Results
+benchmark_results*.csv
+benchmark_log*.txt
+
+# Config (protect API keys & internal endpoints)
+test_config.ini
+.env
+config/settings.py
+config/development_settings.py
+
+# Presets (may contain API keys)
+presets/
+test_presets/
+
+# Batch Tests (may contain API keys in configs)
+batch_tests/
+
+# Test Results
+results/
+test_progress/
+quality_results/
+*.html
+*.png
+*.jpg
+
+# Downloaded data
+raw_data/
+
+# Runtime data (SQLite DB, exports, backups)
+data/
+
+# Tokenizer models
+tokenizers/
+
+# Node / Frontend
+node_modules/
+web/dist/
+web/node_modules/
+
+# Temp / working files
+temp/
+*.lnk
+
+# Dev scripts (one-off debug/fix/verify)
+scripts/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+datasets/longbench/data.zip
+nul

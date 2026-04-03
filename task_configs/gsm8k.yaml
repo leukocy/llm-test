@@ -1,0 +1,77 @@
+# GSM8K 任务配置
+# Grade School Math 8K - 小学数学推理
+
+task: gsm8k
+task_alias: "GSM8K (小学数学)"
+tag:
+  - math
+  - reasoning
+  - chain_of_thought
+
+# 数据集配置
+dataset_path: gsm8k
+dataset_local_path: datasets/gsm8k
+test_split: test
+fewshot_split: train
+
+# ============================================
+# Prompt 模板 (Completion 格式)
+# ============================================
+description: |
+  Solve the following grade school math problems step by step.
+  Show your work and put your final answer after ####.
+
+doc_to_text: |
+  Question: {{question}}
+  Solution:
+
+doc_to_target: |
+   {{answer}}
+
+fewshot_delimiter: "\n\n"
+
+# ============================================
+# Chat 格式模板 (可选)
+# ============================================
+chat_template:
+  system_message: |
+    You are a helpful math tutor. Solve problems step by step and clearly show your reasoning.
+    Put your final numerical answer after ####.
+  user_template: "{{question}}"
+  assistant_template: "{{answer}}"
+  fewshot_as_multiturn: true
+
+# ============================================
+# 评估配置
+# ============================================
+output_type: generate_until
+stop_sequences: ["\n\n", "Question:"]
+num_fewshot: 5
+
+# 生成参数
+generation_kwargs:
+  max_tokens: 512
+  temperature: 0.0
+
+# 答案过滤器
+filter_list:
+  - name: extract_number
+    function: regex
+    pattern: '####\s*([-+]?\d*\.?\d+)'
+    group: 1
+  - name: fallback_last_number
+    function: regex
+    pattern: '([-+]?\d*\.?\d+)'
+    group: -1  # 取最后一个匹配
+    fallback: true
+
+# 评分指标
+metric_list:
+  - metric: exact_match
+    aggregation: mean
+    higher_is_better: true
+
+metadata:
+  version: 1.0
+  source: https://huggingface.co/datasets/gsm8k
+  description: "Grade school math word problems testing multi-step reasoning"

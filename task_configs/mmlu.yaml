@@ -1,0 +1,84 @@
+# MMLU 任务配置
+# Massive Multitask Language Understanding
+
+task: mmlu
+task_alias: "MMLU (多任务语言理解)"
+tag:
+  - knowledge
+  - multiple_choice
+  - reasoning
+
+# 数据集配置
+dataset_path: cais/mmlu
+dataset_local_path: datasets/mmlu
+test_split: test
+fewshot_split: dev
+
+# ============================================
+# Prompt 模板 (Completion 格式)
+# ============================================
+description: |
+  The following are multiple choice questions (with answers) about {{subject | default('general knowledge') | replace('_', ' ') | title}}.
+
+doc_to_text: |
+  Question: {{question}}
+  A. {{choices[0]}}
+  B. {{choices[1]}}
+  C. {{choices[2]}}
+  D. {{choices[3]}}
+  Answer:
+
+doc_to_target: " {{['A', 'B', 'C', 'D'][answer] if answer is number else answer}}"
+
+fewshot_delimiter: "\n\n"
+
+# ============================================
+# Chat 格式模板 (可选)
+# ============================================
+chat_template:
+  system_message: |
+    You are a knowledgeable assistant taking a multiple choice exam.
+    Read each question carefully and select the best answer from the options provided.
+    Respond with only the letter of your answer (A, B, C, or D).
+  user_template: |
+    {{question}}
+    
+    A. {{choices[0]}}
+    B. {{choices[1]}}
+    C. {{choices[2]}}
+    D. {{choices[3]}}
+  assistant_template: "{{['A', 'B', 'C', 'D'][answer] if answer is number else answer}}"
+  fewshot_as_multiturn: true
+
+# ============================================
+# 评估配置
+# ============================================
+output_type: multiple_choice
+doc_to_choice: ["A", "B", "C", "D"]
+num_fewshot: 5
+
+# 生成参数
+generation_kwargs:
+  max_tokens: 16
+  temperature: 0.0
+
+# 答案过滤器
+filter_list:
+  - name: extract_choice
+    function: regex
+    pattern: '\b([A-Da-d])\b'
+    group: 1
+  - name: first_char
+    function: take_first
+    fallback: true
+
+# 评分指标
+metric_list:
+  - metric: accuracy
+    aggregation: mean
+    higher_is_better: true
+
+metadata:
+  version: 1.0
+  source: https://huggingface.co/datasets/cais/mmlu
+  description: "Massive Multitask Language Understanding benchmark covering 57 subjects"
