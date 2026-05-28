@@ -1,0 +1,60 @@
+# PR 自动标签配置
+# 根据修改的文件自动添加标签
+
+"bug":
+  - changed-files:
+      - any-glob-to-any-file: ["core/**/*.py", "evaluators/**/*.py"]
+
+"documentation":
+  - changed-files:
+      - any-glob-to-any-file: ["**/*.md", "docs/**"]
+
+"enhancement":
+  - changed-files:
+      - any-glob-to-any-file: ["core/benchmark_runner.py"]
+
+"security":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "core/safe_executor.py"
+          - "core/url_validator.py"
+          - "core/rate_limiter.py"
+          - "config/auth.py"
+          - "config/secrets.py"
+          - "tests/test_security.py"
+
+"ui":
+  - changed-files:
+      - any-glob-to-any-file: ["ui/**/*.py", "app.py"]
+
+"tests":
+  - changed-files:
+      - any-glob-to-any-file: ["tests/**/*.py"]
+
+"dependencies":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "requirements*.txt"
+          - "pyproject.toml"
+          - "setup.py"
+
+"workflow":
+  - changed-files:
+      - any-glob-to-any-file: [".github/workflows/*.yml"]
+
+"configuration":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "config/**/*.py"
+          - ".env.example"
+          - "streamlit/**/*.toml"
+
+"performance":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "core/metrics/**/*.py"
+          - "core/benchmark_runner.py"
+
+"providers":
+  - changed-files:
+      - any-glob-to-any-file: ["core/providers/**/*.py"]

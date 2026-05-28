@@ -1,0 +1,67 @@
+# GSM8K 数据集评测配置
+# MiMo vs DeepSeek 对比测试
+
+name: "GSM8K MiMo vs DeepSeek 对比测试"
+description: |
+  使用 GSM8K 数学推理数据集对比 MiMo 和 DeepSeek 的表现。
+  测试模型的数学推理能力和思考链质量。
+version: "1.0"
+created_at: "2025-12-23T03:30:00+08:00"
+
+# 模型配置
+models:
+  - platform: mimo
+    model_id: MiMo-7B-RL
+    api_base_url: "https://api.mimo.example.com/v1"
+    api_key_env: MIMO_API_KEY
+    thinking_enabled: true
+    thinking_budget: null
+    reasoning_effort: high
+    temperature: 0.3
+    max_tokens: 2048
+    
+  - platform: deepseek
+    model_id: deepseek-r1
+    api_base_url: "https://api.deepseek.com/v1"
+    api_key_env: DEEPSEEK_API_KEY
+    thinking_enabled: true
+    reasoning_effort: medium
+    temperature: 0.3
+    max_tokens: 2048
+
+# 数据集配置
+dataset:
+  name: gsm8k
+  path: datasets/gsm8k
+  subset: test
+  samples: 200  # 测试 200 个样本
+  seed: 42
+  num_shots: 0  # Zero-shot
+
+# 指标配置
+metrics:
+  accuracy: true
+  reasoning_quality: true
+  ttft: true
+  ttut: true
+  tps: true
+  token_usage: true
+  cost: true
+  consistency: false  # 本次不做一致性测试
+  consistency_runs: 3
+
+# 输出配置
+output:
+  report_dir: reports/gsm8k_comparison
+  json_export: true
+  markdown_export: true
+  html_export: true
+  include_raw_responses: false
+  include_reasoning_content: true
+
+# 运行配置
+concurrency: 8
+timeout_seconds: 120
+retry_count: 3
+enable_llm_judge: true
+enable_llm_parser: false

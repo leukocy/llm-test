@@ -1,0 +1,93 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+api_logs/
+
+# CSV Results
+benchmark_results*.csv
+benchmark_log*.txt
+
+# Config (protect API keys)
+test_config.ini
+.env
+
+# Presets (may contain API keys)
+presets/
+test_presets/
+
+# Batch Tests (may contain API keys in configs)
+batch_tests/
+
+# Test Results
+/results/
+test_progress/
+quality_results/
+*.html
+*.png
+*.jpg
+
+# Node / Frontend
+node_modules/
+web/dist/
+web/node_modules/
+
+# Temp / working files
+temp/
+*.lnk
+
+# OS
+.DS_Store
+Thumbs.db
+nul
+
+# Large data directories
+data/
+datasets/
+raw_data/
+tokenizers/
+needle_haystack_data/
+
+# Runtime cache
+cache/
+
+# Dev debug scripts (not part of pytest suite)
+api_tests/
+
+# Temporary dev test files at project root
+test_abort_feature.py
+test_abort_real.py
+
+# Generated test output
+test_output_quality/
+
+# Claude Code local settings
+.github/.claude/settings.json
+.github/.claude/settings.local.json
+
+# Onboarding state (user preference)
+.onboarding_state

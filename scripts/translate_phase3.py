@@ -1,0 +1,528 @@
+"""
+Phase 3: Deep translation of remaining Chinese text across all Python files.
+Uses extensive context-specific mappings for each major file category.
+"""
+import re
+import os
+
+# ===================================================================
+# COMPREHENSIVE TRANSLATION MAP
+# Organized by category for maintainability
+# ===================================================================
+
+TRANSLATIONS = {
+    # === UI Labels & Buttons ===
+    '选择 Token 数': 'Select Token Counts',
+    '自定义 Token 数 (逗号分隔)': 'Custom Token Counts (comma-separated)',
+    '自定义 Token 数': 'Custom Token Counts',
+    'Prefill 隔离测试 (max_tokens=1)': 'Prefill Isolation Test (max_tokens=1)',
+    'Prefill 隔离测试已激活': 'Prefill isolation test activated',
+    '勾选此 items将强制Max Output Tokens为 1，精确测量 prefill 性能。': 'When checked, forces Max Output Tokens to 1 for precise prefill performance measurement.',
+    '测试说明': 'Test Description',
+    '模拟真实场景中用户分段累计发送长文本的情况': 'Simulates real-world scenarios where users send cumulative long text in segments',
+    '如文档问答、多轮对话等': 'e.g., document Q&A, multi-turn conversations',
+    '累计模式': 'Cumulative Mode',
+    '独立模式': 'Independent Mode',
+    '所有分段共享同一前缀，测试 Prefix Caching 优化效果': 'All segments share the same prefix to test Prefix Caching optimization',
+    '每个分段独立内容，作为无缓存对照组': 'Each segment has independent content as no-cache control group',
+    '分段级别选择': 'Segment level selection',
+    '渐进式': 'Progressive',
+    '快速增长': 'Rapid Growth',
+    '细粒度': 'Fine-grained',
+    '选择预设策略': 'Select Preset Strategy',
+    '自定义': 'Custom',
+    '分段级别': 'Segment levels',
+    '分段级别 (逗号分隔, 单位: tokens)': 'Segment Levels (comma-separated, unit: tokens)',
+    '每分段请求数': 'Requests Per Segment',
+    '累计模式 (Prefix Caching)': 'Cumulative Mode (Prefix Caching)',
+    '勾选后所有分段共享同一前缀，测试 Prefix Caching 效果': 'When checked, all segments share the same prefix to test Prefix Caching effect',
+    '整体测试轮数': 'Total Test Rounds',
+    '每轮独立 Prompt': 'Unique Prompt Per Round',
+    '选择Context Length': 'Select Context Lengths',
+    '自定义Concurrency级别 (逗号分隔)': 'Custom Concurrency Levels (comma-separated)',
+    '每组合请求轮数': 'Rounds Per Combination',
+    '启用预热 (Warmup)': 'Enable Warmup',
+    '在每组测试前先运行一次单请求以触发 Prefix Caching，确保Concurrency请求的 Prefill 时间一致，从而实现 Decode 阶段的同步。': 'Run a single warmup request before each test group to trigger Prefix Caching, ensuring consistent Prefill time for concurrent requests.',
+    '上传 TXT 文件 (Context)': 'Upload TXT File (Context)',
+    '上传 TXT 文件作为 Prompt 上下文，并添加自定义指令。系统将自动注入随机噪声以避免缓存。': 'Upload a TXT file as prompt context and add custom instructions. System will auto-inject random noise to avoid caching.',
+    '自定义后缀指令 (Suffix)': 'Custom Suffix Instruction',
+    '请总结以上内容。': 'Please summarize the above content.',
+    '避免缓存 (注入随机噪声)': 'Avoid Caching (inject random noise)',
+    '强制开启以满足测试要求': 'Forced on to meet test requirements',
+    '此Options将依次运行所有Test Type，可能需要较长时间。': 'This option will run all test types sequentially, which may take a long time.',
+    'Concurrency级别 (逗号分隔)': 'Concurrency Levels (comma-separated)',
+    'Concurrency测试轮数': 'Concurrency Test Rounds',
+    'Token 数 (逗号分隔)': 'Token Counts (comma-separated)',
+    '最大Token数 (Concurrency)': 'Max Output Tokens (Concurrency)',
+    '最大Token数 (Prefill)': 'Max Output Tokens (Prefill)',
+    'Long Context Test配置': 'Long Context Test Configuration',
+    'Context Length (逗号分隔)': 'Context Lengths (comma-separated)',
+    '最大Token数 (长上下文)': 'Max Output Tokens (Long Context)',
+    '此模式将持续运行指定时长的测试。': 'This mode will continuously run tests for the specified duration.',
+    '同时运行的请求数量': 'Number of concurrent requests',
+    '测试持续运行的时间': 'Duration to run the test',
+    
+    # === Error messages ===
+    '至少一个': 'at least one',
+    'Please enter至少一个Concurrency级别。': 'Please enter at least one concurrency level.',
+    'Please enter至少一个 Token 数。': 'Please enter at least one token count.',
+    'Please enter至少一个分段级别。': 'Please enter at least one segment level.',
+    'Please enter至少一个Context Length。': 'Please enter at least one context length.',
+    '请至少选择一个Concurrency级别和一个Context Length。': 'Please select at least one concurrency level and one context length.',
+    '输入的自定义值格式不正确，请使用逗号分隔的数字。': 'Invalid custom value format. Please use comma-separated numbers.',
+    '请上传 TXT 文件。': 'Please upload a TXT file.',
+    'Please select至少一个Concurrency级别。': 'Please select at least one concurrency level.',
+    '读取文件失败': 'Failed to read file',
+    '配置错误': 'Configuration error',
+    
+    # === Status/Button Chinese remnants ===
+    '开始 Prefill Stress Test': 'Start Prefill Stress Test',
+    '开始Segmented Context Test': 'Start Segmented Context Test',
+    '开始Long Context Test': 'Start Long Context Test',
+    '开始长上下文性能测试': 'Start Long Context Test',
+    '长上下文性能测试': 'Long Context Test',
+    '开始Concurrency-Context Matrix Test': 'Start Matrix Test',
+    '开始Custom Text Test': 'Start Custom Text Test',
+    '开始All Tests': 'Start All Tests',
+    '开始所有类型测试': 'Start All Tests',
+    '开始Stability Test': 'Start Stability Test',
+    'ConcurrencyTest Configuration': 'Concurrency Test Configuration',
+    'Input Token Length (Concurrency阶段)': 'Input Token Length (Concurrency Phase)',
+    'Rounds Per Level (长上下文)': 'Rounds Per Level (Long Context)',
+    
+    # === Onboarding ===
+    '新手引导': 'Onboarding',
+    '欢迎使用 LLM 性能基准测试平台': 'Welcome to LLM Performance Benchmark Platform',
+    '欢迎使用': 'Welcome to',
+    '这是一个专业的大语言模型推理性能测试工具': 'This is a professional LLM inference performance testing tool',
+    '支持多种测试场景': 'Supports multiple test scenarios',
+    '快速开始': 'Quick Start',
+    '配置 API 连接': 'Configure API Connection',
+    '选择测试类型': 'Select Test Type',
+    '运行测试': 'Run Test',
+    '查看分析报告': 'View Analysis Report',
+    '在左侧边栏输入你的 API Key 和 Base URL': 'Enter your API Key and Base URL in the left sidebar',
+    '根据需求选择合适的测试类型': 'Choose the appropriate test type based on your needs',
+    '配置参数并点击开始按钮运行': 'Configure parameters and click the start button to run',
+    '测试完成后自动生成详细的分析报告': 'Detailed analysis reports are automatically generated after testing',
+    '帮助': 'Help',
+    '关于': 'About',
+    '版本': 'Version',
+    '作者': 'Author',
+    '许可': 'License',
+    
+    # === Charts ===
+    '对数坐标': 'Log Scale',
+    '相对性能': 'Relative Performance',
+    '绝对值': 'Absolute Value',
+    '相对最佳性能': 'Relative to Best',
+    '置信区间': 'Confidence Interval',
+    '误差棒': 'Error Bars',
+    '坐标轴': 'Axis',
+    '图例': 'Legend',
+    '网格': 'Grid',
+    '标签': 'Label',
+    
+    # === Test control ===
+    '等待执行': 'Waiting',
+    '执行中': 'Executing',
+    '暂停中': 'Paused',
+    '已跳过': 'Skipped',
+    '测试队列': 'Test Queue',
+    '当前测试': 'Current Test',
+    '当前状态': 'Current Status',
+    '已执行': 'Executed',
+    '剩余': 'Remaining',
+    '预计剩余时间': 'Estimated Remaining Time',
+    '已用时间': 'Elapsed Time',
+    '总进度': 'Overall Progress',
+    
+    # === Export ===
+    '导出为 CSV': 'Export as CSV',
+    '导出为 JSON': 'Export as JSON', 
+    '导出为 HTML': 'Export as HTML',
+    '导出为 PDF': 'Export as PDF',
+    '导出为 Markdown': 'Export as Markdown',
+    '导出报告': 'Export Report',
+    '导出成功': 'Export successful',
+    '导出失败': 'Export failed',
+    '文件已保存': 'File saved',
+    
+    # === History ===
+    '历史记录': 'History',
+    '测试历史': 'Test History',
+    '查看历史': 'View History',
+    '历史报告': 'Historical Report',
+    '对比分析': 'Comparative Analysis',
+    '选择测试记录': 'Select Test Record',
+    '加载历史记录': 'Load History',
+    '删除记录': 'Delete Record',
+    '确认删除': 'Confirm Delete',
+    '无历史记录': 'No History',
+    
+    # === Evaluation ===
+    '评测结果': 'Evaluation Results',
+    '评测任务': 'Evaluation Task',
+    '评测进度': 'Evaluation Progress',
+    '评测配置': 'Evaluation Configuration',
+    '质量评估': 'Quality Assessment',
+    '质量报告': 'Quality Report',
+    '评估维度': 'Evaluation Dimensions',
+    '评估标准': 'Evaluation Criteria',
+    '综合得分': 'Overall Score',
+    '单项得分': 'Individual Score',
+    
+    # === Log viewer ===
+    '日志级别': 'Log Level',
+    '日志过滤': 'Log Filter',
+    '清空日志': 'Clear Logs',
+    '实时日志': 'Real-time Logs',
+    '日志详情': 'Log Details',
+    '请求日志': 'Request Logs',
+    '响应日志': 'Response Logs',
+    '错误日志': 'Error Logs',
+    '调试日志': 'Debug Logs',
+    '日志时间': 'Log Time',
+    '日志内容': 'Log Content',
+    
+    # === Thinking components ===
+    '思考过程': 'Thinking Process',
+    '推理过程': 'Reasoning Process',
+    '推理链': 'Reasoning Chain',
+    '思考链': 'Chain of Thought',
+    '思考内容': 'Thinking Content',
+    '思考参数': 'Thinking Parameters',
+    '思考模式': 'Thinking Mode',
+    '思考预算': 'Thinking Budget',
+    '思考 Token': 'Thinking Tokens',
+    '思考 Token 数': 'Thinking Token Count',
+    '可视化': 'Visualization',
+    '思考时间': 'Thinking Time',
+    '推理步骤': 'Reasoning Steps',
+    
+    # === Dashboard ===
+    '仪表板': 'Dashboard',
+    '实时监控': 'Real-time Monitoring',
+    '性能指标': 'Performance Metrics',
+    '状态概览': 'Status Overview',
+    '趋势图': 'Trend Chart',
+    '统计图表': 'Statistical Chart',
+    '数据刷新': 'Data Refresh',
+    '自动刷新': 'Auto Refresh',
+    
+    # === Dataset ===
+    '数据集管理': 'Dataset Management',
+    '添加数据集': 'Add Dataset',
+    '删除数据集': 'Delete Dataset',
+    '数据集详情': 'Dataset Details',
+    '数据集名称': 'Dataset Name',
+    '数据集描述': 'Dataset Description',
+    '数据集大小': 'Dataset Size',
+    '数据集格式': 'Dataset Format',
+    '数据集路径': 'Dataset Path',
+    '数据预览': 'Data Preview',
+    
+    # === Comparison ===
+    '模型对比': 'Model Comparison',
+    '对比结果': 'Comparison Results',
+    '选择对比模型': 'Select Models to Compare',
+    '对比维度': 'Comparison Dimensions',
+    '对比指标': 'Comparison Metrics',
+    '胜出': 'Winner',
+    '平局': 'Tie',
+    '差距': 'Gap',
+    
+    # === Advanced panels ===
+    '高级选项': 'Advanced Options',
+    '高级配置': 'Advanced Configuration',
+    '高级参数': 'Advanced Parameters',
+    '调试模式': 'Debug Mode',
+    '详细日志': 'Verbose Logging',
+    '性能Profile': 'Performance Profile',
+    '内存管理': 'Memory Management',
+    '连接池': 'Connection Pool',
+    '超时设置': 'Timeout Settings',
+    '重试策略': 'Retry Strategy',
+    '代理设置': 'Proxy Settings',
+    
+    # === Batch test ===
+    '批量测试': 'Batch Test',
+    '批量配置': 'Batch Configuration',
+    '批量执行': 'Batch Execution',
+    '批量结果': 'Batch Results',
+    '添加任务': 'Add Task',
+    '移除任务': 'Remove Task',
+    '执行队列': 'Execution Queue',
+    '已排队': 'Queued',
+    '批量导出': 'Batch Export',
+    
+    # === Markdown summary ===
+    '性能摘要': 'Performance Summary',
+    '测试概览': 'Test Overview',
+    '详细指标': 'Detailed Metrics',
+    '关键发现': 'Key Findings',
+    '测试环境': 'Test Environment',
+    '系统配置': 'System Configuration',
+    '硬件信息': 'Hardware Info',
+    '软件环境': 'Software Environment',
+    
+    # === Static chart generator ===
+    '图表标题': 'Chart Title',
+    '图表类型': 'Chart Type',
+    '折线图': 'Line Chart',
+    '柱状图': 'Bar Chart',
+    '散点图': 'Scatter Chart',
+    '箱线图': 'Box Plot',
+    '热力图': 'Heatmap',
+    '雷达图': 'Radar Chart',
+    '面积图': 'Area Chart',
+    '饼图': 'Pie Chart',
+    '图表导出': 'Chart Export',
+    '保存为图片': 'Save as Image',
+    '高分辨率': 'High Resolution',
+    
+    # === Core ===
+    '模型调用失败': 'Model call failed',
+    '请求超时': 'Request timeout',
+    '连接失败': 'Connection failed',
+    '认证失败': 'Authentication failed',
+    '速率限制': 'Rate limited',
+    '服务不可用': 'Service unavailable',
+    '内部错误': 'Internal error',
+    '资源耗尽': 'Resource exhausted',
+    '无效参数': 'Invalid parameter',
+    '权限不足': 'Insufficient permissions',
+    '网络错误': 'Network error',
+    '解析错误': 'Parse error',
+    '格式错误': 'Format error',
+    '编码错误': 'Encoding error',
+    '文件未找到': 'File not found',
+    '目录未找到': 'Directory not found',
+    '数据库错误': 'Database error',
+    '重试中': 'Retrying',
+    '第': '',  # Remove '第' prefix (ordinal marker)
+    '次重试': ' retry',
+    '最大重试次数': 'Max retries',
+    '已达到最大重试次数': 'Maximum retry count reached',
+    
+    # === Metrics ===
+    '指标计算': 'Metric calculation',
+    '吞吐量计算': 'Throughput calculation',
+    '延迟计算': 'Latency calculation',
+    '统计分析': 'Statistical analysis',
+    '百分位数': 'Percentile',
+    '聚合结果': 'Aggregated results',
+    '原始指标': 'Raw metrics',
+    '计算指标': 'Calculated metrics',
+    '基线': 'Baseline',
+    '对照': 'Control',
+    '实验组': 'Experimental group',
+    '对照组': 'Control group',
+    
+    # === Error messages module ===
+    '错误信息': 'Error message',
+    '错误代码': 'Error code',
+    '错误详情': 'Error details',
+    '错误类型': 'Error type',
+    '错误堆栈': 'Error stack',
+    '建议操作': 'Suggested action',
+    '可能原因': 'Possible cause',
+    '解决方案': 'Solution',
+    
+    # === Common Chinese comments ===
+    '延迟导入': 'Lazy import',
+    '移到最后': 'Move to last',
+    '移到前面': 'Move to front',
+    '创建图表': 'Create chart',
+    '格式化列名': 'Format column names',
+    '处理测试数据': 'Process test data',
+    '生成报告内容': 'Generate report content',
+    '更新进度条': 'Update progress bar',
+    '清理临时数据': 'Clean up temp data',
+    '初始化组件': 'Initialize components',
+    '验证输入': 'Validate input',
+    '检查状态': 'Check status',
+    '重置状态': 'Reset state',
+    '保存状态': 'Save state',
+    '恢复状态': 'Restore state',
+    '销毁': 'Destroy',
+    '单例': 'Singleton',
+    '工厂': 'Factory',
+    '适配器': 'Adapter',
+    '观察者': 'Observer',
+    '回调': 'Callback',
+    '钩子': 'Hook',
+    '中间件': 'Middleware',
+    '装饰器': 'Decorator',
+    '序列化': 'Serialize',
+    '反序列化': 'Deserialize',
+    '编译': 'Compile',
+    '解析': 'Parse',
+    '渲染': 'Render',
+    '挂载': 'Mount',
+    '卸载': 'Unmount',
+    '绑定': 'Bind',
+    '触发': 'Trigger',
+    '监听': 'Listen',
+    '订阅': 'Subscribe',
+    '发布': 'Publish',
+    '注册': 'Register',
+    '注销': 'Unregister',
+    '缓冲': 'Buffer',
+    '刷新缓冲': 'Flush buffer',
+    '溢出': 'Overflow',
+    '截断': 'Truncate',
+    '填充': 'Pad',
+    '对齐': 'Align',
+    '归一化': 'Normalize',
+    '标准化': 'Standardize',
+    '量化': 'Quantize',
+    
+    # === Common verbs in comments ===
+    '获取': 'Get',
+    '设置': 'Set',
+    '计算': 'Calculate',
+    '检查': 'Check',
+    '更新': 'Update',
+    '处理': 'Process',
+    '生成': 'Generate',
+    '保存': 'Save',
+    '加载': 'Load',
+    '初始化': 'Initialize',
+    '验证': 'Validate',
+    '构建': 'Build',
+    '显示': 'Display',
+    '格式化': 'Format',
+    '返回': 'Return',
+    '配置': 'Configure',
+    '测试': 'Test',
+    '结果': 'Result',
+    '错误': 'Error',
+    '日志': 'Log',
+    '状态': 'Status',
+    '模型': 'Model',
+    '数据': 'Data',
+    '导出': 'Export',
+    '导入': 'Import',
+    '清理': 'Cleanup',
+    '添加': 'Add',
+    '删除': 'Delete',
+    '创建': 'Create',
+    '解析失败': 'Parse failed',
+    '转换': 'Convert',
+    '合并': 'Merge',
+    '拆分': 'Split',
+    '过滤': 'Filter',
+    '排序': 'Sort',
+    '分组': 'Group',
+    '聚合': 'Aggregate',
+    '统计': 'Statistics',
+    '采样': 'Sample',
+    '预处理': 'Preprocess',
+    '后处理': 'Postprocess',
+    '异步': 'Async',
+    '同步': 'Sync',
+    '线程': 'Thread',
+    '进程': 'Process',
+    '协程': 'Coroutine',
+    '锁': 'Lock',
+    '信号量': 'Semaphore',
+    '队列': 'Queue',
+    '栈': 'Stack',
+    '池': 'Pool',
+    '连接': 'Connect',
+    '断开': 'Disconnect',
+    '重连': 'Reconnect',
+    
+    # === Misc fragments ===
+    '例如': 'For example',
+    '即': 'i.e.',
+    '或': 'or',
+    '和': 'and',
+    '但': 'but',
+    '及': 'and',
+    '等': 'etc.',
+    '个': '',
+    '的': '',
+    '了': '',
+    '是': 'is',
+    '为': 'is',
+    '在': 'in',
+    '中': 'in',
+    '上': 'on',
+    '下': 'under',
+    '不': 'not',
+    '无': 'no',
+    '有': 'has',
+    '可以': 'can',
+    '已经': 'already',
+    '正在': 'currently',
+    '将': 'will',
+    '会': 'will',
+    '需要': 'need',
+    '使用': 'use',
+    '通过': 'via',
+    '根据': 'based on',
+    '其他': 'other',
+    '默认': 'default',
+    '可选': 'optional',
+    '必须': 'must',
+    '如果': 'if',
+    '否则': 'otherwise',
+    '因为': 'because',
+    '所以': 'therefore',
+    '虽然': 'although',
+    '由于': 'due to',
+    '从而': 'thus',
+}
+
+
+def translate_file(filepath):
+    """Apply translations to a file."""
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except:
+        return -1
+    
+    original = content
+    
+    # Sort by length (longest first) to avoid partial matches
+    sorted_items = sorted(TRANSLATIONS.items(), key=lambda x: -len(x[0]))
+    
+    for cn, en in sorted_items:
+        content = content.replace(cn, en)
+    
+    if content != original:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
+        remaining = len(re.findall(r'[\u4e00-\u9fff]+', content))
+        return remaining
+    return -1
+
+
+# Process all Python files
+total_translated = 0
+total_remaining = 0
+
+for root, _, files in os.walk('.'):
+    if '.git' in root or '__pycache__' in root or '.pytest_cache' in root:
+        continue
+    for f in files:
+        if f.endswith('.py') and f not in ('find_chinese.py', 'translate_reports.py', 'translate_all.py', 'translate_phase2.py', 'translate_phase3.py', 'check_ui.py'):
+            path = os.path.join(root, f)
+            try:
+                with open(path, 'r', encoding='utf-8') as fh:
+                    if not re.search(r'[\u4e00-\u9fff]', fh.read()):
+                        continue
+            except:
+                continue
+            
+            remaining = translate_file(path)
+            if remaining >= 0:
+                total_translated += 1
+                total_remaining += remaining
+                if remaining > 0:
+                    print(f"  {remaining:4d} | {path}")
+
+print(f"\nPhase 3 translated {total_translated} files. {total_remaining} segments still remaining.")

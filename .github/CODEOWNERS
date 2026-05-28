@@ -1,0 +1,86 @@
+# CODEOWNERS - 代码审查所有者配置
+# 语法: pattern @user1 @user2 @team
+
+# ============================================
+# 全局所有者
+# ============================================
+* @maintainer
+
+# ============================================
+# 核心模块
+# ============================================
+# 核心运行器 - 需要高级审查
+core/benchmark_runner.py @senior-developer
+
+# 安全关键模块 - 需要安全团队审查
+core/safe_executor.py @security-team @senior-developer
+core/url_validator.py @security-team @senior-developer
+core/rate_limiter.py @security-team
+
+# Providers 模块
+core/providers/ @provider-team @senior-developer
+
+# 评估器模块
+evaluators/ @evaluator-team
+
+# ============================================
+# UI 组件
+# ============================================
+ui/ @ui-team
+app.py @ui-team @senior-developer
+
+# ============================================
+# 配置文件
+# ============================================
+config/ @senior-developer
+
+# ============================================
+# 测试
+# ============================================
+# 安全测试 - 需要安全团队审查
+tests/test_security.py @security-team
+
+tests/ @qa-team
+
+# ============================================
+# 文档
+# ============================================
+*.md @doc-team
+docs/ @doc-team
+README.md @senior-developer @doc-team
+
+# ============================================
+# 工作流和 CI/CD
+# ============================================
+.github/workflows/ @devops-team @senior-developer
+.github/CODEOWNERS @devops-team
+
+# ============================================
+# 依赖和配置
+# ============================================
+requirements*.txt @senior-developer
+pyproject.toml @senior-developer
+setup.py @senior-developer
+setup.cfg @senior-developer
+
+# ============================================
+# 示例和模板
+# ============================================
+examples/ @doc-team
+templates/ @ui-team
+
+# ============================================
+# 忽略的文件
+# ============================================
+# 这些文件不需要审查
+*.log
+*.tmp
+.DS_Store
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/

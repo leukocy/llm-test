@@ -1,0 +1,39 @@
+# 一致性测试配置
+# 用于评估模型回答稳定性
+
+name: "MiMo 一致性测试"
+description: |
+  对 MiMo 模型进行一致性测试，每个问题测试 5 次。
+  评估模型回答的稳定性和可重复性。
+version: "1.0"
+created_at: "2025-12-23T03:30:00+08:00"
+
+models:
+  - platform: mimo
+    model_id: MiMo-7B-RL
+    api_base_url: "https://api.mimo.example.com/v1"
+    api_key_env: MIMO_API_KEY
+    thinking_enabled: true
+    temperature: 0.7  # 使用较高温度测试稳定性
+    max_tokens: 1024
+
+dataset:
+  name: gsm8k
+  samples: 50  # 只测试 50 个样本
+  seed: 42
+  num_shots: 0
+
+metrics:
+  accuracy: true
+  reasoning_quality: true
+  consistency: true       # 启用一致性测试
+  consistency_runs: 5     # 每个样本运行 5 次
+
+output:
+  report_dir: reports/consistency_test
+  json_export: true
+  markdown_export: true
+
+concurrency: 4
+timeout_seconds: 60
+retry_count: 2
