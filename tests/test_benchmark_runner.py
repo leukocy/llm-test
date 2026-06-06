@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, call
 
 import pytest
 
@@ -497,3 +497,225 @@ class TestBenchmarkRunnerEdgeCases:
             "custom-model"
         )
         assert runner.provider == mock_provider
+
+
+class TestBenchmarkRunnerResume:
+    """Test Resume / Pause 功能"""
+
+    @pytest.fixture
+    def runner(self, tmp_path):
+        placeholder = MagicMock()
+        progress_bar = MagicMock()
+        status_text = MagicMock()
+        log_placeholder = MagicMock()
+
+        runner = BenchmarkRunner(
+            placeholder=placeholder,
+            progress_bar=progress_bar,
+            status_text=status_text,
+            api_base_url="http://test",
+            model_id="test-model",
+            tokenizer_option="Character Count (Fallback)",
+            csv_filename=str(tmp_path / "resume.csv"),
+            api_key="test-key",
+            log_placeholder=log_placeholder,
+            provider="TestProvider"
+        )
+        return runner
+
+    @pytest.mark.asyncio
+    async def test_resume_skips_completed_batches(self, runner, tmp_path):
+        """resume时跳过已完成的批次，只运行剩余批次"""
+        import streamlit as st
+
+        st.session_state.is_resuming = True
+        st.session_state.resume_data = {
+            "completed_results": [{"session_id": i} for i in range(4)],
+            "current_index": 4,
+            "total_samples": 6,
+            "test_id": "test_resume",
+            "test_type": "concurrency"
+        }
+
+        runner._start_db_run = MagicMock()
+        runner._batch_save_results_to_db = MagicMock()
+        runner._complete_db_run = MagicMock()
+        runner.update_ui = MagicMock()
+        runner._get_tokenizer = MagicMock(return_value=object())
+        runner._calibrate_prompt = MagicMock(return_value="prompt")
+        runner._run_concurrency_batch = AsyncMock(
+            return_value=[{"session_id": 5, "error": None}, {"session_id": 6, "error": None}]
+        )
+
+        await runner.run_concurrency_test([2], rounds_per_level=3, max_tokens=10, input_tokens_target=20)
+
+        # 总请求数 = 2 * 3 = 6，已做 4 个，应只运行最后 1 个 batch
+        assert runner._run_concurrency_batch.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_resume_restores_results_list(self, runner, tmp_path):
+        """resume时恢复已保存的结果列表"""
+        import streamlit as st
+
+        saved_results = [{"session_id": i, "ttft": 0.5} for i in range(4)]
+        st.session_state.is_resuming = True
+        st.session_state.resume_data = {
+            "completed_results": saved_results.copy(),
+            "current_index": 4,
+            "total_samples": 6,
+            "test_id": "test_resume",
+            "test_type": "concurrency"
+        }
+
+        runner._start_db_run = MagicMock()
+        runner._batch_save_results_to_db = MagicMock()
+        runner._complete_db_run = MagicMock()
+        runner.update_ui = MagicMock()
+        runner._get_tokenizer = MagicMock(return_value=object())
+        runner._calibrate_prompt = MagicMock(return_value="prompt")
+        runner._run_concurrency_batch = AsyncMock(
+            return_value=[{"session_id": 4, "error": None}, {"session_id": 5, "error": None}]
+        )
+
+        await runner.run_concurrency_test([2], rounds_per_level=3, max_tokens=10, input_tokens_target=20)
+
+        assert len(runner.results_list) == 6
+        assert runner.results_list[0]["session_id"] == 0
+        assert runner.results_list[3]["session_id"] == 3
+        assert runner.results_list[4]["session_id"] == 4
+
+    @pytest.mark.asyncio
+    async def test_resume_with_zero_current_index_fallback(self, runner, tmp_path):
+        """current_index 为 0 时回退到 completed_requests"""
+        import streamlit as st
+
+        st.session_state.is_resuming = True
+        st.session_state.resume_data = {
+            "completed_results": [{"session_id": i} for i in range(4)],
+            "current_index": 0,
+            "total_samples": 6,
+            "test_id": "test_resume",
+            "test_type": "concurrency"
+        }
+
+        runner._start_db_run = MagicMock()
+        runner._batch_save_results_to_db = MagicMock()
+        runner._complete_db_run = MagicMock()
+        runner.update_ui = MagicMock()
+        runner._get_tokenizer = MagicMock(return_value=object())
+        runner._calibrate_prompt = MagicMock(return_value="prompt")
+        runner._run_concurrency_batch = AsyncMock(
+            return_value=[{"session_id": 5, "error": None}, {"session_id": 6, "error": None}]
+        )
+
+        await runner.run_concurrency_test([2], rounds_per_level=3, max_tokens=10, input_tokens_target=20)
+
+        # current_index=0 应回退为 4，只运行最后 1 个 batch
+        assert runner._run_concurrency_batch.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_non_resume_runs_all_batches(self, runner, tmp_path):
+        """非resume模式下从头运行所有批次"""
+        import streamlit as st
+        st.session_state.is_resuming = False
+
+        runner._start_db_run = MagicMock()
+        runner._batch_save_results_to_db = MagicMock()
+        runner._complete_db_run = MagicMock()
+        runner.update_ui = MagicMock()
+        runner._get_tokenizer = MagicMock(return_value=object())
+        runner._calibrate_prompt = MagicMock(return_value="prompt")
+        runner._run_concurrency_batch = AsyncMock(
+            side_effect=[
+                [{"session_id": 0, "error": None}, {"session_id": 1, "error": None}],
+                [{"session_id": 2, "error": None}, {"session_id": 3, "error": None}],
+                [{"session_id": 4, "error": None}, {"session_id": 5, "error": None}],
+            ]
+        )
+
+        await runner.run_concurrency_test([2], rounds_per_level=3, max_tokens=10, input_tokens_target=20)
+
+        # 非 resume 应运行全部 3 个 batch
+        assert runner._run_concurrency_batch.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_resume_across_multiple_concurrency_levels(self, runner, tmp_path):
+        """resume跨越多个concurrency level时正确跳过"""
+        import streamlit as st
+
+        st.session_state.is_resuming = True
+        # conc=2 时 2 rounds = 4 请求，从 conc=4 开始
+        st.session_state.resume_data = {
+            "completed_results": [{"session_id": i} for i in range(4)],
+            "current_index": 4,
+            "total_samples": 12,
+            "test_id": "test_resume",
+            "test_type": "concurrency"
+        }
+
+        runner._start_db_run = MagicMock()
+        runner._batch_save_results_to_db = MagicMock()
+        runner._complete_db_run = MagicMock()
+        runner.update_ui = MagicMock()
+        runner._get_tokenizer = MagicMock(return_value=object())
+        runner._calibrate_prompt = MagicMock(return_value="prompt")
+        runner._run_concurrency_batch = AsyncMock(
+            side_effect=[
+                [{"session_id": 4 + i, "error": None} for i in range(4)],  # conc=4 round0
+                [{"session_id": 8 + i, "error": None} for i in range(4)],  # conc=4 round1
+            ]
+        )
+
+        await runner.run_concurrency_test([2, 4], rounds_per_level=2, max_tokens=10, input_tokens_target=20)
+
+        # 跳过 conc=2 的 2 rounds (4 请求)，只运行 conc=4 的 2 rounds
+        assert runner._run_concurrency_batch.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_pause_save_progress_uses_completed_count(self, runner, tmp_path):
+        """pause时 _save_progress 使用 completed_requests 而非 session_counter"""
+        import streamlit as st
+
+        st.session_state.is_resuming = False
+        st.session_state.stop_requested = False
+        st.session_state.pause_requested = False
+
+        runner._start_db_run = MagicMock()
+        runner._batch_save_results_to_db = MagicMock()
+        runner._complete_db_run = MagicMock()
+        runner.update_ui = MagicMock()
+        runner._get_tokenizer = MagicMock(return_value=object())
+        runner._calibrate_prompt = MagicMock(return_value="prompt")
+        runner._save_progress = MagicMock(return_value=True)
+
+        call_count = 0
+        def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return [{"session_id": call_count * 2 - 2 + i, "error": None} for i in range(2)]
+
+        runner._run_concurrency_batch = AsyncMock(side_effect=side_effect)
+
+        # Mock _check_control_signal 让它在两次正常 check 后返回 pause
+        signal_count = 0
+        def mock_check_signal():
+            nonlocal signal_count
+            signal_count += 1
+            if signal_count >= 4:
+                return "pause"
+            return None
+
+        original_check = runner._check_control_signal
+        runner._check_control_signal = mock_check_signal
+
+        try:
+            with patch("config.session_state.set_test_paused", MagicMock()):
+                df = await runner.run_concurrency_test([2], rounds_per_level=3, max_tokens=10, input_tokens_target=20)
+        finally:
+            runner._check_control_signal = original_check
+
+        # 验证 _save_progress 被调用且使用 completed_requests (4 个)
+        runner._save_progress.assert_called_once()
+        saved_current_index = runner._save_progress.call_args[0][1]
+        assert saved_current_index == 4  # 2 batches * 2 = 4 completed requests
+

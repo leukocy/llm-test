@@ -1758,6 +1758,8 @@ class BenchmarkRunner:
             pass
 
         session_counter = start_session_counter
+        # Track how many requests have been processed/skipped in this resume session
+        processed_counter = 0
 
         # 1. Pre-calculate baseline token count if strictly needed for "0" target?
         # If target=0, we use the user's prompt length as the target for uniqueness generation
@@ -1808,7 +1810,8 @@ class BenchmarkRunner:
                     return pd.DataFrame(self.results_list)
 
                 # 跳过已完成的请求（Resume时）
-                if session_counter < start_session_counter:
+                if processed_counter < start_session_counter:
+                    processed_counter += concurrency
                     session_counter += concurrency
                     continue
 
@@ -1837,6 +1840,7 @@ class BenchmarkRunner:
                 )
 
                 session_counter += concurrency
+                processed_counter += concurrency
 
                 # Assign Round info and save
                 for res in results:

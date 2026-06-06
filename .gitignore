@@ -78,6 +78,9 @@ cache/
 # Dev debug scripts (not part of pytest suite)
 api_tests/
 
+# E2E test scripts (real API, not part of pytest suite)
+tests/e2e_*.py
+
 # Temporary dev test files at project root
 test_abort_feature.py
 test_abort_real.py
