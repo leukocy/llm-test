@@ -1,0 +1,63 @@
+services:
+  llm-benchmark:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: llm-benchmark:latest
+    container_name: llm-benchmark
+
+    # ── Ports ──
+    ports:
+      - "${PORT:-8501}:8501"
+
+    # ── Environment ──
+    environment:
+      - TZ=Asia/Shanghai
+      - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
+      - MODELSCOPE_CACHE=/app/cache/modelscope
+    env_file:
+      - .env
+
+    # ── Resource Limits ──
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+
+    # ── Volumes ──
+    volumes:
+      # 持久化数据
+      - ./data:/app/data
+      - ./cache:/app/cache
+      - ./api_logs:/app/api_logs
+      - ./presets:/app/presets
+      - ./results:/app/results
+      - ./datasets:/app/datasets
+      # Tokenizer: 符号链接指向 /DATA/Model
+      - ./tokenizers:/app/tokenizers
+      - /DATA/Model:/DATA/Model:ro
+      # Streamlit 配置
+      - ./.streamlit:/app/.streamlit:ro
+
+    # ── Health Check ──
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    # ── Logging ──
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+    # ── Restart Policy ──
+    restart: unless-stopped
+
+    # ── Labels ──
+    labels:
+      com.llm-test.description: "LLM Benchmark Platform"
+      com.llm-test.version: "2.0.0"

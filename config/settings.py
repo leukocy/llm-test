@@ -119,3 +119,32 @@ TOKENIZER_HF_MAPPING = {
     k: (v if isinstance(v, str) else v["hf"])
     for k, v in TOKENIZER_SOURCES.items()
 }
+
+# --- Tokenizer本地目录 -> ModelScope 魔搭社区 Repo映射 (国内优先) ---
+TOKENIZER_MODELSCOPE_MAPPING = {
+    # DeepSeek系列
+    "DeepSeek-V3.1-Terminus": "deepseek-ai/DeepSeek-V3.1-Terminus",
+    "DeepSeek-V3.2": "deepseek-ai/DeepSeek-V3.2",
+    "DeepSeek-V4-Flash": "deepseek-ai/DeepSeek-V4-Flash",
+    "DeepSeek-V4-Pro": "deepseek-ai/DeepSeek-V4-Pro",
+    # Qwen系列
+    "Qwen3.5-397B-A17B-FP8": "Qwen/Qwen3.5-397B-A17B-FP8",
+    "Qwen3-235B-A22B-Instruct-2507": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "Qwen3-Coder-480B-A35B-Instruct": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    "Qwen3-Next-80B-A3B-Instruct": "Qwen/Qwen3-Next-80B-A3B-Instruct",
+    "Qwen3-VL-32B-Instruct": "Qwen/Qwen3-VL-32B-Instruct",
+    # Kimi系列
+    "Kimi-K2.5": "moonshotai/Kimi-K2.5",
+    "Kimi-K2-Thinking": "moonshotai/Kimi-K2-Thinking",
+    "Kimi-K2-Instruct-0905": "moonshotai/Kimi-K2-Instruct-0905",
+    # GLM系列
+    "GLM-5": "ZhipuAI/GLM-5",
+    "GLM-4.6": "ZhipuAI/GLM-4.7",
+    # MiniMax系列
+    "MiniMax-M2.5": "MiniMaxAI/MiniMax-M2.5",
+    "MiniMax-M2": "MiniMaxAI/MiniMax-M2",
+    # Llama系列
+    "Llama-3.3-70B-Instruct": "LLM-Research/Llama-3.3-70B-Instruct",
+    # MiMo系列
+    "MiMo-V2-Flash": "XiaomiMiMo/MiMo-V2-Flash",
+}
