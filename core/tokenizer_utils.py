@@ -122,6 +122,12 @@ def _download_tokenizer_from_modelscope(repo_id: str, local_dir: str) -> bool:
         return False
 
 
+def _resolve_modelscope_id(local_dir_name: str) -> str | None:
+    """Resolve a local tokenizer directory name to its ModelScope repo ID."""
+    from config.settings import TOKENIZER_MODELSCOPE_MAPPING
+    return TOKENIZER_MODELSCOPE_MAPPING.get(local_dir_name)
+
+
 def _download_tokenizer_from_hf(hf_repo_id: str, local_dir: str) -> bool:
     """
     Download tokenizer files from HuggingFace Hub to a local directory.

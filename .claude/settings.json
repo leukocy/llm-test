@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(sh|bat|cmd|docker|compose\\)$\")",
+      "Bash(docker compose *)",
+      "Bash(docker pull *)",
+      "Read(//etc/**)",
+      "Read(//home/ai/.pip/**)",
+      "Read(//home/ai/.config/pip/**)",
+      "Bash(pip config *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8501/_stcore/health)",
+      "Bash(docker exec *)",
+      "Bash(env)",
+      "Bash(ip route *)",
+      "Bash(docker network *)",
+      "Bash(iptables -L FORWARD -n)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://huggingface.co --max-time 5)",
+      "Bash(docker run *)",
+      "Bash(ls /DATA/Model/Comfy-Org/z_image_turbo/split_files/text_encoders/ 2>/dev/null; echo \"===\"; find /DATA/ -maxdepth 3 -name \"tokenizer*\" -o -name \"tokenizer.json\" -o -name \"config.json\" 2>/dev/null | head -20)",
+      "Read(//DATA/**)",
+      "Bash(ln -sfn /DATA/Model/DeepSeek-V4-Flash ./DeepSeek-V4-Flash)",
+      "Bash(ln -sfn /DATA/Model/DeepSeek-V4-Flash ./DeepSeek-V4-Pro)",
+      "Bash(ln -sfn /DATA/Model/Qwen3.5-9B ./Qwen3.5-397B-A17B-FP8)",
+      "Bash(ln -sfn /DATA/Model/Qwen3.6-35B-A3B-FP8 ./Qwen3-235B-A22B-Instruct-2507)",
+      "Bash(ln -sfn /DATA/Model/Qwen3.6-35B-A3B-FP8 ./Qwen3-Next-80B-A3B-Instruct)",
+      "Bash(sudo chown -R ai:ai /home/ai/llm-test/tokenizers/)",
+      "Bash(sudo rm -rf /home/ai/llm-test/tokenizers/GLM-5)",
+      "Bash(sudo -S chown -R ai:ai /home/ai/llm-test/tokenizers/)",
+      "Bash(sudo -S rm -rf /home/ai/llm-test/tokenizers/GLM-5)"
+    ]
+  }
+}
