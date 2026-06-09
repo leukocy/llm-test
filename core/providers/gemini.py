@@ -119,7 +119,11 @@ class GeminiProvider(LLMProvider):
         # 如果没有传入客户端，创建一个
         own_client = False
         if client is None:
-            client = httpx.AsyncClient(transport=httpx.AsyncHTTPTransport(), timeout=request_timeout_seconds)
+            client = httpx.AsyncClient(
+                transport=httpx.AsyncHTTPTransport(),
+                timeout=request_timeout_seconds,
+                limits=httpx.Limits(max_connections=4096, max_keepalive_connections=2048),
+            )
             own_client = True
 
         # 注册客户端以便可以强制关闭

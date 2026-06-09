@@ -1418,7 +1418,14 @@ class BenchmarkRunner:
         own_shared_client = False
         if client is None:
             import httpx
-            client = httpx.AsyncClient(transport=httpx.AsyncHTTPTransport(), timeout=600.0)
+            client = httpx.AsyncClient(
+                transport=httpx.AsyncHTTPTransport(),
+                timeout=600.0,
+                limits=httpx.Limits(
+                    max_connections=max(200, concurrency * 2),
+                    max_keepalive_connections=max(100, concurrency),
+                ),
+            )
             own_shared_client = True
 
         # 创建同步屏障，让所有并发请求完成准备工作后近乎同时发送 HTTP 请求
