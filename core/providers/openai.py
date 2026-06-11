@@ -197,9 +197,10 @@ class OpenAIProvider(LLMProvider):
         own_client = False
         if client is None:
             client = httpx.AsyncClient(
-                transport=httpx.AsyncHTTPTransport(),
+                transport=httpx.AsyncHTTPTransport(
+                    limits=httpx.Limits(max_connections=4096, max_keepalive_connections=2048),
+                ),
                 timeout=request_timeout_seconds,
-                limits=httpx.Limits(max_connections=4096, max_keepalive_connections=2048),
             )
             own_client = True
 

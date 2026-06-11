@@ -33,6 +33,7 @@ MODEL_OPTIONS = [
     "Qwen3-Next-80B-A3B",
     "Kimi-K2.5",
     "Qwen3-235B-A22B",
+    "MiniMax-M3",
     "MiniMax-M2.5",
     "MiniMax-M2.1",
     "GLM-5",
@@ -64,8 +65,9 @@ HF_MODEL_MAPPING = {
     "qwen3-vl": "./tokenizers/Qwen3-VL-32B-Instruct",
     "glm-5": "./tokenizers/GLM-5",
     "glm": "./tokenizers/GLM-4.6",
+    "minimax-m3": "./tokenizers/MiniMax-M3",
     "minimax-m2.5": "./tokenizers/MiniMax-M2.5",
-    "minimax": "./tokenizers/MiniMax-M2.5",
+    "minimax": "./tokenizers/MiniMax-M3",
     "gpt-oss": "./tokenizers/gpt-oss-120b",
     "llama": "./tokenizers/Llama-3.3-70B-Instruct",
     "mimo-v2.5": "./tokenizers/MiMo-V2.5",
@@ -104,6 +106,7 @@ TOKENIZER_SOURCES = {
     "MiniMax-M2.5": {"ms": "MiniMax/MiniMax-M2.5", "hf": "MiniMaxAI/MiniMax-M2.5"},
     "Llama-3.3-70B-Instruct": {"ms": "LLM-Research/Llama-3.3-70B-Instruct", "hf": "meta-llama/Llama-3.3-70B-Instruct"},
     "gpt-oss-120b": {"ms": "openai-mirror/gpt-oss-120b", "hf": "openai/gpt-oss-120b"},
+    "MiniMax-M3": "MiniMax/MiniMax-M3",
 }
 
 # 兼容层：从 TOKENIZER_SOURCES 自动生成旧变量

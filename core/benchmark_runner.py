@@ -1419,12 +1419,13 @@ class BenchmarkRunner:
         if client is None:
             import httpx
             client = httpx.AsyncClient(
-                transport=httpx.AsyncHTTPTransport(),
-                timeout=600.0,
-                limits=httpx.Limits(
-                    max_connections=max(200, concurrency * 2),
-                    max_keepalive_connections=max(100, concurrency),
+                transport=httpx.AsyncHTTPTransport(
+                    limits=httpx.Limits(
+                        max_connections=max(200, concurrency * 2),
+                        max_keepalive_connections=max(100, concurrency),
+                    ),
                 ),
+                timeout=600.0,
             )
             own_shared_client = True
 
