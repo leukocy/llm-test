@@ -16,7 +16,6 @@ import pytest
 
 import core.hardware_fingerprint as hf
 
-
 # ---------- 辅助 ----------
 
 def _fake_subprocess(commands_map: dict[tuple, str | None]):
@@ -37,8 +36,9 @@ def _fake_subprocess(commands_map: dict[tuple, str | None]):
 
 
 NVIDIA_SMI_GPU = (
-    "0, NVIDIA H100 80GB HBM3, 81920, HBM3, 5, 16\n"
-    "1, NVIDIA RTX 4090, 24564, GDDR6X, 4, 16\n"
+    # 5 字段（memory.type 是无效 nvidia-smi 字段，已从查询移除）
+    "0, NVIDIA H100 80GB HBM3, 81920, 5, 16\n"
+    "1, NVIDIA RTX 4090, 24564, 4, 16\n"
 )
 
 LSCPU_OUT = (
@@ -54,7 +54,7 @@ LSCPU_OUT = (
 # ---------- _query_gpus ----------
 
 def test_query_gpus_parses_nvidia_smi_and_uses_bandwidth_table():
-    cmds = {("nvidia-smi", "--query-gpu=index,name,memory.total,memory.type,pcie.link.gen.max,pcie.link.width.max", "--format=csv,noheader,nounits"): NVIDIA_SMI_GPU}
+    cmds = {("nvidia-smi", "--query-gpu=index,name,memory.total,pcie.link.gen.max,pcie.link.width.max", "--format=csv,noheader,nounits"): NVIDIA_SMI_GPU}
     with patch("core.hardware_fingerprint.subprocess.run", side_effect=_fake_subprocess(cmds)), \
          patch("core.hardware_fingerprint.shutil.which", return_value=None):
         gpus = hf._query_gpus()
@@ -62,7 +62,7 @@ def test_query_gpus_parses_nvidia_smi_and_uses_bandwidth_table():
     h100 = gpus[0]
     assert h100["name"] == "NVIDIA H100 80GB HBM3"
     assert h100["vram_gb"] == pytest.approx(80.0, abs=0.1)
-    assert h100["memory_type"] == "HBM3"
+    assert h100["memory_type"] is None  # nvidia-smi 无有效字段报显存类型
     assert h100["pcie_gen"] == 5
     assert h100["pcie_width"] == 16
     # H100 命中查表 → 3350 GB/s（而非 PCIe 公式）
@@ -175,7 +175,7 @@ def test_capture_hardware_fingerprint_never_raises_and_has_machine_id():
 
 def test_capture_hardware_fingerprint_full_shape():
     cmds = {
-        ("nvidia-smi", "--query-gpu=index,name,memory.total,memory.type,pcie.link.gen.max,pcie.link.width.max", "--format=csv,noheader,nounits"): "0, NVIDIA H100, 81920, HBM3, 5, 16\n",
+        ("nvidia-smi", "--query-gpu=index,name,memory.total,pcie.link.gen.max,pcie.link.width.max", "--format=csv,noheader,nounits"): "0, NVIDIA H100, 81920, 5, 16\n",
         ("lscpu",): LSCPU_OUT,
     }
     with patch("core.hardware_fingerprint.subprocess.run", side_effect=_fake_subprocess(cmds)), \

@@ -121,7 +121,7 @@ def _query_gpus() -> list[dict[str, Any]]:
     gpus: list[dict[str, Any]] = []
     out = _run_cmd([
         "nvidia-smi",
-        "--query-gpu=index,name,memory.total,memory.type,"
+        "--query-gpu=index,name,memory.total,"
         "pcie.link.gen.max,pcie.link.width.max",
         "--format=csv,noheader,nounits",
     ])
@@ -131,7 +131,7 @@ def _query_gpus() -> list[dict[str, Any]]:
             if not line:
                 continue
             parts = [p.strip() for p in line.split(",")]
-            if len(parts) < 4:
+            if len(parts) < 3:
                 continue
             try:
                 index = int(parts[0])
@@ -139,9 +139,10 @@ def _query_gpus() -> list[dict[str, Any]]:
                 index = len(gpus)
             name = parts[1]
             vram_mb = _to_float(parts[2])
-            memory_type = parts[3] if len(parts) > 3 else None
-            pcie_gen = _to_int(parts[4]) if len(parts) > 4 else None
-            pcie_width = _to_int(parts[5]) if len(parts) > 5 else None
+            # nvidia-smi 无有效字段报显存类型（memory.type 无效）→ 留空
+            memory_type = None
+            pcie_gen = _to_int(parts[3]) if len(parts) > 3 else None
+            pcie_width = _to_int(parts[4]) if len(parts) > 4 else None
             vram_gb = round(vram_mb / 1024.0, 2) if vram_mb is not None else None
             # 标称带宽优先查显存(HBM/GDDR)峰值表；查不到再退化为 PCIe 带宽
             nominal = _lookup_gpu_bandwidth(name, vram_gb)
@@ -314,8 +315,13 @@ def _query_memory_details() -> dict[str, Any]:
     # dmidecode：DIMM 级细节（需 root / 可执行）
     if shutil.which("dmidecode"):
         out = _run_cmd(["dmidecode", "-t", "memory"], timeout=10)
+        if not out:
+            # dmidecode 需 root；尝试 sudo -n（需 sudoers 配 NOPASSWD: dmidecode）
+            out = _run_cmd(["sudo", "-n", "dmidecode", "-t", "memory"], timeout=10)
         if out:
-            dimms = [b for b in out.split("\n\n") if "Memory Device" in b.split("\n", 1)[0]]
+            # dmidecode 每条记录：第一行 "Handle 0x.. type 17"，第二行才是 "Memory Device"，
+            # 故整块匹配（不能只看第一行）。
+            dimms = [b for b in out.split("\n\n") if "Memory Device" in b]
             populated = [
                 d for d in dimms
                 if "Size:" in d and "No Module" not in d and "No Module Installed" not in d
