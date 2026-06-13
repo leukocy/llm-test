@@ -99,6 +99,10 @@ def _build_filter(db) -> WarehouseFilter:
     )
     status = st.sidebar.selectbox("状态", _opts("status", "状态"), key="wh_status")
     tester = st.sidebar.selectbox("测试员", _opts("tester", "测试员"), key="wh_tester")
+    cfg_hash = st.sidebar.selectbox(
+        "config_hash（同配置）", _opts("config_hash", "配置"), key="wh_cfg_hash",
+        help="CASE 02：同配置才能承诺。按配置指纹过滤同模型/引擎/并行/量化的一组测试。",
+    )
     search = st.sidebar.text_input("模糊搜索", placeholder="备注 / 模型 / 测试员…", key="wh_search")
 
     def _pick(v):
@@ -111,6 +115,7 @@ def _build_filter(db) -> WarehouseFilter:
         external_level=_pick(level),
         status_detail=_pick(status),
         tester=_pick(tester),
+        config_hash=_pick(cfg_hash),
         search=_pick(search),
     )
 

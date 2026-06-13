@@ -2,7 +2,8 @@
 可对外闸门（Publish Gate）—— 手册 #redlines 的“四道闸”机制。
 
 一条数据能不能对外，先过四道闸：
-1. 配置完整：tester 已填 + machine_id 存在（硬件指纹已冻结）。
+1. 配置完整：tester 已填 + machine_id 存在（硬件指纹已冻结）+ CASE 03 强制字段
+   （PCIe Gen/宽度、内存通道数、内存频率）非空（仅当传入硬件指纹时校验）。
 2. 可复现：machine_id + 硬件指纹 + 随机种子已记录（或明确标注随机）。
 3. 指标可信：无 ❌ 关键问题 + 成功率达标 + 资源监控已记录。
 4. 人工复核：external_level 已被人工置为 'publishable'（永不自动提升）。
@@ -16,6 +17,26 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from core.test_attribution import _has_critical
+
+
+def missing_required_hw_fields(fp: dict[str, Any] | None) -> list[str]:
+    """检查 CASE 03 红线强制字段，返回缺失项的中文名列表。
+
+    fp 为 None/空 → 返回 []（视为无指纹，不校验；由闸2 has_hardware_fingerprint 兜底）。
+    """
+    if not fp:
+        return []
+    gpus = fp.get("gpus") or []
+    gpu0 = gpus[0] if gpus else {}
+    mem = fp.get("memory") or {}
+
+    checks = {
+        "PCIe Gen": gpu0.get("pcie_gen"),
+        "PCIe 宽度": gpu0.get("pcie_width"),
+        "内存通道数": mem.get("channels"),
+        "内存频率": mem.get("speed_mt_s"),
+    }
+    return [name for name, val in checks.items() if val in (None, "", 0)]
 
 
 @dataclass
@@ -43,16 +64,26 @@ def evaluate_publish_gate(
     has_monitor: bool,
     requested_external_level: str = "internal",
     success_rate_threshold: float = 0.95,
+    hardware_fingerprint: dict[str, Any] | None = None,
 ) -> GateResult:
-    """评估四道闸。requested_external_level 为当前（用户设定的）external_level。"""
+    """评估四道闸。requested_external_level 为当前（用户设定的）external_level。
+
+    hardware_fingerprint 非空时，闸1 额外校验 CASE 03 强制字段（PCIe/通道/频率）；
+    为 None（如远程 API 压测机或旧调用）则仅校验 tester + machine_id，保持向后兼容。
+    """
     reasons: list[str] = []
 
-    # 闸 1：配置完整
+    # 闸 1：配置完整（含 CASE 03 强制字段）
     g1_config = bool(tester and tester.strip()) and bool(machine_id)
     if not (tester and tester.strip()):
         reasons.append("缺 tester（测试人）")
     if not machine_id:
         reasons.append("缺 machine_id（硬件指纹未冻结）")
+    if hardware_fingerprint:  # CASE 03：有指纹才校验强制字段
+        missing = missing_required_hw_fields(hardware_fingerprint)
+        if missing:
+            g1_config = False
+            reasons.append(f"缺 CASE 03 强制字段: {', '.join(missing)}")
 
     # 闸 2：可复现
     g2_repro = bool(machine_id) and has_hardware_fingerprint and seed_recorded
@@ -129,6 +160,7 @@ def gate_from_run(run: dict[str, Any], **extra) -> GateResult:
         success_rate=extra.get("success_rate", run.get("success_rate")),
         has_monitor=extra.get("has_monitor", bool(run.get("resource_monitor_json"))),
         requested_external_level=run.get("external_level") or "internal",
+        hardware_fingerprint=sys_info.get("hardware_fingerprint"),
     )
 
 
