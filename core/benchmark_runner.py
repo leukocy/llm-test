@@ -1,6 +1,5 @@
 import asyncio
 import random
-import string
 import threading
 import time
 
@@ -343,6 +342,13 @@ class BenchmarkRunner:
         self._db_manager = None  # Lazy loaded DatabaseManager
         self._test_type_for_db = None  # Current test type for database
 
+        # 资源监控 & 富记录回传给 UI（详见 data-warehouse 计划）
+        self._resource_monitor = None  # ResourceMonitor 实例（运行中）
+        self._last_system_info = {}  # 最近一次 _start_db_run 采集的合并指纹
+        self._last_resource_monitor = None  # 最近一次测试的监控汇总 dict
+        self._last_run_id = None  # 最近一次测试的 DB run id（供 UI 写回归因）
+        self._last_bandwidth = {}  # 最近一次测试的等效带宽结果（供 UI 归因/偏差分析）
+
     @staticmethod
     def _normalize_template_tokens(template_tokens):
         try:
@@ -410,6 +416,9 @@ class BenchmarkRunner:
         try:
             db = self._get_db_manager()
 
+            # 防御性停止上一次测试可能残留的监控线程
+            self._safe_stop_monitor()
+
             # ApplyRandom Seed（确保可复现性）
             self._apply_seed()
 
@@ -445,6 +454,10 @@ class BenchmarkRunner:
                 system_info=merged_sys_info,
             )
             self._test_type_for_db = test_type
+            self._last_system_info = merged_sys_info
+
+            # 启动后台资源监控（线程，不阻塞 async 事件循环）
+            self._start_resource_monitor()
 
             logger.info(f"DatabaseTest运行已Create: ID={self._db_run.id}")
             return self._db_run
@@ -483,16 +496,201 @@ class BenchmarkRunner:
     def _complete_db_run(self, success: bool = True):
         """完成DatabaseTest运行"""
         if self._db_run is None:
+            self._safe_stop_monitor()
             return
+
+        # 先停止资源监控，把摘要暂存（Phase 4 持久化；Phase 2 先回传 UI）
+        monitor_summary = self._safe_stop_monitor()
 
         try:
             db = self._get_db_manager()
-            db.complete_test_run(self._db_run, success, calculate_stats=True)
+            # 组装八维仓库字段并随完成写入
+            extra_fields = self._build_warehouse_extra_fields(monitor_summary)
+            db.complete_test_run(
+                self._db_run, success,
+                calculate_stats=True,
+                extra_fields=extra_fields,
+            )
             logger.info(f"DatabaseTest运行Completed: ID={self._db_run.id}, success={success}")
         except Exception as e:
             logger.warning(f"完成DatabaseTest运行失败: {e}")
         finally:
+            self._last_run_id = self._db_run.id if self._db_run else None
             self._db_run = None
+
+    def _build_warehouse_extra_fields(self, monitor_summary: dict | None) -> dict:
+        """组装 1.2.0 数据仓库扩展字段（硬件指纹/监控/等效带宽/模型规格/服务配置）。
+
+        所有解析均包 try/except，单字段失败不影响其它；返回的 dict 由 complete_test_run 直接写入。
+        """
+        import json as _json
+
+        extra: dict = {}
+
+        # ---- A. machine_id（硬件指纹）----
+        try:
+            sys_info = self._last_system_info or {}
+            fp = sys_info.get('hardware_fingerprint') or {}
+            machine_id = fp.get('machine_id') or sys_info.get('machine_id')
+            if machine_id:
+                extra['machine_id'] = machine_id
+        except Exception:  # noqa: BLE001
+            pass
+
+        # ---- B. 资源监控峰值 + 时序 JSON ----
+        if monitor_summary:
+            peaks = monitor_summary.get('peaks') or {}
+            if peaks.get('gpu_vram_gb') is not None:
+                extra['gpu_vram_peak_gb'] = peaks['gpu_vram_gb']
+            if peaks.get('system_memory_gb') is not None:
+                extra['system_memory_peak_gb'] = peaks['system_memory_gb']
+            try:
+                extra['resource_monitor_json'] = _json.dumps(monitor_summary, ensure_ascii=False)
+            except (TypeError, ValueError):
+                pass
+
+        # ---- C/D. 模型规格 + 服务配置（从 sidebar session_state 读）----
+        spec_dict, serving_dict, mtp_enabled = self._resolve_model_and_serving()
+        if spec_dict:
+            extra['model_spec_json'] = _json.dumps(spec_dict, ensure_ascii=False)
+        if serving_dict:
+            extra['serving_config_json'] = _json.dumps(serving_dict, ensure_ascii=False)
+        if mtp_enabled is not None:
+            extra['mtp_enabled'] = int(mtp_enabled)
+
+        # ---- E. 等效带宽（仅 decode-bound 测试）----
+        bw = self._compute_bandwidth_metric(spec_dict)
+        self._last_bandwidth = bw
+        if bw.get('effective_bandwidth_gbps') is not None:
+            extra['effective_bandwidth_gbps'] = bw['effective_bandwidth_gbps']
+        if bw.get('bandwidth_utilization_pct') is not None:
+            extra['bandwidth_utilization_pct'] = bw['bandwidth_utilization_pct']
+
+        # ---- H. 测试元数据（tester / 可对外等级 / 状态 / 下一步 / 对照组）----
+        extra.update(self._read_test_metadata())
+
+        return extra
+
+    def _read_test_metadata(self) -> dict:
+        """从 sidebar 的 test_metadata 面板读取并映射到 test_runs 列。"""
+        try:
+            import streamlit as st
+            tm = st.session_state.get('test_metadata') or {}
+            mapping = {
+                'tester': 'tester',
+                'external_level': 'external_level',
+                'next_action': 'next_action',
+                'comparison_group': 'comparison_group',
+                'supersedes_test_id': 'supersedes_test_id',
+                'status_detail': 'status_detail',
+                'notes': 'notes',
+            }
+            return {col: tm[k] for k, col in mapping.items()
+                    if tm.get(k) not in (None, '')}
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def _resolve_model_and_serving(self) -> tuple[dict, dict, bool | None]:
+        """解析模型规格 / 服务配置（sidebar 覆盖 + 注册表 / 引擎探测）。"""
+        try:
+            import streamlit as st
+
+            from core.model_spec import resolve_spec
+            from core.serving_config import ServingConfig, from_sidebar
+
+            override = st.session_state.get('model_spec_override') or {}
+            spec = resolve_spec(self.model_id, override)
+            spec_dict = spec.to_dict() if spec else {}
+
+            serving_state = st.session_state.get('serving_config') or {}
+            serving_dict: dict = {}
+            mtp_enabled: bool | None = None
+            if serving_state:
+                sc = from_sidebar(serving_state) if isinstance(serving_state, dict) else ServingConfig()
+                serving_dict = sc.to_dict()
+                mtp_enabled = sc.mtp_enabled
+            return spec_dict, serving_dict, mtp_enabled
+        except Exception:  # noqa: BLE001
+            return {}, {}, None
+
+    def _compute_bandwidth_metric(self, spec_dict: dict) -> dict:
+        """等效带宽（仅 concurrency/stability；prefill 是算力瓶颈不计算）。"""
+        if self._test_type_for_db not in ('concurrency', 'stability'):
+            return {}
+        try:
+            from core.effective_bandwidth import compute_effective_bandwidth
+            from core.model_spec import ModelSpec
+
+            spec = ModelSpec.from_dict(spec_dict) if spec_dict else None
+            decode_tps = self._mean_decode_tps()
+            nominal = self._nominal_gpu_bandwidth_gbps()
+            if spec is None or decode_tps is None:
+                return {}
+            return compute_effective_bandwidth(decode_tps, spec, nominal)
+        except Exception:  # noqa: BLE001
+            return {}
+
+    def _mean_decode_tps(self) -> float | None:
+        """从 results_list 取已完成请求的平均 decode tps。"""
+        vals = [
+            r.get('tps') for r in (self.results_list or [])
+            if r and not r.get('error') and r.get('tps')
+        ]
+        if not vals:
+            return None
+        return sum(vals) / len(vals)
+
+    def _nominal_gpu_bandwidth_gbps(self) -> float | None:
+        """取硬件指纹里第一张 GPU 的标称显存带宽（多卡取第一张代表）。"""
+        try:
+            gpus = (self._last_system_info or {}).get('hardware_fingerprint', {}).get('gpus') or []
+            for g in gpus:
+                if g.get('nominal_bandwidth_gbps'):
+                    return g['nominal_bandwidth_gbps']
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
+    def _start_resource_monitor(self) -> None:
+        """启动后台资源监控（失败不影响测试）。"""
+        try:
+            from core.resource_monitor import ResourceMonitor
+            self._resource_monitor = ResourceMonitor(interval=1.0)
+            self._resource_monitor.start()
+        except Exception as e:
+            logger.warning(f"启动资源监控失败（不影响测试）: {e}")
+            self._resource_monitor = None
+
+    def _safe_stop_monitor(self) -> dict | None:
+        """停止资源监控并暂存摘要；未启动或异常时返回 None。幂等。"""
+        monitor = self._resource_monitor
+        self._resource_monitor = None
+        if monitor is None:
+            return self._last_resource_monitor
+        try:
+            summary = monitor.stop()
+            self._last_resource_monitor = summary
+            return summary
+        except Exception as e:
+            logger.warning(f"停止资源监控失败: {e}")
+            return None
+
+    # ---- 富记录访问器（供 UI 取最近一次测试的指纹/监控/run_id） ----
+    def get_full_system_info(self) -> dict:
+        """最近一次 _start_db_run 采集的合并系统指纹（含 hardware_fingerprint）。"""
+        return self._last_system_info or {}
+
+    @property
+    def last_resource_monitor(self) -> dict | None:
+        return self._last_resource_monitor
+
+    @property
+    def last_run_id(self) -> int | None:
+        return self._last_run_id
+
+    @property
+    def last_bandwidth(self) -> dict:
+        return self._last_bandwidth or {}
 
     def _add_result(self, result: dict, csv_columns: list):
         """
@@ -1420,10 +1618,7 @@ class BenchmarkRunner:
             import httpx
             client = httpx.AsyncClient(
                 transport=httpx.AsyncHTTPTransport(
-                    limits=httpx.Limits(
-                        max_connections=max(200, concurrency * 2),
-                        max_keepalive_connections=max(100, concurrency),
-                    ),
+                    limits=httpx.Limits(max_connections=2048, max_keepalive_connections=256),
                 ),
                 timeout=600.0,
             )
@@ -1766,8 +1961,6 @@ class BenchmarkRunner:
             pass
 
         session_counter = start_session_counter
-        # Track how many requests have been processed/skipped in this resume session
-        processed_counter = 0
 
         # 1. Pre-calculate baseline token count if strictly needed for "0" target?
         # If target=0, we use the user's prompt length as the target for uniqueness generation
@@ -1818,8 +2011,7 @@ class BenchmarkRunner:
                     return pd.DataFrame(self.results_list)
 
                 # 跳过已完成的请求（Resume时）
-                if processed_counter < start_session_counter:
-                    processed_counter += concurrency
+                if session_counter < start_session_counter:
                     session_counter += concurrency
                     continue
 
@@ -1848,7 +2040,6 @@ class BenchmarkRunner:
                 )
 
                 session_counter += concurrency
-                processed_counter += concurrency
 
                 # Assign Round info and save
                 for res in results:

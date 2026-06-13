@@ -38,6 +38,9 @@ sniffio>=1.3.0
 psutil>=7.0.0
 huggingface-hub>=0.36.0
 
+# GPU hardware fingerprint (NVML bindings; graceful no-op if no NVIDIA GPU)
+nvidia-ml-py>=12.0.0
+
 # Dataset download (HuggingFace datasets library)
 datasets>=3.0.0
 

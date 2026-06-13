@@ -49,8 +49,19 @@ def capture_system_info() -> dict[str, Any]:
         info['memory_total_mb'] = None
         info['memory_available_mb'] = None
 
-    # 硬件 - GPU
-    info['gpu'] = _get_gpu_info()
+    # 硬件 - 结构化指纹（CPU 拓扑 / 内存 / GPU / PCIe / CUDA）+ 向后兼容的扁平 gpu 字符串
+    # 富指纹放入 auto_sys_info，user_sys_info（sidebar 自定义）仍可在合并时覆盖。
+    from core.hardware_fingerprint import capture_hardware_fingerprint
+    try:
+        fingerprint = capture_hardware_fingerprint()
+        info['hardware_fingerprint'] = fingerprint
+        info['machine_id'] = fingerprint.get('machine_id')
+        gpu_names = [g.get('name') for g in fingerprint.get('gpus', []) if g.get('name')]
+        info['gpu'] = '; '.join(gpu_names) if gpu_names else _get_gpu_info()
+    except Exception:
+        info['hardware_fingerprint'] = {}
+        info['machine_id'] = None
+        info['gpu'] = _get_gpu_info()
 
     # Git 信息
     info['git_hash'] = get_git_hash()

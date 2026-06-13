@@ -185,6 +185,13 @@ def render_results_section(test_type=None):
             mime='text/csv'
         )
 
+        # 数据仓库富信息：指纹卡 / 资源时序 / 等效带宽偏差 / 可对外闸门 / markdown 报告
+        try:
+            from ui.warehouse_report import render_warehouse_panel
+            render_warehouse_panel(display_type, st.session_state.get("current_model_id", ""))
+        except Exception:
+            pass
+
 
 def render_report_section(test_type):
     """

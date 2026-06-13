@@ -202,6 +202,8 @@ class TestExecutor:
                 st.session_state.logger = runner_instance.logger
                 if hasattr(runner_instance, 'all_outputs'):
                     st.session_state.test_outputs = runner_instance.all_outputs
+                # 采集本次富指纹 + 资源监控 + run_id（UI 富视图与归因写回依赖）
+                self._capture_post_run_artifacts(runner_instance)
 
             # 清除 runner 实例引用
             if '_current_runner_instance' in st.session_state:
@@ -210,9 +212,13 @@ class TestExecutor:
         return df
 
     def _capture_system_info(self, runner_instance):
-        """Capture system information"""
+        """Capture system information（合并富指纹 + 稀疏自定义，而非覆盖）。"""
         try:
-            sys_info = runner_instance.get_system_info()
+            # 以 runner 采集的结构化指纹为底（含 hardware_fingerprint / machine_id），
+            # 再叠加稀疏用户输入（仅非空覆盖），避免丢弃富指纹。
+            full = runner_instance.get_full_system_info()
+            sparse = runner_instance.get_system_info()
+            sys_info = {**full, **{k: v for k, v in (sparse or {}).items() if v}}
 
             # Merge user custom system info
             custom_sys_info = st.session_state.get('custom_sys_info', {})
@@ -230,6 +236,86 @@ class TestExecutor:
             st.session_state.system_info = sys_info
         except Exception:
             st.session_state.system_info = {}
+
+    def _capture_post_run_artifacts(self, runner_instance):
+        """测试结束后采集本次的富指纹 + 资源监控 + run_id + 归因（写 session_state 与 DB）。
+
+        富指纹在 _start_db_run（测试中）才填充，故必须在本测试完成后调用。
+        """
+        try:
+            # 重新合并一次，确保拿到本次测试的结构化指纹
+            full = runner_instance.get_full_system_info()
+            if full:
+                prev = dict(st.session_state.get('system_info', {}))
+                prev.update(full)
+                st.session_state.system_info = prev
+            st.session_state.resource_monitor = runner_instance.last_resource_monitor
+            st.session_state.last_run_id = runner_instance.last_run_id
+            st.session_state.effective_bandwidth = runner_instance.last_bandwidth
+            self._compute_and_store_attribution(runner_instance)
+        except Exception:
+            pass
+
+    def _compute_and_store_attribution(self, runner_instance):
+        """跑 insights → 瓶颈/状态/异常归因，写回 session_state 与 DB(bottleneck/status_detail)。"""
+        try:
+            from core.database import db_manager
+            from core.test_attribution import (
+                derive_bottleneck,
+                derive_error_attribution,
+                derive_status_detail,
+            )
+            from ui.insights import generate_performance_insights
+
+            df = st.session_state.get('results_df')
+            if df is None or getattr(df, 'empty', True):
+                return
+            test_type = st.session_state.get('current_test_type', '')
+            model_id = self.config.get('model_id', '')
+
+            insights = generate_performance_insights(df, test_type, model_id)
+            bw = runner_instance.last_bandwidth or {}
+            utilization = bw.get('bandwidth_utilization_pct')
+            bottleneck = derive_bottleneck(insights, utilization)
+
+            success_rate = self._success_rate_from_df(df)
+            status = derive_status_detail(True, insights, success_rate)
+
+            results = df.to_dict('records') if hasattr(df, 'to_dict') else []
+            err = derive_error_attribution(results)
+
+            st.session_state.insights = insights
+            st.session_state.bottleneck = bottleneck
+            st.session_state.status_detail = (
+                status.value if hasattr(status, 'value') else str(status)
+            )
+            st.session_state.error_attribution = err
+
+            run_id = runner_instance.last_run_id
+            if run_id:
+                db_manager.update_publish_metadata(run_id, {
+                    'bottleneck': bottleneck,
+                    'status_detail': st.session_state.status_detail,
+                })
+        except Exception:
+            pass
+
+    @staticmethod
+    def _success_rate_from_df(df) -> float | None:
+        """从结果 DataFrame 的 error 列估算成功率（0~1）。"""
+        try:
+            if df is None or getattr(df, 'empty', True) or 'error' not in df.columns:
+                return None
+            total = len(df)
+            if total == 0:
+                return None
+            non_empty = df['error'].apply(
+                lambda x: bool(x) and str(x).strip() not in ('', 'nan', 'None')
+            )
+            failed = int(non_empty.sum())
+            return max(0.0, 1.0 - failed / total)
+        except Exception:
+            return None
 
     def _calculate_total_requests(self, test_function, runner_instance, args):
         """Calculate total requests"""

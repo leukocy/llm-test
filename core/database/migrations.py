@@ -17,12 +17,54 @@ logger = logging.getLogger(__name__)
 MigrationFunc = Callable[[sqlite3.Connection], None]
 
 
+def _add_column(table: str, column: str, type_spec: str) -> MigrationFunc:
+    """生成幂等的 ADD COLUMN 迁移（重复列名视为已迁移，吞掉异常）。"""
+
+    def _migrate(conn: sqlite3.Connection) -> None:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {type_spec}")
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
+
+    return _migrate
+
+
 # MigrationRegister表：Version号 -> Migration函数列表
 MIGRATIONS: dict[str, list[MigrationFunc]] = {
-    # 1.0.0 -> 1.1.0: Add prompt_text and output_text 字段
+    # 1.0.0 -> 1.1.0: Add prompt_text and output_text 字段（幂等，新库已含则跳过）
     "1.1.0": [
-        lambda conn: conn.execute("ALTER TABLE test_results ADD COLUMN prompt_text TEXT"),
-        lambda conn: conn.execute("ALTER TABLE test_results ADD COLUMN output_text TEXT"),
+        _add_column("test_results", "prompt_text", "TEXT"),
+        _add_column("test_results", "output_text", "TEXT"),
+    ],
+    # 1.1.0 -> 1.2.0: 数据仓库扩展 —— 把 test_runs 升级为富记录（手册：报告是切片，仓库是全集）
+    "1.2.0": [
+        # 筛选/分组/对外口径字段（一等列）
+        _add_column("test_runs", "machine_id", "TEXT"),
+        _add_column("test_runs", "tester", "TEXT"),
+        _add_column("test_runs", "external_level", "TEXT DEFAULT 'internal'"),
+        _add_column("test_runs", "bottleneck", "TEXT"),
+        _add_column("test_runs", "next_action", "TEXT"),
+        _add_column("test_runs", "supersedes_test_id", "TEXT"),
+        _add_column("test_runs", "comparison_group", "TEXT"),
+        _add_column("test_runs", "mtp_enabled", "INTEGER"),
+        # 资源监控 / 等效带宽 头条指标
+        _add_column("test_runs", "effective_bandwidth_gbps", "REAL"),
+        _add_column("test_runs", "bandwidth_utilization_pct", "REAL"),
+        _add_column("test_runs", "gpu_vram_peak_gb", "REAL"),
+        _add_column("test_runs", "system_memory_peak_gb", "REAL"),
+        # 变长 JSON 字段
+        _add_column("test_runs", "model_spec_json", "TEXT"),
+        _add_column("test_runs", "serving_config_json", "TEXT"),
+        _add_column("test_runs", "resource_monitor_json", "TEXT"),
+        _add_column("test_runs", "status_detail", "TEXT"),
+        # 索引
+        lambda conn: conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_test_runs_machine ON test_runs(machine_id)"),
+        lambda conn: conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_test_runs_external_level ON test_runs(external_level)"),
+        lambda conn: conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_test_runs_comparison ON test_runs(comparison_group)"),
     ],
 }
 

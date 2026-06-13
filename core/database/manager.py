@@ -176,7 +176,8 @@ class DatabaseManager:
         self,
         run: TestRun,
         success: bool = True,
-        calculate_stats: bool = True
+        calculate_stats: bool = True,
+        extra_fields: dict[str, Any] | None = None,
     ) -> bool:
         """
         完成Test运行
@@ -185,36 +186,60 @@ class DatabaseManager:
             run: Test运行实例
             success: is否succeeded
             calculate_stats: is否CalculateStatistics信息
+            extra_fields: 1.2.0 数据仓库扩展字段（机器指纹/监控/带宽/瓶颈/模型规格/服务配置等），
+                          信任输入、不过滤，直接写入对应列（列由 1.2.0 迁移保证存在）。
 
         Returns:
             is否succeeded
         """
         run.complete(success)
 
+        # 计算统计信息
+        stats: dict[str, Any] = {}
         if calculate_stats and run.id:
-            # CalculateStatistics信息
             stats = self._result_repo.get_aggregate_metrics(run.id)
             percentiles = self._result_repo.get_percentiles(run.id, "ttft")
-
             stats.update({
                 "p50_ttft": percentiles.get("p50"),
                 "p95_ttft": percentiles.get("p95"),
                 "p99_ttft": percentiles.get("p99"),
             })
 
-            # 只保留 test_runs 表in实际存in列，避免 UPDATE 时报错
+            # 只保留 test_runs 表实际存在的统计列，避免 UPDATE 报错
             valid_columns = {
                 'avg_ttft', 'avg_tps', 'avg_tpot',
                 'p50_ttft', 'p95_ttft', 'p99_ttft',
                 'total_tokens', 'total_requests',
                 'completed_requests', 'failed_requests', 'success_rate',
                 'duration_seconds',
+                # 1.2.0 扩展：允许统计路径写入这些头条指标
+                'effective_bandwidth_gbps', 'bandwidth_utilization_pct',
+                'gpu_vram_peak_gb', 'system_memory_peak_gb',
+                'bottleneck', 'machine_id', 'status_detail',
             }
-            filtered_stats = {k: v for k, v in stats.items() if k in valid_columns}
+            stats = {k: v for k, v in stats.items() if k in valid_columns}
 
-            return self._run_repo.complete(run.id, success, filtered_stats)
+        # 合并 extra_fields（信任输入，直接写入；列已由迁移保证）
+        if extra_fields:
+            stats = {**stats, **{k: v for k, v in extra_fields.items() if v is not None}}
 
-        return self._run_repo.complete(run.id, success)
+        return self._run_repo.complete(run.id, success, stats or None)
+
+    def update_publish_metadata(self, run_id: int, fields: dict[str, Any]) -> bool:
+        """更新测试的可对外元数据（tester / external_level / next_action / notes /
+        bottleneck / status_detail / comparison_group 等）。
+
+        这些字段通常在测试完成后、人工复核时由 UI 写回。
+        """
+        allowed = {
+            'tester', 'external_level', 'next_action', 'notes',
+            'bottleneck', 'status_detail', 'comparison_group',
+            'supersedes_test_id', 'tags',
+        }
+        data = {k: v for k, v in fields.items() if k in allowed and v is not None}
+        if not data:
+            return False
+        return self._run_repo.update_by(data, "id = ?", (run_id,)) > 0
 
     def update_run_progress(
         self,
