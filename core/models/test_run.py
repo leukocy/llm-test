@@ -108,6 +108,13 @@ class TestRun:
     resource_monitor: dict = field(default_factory=dict)
     status_detail: str | None = None
 
+    # ===== 1.3.0 推理引擎运行时（/metrics 轮询 + KV 实况）=====
+    engine_metrics: dict = field(default_factory=dict)
+    gpu_kv_cache_usage_peak_pct: float | None = None
+    num_preemption_total: int | None = None
+    engine_running_requests_peak: int | None = None
+    kv_cache_capacity_tokens: int | None = None
+
     @classmethod
     def create(
         cls,
@@ -146,6 +153,9 @@ class TestRun:
         data['resource_monitor_json'] = (
             json.dumps(self.resource_monitor, ensure_ascii=False) if self.resource_monitor else None
         )
+        data['engine_metrics_json'] = (
+            json.dumps(self.engine_metrics, ensure_ascii=False) if self.engine_metrics else None
+        )
         if self.mtp_enabled is not None:
             data['mtp_enabled'] = int(self.mtp_enabled)
         # external_level 默认 internal（None → internal）
@@ -163,6 +173,7 @@ class TestRun:
         data.pop('model_spec', None)
         data.pop('serving_config', None)
         data.pop('resource_monitor', None)
+        data.pop('engine_metrics', None)
 
         return data
 
@@ -223,6 +234,11 @@ class TestRun:
             serving_config=json.loads(row.get('serving_config_json', '{}') or '{}'),
             resource_monitor=json.loads(row.get('resource_monitor_json', '{}') or '{}'),
             status_detail=row.get('status_detail'),
+            engine_metrics=json.loads(row.get('engine_metrics_json', '{}') or '{}'),
+            gpu_kv_cache_usage_peak_pct=row.get('gpu_kv_cache_usage_peak_pct'),
+            num_preemption_total=row.get('num_preemption_total'),
+            engine_running_requests_peak=row.get('engine_running_requests_peak'),
+            kv_cache_capacity_tokens=row.get('kv_cache_capacity_tokens'),
         )
 
     @staticmethod

@@ -25,6 +25,10 @@ def _ctx(**overrides):
         "resource_monitor": {"peaks": {"gpu_util_percent": 95.0, "gpu_vram_gb": 70.5,
                                        "system_memory_gb": 120.0, "gpu_power_w": 1800.0,
                                        "gpu_temp_c": 72}},
+        "engine_metrics": {"engine_family": "vllm", "sample_count": 5,
+                           "peaks": {"gpu_cache_usage_perc": 0.82, "num_requests_running": 8},
+                           "preemption_total": 3,
+                           "cache_config": {"kv_capacity_tokens": 1468000, "block_size": 16}},
         "effective_bandwidth": {"effective_bandwidth_gbps": 1850.0, "nominal_bandwidth_gbps": 1792.0,
                                 "bandwidth_utilization_pct": 103.2},
         "gate": {"level": "internal", "gates": {"config_complete": True, "reproducible": True,
@@ -40,8 +44,8 @@ def _ctx(**overrides):
 
 def test_report_has_nine_sections():
     md = build_single_test_report(_ctx())
-    for section in ["硬件指纹", "配置快照", "性能摘要", "资源峰值", "等效带宽偏差分析",
-                    "可对外闸门", "洞察", "备注 / 下一步"]:
+    for section in ["硬件指纹", "配置快照", "性能摘要", "资源峰值", "推理引擎运行时",
+                    "等效带宽偏差分析", "可对外闸门", "洞察", "备注 / 下一步"]:
         assert section in md, f"缺章节: {section}"
     assert "DeepSeek-V3.1" in md
     assert "abc123" in md

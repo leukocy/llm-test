@@ -66,6 +66,14 @@ MIGRATIONS: dict[str, list[MigrationFunc]] = {
         lambda conn: conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_test_runs_comparison ON test_runs(comparison_group)"),
     ],
+    # 1.2.0 -> 1.3.0: 推理引擎运行时（/metrics 轮询 + KV 实况）
+    "1.3.0": [
+        _add_column("test_runs", "engine_metrics_json", "TEXT"),
+        _add_column("test_runs", "gpu_kv_cache_usage_peak_pct", "REAL"),
+        _add_column("test_runs", "num_preemption_total", "INTEGER"),
+        _add_column("test_runs", "engine_running_requests_peak", "INTEGER"),
+        _add_column("test_runs", "kv_cache_capacity_tokens", "INTEGER"),
+    ],
 }
 
 

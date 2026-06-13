@@ -348,6 +348,8 @@ class BenchmarkRunner:
         self._last_resource_monitor = None  # 最近一次测试的监控汇总 dict
         self._last_run_id = None  # 最近一次测试的 DB run id（供 UI 写回归因）
         self._last_bandwidth = {}  # 最近一次测试的等效带宽结果（供 UI 归因/偏差分析）
+        self._engine_poller = None  # EngineMetricsPoller 实例（运行中）
+        self._last_engine_metrics = None  # 最近一次测试的引擎运行时汇总 dict
 
     @staticmethod
     def _normalize_template_tokens(template_tokens):
@@ -458,6 +460,8 @@ class BenchmarkRunner:
 
             # 启动后台资源监控（线程，不阻塞 async 事件循环）
             self._start_resource_monitor()
+            # 启动推理引擎 /metrics 轮询（记录引擎自身运行：KV 占用/队列/抢占）
+            self._start_engine_poller()
 
             logger.info(f"DatabaseTest运行已Create: ID={self._db_run.id}")
             return self._db_run
@@ -497,15 +501,17 @@ class BenchmarkRunner:
         """完成DatabaseTest运行"""
         if self._db_run is None:
             self._safe_stop_monitor()
+            self._safe_stop_engine_poller()
             return
 
-        # 先停止资源监控，把摘要暂存（Phase 4 持久化；Phase 2 先回传 UI）
+        # 先停止资源监控与引擎轮询，把摘要暂存
         monitor_summary = self._safe_stop_monitor()
+        engine_summary = self._safe_stop_engine_poller()
 
         try:
             db = self._get_db_manager()
             # 组装八维仓库字段并随完成写入
-            extra_fields = self._build_warehouse_extra_fields(monitor_summary)
+            extra_fields = self._build_warehouse_extra_fields(monitor_summary, engine_summary)
             db.complete_test_run(
                 self._db_run, success,
                 calculate_stats=True,
@@ -518,7 +524,9 @@ class BenchmarkRunner:
             self._last_run_id = self._db_run.id if self._db_run else None
             self._db_run = None
 
-    def _build_warehouse_extra_fields(self, monitor_summary: dict | None) -> dict:
+    def _build_warehouse_extra_fields(
+        self, monitor_summary: dict | None, engine_summary: dict | None = None
+    ) -> dict:
         """组装 1.2.0 数据仓库扩展字段（硬件指纹/监控/等效带宽/模型规格/服务配置）。
 
         所有解析均包 try/except，单字段失败不影响其它；返回的 dict 由 complete_test_run 直接写入。
@@ -569,7 +577,51 @@ class BenchmarkRunner:
         # ---- H. 测试元数据（tester / 可对外等级 / 状态 / 下一步 / 对照组）----
         extra.update(self._read_test_metadata())
 
+        # ---- F. 推理引擎运行时（/metrics 轮询 + 启动日志 KV 容量）----
+        self._add_engine_runtime(extra, engine_summary)
+
         return extra
+
+    def _add_engine_runtime(self, extra: dict, engine_summary: dict | None) -> None:
+        """把引擎运行时（KV 占用/队列/抢救/容量）写入 extra。日志解析补充 KV 容量。"""
+        import json as _json
+
+        if engine_summary and engine_summary.get("sample_count", 0) > 0:
+            peaks = engine_summary.get("peaks") or {}
+            cc = engine_summary.get("cache_config") or {}
+            if peaks.get("gpu_cache_usage_perc") is not None:
+                extra["gpu_kv_cache_usage_peak_pct"] = peaks["gpu_cache_usage_perc"]
+            if peaks.get("num_requests_running") is not None:
+                extra["engine_running_requests_peak"] = int(peaks["num_requests_running"])
+            if engine_summary.get("preemption_total") is not None:
+                extra["num_preemption_total"] = int(engine_summary["preemption_total"])
+            if cc.get("kv_capacity_tokens") is not None:
+                extra["kv_cache_capacity_tokens"] = cc["kv_capacity_tokens"]
+            try:
+                extra["engine_metrics_json"] = _json.dumps(engine_summary, ensure_ascii=False)
+            except (TypeError, ValueError):
+                pass
+
+        # 引擎启动日志：补充 KV 容量 / GPU blocks（若 /metrics 未给）
+        log_kv = self._parse_engine_log_kv()
+        if log_kv is not None and not extra.get("kv_cache_capacity_tokens"):
+            extra["kv_cache_capacity_tokens"] = log_kv
+
+    def _parse_engine_log_kv(self) -> int | None:
+        """从 sidebar 配置的引擎日志路径解析 KV 容量(tokens)。"""
+        try:
+            import streamlit as st
+
+            from core.engine_log_parser import parse_engine_log_file
+
+            er = st.session_state.get("engine_runtime") or {}
+            log_path = er.get("log_path")
+            if not log_path:
+                return None
+            parsed = parse_engine_log_file(log_path)
+            return parsed.get("kv_cache_size_tokens")
+        except Exception:  # noqa: BLE001
+            return None
 
     def _read_test_metadata(self) -> dict:
         """从 sidebar 的 test_metadata 面板读取并映射到 test_runs 列。"""
@@ -661,6 +713,24 @@ class BenchmarkRunner:
             logger.warning(f"启动资源监控失败（不影响测试）: {e}")
             self._resource_monitor = None
 
+    def _start_engine_poller(self) -> None:
+        """启动推理引擎 /metrics 轮询（未配置端点则 no-op）。"""
+        try:
+            import streamlit as st
+
+            from core.engine_metrics import EngineMetricsPoller, default_metrics_url
+            er = st.session_state.get("engine_runtime") or {}
+            metrics_url = er.get("metrics_url") or default_metrics_url(self.api_base_url)
+            if er.get("enabled", True) is False:  # 显式关闭
+                metrics_url = None
+            if not metrics_url:
+                return
+            self._engine_poller = EngineMetricsPoller(metrics_url, interval=1.0)
+            self._engine_poller.start()
+        except Exception as e:
+            logger.warning(f"启动引擎指标轮询失败（不影响测试）: {e}")
+            self._engine_poller = None
+
     def _safe_stop_monitor(self) -> dict | None:
         """停止资源监控并暂存摘要；未启动或异常时返回 None。幂等。"""
         monitor = self._resource_monitor
@@ -673,6 +743,20 @@ class BenchmarkRunner:
             return summary
         except Exception as e:
             logger.warning(f"停止资源监控失败: {e}")
+            return None
+
+    def _safe_stop_engine_poller(self) -> dict | None:
+        """停止引擎轮询并暂存汇总；幂等。"""
+        poller = self._engine_poller
+        self._engine_poller = None
+        if poller is None:
+            return self._last_engine_metrics
+        try:
+            summary = poller.stop()
+            self._last_engine_metrics = summary
+            return summary
+        except Exception as e:
+            logger.warning(f"停止引擎轮询失败: {e}")
             return None
 
     # ---- 富记录访问器（供 UI 取最近一次测试的指纹/监控/run_id） ----
@@ -691,6 +775,10 @@ class BenchmarkRunner:
     @property
     def last_bandwidth(self) -> dict:
         return self._last_bandwidth or {}
+
+    @property
+    def last_engine_metrics(self) -> dict | None:
+        return self._last_engine_metrics
 
     def _add_result(self, result: dict, csv_columns: list):
         """

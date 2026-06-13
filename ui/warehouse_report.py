@@ -130,6 +130,54 @@ def render_deviation_analysis() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 推理引擎运行时（KV 占用 / 调度队列 / 抢救）
+# ---------------------------------------------------------------------------
+
+def render_engine_runtime() -> None:
+    """渲染引擎自身的运行视图：KV cache 占用、运行/等待队列、抢救数、KV 容量。"""
+    eng = st.session_state.get("engine_metrics")
+    if not eng or not eng.get("timeline"):
+        return
+    try:
+        import pandas as pd
+        import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
+    except ImportError:
+        return
+
+    df = pd.DataFrame(eng["timeline"])
+    if "t" not in df.columns:
+        return
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    if "gpu_cache_usage_perc" in df:
+        fig.add_trace(go.Scatter(x=df["t"], y=df["gpu_cache_usage_perc"], name="KV cache 占用", line={"width": 2}), secondary_y=False)
+    if "num_requests_running" in df:
+        fig.add_trace(go.Scatter(x=df["t"], y=df["num_requests_running"], name="运行请求", line={"dash": "dot"}), secondary_y=True)
+    if "num_requests_waiting" in df:
+        fig.add_trace(go.Scatter(x=df["t"], y=df["num_requests_waiting"], name="等待请求", line={"dash": "dot"}), secondary_y=True)
+    fig.update_layout(
+        title=f"推理引擎运行时（{eng.get('engine_family', '?')}）", height=320,
+        legend={"orientation": "h", "y": -0.2}, margin={"l": 10, "r": 10, "t": 40, "b": 10},
+    )
+    fig.update_xaxes(title_text="时间 (s)")
+    fig.update_yaxes(title_text="KV cache 占用 (0~1)", secondary_y=False, range=[0, 1.05])
+    fig.update_yaxes(title_text="请求数", secondary_y=True)
+
+    peaks = eng.get("peaks") or {}
+    cc = eng.get("cache_config") or {}
+    with st.expander("🔌 推理引擎运行时（KV / 队列 / 抢救）", expanded=False):
+        st.plotly_chart(fig, use_container_width=True)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("KV 占用峰值", f"{(peaks.get('gpu_cache_usage_perc') or 0)*100:.0f}%")
+        c2.metric("抢救数(窗口)", eng.get("preemption_total") or 0)
+        c3.metric("运行队列峰值", peaks.get("num_requests_running") or "—")
+        c4.metric("KV 容量(tokens)", cc.get("kv_capacity_tokens") or st.session_state.get("kv_cache_capacity_tokens") or "—")
+        if cc.get("num_gpu_blocks"):
+            st.caption(f"block_size={cc.get('block_size')} · num_gpu_blocks={cc.get('num_gpu_blocks')} · num_cpu_blocks={cc.get('num_cpu_blocks')}")
+
+
+# ---------------------------------------------------------------------------
 # 可对外闸门徽标
 # ---------------------------------------------------------------------------
 
@@ -228,6 +276,20 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
     lines.append(f"- 功耗/温度: {peaks.get('gpu_power_w') or '—'}W / {peaks.get('gpu_temp_c') or '—'}℃")
     lines.append("")
 
+    lines.append("## 推理引擎运行时\n")
+    eng = ctx.get("engine_metrics") or {}
+    if eng and eng.get("sample_count", 0) > 0:
+        ep = eng.get("peaks") or {}
+        cc = eng.get("cache_config") or {}
+        lines.append(f"- 引擎: {eng.get('engine_family', '?')} @ {eng.get('metrics_url', '?')}")
+        lines.append(f"- KV cache 占用峰值: {(ep.get('gpu_cache_usage_perc') or 0)*100:.0f}%")
+        lines.append(f"- 运行队列峰值: {ep.get('num_requests_running') or '—'} / 等待峰值: {ep.get('num_requests_waiting') or '—'}")
+        lines.append(f"- 抢救数(窗口): {eng.get('preemption_total') or 0}")
+        lines.append(f"- KV 容量: {cc.get('kv_capacity_tokens') or '—'} tokens (block_size={cc.get('block_size') or '?'})")
+    else:
+        lines.append("- 未采集到引擎运行时（未配置 /metrics 端点或端点不可达）。")
+    lines.append("")
+
     lines.append("## 等效带宽偏差分析\n")
     from core.effective_bandwidth import summarize_gap
     lines.append(summarize_gap(ctx.get("effective_bandwidth") or {}))
@@ -267,10 +329,11 @@ def render_warehouse_panel(test_type: str, model_id: str) -> None:
 
         # 闸门徽标
         render_publish_gate_badge()
-        # 指纹 / 时序 / 偏差
+        # 指纹 / 时序 / 偏差 / 引擎运行时
         render_hardware_fingerprint_card()
         render_resource_timeline()
         render_deviation_analysis()
+        render_engine_runtime()
 
         # 单次测试报告导出
         if st.button("📄 导出单次测试报告 (Markdown)", key="export_single_report"):
@@ -312,6 +375,7 @@ def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
         "hardware_fingerprint": fp,
         "test_config": st.session_state.get("test_config") or {},
         "resource_monitor": mon,
+        "engine_metrics": st.session_state.get("engine_metrics") or {},
         "effective_bandwidth": bw,
         "gate": {"level": result.level, "gates": result.gates, "reasons": result.reasons},
         "insights": st.session_state.get("insights") or [],

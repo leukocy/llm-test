@@ -15,13 +15,21 @@ from core.database.migrations import MIGRATIONS, run_migrations
 from core.models.test_run import TestRun
 
 
-# 1.2.0 新增的列（迁移 + DDL 都应包含）
+# 1.2.0 + 1.3.0 新增的列（迁移 + DDL 都应包含）
 WAREHOUSE_COLUMNS = [
     "machine_id", "tester", "external_level", "bottleneck", "next_action",
     "supersedes_test_id", "comparison_group", "mtp_enabled",
     "effective_bandwidth_gbps", "bandwidth_utilization_pct",
     "gpu_vram_peak_gb", "system_memory_peak_gb",
     "model_spec_json", "serving_config_json", "resource_monitor_json", "status_detail",
+    # 1.3.0 推理引擎运行时
+    "engine_metrics_json", "gpu_kv_cache_usage_peak_pct", "num_preemption_total",
+    "engine_running_requests_peak", "kv_cache_capacity_tokens",
+]
+
+ENGINE_COLUMNS = [
+    "engine_metrics_json", "gpu_kv_cache_usage_peak_pct", "num_preemption_total",
+    "engine_running_requests_peak", "kv_cache_capacity_tokens",
 ]
 
 
@@ -49,11 +57,11 @@ def test_create_tables_has_warehouse_columns(tmp_path):
 
 # ---------- 迁移 ----------
 
-def test_migration_1_1_0_to_1_2_0_adds_columns(tmp_path):
-    """模拟一个 1.1.0 老库（无 1.2.0 列），运行迁移后应补齐。"""
+def test_migration_1_1_0_to_latest_adds_all_warehouse_columns(tmp_path):
+    """模拟一个 1.1.0 老库，迁移到最新版本应补齐 1.2.0 + 1.3.0 全部列。"""
     conn = sqlite3.connect(str(tmp_path / "legacy.db"))
     try:
-        # 用一份不含 1.2.0 列的精简 DDL 建表，模拟 1.1.0 schema
+        # 用一份不含仓库列的精简 DDL 建表，模拟 1.1.0 schema
         legacy_ddl = """
         CREATE TABLE test_runs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,14 +83,17 @@ def test_migration_1_1_0_to_1_2_0_adds_columns(tmp_path):
 
         assert "machine_id" not in _columns(conn)
 
-        run_migrations(conn, "1.2.0")
+        from core.database.schema import SCHEMA_VERSION
+        run_migrations(conn, SCHEMA_VERSION)
 
         cols = _columns(conn)
         for c in WAREHOUSE_COLUMNS:
             assert c in cols, f"迁移后仍缺列 {c}"
-        # 版本号更新
+        # 1.3.0 引擎列必须在
+        for c in ENGINE_COLUMNS:
+            assert c in cols
         ver = conn.execute("SELECT value FROM db_meta WHERE key='schema_version'").fetchone()[0]
-        assert ver == "1.2.0"
+        assert ver == SCHEMA_VERSION
     finally:
         conn.close()
 

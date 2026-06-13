@@ -252,6 +252,7 @@ class TestExecutor:
             st.session_state.resource_monitor = runner_instance.last_resource_monitor
             st.session_state.last_run_id = runner_instance.last_run_id
             st.session_state.effective_bandwidth = runner_instance.last_bandwidth
+            st.session_state.engine_metrics = runner_instance.last_engine_metrics
             self._compute_and_store_attribution(runner_instance)
         except Exception:
             pass
