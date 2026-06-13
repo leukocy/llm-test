@@ -250,6 +250,19 @@ class TestBenchmarkRunnerSystemInfo:
         runner.output_placeholder = None
         runner.update_ui()  # 不应抛异常
 
+    def test_update_log_invokes_render_log_callback(self, runner):
+        """_update_log 把日志渲染交给注入的 render_log 回调（模式 F2）"""
+        captured = []
+        runner.render_log = lambda logger: captured.append(logger)
+        runner._update_log("hello")
+        assert len(captured) == 1
+        assert captured[0] is runner.logger
+
+    def test_update_log_skips_render_when_no_callback(self, runner):
+        """未注入 render_log 时不报错（仍内存日志 + WebSocket 广播）"""
+        runner.render_log = None
+        runner._update_log("silent")  # 不应抛异常
+
 
 class TestBenchmarkRunnerInitialization:
     """Test BenchmarkRunner Initialize"""

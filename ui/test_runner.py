@@ -145,6 +145,18 @@ class TestExecutor:
                 # 后台线程渲染失败不应中断测试
                 pass
 
+        def _render_log(logger):
+            """UI 回调：在后台线程把 BenchmarkLogger 渲染到日志面板（core 不再调 render_log_viewer）。"""
+            import threading as _threading
+
+            from ui.log_viewer import render_log_viewer
+            try:
+                if _main_ctx and not get_script_run_ctx():
+                    add_script_run_ctx(_threading.current_thread(), _main_ctx)
+                render_log_viewer(logger, placeholder=log_placeholder, max_display=50, compact_mode=True)
+            except Exception:
+                pass
+
         try:
             # Create filename
             timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -177,6 +189,7 @@ class TestExecutor:
                 warehouse_context=self._build_warehouse_context(),
                 ui_state=SessionStateBridge(st.session_state),
                 render_progress=_render_progress,
+                render_log=_render_log,
             )
 
             # 存储 runner 实例到 session_state，以便 Stop 按钮可以访问结果
