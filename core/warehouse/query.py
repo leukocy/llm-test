@@ -380,6 +380,33 @@ def build_ma_test_rows(runs: list[TestRun]) -> list[dict[str, Any]]:
     return [_select_fields(project_run(r), MA_TEST_FIELDS) for r in runs]
 
 
+def build_ma_test_rows_from_cases(
+    db,
+    scenario: str | None = None,
+    model_name: str | None = None,
+    machine_id: str | None = None,
+    external_level: str | None = None,
+    source: str | None = None,
+    limit: int = 2000,
+) -> list[dict[str, Any]]:
+    """模型×应用测试模板（#3）行——从 application_cases 表读（数据真源）。
+
+    ApplicationCase 的字段名与 MA_TEST_FIELDS 逐字对齐，故直接按模板字段投影。
+    任一筛选参数 None = 不过滤。
+    """
+    if not hasattr(db, "list_application_cases"):
+        return []
+    cases = db.list_application_cases(
+        scenario=scenario,
+        model_name=model_name,
+        machine_id=machine_id,
+        external_level=external_level,
+        source=source,
+        limit=limit,
+    )
+    return [{f: getattr(c, f, None) for f in MA_TEST_FIELDS} for c in cases]
+
+
 # ---------------------------------------------------------------------------
 # 硬件 × 模型 透视矩阵（手册"不同硬件下的表现"）
 # ---------------------------------------------------------------------------

@@ -74,6 +74,62 @@ MIGRATIONS: dict[str, list[MigrationFunc]] = {
         _add_column("test_runs", "engine_running_requests_peak", "INTEGER"),
         _add_column("test_runs", "kv_cache_capacity_tokens", "INTEGER"),
     ],
+    # 1.3.0 -> 1.4.0: 模型×应用质量评估表（手册 maTest 模板采集层）
+    # 新表，CREATE TABLE IF NOT EXISTS 幂等（create_tables 对新老库都已建；此处双保险）。
+    "1.4.0": [
+        lambda conn: conn.execute("""CREATE TABLE IF NOT EXISTS application_cases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_id TEXT NOT NULL UNIQUE,
+            run_id INTEGER,
+            source TEXT DEFAULT 'manual',
+            evaluator_name TEXT DEFAULT '',
+            sample_id TEXT DEFAULT '',
+            date TEXT DEFAULT '',
+            tester TEXT DEFAULT '',
+            scenario TEXT DEFAULT '',
+            task_name TEXT DEFAULT '',
+            customer_type TEXT DEFAULT '',
+            model_name TEXT DEFAULT '',
+            machine_id TEXT DEFAULT '',
+            engine TEXT DEFAULT '',
+            usecase_set_version TEXT DEFAULT '',
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            context_length INTEGER,
+            concurrency INTEGER,
+            ttft_s REAL,
+            retrieval_latency_s REAL,
+            prefill_latency_s REAL,
+            total_latency_s REAL,
+            decode_tps REAL,
+            quality_score REAL,
+            success INTEGER,
+            citation_score REAL,
+            tool_success_rate REAL,
+            privacy_requirement TEXT DEFAULT '',
+            cost_note TEXT DEFAULT '',
+            recommended_config TEXT DEFAULT '',
+            sales_summary TEXT DEFAULT '',
+            external_level TEXT DEFAULT 'internal',
+            failure_reason TEXT DEFAULT '',
+            evidence_path TEXT DEFAULT '',
+            next_action TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            extra_json TEXT
+        )"""),
+        lambda conn: conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_app_cases_case_id ON application_cases(case_id)"),
+        lambda conn: conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_app_cases_run ON application_cases(run_id)"),
+        lambda conn: conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_app_cases_scenario ON application_cases(scenario)"),
+        lambda conn: conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_app_cases_model ON application_cases(model_name)"),
+        lambda conn: conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_app_cases_external ON application_cases(external_level)"),
+        lambda conn: conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_app_cases_machine ON application_cases(machine_id)"),
+    ],
 }
 
 

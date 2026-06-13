@@ -24,6 +24,7 @@ from core.warehouse.query import (
     build_hardware_inventory_rows,
     build_hm_test_rows,
     build_ma_test_rows,
+    build_ma_test_rows_from_cases,
     distinct_values,
     project_run,
     query_runs,
@@ -58,6 +59,7 @@ __all__ = [
     "build_hm_test_rows",
     "build_hardware_inventory_rows",
     "build_ma_test_rows",
+    "build_ma_test_rows_from_cases",
     "build_cross_matrix",
     # export
     "export_template_csv",

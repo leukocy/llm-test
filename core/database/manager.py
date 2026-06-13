@@ -9,9 +9,10 @@ from typing import Any
 
 from core.database.backup import DatabaseBackup
 from core.database.connection import Database
-from core.models import ApiLog, ExecLog, Report, TestResult, TestRun
+from core.models import ApiLog, ApplicationCase, ExecLog, Report, TestResult, TestRun
 from core.repositories import (
     ApiLogRepository,
+    ApplicationCaseRepository,
     ExecLogRepository,
     ReportRepository,
     TestResultRepository,
@@ -51,6 +52,7 @@ class DatabaseManager:
         self._api_log_repo = ApiLogRepository(self._db)
         self._exec_log_repo = ExecLogRepository(self._db)
         self._report_repo = ReportRepository(self._db)
+        self._case_repo = ApplicationCaseRepository(self._db)
 
         # Initialize Service
         self._import_service = DataImportService(self._db)
@@ -86,6 +88,11 @@ class DatabaseManager:
     def reports(self) -> ReportRepository:
         """报告 Repository"""
         return self._report_repo
+
+    @property
+    def cases(self) -> ApplicationCaseRepository:
+        """应用用例 Repository（模型×应用质量评估表）"""
+        return self._case_repo
 
     @property
     def importer(self) -> DataImportService:
@@ -347,6 +354,52 @@ class DatabaseManager:
     def search_runs(self, query: str, limit: int = 50) -> list[TestRun]:
         """搜索Test运行"""
         return self._run_repo.search(query, limit)
+
+    # ============================================
+    # 便捷方法：Application Cases（模型×应用质量评估表）
+    # ============================================
+
+    def save_application_case(self, case: ApplicationCase) -> int:
+        """保存一条应用用例（按 case_id 去重 upsert）。返回记录 id。"""
+        return self._case_repo.upsert(case)
+
+    def save_application_cases_batch(self, cases: list[ApplicationCase]) -> int:
+        """批量保存应用用例（逐条 upsert）。返回写入条数。"""
+        count = 0
+        for case in cases:
+            try:
+                self._case_repo.upsert(case)
+                count += 1
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"保存应用用例失败 case_id={case.case_id}: {e}")
+        return count
+
+    def list_application_cases(
+        self,
+        scenario: str | None = None,
+        model_name: str | None = None,
+        machine_id: str | None = None,
+        external_level: str | None = None,
+        source: str | None = None,
+        limit: int = 500,
+    ) -> list[ApplicationCase]:
+        """按 maTest 维度筛选应用用例。任一参数 None = 不过滤。"""
+        return self._case_repo.find_by_filter(
+            scenario=scenario,
+            model_name=model_name,
+            machine_id=machine_id,
+            external_level=external_level,
+            source=source,
+            limit=limit,
+        )
+
+    def update_application_case(self, case_id: str, fields: dict[str, Any]) -> bool:
+        """按 case_id 更新指定字段。"""
+        return self._case_repo.update_by(fields, "case_id = ?", (case_id,)) > 0
+
+    def delete_application_case(self, case_id: str) -> bool:
+        """按 case_id 删除。"""
+        return self._case_repo.delete_by("case_id = ?", (case_id,)) > 0
 
     def get_dashboard_stats(self) -> dict[str, Any]:
         """Get仪表盘StatisticsData"""

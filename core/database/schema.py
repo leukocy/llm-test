@@ -4,7 +4,7 @@ Database Schema 定义
 包含所has表 SQL 定义andMigration语句。
 """
 
-SCHEMA_VERSION = "1.3.0"
+SCHEMA_VERSION = "1.4.0"
 
 # ============================================
 # Table schema定义
@@ -277,6 +277,55 @@ CREATE TABLE IF NOT EXISTS db_meta (
 );
 """
 
+CREATE_APPLICATION_CASES = """
+CREATE TABLE IF NOT EXISTS application_cases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id TEXT NOT NULL UNIQUE,          -- 去重键：model_id:evaluator_name:sample_id（自动）/ uuid（手动）
+    run_id INTEGER,                        -- 关联 test_runs（quality_evaluator 不开 run，可空）
+
+    -- 来源
+    source TEXT DEFAULT 'manual',          -- 'auto' / 'manual'
+    evaluator_name TEXT DEFAULT '',        -- 自动采集时的 dataset/evaluator 名
+    sample_id TEXT DEFAULT '',             -- 自动采集时的 SampleResult.sample_id
+
+    -- maTest 对齐字段（顺序与 core/warehouse/templates.py MA_TEST_FIELDS 一致）
+    date TEXT DEFAULT '',
+    tester TEXT DEFAULT '',
+    scenario TEXT DEFAULT '',              -- coding/long_doc/retrieval/dialogue/agent/knowledge_qa/other
+    task_name TEXT DEFAULT '',
+    customer_type TEXT DEFAULT '',
+    model_name TEXT DEFAULT '',
+    machine_id TEXT DEFAULT '',
+    engine TEXT DEFAULT '',
+    usecase_set_version TEXT DEFAULT '',
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    context_length INTEGER,
+    concurrency INTEGER,
+    ttft_s REAL,
+    retrieval_latency_s REAL,             -- 自动采集留空（evaluator 不分阶段）
+    prefill_latency_s REAL,
+    total_latency_s REAL,
+    decode_tps REAL,
+    quality_score REAL,                   -- 自动采集留空（需人评/judge）
+    success INTEGER,                      -- ← SampleResult.is_correct（0/1/NULL）
+    citation_score REAL,                  -- 自动采集留空（RAG 引用分）
+    tool_success_rate REAL,               -- 自动采集留空（工具调用成功率）
+    privacy_requirement TEXT DEFAULT '',
+    cost_note TEXT DEFAULT '',
+    recommended_config TEXT DEFAULT '',
+    sales_summary TEXT DEFAULT '',
+    external_level TEXT DEFAULT 'internal',
+    failure_reason TEXT DEFAULT '',
+    evidence_path TEXT DEFAULT '',
+    next_action TEXT DEFAULT '',
+
+    -- 元数据
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    extra_json TEXT                        -- reasoning_quality/failure_category/evaluation_method 等
+);
+"""
+
 # ============================================
 # Index定义
 # ============================================
@@ -306,6 +355,14 @@ CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_reports_model ON reports(model_id);",
     "CREATE INDEX IF NOT EXISTS idx_reports_type ON reports(report_type);",
     "CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at);",
+
+    # application_cases（1.4.0 新表；表本身在 create_tables 建，索引对新老库都安全）
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_app_cases_case_id ON application_cases(case_id);",
+    "CREATE INDEX IF NOT EXISTS idx_app_cases_run ON application_cases(run_id);",
+    "CREATE INDEX IF NOT EXISTS idx_app_cases_scenario ON application_cases(scenario);",
+    "CREATE INDEX IF NOT EXISTS idx_app_cases_model ON application_cases(model_name);",
+    "CREATE INDEX IF NOT EXISTS idx_app_cases_external ON application_cases(external_level);",
+    "CREATE INDEX IF NOT EXISTS idx_app_cases_machine ON application_cases(machine_id);",
 ]
 
 
@@ -318,6 +375,7 @@ def get_schema_sql() -> str:
         CREATE_EXECUTION_LOGS,
         CREATE_REPORTS,
         CREATE_DB_META,
+        CREATE_APPLICATION_CASES,
     ]
     return "\n".join(tables + CREATE_INDEXES)
 
@@ -339,6 +397,7 @@ def create_tables(conn) -> None:
         CREATE_EXECUTION_LOGS,
         CREATE_REPORTS,
         CREATE_DB_META,
+        CREATE_APPLICATION_CASES,
     ]:
         cursor.execute(sql)
 

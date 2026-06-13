@@ -5,6 +5,7 @@ Repository 模块
 """
 
 from .api_log import ApiLogRepository
+from .application_case import ApplicationCaseRepository
 from .base import BaseRepository
 from .exec_log import ExecLogRepository
 from .report import ReportRepository
@@ -16,6 +17,7 @@ __all__ = [
     'TestRunRepository',
     'TestResultRepository',
     'ApiLogRepository',
+    'ApplicationCaseRepository',
     'ExecLogRepository',
     'ReportRepository',
 ]
