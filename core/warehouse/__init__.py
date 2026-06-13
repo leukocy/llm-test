@@ -11,6 +11,11 @@
 
 from __future__ import annotations
 
+from core.warehouse.capability_sheet import (
+    CAPABILITY_COLUMNS,
+    build_capability_markdown,
+    build_capability_sheet,
+)
 from core.warehouse.export import (
     export_all_templates_zip,
     export_template_csv,
@@ -61,6 +66,10 @@ __all__ = [
     "build_ma_test_rows",
     "build_ma_test_rows_from_cases",
     "build_cross_matrix",
+    # capability sheet
+    "CAPABILITY_COLUMNS",
+    "build_capability_sheet",
+    "build_capability_markdown",
     # export
     "export_template_csv",
     "export_template_json",

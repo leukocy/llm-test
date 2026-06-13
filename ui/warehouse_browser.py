@@ -21,6 +21,8 @@ from core.database import db_manager
 from core.warehouse import (
     TEMPLATE_TITLES,
     WarehouseFilter,
+    build_capability_markdown,
+    build_capability_sheet,
     build_cross_matrix,
     build_hardware_inventory_rows,
     build_hm_test_rows,
@@ -59,8 +61,9 @@ def render_warehouse_browser() -> None:
         st.info("当前筛选条件下无记录。松开筛选条件，或先跑一次测试再回来。")
         return
 
-    tab_history, tab_matrix, tab_inventory, tab_cases, tab_export = st.tabs(
-        ["📋 运行历史", "🔲 硬件 × 模型矩阵", "🖥️ 硬件盘点", "🧪 应用用例", "📤 模板导出"]
+    tab_history, tab_matrix, tab_inventory, tab_cases, tab_capability, tab_export = st.tabs(
+        ["📋 运行历史", "🔲 硬件 × 模型矩阵", "🖥️ 硬件盘点", "🧪 应用用例",
+         "📊 客户能力表", "📤 模板导出"]
     )
 
     with tab_history:
@@ -72,6 +75,8 @@ def render_warehouse_browser() -> None:
     with tab_cases:
         from ui.application_case_form import render_application_case_manager
         render_application_case_manager()
+    with tab_capability:
+        _render_capability_sheet()
     with tab_export:
         _render_export(runs)
 
@@ -248,6 +253,81 @@ def _render_inventory(runs) -> None:
     ]
     df = pd.DataFrame(rows)[cols].rename(columns=_COLUMN_LABELS)
     st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+# ---------------------------------------------------------------------------
+# 客户能力表
+# ---------------------------------------------------------------------------
+
+
+def _render_capability_sheet() -> None:
+    """按 customer_type × scenario 聚合应用用例，生成对外客户能力表。"""
+    st.subheader("📊 客户能力表")
+    st.caption(
+        "手册核心产出：「销售可以自动生成客户能力表」。按客户类型 × 场景聚合应用用例，"
+        "10 分钟内从仓库抽出对外材料。"
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        min_level = st.selectbox("对外口径下限", ["internal", "review", "publishable"],
+                                 index=1, key="cap_min_level",
+                                 help="只保留该等级及以上（默认 review 起，即可对外讨论）")
+    with c2:
+        group_dim = st.multiselect(
+            "聚合维度", ["customer_type", "scenario", "model_name"],
+            default=["customer_type", "scenario", "model_name"], key="cap_group",
+        )
+
+    cases = db_manager.list_application_cases(limit=2000)
+    if not cases:
+        st.info("暂无应用用例。跑 Model Quality Test（自动采集）或录入应用用例后会生成。")
+        return
+
+    group_by = tuple(group_dim) if group_dim else ("customer_type", "scenario", "model_name")
+    sheet = build_capability_sheet(cases, group_by=group_by, min_external_level=min_level)
+
+    if not sheet:
+        st.info(f"当前筛选下无达 {min_level} 口径的能力切片。降低口径下限或录入更多用例。")
+        return
+
+    import pandas as pd
+    df = pd.DataFrame(sheet)
+    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.caption(f"共 {len(sheet)} 个能力切片（来自 {len(cases)} 条应用用例）")
+
+    # 导出：CSV + 对外 Markdown
+    e1, e2 = st.columns(2)
+    csv_str = _sheet_to_csv(sheet)
+    md_str = build_capability_markdown(sheet)
+    e1.download_button("📥 导出 CSV", data=csv_str.encode("utf-8"),
+                       file_name="capability_sheet.csv", mime="text/csv", key="cap_dl_csv")
+    e2.download_button("📥 导出对外 Markdown", data=md_str.encode("utf-8"),
+                       file_name="capability_sheet.md", mime="text/markdown", key="cap_dl_md")
+
+    with st.expander("预览对外 Markdown"):
+        st.markdown(md_str)
+
+
+def _sheet_to_csv(sheet: list[dict]) -> str:
+    """客户能力表 → CSV 字符串（UTF-8 BOM）。"""
+    import csv
+    import io
+    if not sheet:
+        return ""
+    # 取所有键的并集，但优先 CAPABILITY_COLUMNS 顺序
+    from core.warehouse import CAPABILITY_COLUMNS
+    fields = list(CAPABILITY_COLUMNS)
+    extra = sorted({k for row in sheet for k in row} - set(fields))
+    fields += extra
+    buf = io.StringIO()
+    buf.write("﻿")
+    writer = csv.DictWriter(buf, fieldnames=fields, lineterminator="\n",
+                            extrasaction="ignore")
+    writer.writeheader()
+    for row in sheet:
+        writer.writerow({k: ("" if v is None else v) for k, v in row.items()})
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
