@@ -1489,8 +1489,8 @@ class BenchmarkRunner:
                 )
 
             if error_msg == "UserCancelled":
-                return {"session_id": session_id, "error": "UserCancelled", **self._get_empty_metrics()}
-            return {"session_id": session_id, "error": error_msg, **self._get_empty_metrics()}
+                return {**self._get_empty_metrics(), "session_id": session_id, "error": "UserCancelled"}
+            return {**self._get_empty_metrics(), "session_id": session_id, "error": error_msg}
 
         # Extract provider response
         # Note: start_time, first_token_time, end_time are monotonic timestamps
@@ -2063,6 +2063,9 @@ class BenchmarkRunner:
             pass
 
         session_counter = start_session_counter
+        # Resume 时跟踪本次会话已处理/跳过的请求数（独立于 session_counter，
+        # 后者初始即 = start_session_counter，若用它判断跳过会恒为 False）。
+        processed_counter = 0
 
         # 1. Pre-calculate baseline token count if strictly needed for "0" target?
         # If target=0, we use the user's prompt length as the target for uniqueness generation
@@ -2112,8 +2115,9 @@ class BenchmarkRunner:
                         self._show("warning", "Test已停止，进度Saved")
                     return pd.DataFrame(self.results_list)
 
-                # 跳过已完成的请求（Resume时）
-                if session_counter < start_session_counter:
+                # 跳过已完成的请求（Resume时）：用 processed_counter 判断是否落在已完成区间
+                if processed_counter < start_session_counter:
+                    processed_counter += concurrency
                     session_counter += concurrency
                     continue
 
