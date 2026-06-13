@@ -196,6 +196,9 @@ def main():
     elif test_type == "📦 Batch Test":
         batch_test = _get_batch_test()
         batch_test.render_batch_test_main()
+    elif test_type == "🗄️ 数据仓库":
+        from ui.warehouse_browser import render_warehouse_browser
+        render_warehouse_browser()
     else:
         # 9. Render test control panel (provides Stop button)
         from ui.test_control_panel import render_test_control_panel
