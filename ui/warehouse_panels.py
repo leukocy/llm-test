@@ -14,6 +14,35 @@ from core.serving_config import ATTENTION_BACKENDS, ENGINES, MOE_BACKENDS
 from core.test_attribution import TestStatusDetail
 
 
+def render_engine_runtime_panel(api_base_url: str) -> None:
+    """🔌 推理引擎接入面板——记录引擎自身的运行（/metrics 轮询 + 启动日志 KV 容量）。"""
+    with st.sidebar.expander("🔌 推理引擎接入（记录引擎运行）", expanded=False):
+        st.caption(
+            "测试期间轮询 vLLM/SGLang 的 Prometheus `/metrics`，记录引擎 KV cache 占用、"
+            "调度队列、抢救数；并解析启动日志拿 KV 容量。留空则按 api_base 自动推导端点。"
+        )
+        from core.engine_metrics import default_metrics_url
+
+        er = st.session_state.get("engine_runtime") or {}
+        if not isinstance(er, dict):
+            er = {}
+
+        default_url = default_metrics_url(api_base_url)
+        metrics_url = st.text_input(
+            "引擎 metrics 端点", value=er.get("metrics_url", "") or default_url,
+            help="如 http://gpu-host:8000/metrics", key="er_metrics_url")
+        log_path = st.text_input(
+            "引擎启动日志路径（可选）", value=er.get("log_path", ""),
+            help="vLLM/SGLang 启动 stdout 日志，用于解析 KV 容量/max_num_seqs", key="er_log_path")
+        enabled = st.checkbox("启用引擎运行时采集", value=er.get("enabled", True), key="er_enabled")
+
+        st.session_state.engine_runtime = {
+            "metrics_url": metrics_url.strip() or None,
+            "log_path": log_path.strip() or None,
+            "enabled": enabled,
+        }
+
+
 def render_model_spec_panel(model_id: str) -> None:
     """📐 模型架构规格面板（自动从注册表预填，可覆盖；用于等效带宽与模型身份证）。"""
     with st.sidebar.expander("📐 模型架构规格（等效带宽）", expanded=False):

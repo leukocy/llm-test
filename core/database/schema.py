@@ -4,7 +4,7 @@ Database Schema 定义
 包含所has表 SQL 定义andMigration语句。
 """
 
-SCHEMA_VERSION = "1.2.0"
+SCHEMA_VERSION = "1.3.0"
 
 # ============================================
 # Table schema定义
@@ -89,7 +89,14 @@ CREATE TABLE IF NOT EXISTS test_runs (
     model_spec_json TEXT,        -- 模型架构规格（架构/MoE/KV精度/MTP...）
     serving_config_json TEXT,    -- 服务配置（引擎/并行/注意力&MoE后端/调度/MTP/runtime）
     resource_monitor_json TEXT,  -- 资源监控汇总 + 时序
-    status_detail TEXT           -- 状态明细：未测/异常/已通过/需复测/可对外
+    status_detail TEXT,          -- 状态明细：未测/异常/已通过/需复测/可对外
+
+    -- ===== 1.3.0 推理引擎运行时（手册 F 维 KV 实况 + 引擎自身视图）=====
+    engine_metrics_json TEXT,            -- 引擎 /metrics 时序 + peaks + cache_config
+    gpu_kv_cache_usage_peak_pct REAL,    -- 引擎 GPU KV cache 占用峰值(0~1)
+    num_preemption_total INTEGER,        -- 测试窗口内 KV 抢救数（稳定性信号）
+    engine_running_requests_peak INTEGER,  -- 调度器运行队列峰值
+    kv_cache_capacity_tokens INTEGER      -- 引擎 KV 容量(tokens)，来自 cache_config/log
 );
 """
 
