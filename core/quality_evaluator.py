@@ -19,6 +19,59 @@ from evaluators.base_evaluator import BaseEvaluator, EvaluationResult
 from utils.logger import LogLevel
 
 
+def _build_case_from_sample(
+    sample,
+    evaluator_name: str,
+    model_id: str,
+    date_str: str,
+    tester: str = "",
+    machine_id: str = "",
+    engine: str = "",
+    engine_version: str = "",
+):
+    """把一个 SampleResult 映射成 ApplicationCase（手册 maTest 自动采集）。
+
+    纯函数（不碰 DB），供 _save_cases_to_db 与单元测试共用。evaluator 不产出的
+    应用质量分（citation/quality/tool/retrieval）一律留 None（待手动补）。
+    """
+    from core.application_scenario import scenario_from_dataset
+    from core.models import ApplicationCase
+
+    sample_id = str(sample.sample_id) if sample.sample_id is not None else ""
+    return ApplicationCase(
+        case_id=f"{model_id}:{evaluator_name}:{sample_id}",
+        source="auto",
+        evaluator_name=evaluator_name,
+        sample_id=sample_id,
+        date=date_str,
+        tester=tester,
+        scenario=scenario_from_dataset(evaluator_name),
+        model_name=model_id,
+        machine_id=machine_id,
+        engine=engine,
+        success=bool(sample.is_correct) if sample.is_correct is not None else None,
+        ttft_s=(sample.ttft_ms / 1000.0) if sample.ttft_ms else None,
+        prefill_latency_s=(sample.ttft_ms / 1000.0) if sample.ttft_ms else None,
+        total_latency_s=(sample.total_time_ms / 1000.0) if sample.total_time_ms else None,
+        decode_tps=sample.tps or None,
+        input_tokens=sample.input_tokens or None,
+        output_tokens=sample.output_tokens or None,
+        # citation / quality / tool / retrieval ← None（evaluator 不产出，待手动补）
+        failure_reason=(
+            getattr(sample, "failure_category", "") or getattr(sample, "failure_analysis", "")
+            or sample.error or ""
+        ),
+        external_level="internal",
+        extra={
+            "engine_version": engine_version or "",
+            "reasoning_quality_overall": getattr(sample, "reasoning_quality_overall", None) or None,
+            "failure_category": getattr(sample, "failure_category", "") or "",
+            "evaluation_method": getattr(sample, "evaluation_method", "") or "",
+            "category": getattr(sample, "category", "") or "",
+        },
+    )
+
+
 @dataclass
 class QualityTestConfig:
     """质量Test Configuration"""
@@ -113,7 +166,8 @@ class QualityEvaluator:
         output_dir: str = "quality_results",
         log_callback: Callable[[str, LogLevel], None] | None = None,
         tokenizer_model_id: str | None = None,
-        enable_cache: bool = True
+        enable_cache: bool = True,
+        warehouse_context: dict | None = None
     ):
         """
         InitializeQuality Assessment引擎
@@ -127,6 +181,9 @@ class QualityEvaluator:
             log_callback: LogCallback函数
             tokenizer_model_id: 用于Calculate token Model ID
             enable_cache: is否启用响应缓存
+            warehouse_context: 数据仓库上下文（machine_id/tester/engine/engine_version/serving_config/
+                system_info），用于把评估样本持久化为 application_cases（模型×应用质量评估表）。
+                缺则 machine/tester/engine 维度留空（与 benchmark_runner 同渐进填充）。
         """
         self.api_base_url = api_base_url
         self.model_id = model_id
@@ -134,6 +191,8 @@ class QualityEvaluator:
         self.provider_name = provider
         self.output_dir = output_dir
         self.log_callback = log_callback
+        # 数据仓库上下文（手册 maTest 采集用）
+        self.warehouse_context: dict = warehouse_context or {}
 
         # Initialize Provider (use model_id)
         self.provider = get_provider(provider, api_base_url, api_key, model_id)
@@ -850,6 +909,56 @@ class QualityEvaluator:
 
         # GenerateStandardize报告
         self._export_standard_reports(timestamp)
+
+        # 持久化应用用例到数据仓库（application_cases，手册 maTest 模板采集）
+        self._save_cases_to_db()
+
+    def _save_cases_to_db(self) -> None:
+        """把评估样本（SampleResult）持久化为 application_cases 行（手册 maTest 采集层）。
+
+        每个 SampleResult → 一行。evaluator 不产出的应用质量分（citation/quality/tool/
+        retrieval）**留 None**（待手动录入补）。全程 try/except，失败只 log，不影响评估主流程。
+        """
+        if not self.results:
+            return
+        try:
+            from datetime import datetime as _dt
+
+            from core.database import db_manager
+            from core.models import ApplicationCase
+
+            wc = self.warehouse_context or {}
+            date_str = _dt.now().strftime("%Y-%m-%d")
+            tester = wc.get("tester") or ""
+            machine_id = wc.get("machine_id") or ""
+            engine = wc.get("engine") or ""
+            engine_version = wc.get("engine_version") or ""
+            serving = wc.get("serving_config") or {}
+            if not engine:
+                engine = serving.get("engine") or ""
+
+            cases: list[ApplicationCase] = []
+            for name, result in self.results.items():
+                for sample in (result.details or []):
+                    cases.append(_build_case_from_sample(
+                        sample=sample,
+                        evaluator_name=name,
+                        model_id=self.model_id,
+                        date_str=date_str,
+                        tester=tester,
+                        machine_id=machine_id,
+                        engine=engine,
+                        engine_version=engine_version,
+                    ))
+            if cases:
+                written = db_manager.save_application_cases_batch(cases)
+                self._log(f"已采集 {written}/{len(cases)} 条应用用例到数据仓库")
+        except Exception as e:  # noqa: BLE001
+            # 采集失败不影响评估主流程
+            try:
+                self._log(f"应用用例采集失败（不影响评估）: {e}", LogLevel.WARNING)
+            except Exception:  # noqa: BLE001
+                pass
 
     def _export_standard_reports(self, timestamp: str):
         """ExportStandardize格式报告"""

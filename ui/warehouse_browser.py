@@ -24,7 +24,6 @@ from core.warehouse import (
     build_cross_matrix,
     build_hardware_inventory_rows,
     build_hm_test_rows,
-    build_ma_test_rows,
     distinct_values,
     export_all_templates_zip,
     export_template_csv,
@@ -60,8 +59,8 @@ def render_warehouse_browser() -> None:
         st.info("当前筛选条件下无记录。松开筛选条件，或先跑一次测试再回来。")
         return
 
-    tab_history, tab_matrix, tab_inventory, tab_export = st.tabs(
-        ["📋 运行历史", "🔲 硬件 × 模型矩阵", "🖥️ 硬件盘点", "📤 模板导出"]
+    tab_history, tab_matrix, tab_inventory, tab_cases, tab_export = st.tabs(
+        ["📋 运行历史", "🔲 硬件 × 模型矩阵", "🖥️ 硬件盘点", "🧪 应用用例", "📤 模板导出"]
     )
 
     with tab_history:
@@ -70,6 +69,9 @@ def render_warehouse_browser() -> None:
         _render_cross_matrix(runs)
     with tab_inventory:
         _render_inventory(runs)
+    with tab_cases:
+        from ui.application_case_form import render_application_case_manager
+        render_application_case_manager()
     with tab_export:
         _render_export(runs)
 
@@ -254,7 +256,9 @@ def _render_export(runs) -> None:
 
     hw_rows = build_hardware_inventory_rows(runs)
     hm_rows = build_hm_test_rows(runs)
-    ma_rows = build_ma_test_rows(runs)
+    # maTest 数据真源是 application_cases 表（自动采集 + 手动录入），不是 test_runs
+    from core.warehouse import build_ma_test_rows_from_cases
+    ma_rows = build_ma_test_rows_from_cases(db_manager)
     bundles = {"hwInventory": hw_rows, "hmTest": hm_rows, "maTest": ma_rows}
 
     # 每套模板一行：说明 + 行数 + CSV/JSON 下载
