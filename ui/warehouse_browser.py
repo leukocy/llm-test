@@ -26,10 +26,12 @@ from core.warehouse import (
     build_cross_matrix,
     build_hardware_inventory_rows,
     build_hm_test_rows,
+    build_scaling_efficiency,
     distinct_values,
     export_all_templates_zip,
     export_template_csv,
     export_template_json,
+    interpret_efficiency,
     project_run,
     query_runs,
 )
@@ -61,8 +63,8 @@ def render_warehouse_browser() -> None:
         st.info("当前筛选条件下无记录。松开筛选条件，或先跑一次测试再回来。")
         return
 
-    tab_history, tab_matrix, tab_inventory, tab_cases, tab_capability, tab_export = st.tabs(
-        ["📋 运行历史", "🔲 硬件 × 模型矩阵", "🖥️ 硬件盘点", "🧪 应用用例",
+    tab_history, tab_matrix, tab_scaling, tab_inventory, tab_cases, tab_capability, tab_export = st.tabs(
+        ["📋 运行历史", "🔲 透视矩阵", "📈 扩展效率", "🖥️ 硬件盘点", "🧪 应用用例",
          "📊 客户能力表", "📤 模板导出"]
     )
 
@@ -70,6 +72,8 @@ def render_warehouse_browser() -> None:
         _render_history(runs)
     with tab_matrix:
         _render_cross_matrix(runs)
+    with tab_scaling:
+        _render_scaling_efficiency(runs)
     with tab_inventory:
         _render_inventory(runs)
     with tab_cases:
@@ -199,22 +203,71 @@ def _render_detail_drawer(run) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 硬件 × 模型矩阵
+# 多卡扩展效率
+# ---------------------------------------------------------------------------
+
+
+def _render_scaling_efficiency(runs) -> None:
+    """同模型 tp1→tpN 的扩展效率（手册诊断树 B：能跑但多卡没线性变快）。"""
+    st.subheader("📈 多卡扩展效率")
+    st.caption(
+        "手册：「4 卡只比 1 卡快 2 倍？」以 tp1 为基线，算 speedup 与 efficiency"
+        "（理想线性=1.0；<1 亚线性，疑似通信/调度瓶颈）。"
+    )
+
+    metric = st.selectbox("指标", ["decode_tps", "effective_bandwidth_gbps"],
+                          key="se_metric")
+    rows = build_scaling_efficiency(runs, metric=metric)
+    if not rows:
+        st.info("无可分析的多卡数据（需同模型在 tp1/tp2/tp4... 下各跑过测试）。")
+        return
+
+    import pandas as pd
+    df = pd.DataFrame(rows)
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    # 归因：取效率最低的非 tp1 行
+    non_baseline = [r for r in rows if r["tp_size"] != 1 and r["efficiency"] is not None]
+    if non_baseline:
+        worst = min(non_baseline, key=lambda r: r["efficiency"])
+        st.warning(
+            f"最低效率：{worst['model_name']} @ tp{worst['tp_size']} = "
+            f"{worst['efficiency']:.2f}（speedup {worst['speedup_vs_tp1']:.2f}x / 理想 "
+            f"{worst['linear_ideal_speedup']}x）。{interpret_efficiency(worst['efficiency'])}"
+        )
+
+    csv_str = _sheet_to_csv(rows)
+    st.download_button("📥 导出 CSV", data=csv_str.encode("utf-8"),
+                       file_name="scaling_efficiency.csv", mime="text/csv", key="se_dl_csv")
+
+
+# ---------------------------------------------------------------------------
+# 透视矩阵
 # ---------------------------------------------------------------------------
 
 
 def _render_cross_matrix(runs) -> None:
     st.subheader("硬件 × 模型 透视矩阵")
-    metric = st.selectbox(
-        "透视指标",
-        ["decode_tps", "ttft_s", "effective_bandwidth_gbps", "bandwidth_utilization_pct",
-         "gpu_vram_peak_gb"],
-        key="wh_matrix_metric",
-    )
-    agg = st.radio("同格多次测试聚合", ["latest（取最新）", "best（取最大）"], horizontal=True, key="wh_matrix_agg")
-    agg_code = "best" if agg.startswith("best") else "latest"
+    # 维度可选：默认 machine×model；可切 quantization/engine/parallel 做量化/引擎/扩展对照
+    dims = ["machine_id", "model_name", "engine", "quantization", "parallel_strategy"]
+    d1, d2, d3, d4 = st.columns(4)
+    with d1:
+        row_key = st.selectbox("行维度", dims, index=0, key="wh_matrix_row")
+    with d2:
+        col_opts = [d for d in dims if d != row_key]
+        col_key = st.selectbox("列维度", col_opts, index=0, key="wh_matrix_col")
+    with d3:
+        metric = st.selectbox(
+            "透视指标",
+            ["decode_tps", "ttft_s", "effective_bandwidth_gbps", "bandwidth_utilization_pct",
+             "gpu_vram_peak_gb"],
+            key="wh_matrix_metric",
+        )
+    with d4:
+        agg = st.radio("聚合", ["best", "latest"], horizontal=True, key="wh_matrix_agg")
+    agg_code = "best" if agg == "best" else "latest"
 
-    mx = build_cross_matrix(runs, metric=metric, agg=agg_code)
+    mx = build_cross_matrix(runs, row_key=row_key, col_key=col_key, metric=metric, agg=agg_code)
     if not mx.row_labels or not mx.col_labels:
         st.info("该指标在当前筛选下无可透视的格（指标全缺测或无 machine_id/模型）。")
         return
