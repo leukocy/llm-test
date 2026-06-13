@@ -151,9 +151,12 @@ class TestResultRepository(BaseRepository[TestResult]):
                 SUM(prefill_tokens) as total_prefill_tokens,
                 SUM(decode_tokens) as total_decode_tokens,
                 SUM(cache_hit_tokens) as total_cache_hit_tokens,
-                COUNT(*) as total_requests
+                COUNT(*) as total_requests,
+                SUM(CASE WHEN error IS NULL THEN 1 ELSE 0 END) as completed_requests,
+                SUM(CASE WHEN error IS NOT NULL THEN 1 ELSE 0 END) as failed_requests,
+                1.0 * SUM(CASE WHEN error IS NULL THEN 1 ELSE 0 END) / COUNT(*) as success_rate
             FROM test_results
-            WHERE run_id = ? AND error IS NULL
+            WHERE run_id = ?
         """
         row = self.db.fetch_one(sql, (run_id,))
         return row if row else {}
