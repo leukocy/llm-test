@@ -229,6 +229,27 @@ class TestBenchmarkRunnerSystemInfo:
         # Engine refers to the inference backend, so provider names are not a fallback.
         assert info['engine_name'] == ''
 
+    def test_update_ui_invokes_render_progress_callback(self, runner):
+        """update_ui 把实时结果交给注入的 render_progress 回调，不直接调 st.*（模式 F）"""
+        runner.results_list = [{"session_id": 7, "tps": 50.0, "error": None}]
+        captured = []
+        runner.render_progress = lambda df, out, sid: captured.append((len(df), out, sid))
+        runner.output_placeholder = None  # 不触发 latest_output
+
+        runner.update_ui()
+
+        assert len(captured) == 1
+        assert captured[0][0] == 1          # df 一行
+        assert captured[0][1] is None       # 无 latest_output
+        assert captured[0][2] == 7          # session_id 透传
+
+    def test_update_ui_skips_render_when_no_callback(self, runner):
+        """未注入 render_progress（headless/测试默认）时不报错"""
+        runner.results_list = [{"session_id": 1, "tps": 1.0}]
+        runner.render_progress = None
+        runner.output_placeholder = None
+        runner.update_ui()  # 不应抛异常
+
 
 class TestBenchmarkRunnerInitialization:
     """Test BenchmarkRunner Initialize"""
