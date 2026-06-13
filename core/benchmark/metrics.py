@@ -45,6 +45,7 @@ def empty_metrics() -> dict[str, object]:
         "total_time": 0,
         "cache_hit_tokens": 0,
         "token_calc_method": "Error",
+        "error": None,
     }
 
 

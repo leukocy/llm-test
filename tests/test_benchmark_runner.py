@@ -561,16 +561,15 @@ class TestBenchmarkRunnerResume:
     @pytest.mark.asyncio
     async def test_resume_skips_completed_batches(self, runner, tmp_path):
         """resume时跳过已完成的批次，只运行剩余批次"""
-        import streamlit as st
 
-        st.session_state.is_resuming = True
-        st.session_state.resume_data = {
+        runner.ui_state.set('is_resuming', True)
+        runner.ui_state.set('resume_data', {
             "completed_results": [{"session_id": i} for i in range(4)],
             "current_index": 4,
             "total_samples": 6,
             "test_id": "test_resume",
             "test_type": "concurrency"
-        }
+        })
 
         runner._start_db_run = MagicMock()
         runner._batch_save_results_to_db = MagicMock()
@@ -590,17 +589,16 @@ class TestBenchmarkRunnerResume:
     @pytest.mark.asyncio
     async def test_resume_restores_results_list(self, runner, tmp_path):
         """resume时恢复已保存的结果列表"""
-        import streamlit as st
 
         saved_results = [{"session_id": i, "ttft": 0.5} for i in range(4)]
-        st.session_state.is_resuming = True
-        st.session_state.resume_data = {
+        runner.ui_state.set('is_resuming', True)
+        runner.ui_state.set('resume_data', {
             "completed_results": saved_results.copy(),
             "current_index": 4,
             "total_samples": 6,
             "test_id": "test_resume",
             "test_type": "concurrency"
-        }
+        })
 
         runner._start_db_run = MagicMock()
         runner._batch_save_results_to_db = MagicMock()
@@ -622,16 +620,15 @@ class TestBenchmarkRunnerResume:
     @pytest.mark.asyncio
     async def test_resume_with_zero_current_index_fallback(self, runner, tmp_path):
         """current_index 为 0 时回退到 completed_requests"""
-        import streamlit as st
 
-        st.session_state.is_resuming = True
-        st.session_state.resume_data = {
+        runner.ui_state.set('is_resuming', True)
+        runner.ui_state.set('resume_data', {
             "completed_results": [{"session_id": i} for i in range(4)],
             "current_index": 0,
             "total_samples": 6,
             "test_id": "test_resume",
             "test_type": "concurrency"
-        }
+        })
 
         runner._start_db_run = MagicMock()
         runner._batch_save_results_to_db = MagicMock()
@@ -676,17 +673,16 @@ class TestBenchmarkRunnerResume:
     @pytest.mark.asyncio
     async def test_resume_across_multiple_concurrency_levels(self, runner, tmp_path):
         """resume跨越多个concurrency level时正确跳过"""
-        import streamlit as st
 
-        st.session_state.is_resuming = True
+        runner.ui_state.set('is_resuming', True)
         # conc=2 时 2 rounds = 4 请求，从 conc=4 开始
-        st.session_state.resume_data = {
+        runner.ui_state.set('resume_data', {
             "completed_results": [{"session_id": i} for i in range(4)],
             "current_index": 4,
             "total_samples": 12,
             "test_id": "test_resume",
             "test_type": "concurrency"
-        }
+        })
 
         runner._start_db_run = MagicMock()
         runner._batch_save_results_to_db = MagicMock()
