@@ -34,6 +34,11 @@ from core.warehouse.query import (
     project_run,
     query_runs,
 )
+from core.warehouse.scaling_efficiency import (
+    build_scaling_efficiency,
+    interpret_efficiency,
+    parse_tp_size,
+)
 from core.warehouse.templates import (
     HARDWARE_INVENTORY_FIELDS,
     HM_TEST_FIELDS,
@@ -70,6 +75,10 @@ __all__ = [
     "CAPABILITY_COLUMNS",
     "build_capability_sheet",
     "build_capability_markdown",
+    # scaling efficiency
+    "build_scaling_efficiency",
+    "interpret_efficiency",
+    "parse_tp_size",
     # export
     "export_template_csv",
     "export_template_json",
