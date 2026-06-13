@@ -4,7 +4,7 @@ Database Schema 定义
 包含所has表 SQL 定义andMigration语句。
 """
 
-SCHEMA_VERSION = "1.1.0"
+SCHEMA_VERSION = "1.2.0"
 
 # ============================================
 # Table schema定义
@@ -66,7 +66,30 @@ CREATE TABLE IF NOT EXISTS test_runs (
     -- 元Data
     tags TEXT,
     notes TEXT,
-    csv_path TEXT
+    csv_path TEXT,
+
+    -- ===== 1.2.0 数据仓库扩展（手册：报告是切片，仓库是全集）=====
+    -- 硬件指纹分组 / 测试人 / 可对外等级 / 瓶颈归因（一等列，便于筛选）
+    machine_id TEXT,
+    tester TEXT,
+    external_level TEXT DEFAULT 'internal',  -- internal / review / publishable
+    bottleneck TEXT,
+    next_action TEXT,
+    supersedes_test_id TEXT,   -- 复测指向原 test_id
+    comparison_group TEXT,     -- MTP on/off、A/B 对照分组
+    mtp_enabled INTEGER,       -- 推测解码开关（便于直接筛选）
+
+    -- 资源监控 / 等效带宽 头条指标（一等列，便于筛选/排序）
+    effective_bandwidth_gbps REAL,
+    bandwidth_utilization_pct REAL,
+    gpu_vram_peak_gb REAL,
+    system_memory_peak_gb REAL,
+
+    -- 变长 JSON 字段（富模型规格 / 服务配置 / 监控时序 / 状态明细）
+    model_spec_json TEXT,        -- 模型架构规格（架构/MoE/KV精度/MTP...）
+    serving_config_json TEXT,    -- 服务配置（引擎/并行/注意力&MoE后端/调度/MTP/runtime）
+    resource_monitor_json TEXT,  -- 资源监控汇总 + 时序
+    status_detail TEXT           -- 状态明细：未测/异常/已通过/需复测/可对外
 );
 """
 
@@ -256,6 +279,8 @@ CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_test_runs_model ON test_runs(model_id);",
     "CREATE INDEX IF NOT EXISTS idx_test_runs_status ON test_runs(status);",
     "CREATE INDEX IF NOT EXISTS idx_test_runs_created ON test_runs(created_at);",
+    # 注：machine_id / external_level / comparison_group 上的索引引用 1.2.0 新列，
+    # 不能放在 create_tables（对老库会在迁移加列之前执行而崩溃），统一由 1.2.0 迁移创建。
 
     "CREATE INDEX IF NOT EXISTS idx_results_run_id ON test_results(run_id);",
     "CREATE INDEX IF NOT EXISTS idx_results_session ON test_results(session_id);",
@@ -314,9 +339,6 @@ def create_tables(conn) -> None:
     for sql in CREATE_INDEXES:
         cursor.execute(sql)
 
-    # Initialize元Data
-    cursor.execute("""
-        INSERT OR IGNORE INTO db_meta (key, value) VALUES ('schema_version', ?)
-    """, (SCHEMA_VERSION,))
-
+    # 注：不在此写入 schema_version，让 run_migrations 成为版本唯一来源。
+    # 这样全新库也会执行幂等迁移（含 1.2.0 新列索引），老库则补齐历史迁移。
     conn.commit()

@@ -52,6 +52,10 @@ class Database:
 
         with self._get_raw_connection() as conn:
             create_tables(conn)
+            # 执行迁移：补齐历史从未运行的 1.1.0，以及本次 1.2.0（老库才能拿到新列）。
+            # 此前 run_migrations 是死代码（无调用方），现在补上。
+            from .migrations import run_migrations
+            run_migrations(conn)
 
         self._initialized = True
 

@@ -115,7 +115,7 @@ def fetch_models(api_base, api_key):
 
 def _render_tokenizer_status_panel():
     """Render tokenizer availability status panel with download buttons."""
-    from core.tokenizer_utils import list_registered_tokenizers, ensure_tokenizer_available
+    from core.tokenizer_utils import ensure_tokenizer_available, list_registered_tokenizers
 
     tokenizers = list_registered_tokenizers()
     missing = [t for t in tokenizers if not t["available"]]
@@ -701,3 +701,17 @@ def render_sidebar_bottom():
             'system': c_sys,
             'engine_name': c_engine
         })
+
+    # 数据仓库输入面板：模型规格 / 服务配置 / 测试元数据（详见 ui/warehouse_panels.py）
+    try:
+        from ui.warehouse_panels import (
+            render_model_spec_panel,
+            render_serving_config_panel,
+            render_test_metadata_panel,
+        )
+        render_model_spec_panel(st.session_state.get('model_id_selector', ''))
+        render_serving_config_panel()
+        render_test_metadata_panel()
+    except Exception:
+        # 面板渲染失败不应阻塞 sidebar
+        pass
