@@ -23,6 +23,7 @@ from typing import Any, Callable
 
 import pandas as pd
 
+from core.cancel_state import is_batch_stop_requested
 from core.result_metrics import success_mask_from_error
 
 # LatencyImport BenchmarkRunner（仅inTest执行时Load）
@@ -435,17 +436,13 @@ class BatchTestScheduler:
                 results.append(item.to_dict())
                 continue
 
-            # Also check global stop flag from session_state
-            try:
-                import streamlit as st
-                if st.session_state.get('batch_test_stop_requested', False):
-                    self.should_stop = True
-                    item.status = "skipped"
-                    progress.skipped_items += 1
-                    results.append(item.to_dict())
-                    continue
-            except Exception:
-                pass
+            # Also check global batch stop flag (进程级 cancel_state)
+            if is_batch_stop_requested():
+                self.should_stop = True
+                item.status = "skipped"
+                progress.skipped_items += 1
+                results.append(item.to_dict())
+                continue
 
             progress.current_item = item.name
             item.status = "running"
@@ -495,13 +492,9 @@ class BatchTestScheduler:
             # Check stop signal before starting batch
             if self.should_stop:
                 break
-            try:
-                import streamlit as st
-                if st.session_state.get('batch_test_stop_requested', False):
-                    self.should_stop = True
-                    break
-            except Exception:
-                pass
+            if is_batch_stop_requested():
+                self.should_stop = True
+                break
 
             # Create任务
             tasks = []

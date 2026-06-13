@@ -10,6 +10,7 @@ from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ct
 
 from config.settings import HF_MODEL_MAPPING
 from core.benchmark.metrics import calculate_request_metrics, empty_metrics
+from core.cancel_state import is_stop_requested
 from core.error_messages import get_error_info
 from core.providers.factory import get_provider
 from core.tokenizer_utils import get_cached_tokenizer
@@ -1606,8 +1607,8 @@ class BenchmarkRunner:
             self._update_log(f"[SIGNAL] Import error: {e}", level=LogLevel.ERROR)
 
         # 后备：检查 session_state
-        ss_stop = st.session_state.get('stop_requested', False)
-        ss_pause = st.session_state.get('pause_requested', False)
+        ss_stop = is_stop_requested()
+        ss_pause = is_pause_requested()
         if ss_stop or ss_pause:
             self._update_log(f"[SIGNAL] session_state: stop={ss_stop}, pause={ss_pause}", level=LogLevel.INFO)
         if ss_stop:
@@ -1834,7 +1835,7 @@ class BenchmarkRunner:
                 session_id = session_id_start + i
 
                 # Check for stop signal
-                if st.session_state.get('stop_requested', False):
+                if is_stop_requested():
                     return None
 
                 req_start_time = time.time()
@@ -1929,7 +1930,7 @@ class BenchmarkRunner:
             wait_task = asyncio.gather(*tasks, return_exceptions=True)
 
             while not wait_task.done():
-                if st.session_state.get('stop_requested', False):
+                if is_stop_requested():
                     for t in tasks:
                         if not t.done():
                             t.cancel()
@@ -2414,7 +2415,7 @@ class BenchmarkRunner:
 
         # 整体轮次循环
         for overall_round in range(total_rounds):
-            if st.session_state.get('stop_requested', False):
+            if is_stop_requested():
                 st.warning("Test已停止。")
                 break
 
@@ -2441,7 +2442,7 @@ class BenchmarkRunner:
 
             # 按Segment levels从小到大发送
             for seg_idx, segment_length in enumerate(segment_levels):
-                if st.session_state.get('stop_requested', False):
+                if is_stop_requested():
                     st.warning("Test已停止。")
                     break
 
@@ -2475,7 +2476,7 @@ class BenchmarkRunner:
 
                 # 发送Concurrency请求
                 for req_idx in range(requests_per_segment):
-                    if st.session_state.get('stop_requested', False):
+                    if is_stop_requested():
                         break
 
                     # Concurrency执行
@@ -2872,7 +2873,7 @@ class BenchmarkRunner:
         # No client needed - requests library creates connections per-request
         for concurrency in concurrencies:
             for length_target in context_lengths:
-                if st.session_state.get('stop_requested', False):
+                if is_stop_requested():
                     st.warning("Test已停止。")
                     break
 
@@ -3226,7 +3227,7 @@ class BenchmarkRunner:
         async def worker(worker_index):
             while time.time() < end_test_time:
                 # Check for stop signal
-                if st.session_state.get('stop_requested', False):
+                if is_stop_requested():
                     break
 
                 # Get next session ID

@@ -226,10 +226,11 @@ def render_batch_test_executor():
     with col_stop:
         if st.button("Stop Test", disabled=not st.session_state.get("batch_test_running", False), use_container_width=True):
             st.session_state.batch_test_stop_requested = True
-            # Also call global abort to stop any in-progress LLM calls
+            # 进程级取消信号：批量停止 + 中断进行中的 LLM 调用
             try:
-                from core.providers.openai import set_stop_requested
-                set_stop_requested(True)
+                from core import cancel_state
+                cancel_state.request_batch_stop()
+                cancel_state.request_stop()
             except ImportError:
                 pass
             try:

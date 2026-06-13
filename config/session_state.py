@@ -4,7 +4,6 @@ Streamlit Session State Management Module
 Centralized management of all Streamlit session_state variable initialization and access.
 """
 
-import os
 import time
 
 import pandas as pd
@@ -283,11 +282,22 @@ def request_stop():
     """Request to stop test"""
     st.session_state.stop_requested = True
     st.session_state.test_running = False
+    # 桥接：同步写进程级 cancel_state（core 读它，不再读 session_state）
+    try:
+        from core import cancel_state
+        cancel_state.request_stop()
+    except ImportError:
+        pass
 
 
 def request_pause():
     """Request to pause test"""
     st.session_state.pause_requested = True
+    try:
+        from core import cancel_state
+        cancel_state.request_pause()
+    except ImportError:
+        pass
 
 
 def set_test_running():
@@ -299,10 +309,10 @@ def set_test_running():
     st.session_state.pause_requested = False
     # 强制刷新时间戳
     _touch_test_running_timestamp()
-    # 同时重置全局停止标志
+    # 重置进程级取消信号（stop/pause/batch 全清）
     try:
-        from core.providers.openai import set_stop_requested
-        set_stop_requested(False)
+        from core import cancel_state
+        cancel_state.reset_all()
     except ImportError:
         pass
 
@@ -324,10 +334,10 @@ def set_test_cancelled():
     st.session_state.pause_requested = False
     # 关键：强制刷新 session_state 确保状态立即生效
     _touch_test_running_timestamp()
-    # 同时重置全局停止标志
+    # 重置进程级取消信号
     try:
-        from core.providers.openai import set_stop_requested
-        set_stop_requested(False)
+        from core import cancel_state
+        cancel_state.reset_all()
     except ImportError:
         pass
 

@@ -11,10 +11,7 @@ from ..thinking_params import build_thinking_params, detect_platform
 from .base import LLMProvider, get_request_timeout_seconds
 from .stream_parser import parse_openai_stream_line
 
-# 全局停止标志 - 作为 session_state 的备份
-_stop_requested = False
-# 全局暂停标志 - 用于跨线程通信
-_pause_requested = False
+# 取消/暂停标志已迁移至 core.cancel_state（进程级 threading.Event，UI 无关）
 # 活跃流任务追踪
 _active_streams: WeakSet = WeakSet()
 _active_streams_lock = threading.Lock()
@@ -31,24 +28,14 @@ _barrier_lock = threading.Lock()
 
 
 def set_stop_requested(value: bool):
-    """设置停止标志并取消所有活跃流
+    """设置停止标志并取消所有活跃流。
 
-    同时设置：
-    1. session_state.stop_requested (持久化)
-    2. 全局 _stop_requested (备份)
-    3. 关闭所有活跃的 httpx 客户端连接
+    状态存于 core.cancel_state（进程级，UI 无关）。UI 层负责把信号镜像到 session_state 供显示。
     """
-    global _stop_requested
-    _stop_requested = value
-
-    # 同时设置 session_state 以持久化
-    try:
-        import streamlit as st
-        st.session_state.stop_requested = value
-    except Exception:
-        pass
+    from core import cancel_state
 
     if value:
+        cancel_state.request_stop()
         # 关闭所有活跃的 httpx 客户端 - 这会立即中断正在进行的流式请求
         with _active_clients_lock:
             for client_id, client in list(_active_clients.items()):
@@ -75,57 +62,32 @@ def set_stop_requested(value: bool):
                         stream_task.cancel()
                 except Exception:
                     pass
+    else:
+        cancel_state.clear_stop()
 
 
 def is_stop_requested() -> bool:
-    """检查是否请求停止
+    """检查是否请求停止（读 core.cancel_state，不再读 session_state）。"""
+    from core import cancel_state
 
-    优先检查 session_state，然后检查全局变量
-    """
-    try:
-        import streamlit as st
-        session_stop = st.session_state.get('stop_requested', False)
-        if session_stop:
-            return True
-    except Exception:
-        pass
-
-    global _stop_requested
-    return _stop_requested
+    return cancel_state.is_stop_requested()
 
 
 def set_pause_requested(value: bool):
-    """设置暂停标志
+    """设置暂停标志（状态存于 core.cancel_state）。"""
+    from core import cancel_state
 
-    同时设置：
-    1. session_state.pause_requested (持久化)
-    2. 全局 _pause_requested (备份)
-    """
-    global _pause_requested
-    _pause_requested = value
-
-    try:
-        import streamlit as st
-        st.session_state.pause_requested = value
-    except Exception:
-        pass
+    if value:
+        cancel_state.request_pause()
+    else:
+        cancel_state.clear_pause()
 
 
 def is_pause_requested() -> bool:
-    """检查是否请求暂停
+    """检查是否请求暂停（读 core.cancel_state）。"""
+    from core import cancel_state
 
-    优先检查 session_state，然后检查全局变量
-    """
-    try:
-        import streamlit as st
-        session_pause = st.session_state.get('pause_requested', False)
-        if session_pause:
-            return True
-    except Exception:
-        pass
-
-    global _pause_requested
-    return _pause_requested
+    return cancel_state.is_pause_requested()
 
 
 def register_stream(stream_task):
@@ -198,7 +160,7 @@ class OpenAIProvider(LLMProvider):
         if client is None:
             client = httpx.AsyncClient(
                 transport=httpx.AsyncHTTPTransport(
-                    limits=httpx.Limits(max_connections=4096, max_keepalive_connections=2048),
+                    limits=httpx.Limits(max_connections=2048, max_keepalive_connections=256),
                 ),
                 timeout=request_timeout_seconds,
             )
