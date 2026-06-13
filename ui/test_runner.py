@@ -114,6 +114,37 @@ class TestExecutor:
         output_placeholder = output_container.empty()
         output_placeholder.info("📝 Output preview area ready, waiting for first request to complete...")
 
+        # 实时进度渲染回调：core 不再直接调 st.*，由本闭包在后台线程渲染到 placeholder。
+        # 后台线程无 script run context，需附上主线程捕获的 ctx 才能调 st.*。
+        try:
+            from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
+            _main_ctx = get_script_run_ctx()
+        except Exception:
+            _main_ctx = None
+
+        def _render_progress(df, latest_output, session_id):
+            import threading as _threading
+
+            from ui.formatters import format_results_for_display
+            from utils.helpers import reorder_dataframe_columns
+            try:
+                if _main_ctx and not get_script_run_ctx():
+                    add_script_run_ctx(_threading.current_thread(), _main_ctx)
+                with placeholder.container():
+                    st.subheader("实时Result")
+                    display_df = format_results_for_display(
+                        reorder_dataframe_columns(df) if not df.empty else df,
+                        st.session_state.get('current_test_type'),
+                    )
+                    st.dataframe(display_df, width="stretch")
+                if latest_output:
+                    with output_placeholder.container():
+                        with st.expander(f"📝 最新输出预览 (Session {session_id})", expanded=False):
+                            st.code(latest_output, language=None, wrap_lines=True)
+            except Exception:
+                # 后台线程渲染失败不应中断测试
+                pass
+
         try:
             # Create filename
             timestamp = time.strftime("%Y%m%d_%H%M%S")
@@ -145,6 +176,7 @@ class TestExecutor:
                 template_tokens=st.session_state.get('template_tokens', self.config.get('template_tokens', 0)),
                 warehouse_context=self._build_warehouse_context(),
                 ui_state=SessionStateBridge(st.session_state),
+                render_progress=_render_progress,
             )
 
             # 存储 runner 实例到 session_state，以便 Stop 按钮可以访问结果

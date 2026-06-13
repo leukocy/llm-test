@@ -5,7 +5,6 @@ import time
 
 import numpy as np
 import pandas as pd
-import streamlit as st
 from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 
 from config.settings import HF_MODEL_MAPPING
@@ -14,10 +13,9 @@ from core.cancel_state import is_stop_requested
 from core.error_messages import get_error_info
 from core.providers.factory import get_provider
 from core.tokenizer_utils import get_cached_tokenizer
-from ui.formatters import format_results_for_display
 from ui.log_viewer import render_log_viewer
 from utils.get_logger import get_logger
-from utils.helpers import append_to_csv, initialize_csv, reorder_dataframe_columns
+from utils.helpers import append_to_csv, initialize_csv
 from utils.log_server import log_server
 from utils.logger import BenchmarkLogger, LogLevel
 
@@ -267,7 +265,7 @@ def _get_random_suffix_prompt(target_token_budget: int, tokenizer) -> str:
 logger = get_logger(__name__)
 
 class BenchmarkRunner:
-    def __init__(self, placeholder, progress_bar, status_text, api_base_url, model_id, tokenizer_option, csv_filename, api_key, log_placeholder, provider, dashboard=None, output_placeholder=None, hf_tokenizer_model_id=None, latency_offset=0.0, thinking_enabled=None, thinking_budget=None, reasoning_effort=None, random_seed=None, skip_first_token_for_tps=False, template_tokens=0, warehouse_context: dict | None = None, ui_state=None):
+    def __init__(self, placeholder, progress_bar, status_text, api_base_url, model_id, tokenizer_option, csv_filename, api_key, log_placeholder, provider, dashboard=None, output_placeholder=None, hf_tokenizer_model_id=None, latency_offset=0.0, thinking_enabled=None, thinking_budget=None, reasoning_effort=None, random_seed=None, skip_first_token_for_tps=False, template_tokens=0, warehouse_context: dict | None = None, ui_state=None, render_progress=None):
         self.placeholder, self.progress_bar, self.status_text = placeholder, progress_bar, status_text
         self.api_base_url = api_base_url
         self.model_id = model_id
@@ -358,6 +356,9 @@ class BenchmarkRunner:
         # UI 注入 session_state 实现；默认 NullStateBridge（内存 dict，headless/测试用）。
         from core.ui_bridge import NullStateBridge
         self.ui_state = ui_state or NullStateBridge()
+        # UI 注入的实时进度渲染回调（取代 update_ui 直接调 st.*；模式 F 解耦）。
+        # 签名：render_progress(df, latest_output, session_id)。None 时跳过渲染（headless/测试）。
+        self.render_progress = render_progress
 
     def set_warehouse_context(self, ctx: dict | None) -> None:
         """UI 层在跑测试前注入仓库上下文（从 session_state 摊成纯 dict）。"""
@@ -1587,25 +1588,18 @@ class BenchmarkRunner:
 
         try:
             df = pd.DataFrame(self.results_list)
-
-            if not df.empty:
-                df = reorder_dataframe_columns(df)
-
             self.ui_state.set('results_df', df)
-            with self.placeholder.container():
-                st.subheader("实时Result")
 
-                # Format for display (Same style as PageLayout)
-                test_type = self.ui_state.get('current_test_type')
-                display_df = format_results_for_display(df, test_type)
-
-                st.dataframe(display_df, width="stretch")
-
-            # Update output preview if available
+            # 实时渲染交由 UI 注入的 render_progress 回调（core 不再直接调 st.*）
+            latest_output = None
+            session_id = self.results_list[-1].get('session_id', 'Unknown') if self.results_list else 'Unknown'
             if self.output_placeholder and self.last_output and self.last_output != self._last_rendered_output:
-                with self.output_placeholder.container():
-                    with st.expander(f"📝 最新输出预览 (Session {self.results_list[-1].get('session_id', 'Unknown')})", expanded=False):
-                        st.code(self.last_output, language=None, wrap_lines=True)
+                latest_output = self.last_output
+
+            if self.render_progress:
+                self.render_progress(df, latest_output, session_id)
+
+            if latest_output is not None:
                 self._last_rendered_output = self.last_output
 
         except Exception as e:
