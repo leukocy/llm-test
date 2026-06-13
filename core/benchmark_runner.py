@@ -266,7 +266,7 @@ def _get_random_suffix_prompt(target_token_budget: int, tokenizer) -> str:
 logger = get_logger(__name__)
 
 class BenchmarkRunner:
-    def __init__(self, placeholder, progress_bar, status_text, api_base_url, model_id, tokenizer_option, csv_filename, api_key, log_placeholder, provider, dashboard=None, output_placeholder=None, hf_tokenizer_model_id=None, latency_offset=0.0, thinking_enabled=None, thinking_budget=None, reasoning_effort=None, random_seed=None, skip_first_token_for_tps=False, template_tokens=0):
+    def __init__(self, placeholder, progress_bar, status_text, api_base_url, model_id, tokenizer_option, csv_filename, api_key, log_placeholder, provider, dashboard=None, output_placeholder=None, hf_tokenizer_model_id=None, latency_offset=0.0, thinking_enabled=None, thinking_budget=None, reasoning_effort=None, random_seed=None, skip_first_token_for_tps=False, template_tokens=0, warehouse_context: dict | None = None):
         self.placeholder, self.progress_bar, self.status_text = placeholder, progress_bar, status_text
         self.api_base_url = api_base_url
         self.model_id = model_id
@@ -350,6 +350,13 @@ class BenchmarkRunner:
         self._last_bandwidth = {}  # 最近一次测试的等效带宽结果（供 UI 归因/偏差分析）
         self._engine_poller = None  # EngineMetricsPoller 实例（运行中）
         self._last_engine_metrics = None  # 最近一次测试的引擎运行时汇总 dict
+        # UI 注入的数据仓库上下文（取代直接读 st.session_state，保持 core UI-agnostic）。
+        # 键：engine_runtime / test_metadata / model_spec_override / serving_config / custom_sys_info
+        self.warehouse_context: dict = warehouse_context or {}
+
+    def set_warehouse_context(self, ctx: dict | None) -> None:
+        """UI 层在跑测试前注入仓库上下文（从 session_state 摊成纯 dict）。"""
+        self.warehouse_context = ctx or {}
 
     @staticmethod
     def _normalize_template_tokens(template_tokens):
@@ -608,13 +615,11 @@ class BenchmarkRunner:
             extra["kv_cache_capacity_tokens"] = log_kv
 
     def _parse_engine_log_kv(self) -> int | None:
-        """从 sidebar 配置的引擎日志路径解析 KV 容量(tokens)。"""
+        """从仓库上下文的引擎日志路径解析 KV 容量(tokens)。"""
         try:
-            import streamlit as st
-
             from core.engine_log_parser import parse_engine_log_file
 
-            er = st.session_state.get("engine_runtime") or {}
+            er = self.warehouse_context.get("engine_runtime") or {}
             log_path = er.get("log_path")
             if not log_path:
                 return None
@@ -624,10 +629,9 @@ class BenchmarkRunner:
             return None
 
     def _read_test_metadata(self) -> dict:
-        """从 sidebar 的 test_metadata 面板读取并映射到 test_runs 列。"""
+        """从仓库上下文的 test_metadata 映射到 test_runs 列。"""
         try:
-            import streamlit as st
-            tm = st.session_state.get('test_metadata') or {}
+            tm = self.warehouse_context.get('test_metadata') or {}
             mapping = {
                 'tester': 'tester',
                 'external_level': 'external_level',
@@ -643,18 +647,16 @@ class BenchmarkRunner:
             return {}
 
     def _resolve_model_and_serving(self) -> tuple[dict, dict, bool | None]:
-        """解析模型规格 / 服务配置（sidebar 覆盖 + 注册表 / 引擎探测）。"""
+        """解析模型规格 / 服务配置（仓库上下文覆盖 + 注册表 / 引擎探测）。"""
         try:
-            import streamlit as st
-
             from core.model_spec import resolve_spec
             from core.serving_config import ServingConfig, from_sidebar
 
-            override = st.session_state.get('model_spec_override') or {}
+            override = self.warehouse_context.get('model_spec_override') or {}
             spec = resolve_spec(self.model_id, override)
             spec_dict = spec.to_dict() if spec else {}
 
-            serving_state = st.session_state.get('serving_config') or {}
+            serving_state = self.warehouse_context.get('serving_config') or {}
             serving_dict: dict = {}
             mtp_enabled: bool | None = None
             if serving_state:
@@ -716,10 +718,8 @@ class BenchmarkRunner:
     def _start_engine_poller(self) -> None:
         """启动推理引擎 /metrics 轮询（未配置端点则 no-op）。"""
         try:
-            import streamlit as st
-
             from core.engine_metrics import EngineMetricsPoller, default_metrics_url
-            er = st.session_state.get("engine_runtime") or {}
+            er = self.warehouse_context.get("engine_runtime") or {}
             metrics_url = er.get("metrics_url") or default_metrics_url(self.api_base_url)
             if er.get("enabled", True) is False:  # 显式关闭
                 metrics_url = None
@@ -828,13 +828,12 @@ class BenchmarkRunner:
             "mainboard": ""
         }
 
-        # Try to load user custom overrides from Session State
+        # Try to load user custom overrides from injected warehouse context
         try:
-            if hasattr(st, 'session_state') and 'custom_sys_info' in st.session_state:
-                custom = st.session_state.custom_sys_info
-                for key in ['processor', 'mainboard', 'memory', 'gpu', 'system', 'engine_name']:
-                    if custom.get(key):
-                        info[key] = custom.get(key)
+            custom = self.warehouse_context.get('custom_sys_info') or {}
+            for key in ['processor', 'mainboard', 'memory', 'gpu', 'system', 'engine_name']:
+                if custom.get(key):
+                    info[key] = custom.get(key)
         except Exception:
             pass # Safe fallback
 
