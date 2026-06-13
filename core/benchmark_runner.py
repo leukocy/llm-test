@@ -267,7 +267,7 @@ def _get_random_suffix_prompt(target_token_budget: int, tokenizer) -> str:
 logger = get_logger(__name__)
 
 class BenchmarkRunner:
-    def __init__(self, placeholder, progress_bar, status_text, api_base_url, model_id, tokenizer_option, csv_filename, api_key, log_placeholder, provider, dashboard=None, output_placeholder=None, hf_tokenizer_model_id=None, latency_offset=0.0, thinking_enabled=None, thinking_budget=None, reasoning_effort=None, random_seed=None, skip_first_token_for_tps=False, template_tokens=0, warehouse_context: dict | None = None):
+    def __init__(self, placeholder, progress_bar, status_text, api_base_url, model_id, tokenizer_option, csv_filename, api_key, log_placeholder, provider, dashboard=None, output_placeholder=None, hf_tokenizer_model_id=None, latency_offset=0.0, thinking_enabled=None, thinking_budget=None, reasoning_effort=None, random_seed=None, skip_first_token_for_tps=False, template_tokens=0, warehouse_context: dict | None = None, ui_state=None):
         self.placeholder, self.progress_bar, self.status_text = placeholder, progress_bar, status_text
         self.api_base_url = api_base_url
         self.model_id = model_id
@@ -354,10 +354,18 @@ class BenchmarkRunner:
         # UI 注入的数据仓库上下文（取代直接读 st.session_state，保持 core UI-agnostic）。
         # 键：engine_runtime / test_metadata / model_spec_override / serving_config / custom_sys_info
         self.warehouse_context: dict = warehouse_context or {}
+        # UI 状态桥（取代直接读写 st.session_state；模式 E 解耦）。
+        # UI 注入 session_state 实现；默认 NullStateBridge（内存 dict，headless/测试用）。
+        from core.ui_bridge import NullStateBridge
+        self.ui_state = ui_state or NullStateBridge()
 
     def set_warehouse_context(self, ctx: dict | None) -> None:
         """UI 层在跑测试前注入仓库上下文（从 session_state 摊成纯 dict）。"""
         self.warehouse_context = ctx or {}
+
+    def set_ui_state(self, bridge) -> None:
+        """UI 层注入状态桥（session_state 实现）。"""
+        self.ui_state = bridge
 
     @staticmethod
     def _normalize_template_tokens(template_tokens):
@@ -1583,12 +1591,12 @@ class BenchmarkRunner:
             if not df.empty:
                 df = reorder_dataframe_columns(df)
 
-            st.session_state.results_df = df
+            self.ui_state.set('results_df', df)
             with self.placeholder.container():
                 st.subheader("实时Result")
 
                 # Format for display (Same style as PageLayout)
-                test_type = st.session_state.get('current_test_type')
+                test_type = self.ui_state.get('current_test_type')
                 display_df = format_results_for_display(df, test_type)
 
                 st.dataframe(display_df, width="stretch")
@@ -1656,10 +1664,10 @@ class BenchmarkRunner:
             progress_dir = Path("test_progress")
             progress_dir.mkdir(exist_ok=True)
 
-            test_id = st.session_state.get('current_test_id')
+            test_id = self.ui_state.get('current_test_id')
             if not test_id:
                 test_id = f"{test_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                st.session_state.current_test_id = test_id
+                self.ui_state.set('current_test_id', test_id)
 
             progress_data = {
                 "test_id": test_id,
@@ -1687,14 +1695,14 @@ class BenchmarkRunner:
             with open(progress_file, 'w', encoding='utf-8') as f:
                 json.dump(progress_data, f, ensure_ascii=False, indent=2, default=str)
 
-            # 同时保存到 session_state 的 resume_data，用于 Resume 功能
-            st.session_state.resume_data = {
+            # 同时经 UI 状态桥保存 resume_data（用于 Resume 功能）
+            self.ui_state.set('resume_data', {
                 'completed_results': self.results_list.copy(),
                 'current_index': current_index,
                 'total_samples': total_samples,
                 'test_id': test_id,
                 'test_type': test_type,
-            }
+            })
 
             self._update_log(f"进度Saved到 {progress_file}", level=LogLevel.INFO)
             self._update_log(f"Resume data saved: {len(self.results_list)} results, will skip first {current_index}", level=LogLevel.INFO)
@@ -2042,8 +2050,8 @@ class BenchmarkRunner:
         self._start_db_run("concurrency", config)
 
         # Checkis否isRestore模式
-        is_resuming = st.session_state.get('is_resuming', False)
-        resume_data = st.session_state.get('resume_data', None)
+        is_resuming = self.ui_state.get('is_resuming', False)
+        resume_data = self.ui_state.get('resume_data')
         start_session_counter = 0
 
         if is_resuming and resume_data:
@@ -2058,8 +2066,8 @@ class BenchmarkRunner:
                     start_session_counter = self.completed_requests
                 self._update_log(f"从进度Restore: Completed {self.completed_requests} requests, will skip first {start_session_counter}", level=LogLevel.INFO)
                 # 清除Restore标志
-                st.session_state.is_resuming = False
-                st.session_state.resume_data = None
+                self.ui_state.set('is_resuming', False)
+                self.ui_state.set('resume_data', None)
 
         # Generate Calibrated Prompt if target > 0
         if input_tokens_target > 0:

@@ -21,6 +21,25 @@ from core.result_persistence import save_last_result_snapshot
 from utils.helpers import reorder_dataframe_columns
 
 
+class SessionStateBridge:
+    """把 streamlit session_state 适配成 core 期望的 ui_state 桥（get/set）。
+
+    core 通过它读写跨重跑状态（resume/results 等），不再直接 import streamlit（模式 E）。
+    """
+
+    def __init__(self, session_state) -> None:
+        self._ss = session_state
+
+    def get(self, key: str, default=None):
+        try:
+            return self._ss.get(key, default)
+        except Exception:
+            return default
+
+    def set(self, key: str, value) -> None:
+        self._ss[key] = value
+
+
 class TestExecutor:
     """Test executor class"""
 
@@ -125,6 +144,7 @@ class TestExecutor:
                 skip_first_token_for_tps=st.session_state.get('skip_first_token_for_tps', False),
                 template_tokens=st.session_state.get('template_tokens', self.config.get('template_tokens', 0)),
                 warehouse_context=self._build_warehouse_context(),
+                ui_state=SessionStateBridge(st.session_state),
             )
 
             # 存储 runner 实例到 session_state，以便 Stop 按钮可以访问结果
