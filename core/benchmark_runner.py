@@ -5,7 +5,6 @@ import time
 
 import numpy as np
 import pandas as pd
-from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 
 from config.settings import HF_MODEL_MAPPING
 from core.benchmark.metrics import calculate_request_metrics, empty_metrics
@@ -13,7 +12,6 @@ from core.cancel_state import is_stop_requested
 from core.error_messages import get_error_info
 from core.providers.factory import get_provider
 from core.tokenizer_utils import get_cached_tokenizer
-from ui.log_viewer import render_log_viewer
 from utils.get_logger import get_logger
 from utils.helpers import append_to_csv, initialize_csv
 from utils.log_server import log_server
@@ -265,7 +263,7 @@ def _get_random_suffix_prompt(target_token_budget: int, tokenizer) -> str:
 logger = get_logger(__name__)
 
 class BenchmarkRunner:
-    def __init__(self, placeholder, progress_bar, status_text, api_base_url, model_id, tokenizer_option, csv_filename, api_key, log_placeholder, provider, dashboard=None, output_placeholder=None, hf_tokenizer_model_id=None, latency_offset=0.0, thinking_enabled=None, thinking_budget=None, reasoning_effort=None, random_seed=None, skip_first_token_for_tps=False, template_tokens=0, warehouse_context: dict | None = None, ui_state=None, render_progress=None):
+    def __init__(self, placeholder, progress_bar, status_text, api_base_url, model_id, tokenizer_option, csv_filename, api_key, log_placeholder, provider, dashboard=None, output_placeholder=None, hf_tokenizer_model_id=None, latency_offset=0.0, thinking_enabled=None, thinking_budget=None, reasoning_effort=None, random_seed=None, skip_first_token_for_tps=False, template_tokens=0, warehouse_context: dict | None = None, ui_state=None, render_progress=None, render_log=None):
         self.placeholder, self.progress_bar, self.status_text = placeholder, progress_bar, status_text
         self.api_base_url = api_base_url
         self.model_id = model_id
@@ -305,7 +303,8 @@ class BenchmarkRunner:
         )
 
         # Capture the current script run context to pass to background threads
-        self.ctx = get_script_run_ctx()
+        # script run context 的捕获/附着自己已下放到 UI 回调（_render_progress / _render_log），
+        # core 不再依赖 streamlit.runtime.scriptrunner（模式 F2 解耦）。
 
         # Start WebSocket Server (Singleton, safe to call multiple times)
         try:
@@ -359,6 +358,9 @@ class BenchmarkRunner:
         # UI 注入的实时进度渲染回调（取代 update_ui 直接调 st.*；模式 F 解耦）。
         # 签名：render_progress(df, latest_output, session_id)。None 时跳过渲染（headless/测试）。
         self.render_progress = render_progress
+        # UI 注入的日志渲染回调（取代 _update_log 直接调 render_log_viewer；模式 F2 解耦）。
+        # 签名：render_log(logger)。None 时跳过（仅内存日志 + WebSocket 广播）。
+        self.render_log = render_log
 
     def set_warehouse_context(self, ctx: dict | None) -> None:
         """UI 层在跑测试前注入仓库上下文（从 session_state 摊成纯 dict）。"""
@@ -1295,21 +1297,12 @@ class BenchmarkRunner:
             # 2. Broadcast via WebSocket
             log_server.broadcast(entry.to_dict())
 
-            # 3. Update UI (Compact Mode)
-            # Ensure we have the script context if running in a background thread
-            if self.log_placeholder:
+            # 3. UI 日志渲染交由注入的 render_log 回调（core 不再调 render_log_viewer/附 ctx）
+            if self.render_log:
                 try:
-                    if not get_script_run_ctx() and self.ctx:
-                        add_script_run_ctx(threading.current_thread(), self.ctx)
-
-                    render_log_viewer(
-                        self.logger,
-                        placeholder=self.log_placeholder,
-                        max_display=50,
-                        compact_mode=True
-                    )
+                    self.render_log(self.logger)
                 except Exception as ui_error:
-                    logger.debug(f"UI update failed (likely thread context issue): {ui_error}")
+                    logger.debug(f"UI log render failed: {ui_error}")
 
         except Exception as e:
             logger.debug(f"Failed to update log: {e}")
