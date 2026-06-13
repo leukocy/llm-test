@@ -157,6 +157,13 @@ class EngineMetricsPoller:
             vals = [s[key] for s in self._samples if s.get(key) is not None]
             return max(vals) if vals else None
 
+        def _last(key):
+            # 末采样点值（vLLM/SGLang 直方图是累积的，末点均值 = 引擎整段整体值）
+            for s in reversed(self._samples):
+                if s.get(key) is not None:
+                    return s[key]
+            return None
+
         # num_preemption 是累加 counter：取窗口内增量（需 ≥2 个样本才能算）
         preemption_vals = [s["num_preemption"] for s in self._samples if s.get("num_preemption") is not None]
         preemption_total = None
@@ -180,6 +187,11 @@ class EngineMetricsPoller:
                 "num_requests_waiting": _peak("num_requests_waiting"),
                 "ttft_mean_s": _peak("ttft_mean_s"),
                 "tpot_mean_s": _peak("tpot_mean_s"),
+            },
+            "engine_means": {
+                # 末采样点的直方图均值（直方图累积，末点 = 引擎整段整体 TTFT/TPOT）
+                "ttft_s": _last("ttft_mean_s"),
+                "tpot_s": _last("tpot_mean_s"),
             },
             "preemption_total": preemption_total,
             "cache_config": {
@@ -206,6 +218,7 @@ class EngineMetricsPoller:
             "interval": self.interval,
             "sample_count": 0,
             "peaks": {},
+            "engine_means": {},
             "preemption_total": None,
             "cache_config": {},
             "timeline": [],

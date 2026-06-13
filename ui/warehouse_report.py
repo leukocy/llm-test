@@ -178,6 +178,37 @@ def render_engine_runtime() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 客户端 vs 引擎侧 TTFT/TPOT 对照
+# ---------------------------------------------------------------------------
+
+def render_client_vs_engine_analysis() -> None:
+    """客户端（端到端）vs 引擎侧（/metrics 直方图）TTFT/TPOT 对照，定位延迟在传输还是引擎。"""
+    from core.latency_analysis import compute_client_vs_engine_latency
+
+    df = st.session_state.get("results_df")
+    eng = st.session_state.get("engine_metrics")
+    if (df is None or getattr(df, "empty", True)) and not (eng or {}).get("engine_means"):
+        return
+
+    r = compute_client_vs_engine_latency(df, eng)
+    if r["client_ttft_s"] is None and r["engine_ttft_s"] is None:
+        return
+
+    with st.expander("⏱️ 客户端 vs 引擎侧延迟对照", expanded=False):
+        c1, c2, c3 = st.columns(3)
+        c1.metric("客户端 TTFT(中位)", f"{r['client_ttft_s']*1000:.0f} ms" if r["client_ttft_s"] else "—")
+        c2.metric("引擎侧 TTFT(整体)", f"{r['engine_ttft_s']*1000:.0f} ms" if r["engine_ttft_s"] else "—")
+        oh = r["ttft_overhead_pct"]
+        c3.metric("TTFT 开销占比", f"{oh}%" if oh is not None else "—",
+                  help="(客户端-引擎)/引擎 —— 高则延迟在网络/排队，低则在引擎内部")
+        c4, c5, c6 = st.columns(3)
+        c4.metric("客户端 TPOT(中位)", f"{r['client_tpot_ms']:.1f} ms" if r["client_tpot_ms"] else "—")
+        c5.metric("引擎侧 TPOT(整体)", f"{r['engine_tpot_ms']:.1f} ms" if r["engine_tpot_ms"] else "—")
+        c6.metric("TPOT 开销", f"{r['tpot_overhead_ms']:.1f} ms" if r["tpot_overhead_ms"] is not None else "—")
+        st.caption(r["verdict"])
+
+
+# ---------------------------------------------------------------------------
 # 可对外闸门徽标
 # ---------------------------------------------------------------------------
 
@@ -290,6 +321,16 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
         lines.append("- 未采集到引擎运行时（未配置 /metrics 端点或端点不可达）。")
     lines.append("")
 
+    lines.append("## 客户端 vs 引擎侧延迟对照\n")
+    ce = ctx.get("client_vs_engine") or {}
+    if ce.get("client_ttft_s") is not None or ce.get("engine_ttft_s") is not None:
+        lines.append(f"- 客户端 TTFT(中位): {ce.get('client_ttft_s') or '—'} s | 引擎侧 TTFT(整体): {ce.get('engine_ttft_s') or '—'} s | 开销占比: {ce.get('ttft_overhead_pct') or '—'}%")
+        lines.append(f"- 客户端 TPOT(中位): {ce.get('client_tpot_ms') or '—'} ms | 引擎侧 TPOT(整体): {ce.get('engine_tpot_ms') or '—'} ms")
+        lines.append(f"- 判定: {ce.get('verdict') or '—'}")
+    else:
+        lines.append("- 对照数据不全（缺客户端 TTFT 或引擎侧 /metrics）。")
+    lines.append("")
+
     lines.append("## 等效带宽偏差分析\n")
     from core.effective_bandwidth import summarize_gap
     lines.append(summarize_gap(ctx.get("effective_bandwidth") or {}))
@@ -334,6 +375,7 @@ def render_warehouse_panel(test_type: str, model_id: str) -> None:
         render_resource_timeline()
         render_deviation_analysis()
         render_engine_runtime()
+        render_client_vs_engine_analysis()
 
         # 单次测试报告导出
         if st.button("📄 导出单次测试报告 (Markdown)", key="export_single_report"):
@@ -346,6 +388,14 @@ def render_warehouse_panel(test_type: str, model_id: str) -> None:
             )
     except Exception as e:  # noqa: BLE001
         st.caption(f"数据仓库面板渲染跳过: {e}")
+
+
+def _client_vs_engine_for_report(ss) -> dict[str, Any]:
+    from core.latency_analysis import compute_client_vs_engine_latency
+
+    return compute_client_vs_engine_latency(
+        ss.get("results_df"), ss.get("engine_metrics")
+    )
 
 
 def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
@@ -376,6 +426,7 @@ def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
         "test_config": st.session_state.get("test_config") or {},
         "resource_monitor": mon,
         "engine_metrics": st.session_state.get("engine_metrics") or {},
+        "client_vs_engine": _client_vs_engine_for_report(st.session_state),
         "effective_bandwidth": bw,
         "gate": {"level": result.level, "gates": result.gates, "reasons": result.reasons},
         "insights": st.session_state.get("insights") or [],
