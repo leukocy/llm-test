@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -198,14 +198,15 @@ class TestBenchmarkRunnerSystemInfo:
             assert field in info
 
     def test_get_system_info_with_custom_overrides(self, runner):
-        """TestCustom系统信息覆盖"""
-        import streamlit as st
-        st.session_state.custom_sys_info = {
-            'processor': 'Custom CPU',
-            'gpu': 'Custom GPU',
-            'memory': '64GB RAM',
-            'engine_name': 'vLLM'
-        }
+        """TestCustom系统信息覆盖（经 warehouse_context 注入，core 不再读 session_state）"""
+        runner.set_warehouse_context({
+            'custom_sys_info': {
+                'processor': 'Custom CPU',
+                'gpu': 'Custom GPU',
+                'memory': '64GB RAM',
+                'engine_name': 'vLLM'
+            }
+        })
 
         info = runner.get_system_info()
 

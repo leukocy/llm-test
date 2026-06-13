@@ -1,6 +1,5 @@
+import functools
 import os
-
-import streamlit as st
 
 from utils.get_logger import get_logger
 
@@ -96,6 +95,9 @@ def _download_tokenizer_from_modelscope(repo_id: str, local_dir: str) -> bool:
         return False
 
     try:
+        if os.path.islink(local_dir):
+            logger.info(f"Removing broken symlink before download: {local_dir}")
+            os.remove(local_dir)
         os.makedirs(local_dir, exist_ok=True)
         logger.info(f"Downloading tokenizer from ModelScope: {repo_id} -> {local_dir}")
 
@@ -141,6 +143,9 @@ def _download_tokenizer_from_hf(hf_repo_id: str, local_dir: str) -> bool:
     """
     try:
         AutoTokenizer = _get_auto_tokenizer()
+        if os.path.islink(local_dir):
+            logger.info(f"Removing broken symlink before download: {local_dir}")
+            os.remove(local_dir)
         os.makedirs(local_dir, exist_ok=True)
         logger.info(f"Downloading tokenizer from HuggingFace: {hf_repo_id} -> {local_dir}")
 
@@ -188,10 +193,17 @@ def ensure_tokenizer_available(model_path: str) -> str | None:
         if "/" in model_path:
             candidates.append(os.path.join(tokenizers_dir, model_path.split("/")[-1]))
 
-    # Check if any local path already exists
+    # Check if any local path already exists and has files
+    # Dangling symlinks (broken links) are removed so download can proceed
+    # Empty directories are also skipped — they don't contain a usable tokenizer
     for candidate in candidates:
         if os.path.exists(candidate):
+            if os.path.isdir(candidate) and not os.listdir(candidate):
+                continue
             return candidate
+        if os.path.islink(candidate):
+            logger.info(f"Removing broken symlink: {candidate}")
+            os.remove(candidate)
 
     # Determine local dir name
     local_dir_name = _get_local_dir_name(model_path)
@@ -220,7 +232,7 @@ def ensure_tokenizer_available(model_path: str) -> str | None:
     return None
 
 
-@st.cache_resource
+@functools.cache
 def get_cached_tokenizer(model_path):
     """
     Load a HuggingFace tokenizer with caching.
@@ -331,7 +343,7 @@ def list_registered_tokenizers() -> list[dict]:
             hf_repo_id = source["hf"]
 
         local_path = os.path.join(tokenizers_dir, local_name)
-        available = os.path.exists(local_path)
+        available = os.path.exists(local_path) and os.listdir(local_path)
 
         size_mb = 0.0
         if available:

@@ -124,6 +124,7 @@ class TestExecutor:
                 random_seed=st.session_state.get('random_seed'),
                 skip_first_token_for_tps=st.session_state.get('skip_first_token_for_tps', False),
                 template_tokens=st.session_state.get('template_tokens', self.config.get('template_tokens', 0)),
+                warehouse_context=self._build_warehouse_context(),
             )
 
             # 存储 runner 实例到 session_state，以便 Stop 按钮可以访问结果
@@ -300,6 +301,17 @@ class TestExecutor:
                 })
         except Exception:
             pass
+
+    def _build_warehouse_context(self) -> dict:
+        """UI 层把 session_state 里仓库相关字段摊成纯 dict 注入 runner（core 不再读 session_state）。"""
+        ss = st.session_state
+        return {
+            "engine_runtime": ss.get("engine_runtime") or {},
+            "test_metadata": ss.get("test_metadata") or {},
+            "model_spec_override": ss.get("model_spec_override") or {},
+            "serving_config": ss.get("serving_config") or {},
+            "custom_sys_info": ss.get("custom_sys_info") or {},
+        }
 
     @staticmethod
     def _success_rate_from_df(df) -> float | None:
