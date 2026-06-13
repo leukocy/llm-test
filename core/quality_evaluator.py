@@ -12,6 +12,7 @@ from typing import Any
 
 import pandas as pd
 
+from core.cancel_state import is_stop_requested
 from core.failure_analyzer import analyze_failures
 from core.providers.factory import get_provider
 from evaluators.base_evaluator import BaseEvaluator, EvaluationResult
@@ -531,14 +532,10 @@ class QualityEvaluator:
                 if self.should_stop:
                     raise asyncio.CancelledError("评估已停止")
 
-                # Also check global stop flag from session_state
-                try:
-                    import streamlit as st
-                    if st.session_state.get('stop_requested', False):
-                        self.should_stop = True
-                        raise asyncio.CancelledError("评估已停止")
-                except Exception:
-                    pass
+                # Also check global stop flag (进程级 cancel_state)
+                if is_stop_requested():
+                    self.should_stop = True
+                    raise asyncio.CancelledError("评估已停止")
 
                 # 传递参数
                 return await self._get_response_with_metrics(
@@ -702,13 +699,9 @@ class QualityEvaluator:
                 # Check both internal flag and global stop signal
                 if self.should_stop:
                     break
-                try:
-                    import streamlit as st
-                    if st.session_state.get('stop_requested', False):
-                        self.should_stop = True
-                        break
-                except Exception:
-                    pass
+                if is_stop_requested():
+                    self.should_stop = True
+                    break
 
                 self._log(f"=== 评估Dataset [{i+1}/{total_datasets}]: {dataset_name} ===")
 

@@ -121,7 +121,7 @@ class GeminiProvider(LLMProvider):
         if client is None:
             client = httpx.AsyncClient(
                 transport=httpx.AsyncHTTPTransport(
-                    limits=httpx.Limits(max_connections=4096, max_keepalive_connections=2048),
+                    limits=httpx.Limits(max_connections=2048, max_keepalive_connections=256),
                 ),
                 timeout=request_timeout_seconds,
             )
