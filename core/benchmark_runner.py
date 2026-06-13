@@ -868,6 +868,25 @@ class BenchmarkRunner:
             # Silently ignore if no Streamlit context (e.g., in thread pool)
             logger.debug(f"Streamlit log skipped (no context): {message[:50]}...")
 
+    def _show(self, level: str, message: str) -> None:
+        """向 UI 日志面板输出消息（经注入的 log_placeholder，不直接依赖 streamlit）。
+
+        level: "info" / "warning" / "error" / "success"。无 log_placeholder 或无
+        Streamlit 上下文（后台线程）时降级到 Python logging，保证消息不丢。
+        取代散落的 st.error/st.warning 直接调用（模式 C 解耦）。
+        """
+        placeholder = getattr(self, "log_placeholder", None)
+        fn = getattr(placeholder, level, None) if placeholder is not None else None
+        if fn is not None:
+            try:
+                fn(message)
+                return
+            except Exception:
+                logger.debug(f"log_placeholder {level} skipped (no context): {message[:50]}...")
+        # 降级：Python logging（core 无 streamlit 依赖）
+        log_fn = getattr(logger, level if level in ("info", "warning", "error") else "info")
+        log_fn(message)
+
     def _get_tokenizer(self):
         """Get tokenizer: Custom HF -> Auto-Inferred HF -> transformers fallback"""
 
@@ -934,10 +953,10 @@ class BenchmarkRunner:
             # Use GPT-2 tokenizer as a reasonable default
             if not hasattr(self, '_transformers_tokenizer') or self._transformers_tokenizer is None:
                 self._transformers_tokenizer = AutoTokenizer.from_pretrained("gpt2")
-                self._safe_log(st.info, "已Load transformers GPT-2 tokenizer 作is托底。")
+                self._show("info", "已Load transformers GPT-2 tokenizer 作is托底。")
             return self._transformers_tokenizer
         except Exception as tf_error:
-            self._safe_log(st.error, f"transformers tokenizer 也Load failed: {tf_error}")
+            self._show("error", f"transformers tokenizer 也Load failed: {tf_error}")
             return None
 
     def _calibrate_prompt(self, target_tokens, suffix="", _tokenizer=None):
@@ -1024,7 +1043,7 @@ class BenchmarkRunner:
         tokenizer = _tokenizer if _tokenizer is not None else self._get_tokenizer()
 
         if not tokenizer:
-            self._safe_log(st.error, "所has tokenizer（tiktoken, transformers）都not可用。no法Generate精确 Token 长度文本。")
+            self._show("error", "所has tokenizer（tiktoken, transformers）都not可用。no法Generate精确 Token 长度文本。")
             raise RuntimeError("No tokenizer available - cannot generate token-based prompts")
 
         try:
@@ -1250,7 +1269,7 @@ class BenchmarkRunner:
             return prompt_text, actual_tokens, question_summary
 
         except Exception as e:
-            st.error(f"use tokenizer Process文本失败: {e}。")
+            self._show("error", f"use tokenizer Process文本失败: {e}。")
             raise
 
     def _update_log(self, message, level=LogLevel.INFO, **kwargs):
@@ -1582,7 +1601,7 @@ class BenchmarkRunner:
                 self._last_rendered_output = self.last_output
 
         except Exception as e:
-            st.warning(f"Update UI 失败: {e}")
+            self._show("warning", f"Update UI 失败: {e}")
 
     def _check_control_signal(self):
         """
@@ -2071,10 +2090,10 @@ class BenchmarkRunner:
                                    pending_prompts, status)
                 if signal == 'pause':
                     set_test_paused()
-                    st.warning("TestPaused，进度Saved")
+                    self._show("warning", "TestPaused，进度Saved")
                 else:
                     set_test_cancelled()
-                    st.warning("Test已停止，进度Saved")
+                    self._show("warning", "Test已停止，进度Saved")
                 return pd.DataFrame(self.results_list)
 
             self._current_concurrency = concurrency
@@ -2092,10 +2111,10 @@ class BenchmarkRunner:
                                        pending_prompts, status)
                     if signal == 'pause':
                         set_test_paused()
-                        st.warning("TestPaused，进度Saved")
+                        self._show("warning", "TestPaused，进度Saved")
                     else:
                         set_test_cancelled()
-                        st.warning("Test已停止，进度Saved")
+                        self._show("warning", "Test已停止，进度Saved")
                     return pd.DataFrame(self.results_list)
 
                 # 跳过已完成的请求（Resume时）
@@ -2177,10 +2196,10 @@ class BenchmarkRunner:
                                    pending_prompts, status)
                 if signal == 'pause':
                     set_test_paused()
-                    st.warning("TestPaused，进度Saved")
+                    self._show("warning", "TestPaused，进度Saved")
                 else:
                     set_test_cancelled()
-                    st.warning("Test已停止，进度Saved")
+                    self._show("warning", "Test已停止，进度Saved")
                 return pd.DataFrame(self.results_list)
 
             self.status_text.info(f"currently准备 {tokens_target} (目标) Token Tip...")
@@ -2385,7 +2404,7 @@ class BenchmarkRunner:
         # Get tokenizer
         tokenizer = self._get_tokenizer()
         if not tokenizer:
-            st.error("no法Load Tokenizer，Segmented Context Testneed精确 Token 控制")
+            self._show("error", "no法Load Tokenizer，Segmented Context Testneed精确 Token 控制")
             return pd.DataFrame()
 
         # Generate基础 prompt（最大长度）- 每Concurrencywill话need独立 prompt
@@ -2416,7 +2435,7 @@ class BenchmarkRunner:
         # 整体轮次循环
         for overall_round in range(total_rounds):
             if is_stop_requested():
-                st.warning("Test已停止。")
+                self._show("warning", "Test已停止。")
                 break
 
             self._update_log(f"开始 {overall_round + 1}/{total_rounds} 轮Test", level=LogLevel.INFO)
@@ -2443,7 +2462,7 @@ class BenchmarkRunner:
             # 按Segment levels从小到大发送
             for seg_idx, segment_length in enumerate(segment_levels):
                 if is_stop_requested():
-                    st.warning("Test已停止。")
+                    self._show("warning", "Test已停止。")
                     break
 
                 self.status_text.info(
@@ -2874,7 +2893,7 @@ class BenchmarkRunner:
         for concurrency in concurrencies:
             for length_target in context_lengths:
                 if is_stop_requested():
-                    st.warning("Test已停止。")
+                    self._show("warning", "Test已停止。")
                     break
 
                 self.status_text.info(f"currentlyTest: {concurrency} Concurrency, {length_target} Context Length...")
@@ -3101,7 +3120,7 @@ class BenchmarkRunner:
             local_tokens_to_generate = self._prompt_generation_target(tokens_target)
 
             if local_tokens_to_generate <= 0:
-                st.warning(f"目标 Token {tokens_target} 太小，跳过。")
+                self._show("warning", f"目标 Token {tokens_target} 太小，跳过。")
                 self.completed_requests += req_per_level_p
                 continue
             prompt_text, local_token_estimate, q_summary = self._get_text_for_token_count(local_tokens_to_generate)
@@ -3149,7 +3168,7 @@ class BenchmarkRunner:
             local_tokens_to_generate = self._prompt_generation_target(length_target)
 
             if local_tokens_to_generate <= 0:
-                st.warning(f"目标 Token {length_target} 太小，跳过。")
+                self._show("warning", f"目标 Token {length_target} 太小，跳过。")
                 self.completed_requests += 1
                 continue
 
