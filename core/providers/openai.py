@@ -179,8 +179,9 @@ class OpenAIProvider(LLMProvider):
             "stream": True,
         }
 
-        if self.platform != "unknown":
-            payload["stream_options"] = {"include_usage": True}
+        # stream_options.include_usage 是 OpenAI 标准（vLLM/SGLang/各兼容端点均支持）：
+        # 不加则流式响应不返回 usage → completion_tokens=0 → tps/decode_tps 全 0。
+        payload["stream_options"] = {"include_usage": True}
 
         if self.platform == "mimo":
             payload["max_completion_tokens"] = max_tokens
