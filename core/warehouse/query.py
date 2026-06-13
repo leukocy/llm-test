@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from core.config_hash import compute_config_hash
 from core.models import TestRun
 from core.warehouse.templates import (
     HARDWARE_INVENTORY_FIELDS,
@@ -43,6 +44,7 @@ class WarehouseFilter:
     test_type: str | None = None
     tester: str | None = None
     comparison_group: str | None = None
+    config_hash: str | None = None  # CASE 02：同配置才能承诺
     date_from: datetime | None = None
     date_to: datetime | None = None
     search: str | None = None  # 跨字段模糊（model/notes/tester/machine_id）
@@ -64,6 +66,8 @@ class WarehouseFilter:
         if self.status_detail and row.get("status") != self.status_detail:
             return False
         if self.tester and row.get("tester") != self.tester:
+            return False
+        if self.config_hash and row.get("config_hash") != self.config_hash:
             return False
         if self.search:
             haystack = " ".join(
@@ -262,6 +266,16 @@ def project_run(run: TestRun) -> dict[str, Any]:
         "failure_reason": config.get("failure_reason") or "",
         "evidence_path": config.get("evidence_path") or run.csv_path or "",
     }
+    # 配置指纹（CASE 02“同配置才能承诺”）：仓库内部去重/过滤键，不进手册模板字段
+    row["config_hash"] = compute_config_hash(
+        model_name=row["model_name"],
+        engine=row["engine"],
+        engine_version=serving.get("engine_version") or "",
+        parallel_strategy=row["parallel_strategy"],
+        quantization=row["quantization"],
+        dtype=row["dtype"],
+        max_context=row["max_context"],
+    )
     return row
 
 

@@ -10,11 +10,11 @@ from core.publish_gate import (
 
 
 def _ok(**overrides):
-    base = dict(
-        tester="alice", machine_id="host1", has_hardware_fingerprint=True,
-        seed_recorded=True, insights=["🚀 good"], success_rate=0.99,
-        has_monitor=True, requested_external_level="publishable",
-    )
+    base = {
+        "tester": "alice", "machine_id": "host1", "has_hardware_fingerprint": True,
+        "seed_recorded": True, "insights": ["🚀 good"], "success_rate": 0.99,
+        "has_monitor": True, "requested_external_level": "publishable",
+    }
     base.update(overrides)
     return evaluate_publish_gate(**base)
 
@@ -63,6 +63,46 @@ def test_internal_when_not_reproducible_no_seed():
     assert r.gates["reproducible"] is False
 
 
+# ---- CASE 03 红线：缺强制字段不可对外 ----
+
+
+def _fp(**overrides):
+    base = {
+        "machine_id": "m1",
+        "gpus": [{"name": "H100", "pcie_gen": 5, "pcie_width": 16}],
+        "memory": {"type": "DDR5", "channels": 24, "speed_mt_s": 6400},
+    }
+    base.update(overrides)
+    return base
+
+
+def test_case03_complete_hw_fields_still_publishable():
+    r = _ok(hardware_fingerprint=_fp())
+    assert r.gates["config_complete"] is True
+    assert r.level == "publishable"
+
+
+def test_case03_missing_pcie_blocks_publishable():
+    fp = _fp(gpus=[{"name": "H100"}])  # 缺 pcie_gen/pcie_width
+    r = _ok(hardware_fingerprint=fp)
+    assert r.gates["config_complete"] is False
+    assert r.level == "internal"
+    assert any("PCIe" in reason for reason in r.reasons)
+
+
+def test_case03_missing_memory_channels_blocks_publishable():
+    fp = _fp(memory={"type": "DDR5", "speed_mt_s": 6400})  # 缺 channels
+    r = _ok(hardware_fingerprint=fp)
+    assert r.gates["config_complete"] is False
+    assert any("内存通道数" in reason for reason in r.reasons)
+
+
+def test_case03_not_checked_when_no_fingerprint():
+    # 远程 API / 旧调用：不传 hardware_fingerprint → 仅 tester+machine_id，向后兼容
+    r = _ok()  # hardware_fingerprint 默认 None
+    assert r.gates["config_complete"] is True
+
+
 def test_never_auto_promote_to_publishable_without_human():
     # 即使前三闸全过，未人工置 publishable → 最多 review
     r = _ok(requested_external_level="review")
@@ -73,7 +113,7 @@ def test_never_auto_promote_to_publishable_without_human():
 def test_gate_from_run_convenience():
     run = {
         "tester": "bob", "machine_id": "m1",
-        "system_info": {"hardware_fingerprint": {"machine_id": "m1"}},
+        "system_info": {"hardware_fingerprint": _fp()},
         "config": {"random_seed": 42},
         "resource_monitor_json": '{"peaks": {}}',
         "external_level": "publishable",
@@ -83,6 +123,20 @@ def test_gate_from_run_convenience():
     assert r.gates["config_complete"] is True
     assert r.gates["reproducible"] is True
     assert r.level == "publishable"
+
+
+def test_gate_from_run_case03_blocks_when_required_fields_missing():
+    run = {
+        "tester": "bob", "machine_id": "m1",
+        "system_info": {"hardware_fingerprint": {"machine_id": "m1"}},  # 缺 PCIe/通道/频率
+        "config": {"random_seed": 42},
+        "resource_monitor_json": '{"peaks": {}}',
+        "external_level": "publishable",
+        "success_rate": 0.98,
+    }
+    r = gate_from_run(run, insights=["🚀 ok"])
+    assert r.gates["config_complete"] is False  # CASE 03 拦截
+    assert r.level != "publishable"
 
 
 def test_level_badge_lookup():
