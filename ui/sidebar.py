@@ -470,7 +470,8 @@ def render_sidebar():
         "Custom Text Test",
         "All Tests",
         "Stability Test",
-        "📦 Batch Test"
+        "📦 Batch Test",
+        "🗄️ 数据仓库"
     ]
     if quality_available:
         _test_types.append("📝 Model Quality Test")
