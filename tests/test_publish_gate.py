@@ -139,6 +139,59 @@ def test_gate_from_run_case03_blocks_when_required_fields_missing():
     assert r.level != "publishable"
 
 
+# ---- 统计严谨性：小样本高成功率不可信 ----
+
+
+def test_small_sample_blocks_publishable():
+    # 5 样本 100% 成功率——样本量不足，不可信
+    r = _ok(success_rate=1.0, sample_size=5)
+    assert r.gates["metrics_trustworthy"] is False
+    assert r.level == "internal"
+    assert any("样本量" in reason for reason in r.reasons)
+
+
+def test_sufficient_sample_passes():
+    # 100 样本 99% 成功率——样本量足够
+    r = _ok(success_rate=0.99, sample_size=100)
+    assert r.gates["metrics_trustworthy"] is True
+    assert r.level == "publishable"
+
+
+def test_sample_size_none_no_check_back_compat():
+    # 不传 sample_size → 不做样本量校验（向后兼容，现有 _ok 默认）
+    r = _ok(success_rate=0.99)
+    assert r.gates["metrics_trustworthy"] is True
+
+
+def test_wilson_lower_bound_blocks_small_sample():
+    # 5 样本全对（success_count=5, sample_size=5）→ Wilson 下界远低于 95%
+    r = _ok(success_rate=1.0, sample_size=5, success_count=5, use_wilson=True)
+    assert r.gates["metrics_trustworthy"] is False
+    assert any("Wilson" in reason for reason in r.reasons)
+
+
+def test_wilson_lower_bound_passes_large_sample():
+    # 1000 样本 98% 对（success_count=980）→ Wilson 下界 ≈ 0.97，明确 ≥ 95%
+    r = _ok(success_rate=0.98, sample_size=1000, success_count=980, use_wilson=True)
+    assert r.gates["metrics_trustworthy"] is True
+    assert r.level == "publishable"
+
+
+def test_gate_from_run_passes_sample_size_from_run():
+    run = {
+        "tester": "bob", "machine_id": "m1",
+        "system_info": {"hardware_fingerprint": _fp()},
+        "config": {"random_seed": 42},
+        "resource_monitor_json": '{"peaks": {}}',
+        "external_level": "publishable",
+        "success_rate": 0.98,
+        "total_requests": 3,  # 小样本
+    }
+    r = gate_from_run(run, insights=["🚀 ok"])
+    assert r.gates["metrics_trustworthy"] is False  # 样本量 3 不足
+    assert any("样本量" in reason for reason in r.reasons)
+
+
 def test_level_badge_lookup():
     assert LEVEL_BADGE["publishable"][1] == "green"
     assert LEVEL_BADGE["internal"][1] == "gray"

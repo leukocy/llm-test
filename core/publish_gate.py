@@ -65,11 +65,21 @@ def evaluate_publish_gate(
     requested_external_level: str = "internal",
     success_rate_threshold: float = 0.95,
     hardware_fingerprint: dict[str, Any] | None = None,
+    sample_size: int | None = None,
+    min_sample_size: int = 30,
+    success_count: int | None = None,
+    use_wilson: bool = False,
 ) -> GateResult:
     """评估四道闸。requested_external_level 为当前（用户设定的）external_level。
 
     hardware_fingerprint 非空时，闸1 额外校验 CASE 03 强制字段（PCIe/通道/频率）；
     为 None（如远程 API 压测机或旧调用）则仅校验 tester + machine_id，保持向后兼容。
+
+    统计严谨性（补手册漏洞：小样本高成功率不可信）：
+    - sample_size 传入时，闸3 要求样本量 ≥ min_sample_size（默认 30）。
+    - use_wilson=True 且提供 success_count + sample_size 时，用 Wilson 95% 置信下界
+      替代裸 success_rate 判阈值——小样本下界自动降低，更诚实。
+    - sample_size=None（旧调用）不触发样本量校验，保持向后兼容。
     """
     reasons: list[str] = []
 
@@ -92,14 +102,35 @@ def evaluate_publish_gate(
     if not seed_recorded:
         reasons.append("未记录随机种子（不可复现）")
 
-    # 闸 3：指标可信
+    # 闸 3：指标可信（含统计严谨性）
     no_critical = not _has_critical(insights or [])
-    sr_ok = success_rate is None or success_rate >= success_rate_threshold
-    g3_metrics = no_critical and sr_ok and has_monitor
+
+    # 成功率可信度：Wilson 下界（可选）或裸 success_rate
+    wilson_lower: float | None = None
+    if use_wilson and success_count is not None and sample_size:
+        try:
+            from core.metrics import wilson_score_interval
+            wilson_lower, _ = wilson_score_interval(success_count, sample_size, 0.95)
+        except Exception:  # noqa: BLE001
+            wilson_lower = None
+
+    if wilson_lower is not None:
+        sr_ok = wilson_lower >= success_rate_threshold
+        sr_label = f"Wilson 95% 下界 {wilson_lower:.0%}"
+    else:
+        sr_ok = success_rate is None or success_rate >= success_rate_threshold
+        sr_label = f"成功率 {success_rate:.0%}" if success_rate is not None else "成功率"
+
+    # 样本量门槛（仅当 sample_size 传入）
+    enough_samples = sample_size is None or sample_size >= min_sample_size
+
+    g3_metrics = no_critical and sr_ok and has_monitor and enough_samples
     if not no_critical:
         reasons.append("存在 ❌ 关键问题（指标不可信）")
     if not sr_ok:
-        reasons.append(f"成功率 {success_rate:.0%} 低于阈值 {success_rate_threshold:.0%}" if success_rate is not None else "成功率未知")
+        reasons.append(f"{sr_label} 低于阈值 {success_rate_threshold:.0%}")
+    if not enough_samples and sample_size is not None:
+        reasons.append(f"样本量 {sample_size} 不足（建议≥{min_sample_size}，成功率不可信）")
     if not has_monitor:
         reasons.append("缺资源监控数据")
 
@@ -161,6 +192,12 @@ def gate_from_run(run: dict[str, Any], **extra) -> GateResult:
         has_monitor=extra.get("has_monitor", bool(run.get("resource_monitor_json"))),
         requested_external_level=run.get("external_level") or "internal",
         hardware_fingerprint=sys_info.get("hardware_fingerprint"),
+        sample_size=extra.get(
+            "sample_size",
+            run.get("completed_requests") or run.get("total_requests"),
+        ),
+        success_count=extra.get("success_count"),
+        use_wilson=extra.get("use_wilson", False),
     )
 
 
