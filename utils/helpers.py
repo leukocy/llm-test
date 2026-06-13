@@ -2,7 +2,10 @@ import base64
 import csv
 
 import pandas as pd
-import streamlit as st
+
+from utils.get_logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def initialize_csv(columns, filename):
@@ -10,7 +13,7 @@ def initialize_csv(columns, filename):
         with open(filename, 'w', newline='', encoding='utf-8') as f:
             csv.writer(f).writerow(columns)
     except OSError as e:
-        st.error(f"no法Initialize CSV 文件: {e}")
+        logger.error(f"Initialize CSV 文件失败: {e}")
 
 def append_to_csv(result_dict, columns, filename):
     try:
@@ -18,7 +21,7 @@ def append_to_csv(result_dict, columns, filename):
             writer = csv.DictWriter(f, fieldnames=columns)
             writer.writerow({k: result_dict.get(k) for k in columns})
     except OSError as e:
-        st.error(f"no法写入 CSV: {e}")
+        logger.error(f"写入 CSV 失败: {e}")
 
 def get_table_download_link(df, filename, text):
     csv_data = df.to_csv(index=False)
@@ -33,7 +36,7 @@ def get_log_download_link(log_list, filename, text):
         b64 = base64.b64encode(log_text.encode()).decode()
         return f'<a href="data:file/text;base64,{b64}" download="{filename}">{text}</a>'
     except Exception as e:
-        st.error(f"GenerateLogunder载链接失败: {e}")
+        logger.error(f"GenerateLog 下载链接失败: {e}")
         return ""
 
 def reorder_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
