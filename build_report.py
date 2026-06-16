@@ -52,9 +52,8 @@ for ctx in [64, 4096, 32768, 131072]:
     sub = ok[ok["context_length_target"] == ctx].groupby("concurrency")["system_output_throughput"].mean()
     if len(sub):
         ax.plot(sub.index, sub.values, marker="o", label=f"ctx={lbl(ctx)} tok")
-ax.axvline(16, color="red", ls="--", alpha=0.5, label="max_num_seqs=16")
 ax.set_xlabel("Concurrency"); ax.set_ylabel("System output throughput (tok/s)")
-ax.set_title("Throughput vs Concurrency — saturation at conc=16")
+ax.set_title("Throughput vs Concurrency (max_num_seqs=64, 未在测区内饱和)")
 ax.set_xscale("log", base=2); ax.set_xticks(CONC); ax.set_xticklabels(CONC)
 ax.legend(fontsize=8, loc="upper left")
 chart1 = svg(fig)
@@ -139,7 +138,8 @@ rate_head = "".join(f"<th>conc={c}</th>" for c in CONC)
 rate_table = f'<table class="matrix rate"><thead><tr><th>ctx＼conc</th>{rate_head}</tr></thead><tbody>{rate_rows}</tbody></table>'
 
 # 关键数字
-sat_tps = ok[(ok.concurrency == 16) & (ok.context_length_target == 64)]["system_output_throughput"].mean()
+# 峰值系统吞吐:max_num_seqs=64 下 conc=32 仍未饱和(482 tok/s),取测区内最大
+sat_tps = ok[(ok.context_length_target == 64)].groupby("concurrency")["system_output_throughput"].mean().max()
 peak_tps = ok[ok.concurrency == 1][ok.context_length_target == 64]["tps"].mean()
 n_total = len(df)
 n_ok = int(df["ok"].sum())
@@ -183,9 +183,9 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <div class="concl">
 <h2 style="margin-top:0;border:0;padding:0;color:#1e40af">一句话结论</h2>
 <ul>
-<li><b>吞吐在并发 16 饱和</b>:系统 decode 吞吐 ~{sat_tps:.0f} tok/s,受 <code>max_num_seqs=16</code> 限制,conc=32 无增益。</li>
+<li><b>吞吐随并发持续上升</b>(max_num_seqs=64):系统 decode 吞吐 conc=1→49、8→223、16→351、32→482 tok/s,<b>测区内未饱和</b>(早期"conc=16 饱和"是旧 max_num_seqs=16 的配置上限,现已改 64)。单流 decode 随并发下降(49→15 tok/s),聚合靠 batch 摊薄。</li>
 <li><b>decode 非带宽受限</b>:int4 下 TP=8 真实每卡显存带宽利用率仅 ~5%,瓶颈在算力/TP 通信/调度,显存带宽余量充足。</li>
-<li><b>散热修复后 260K 稳定到 conc=4</b>(94°C,0 崩溃);矩阵天然边界是 <b>KV 容量 1.67M token</b>——<code>conc×ctx ≤ 1.67M</code> 可行,超过则 KV 排队不可行(见边界)。</li>
+<li><b>散热修复后 260K 稳定到 conc=4</b>(94°C,0 崩溃);矩阵天然边界是 <b>KV 容量 1.53M token</b>——<code>conc×ctx ≤ 1.53M</code> 可行,超过则 KV 排队不可行(见边界)。</li>
 <li>单流 decode 峰值 ~{peak_tps:.0f} tok/s(ctx=64);TTFT 随上下文近线性增长(131K @ conc=1 ≈ 20s);per-cell 温度监控全程无热降频。</li>
 </ul>
 </div>
@@ -194,15 +194,15 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <div><div class="v">{n_ok}/{n_total}</div><div class="l">成功请求(干净基线)</div></div>
 <div><div class="v">{sat_tps:.0f}</div><div class="l">峰值系统吞吐 tok/s</div></div>
 <div><div class="v">{peak_tps:.0f}</div><div class="l">单流 decode tok/s</div></div>
-<div><div class="v">228s</div><div class="l">引擎冷启动</div></div>
-<div><div class="v">1.67M</div><div class="l">KV cache tokens</div></div>
+<div><div class="v">256s</div><div class="l">引擎冷启动</div></div>
+<div><div class="v">1.53M</div><div class="l">KV cache tokens</div></div>
 </div>
 
 <h2>硬件 & 引擎配置</h2>
 <table class="hw">
 <tr><td>CPU</td><td>AMD EPYC 9355 32C/64T</td><td>内存</td><td>DDR5-6400 ×24 通道,1133GB,Multi-bit ECC</td></tr>
 <tr><td>GPU</td><td>8× RTX PRO 6000 Blackwell(96GB GDDR7,1792 GB/s)</td><td>存储</td><td>ZHITAI TiPlus7100 4TB NVMe</td></tr>
-<tr><td>驱动/算</td><td>580.159.03 / CUDA 13.0</td><td>引擎</td><td>vLLM v0.23.0,<code>tp=8 dcp=8 ep</code>,<code>gpu_mem_util=0.94</code>,<code>max_num_seqs=16</code>,prefix-cache,fuse-allreduce-rms</td></tr>
+<tr><td>驱动/算</td><td>580.159.03 / CUDA 13.0</td><td>引擎</td><td>vLLM v0.23.0,<code>tp=8 dcp=8 ep</code>,<code>gpu_mem_util=0.94</code>,<code>max_num_seqs=64</code>,prefix-cache,fuse-allreduce-rms</td></tr>
 </table>
 
 <h2>性能图表</h2>
@@ -223,12 +223,12 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 
 <h2>成功率矩阵(绿=全过 / 黄=部分 / 红=全失败)</h2>
 {rate_table}
-<p style="font-size:12px;color:#666">空白格 = KV 容量不可行(conc×ctx > 1.67M token,vLLM 排队/超时,非崩溃)。</p>
+<p style="font-size:12px;color:#666">空白格 = KV 容量不可行(conc×ctx > 1.53M token,vLLM 排队/超时,非崩溃)。</p>
 
 <div class="risk">
 <h2 style="margin-top:0;border:0;padding:0;color:#991b1b">⚠ 边界与风险</h2>
 <ul>
-<li><b>矩阵天然边界 = KV 容量 1.67M token</b>:<code>conc × ctx ≤ 1.67M</code> 可行(如 260K×conc≤6、128K×conc≤13)。超过的 cell(conc=32/128k=4M、260K×conc≥8=2-8M)vLLM 因 KV 不足大量排队/超时,<b>非崩溃、非缺陷</b>,是硬件 KV 容量的真实上限。</li>
+<li><b>矩阵天然边界 = KV 容量 1.53M token</b>:<code>conc × ctx ≤ 1.53M</code> 可行(如 260K×conc≤6、128K×conc≤13)。超过的 cell(conc=32/128k=4M、260K×conc≥8=2-8M)vLLM 因 KV 不足大量排队/超时,<b>非崩溃、非缺陷</b>,是硬件 KV 容量的真实上限。</li>
 <li><b>散热问题已修复</b>(2026-06-16):此前 260K 高并发触发某槽位过热掉卡(per-cell 监控实测 97°C);更换散热部件后,本次完整矩阵 542 请求 0 崩溃,conc=4/260K 仅 94°C。完整取证见 <code>forensics/INCIDENT_REPORT_*.md</code>。</li>
 <li><b>per-cell 温度监控</b>(本批次新增)全程无热降频(throttle),最高 conc=4/260K 94°C——散热裕量已恢复。</li>
 </ul>

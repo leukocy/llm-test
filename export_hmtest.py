@@ -49,9 +49,9 @@ MODEL_SPEC = {
 SERVING = {
     "engine": "vLLM",
     "engine_version": "0.23.0",
-    # 完整启动参数(逐字取自 docker inspect kimi-k27 的 Cmd)
+    # 完整启动参数(逐字取自 docker inspect kimi-k27 的 Cmd,2026-06-16 实测配置)
     "engine_params": ("tp=8;decode_context_parallel=8;enable_expert_parallel;"
-                      "gpu_memory_utilization=0.94;max_num_seqs=16;enable_prefix_caching;"
+                      "gpu_memory_utilization=0.94;max_num_seqs=64;enable_prefix_caching;"
                       "mm_encoder_tp_mode=data;mm_processor_cache_gb=0;mm_processor_cache_type=shm;"
                       "compilation.fuse_allreduce_rms=true;tool_call_parser=kimi_k2;"
                       "reasoning_parser=kimi_k2;enable_auto_tool_choice;trust_remote_code;"
@@ -61,10 +61,10 @@ SERVING = {
 # 单卡标称带宽(与 runner._nominal_gpu_bandwidth_gbps 同约定)
 NOMINAL_GPU_BW = gpu0.get("nominal_bandwidth_gbps") or 1792.0
 
-# 引擎冷启动时间(从 vLLM 容器日志时间戳序列算,6/13 冷启动;reboot 后一致)
-# 载入权重 138s + 引擎 init(profile+KV cache+warmup,含编译 17s)57.6s + CUDA graph 捕获 13s + 杂项 ~20s
-# 附:GPU KV cache 总量 1,672,960 tokens;权重占 71.98 GiB/卡
-LOAD_TIME_S = 228
+# 引擎冷启动时间(从 vLLM 容器日志时间戳序列算,2026-06-16 实测)
+# 载入权重 148s + 引擎 init(profile+KV cache+warmup,含编译 17s)75.5s + CUDA graph 捕获 32s + 杂项
+# 附:GPU KV cache 总量 1,529,216 tokens(max_num_seqs=64);权重占 71.98 GiB/卡
+LOAD_TIME_S = 256
 TESTER = "claude-live"
 MACHINE_ID = fp.get("machine_id") or "ab8652ab0b09bbd7"
 DATE = "2026-06-14"
