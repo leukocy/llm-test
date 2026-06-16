@@ -30,7 +30,7 @@ cuda = fp.get("cuda") or {}
 gpus = fp.get("gpus") or []
 gpu0 = gpus[0] if gpus else {}
 
-# ---- 2. 公共字段:模型规格(从 registry 解析,权威) + 服务配置 ----
+# ---- 2. 公共字段:模型规格(从 registry 解析) + 服务配置(自动采集,非硬编码)----
 SPEC = resolve_spec("Kimi-K2.7-Code")
 assert SPEC is not None, "Kimi-K2.7-Code 未能从 registry 解析 model_spec"
 MODEL_SPEC = {
@@ -46,25 +46,23 @@ MODEL_SPEC = {
     "dtype": SPEC.weight_dtype,
     "max_context": SPEC.max_position_embeddings,
 }
+# 引擎配置自动采集(docker inspect + 日志 + /v1/models)——不再硬编码,配置变即跟着变
+from core.engine_capture import capture_engine_config
+_ENG = capture_engine_config("http://localhost:10814/v1")
+_SCHEDULE = _ENG.get("schedule") or {}
+_PARALLEL = _ENG.get("parallel") or {}
+_RUNTIME = _ENG.get("runtime") or {}
 SERVING = {
-    "engine": "vLLM",
-    "engine_version": "0.23.0",
-    # 完整启动参数(逐字取自 docker inspect kimi-k27 的 Cmd,2026-06-16 实测配置)
-    "engine_params": ("tp=8;decode_context_parallel=8;enable_expert_parallel;"
-                      "gpu_memory_utilization=0.94;max_num_seqs=64;enable_prefix_caching;"
-                      "mm_encoder_tp_mode=data;mm_processor_cache_gb=0;mm_processor_cache_type=shm;"
-                      "compilation.fuse_allreduce_rms=true;tool_call_parser=kimi_k2;"
-                      "reasoning_parser=kimi_k2;enable_auto_tool_choice;trust_remote_code;"
-                      "max_model_len=262144(取自模型 config)"),
-    "parallel_strategy": "tp=8 + dcp=8(decode-context-parallel) + ep(expert-parallel)",
+    "engine": _ENG.get("engine", "vLLM"),
+    "engine_version": _ENG.get("engine_version", ""),
+    "engine_params": _ENG.get("launch_cmd", "") or ";".join(f"{k}={v}" for k, v in _SCHEDULE.items()),
+    "parallel_strategy": (_PARALLEL and f"tp={_PARALLEL.get('tp')} + dcp={_PARALLEL.get('dcp')} + ep={_PARALLEL.get('ep')}") or "",
 }
 # 单卡标称带宽(与 runner._nominal_gpu_bandwidth_gbps 同约定)
 NOMINAL_GPU_BW = gpu0.get("nominal_bandwidth_gbps") or 1792.0
-
-# 引擎冷启动时间(从 vLLM 容器日志时间戳序列算,2026-06-16 实测)
-# 载入权重 148s + 引擎 init(profile+KV cache+warmup,含编译 17s)75.5s + CUDA graph 捕获 32s + 杂项
-# 附:GPU KV cache 总量 1,529,216 tokens(max_num_seqs=64);权重占 71.98 GiB/卡
-LOAD_TIME_S = 256
+# 引擎冷启动(自动采集的分解)
+LOAD_TIME_S = _RUNTIME.get("cold_start_s_est") or 256
+KV_CACHE_TOKENS = _RUNTIME.get("kv_cache_tokens")
 TESTER = "claude-live"
 MACHINE_ID = fp.get("machine_id") or "ab8652ab0b09bbd7"
 DATE = "2026-06-14"

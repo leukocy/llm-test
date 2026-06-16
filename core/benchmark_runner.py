@@ -675,6 +675,30 @@ class BenchmarkRunner:
                 sc = from_sidebar(serving_state) if isinstance(serving_state, dict) else ServingConfig()
                 serving_dict = sc.to_dict()
                 mtp_enabled = sc.mtp_enabled
+
+            # 引擎配置 per-run 自动采集(docker inspect + 日志 + /v1/models)。
+            # auto 覆盖手工——配置变了报告不再陈旧。失败优雅降级(不影响测试)。
+            try:
+                from core.engine_capture import capture_engine_config
+                auto = capture_engine_config(self.api_base_url)
+                if auto:
+                    serving_dict["engine_capture"] = auto
+                    # 关键字段提升到顶层(供 project_run 等直接读)
+                    if auto.get("engine"):
+                        serving_dict["engine"] = auto["engine"]
+                    if auto.get("engine_version"):
+                        serving_dict["engine_version"] = auto["engine_version"]
+                    if auto.get("launch_cmd"):
+                        serving_dict["launch_cmd"] = auto["launch_cmd"]
+                    if auto.get("schedule"):
+                        serving_dict.update(auto["schedule"])
+                    if auto.get("parallel"):
+                        serving_dict["parallel_strategy"] = auto["parallel"]
+                    if auto.get("runtime"):
+                        serving_dict["engine_runtime"] = auto["runtime"]
+            except Exception:  # noqa: BLE001
+                pass
+
             return spec_dict, serving_dict, mtp_enabled
         except Exception:  # noqa: BLE001
             return {}, {}, None
