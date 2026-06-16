@@ -2874,7 +2874,9 @@ class BenchmarkRunner:
                        "ttft", "tps", "tpot", "prefill_speed",
                        "system_output_throughput", "system_input_throughput", "rps",
                        "prefill_tokens", "decode_tokens", "total_time", "decode_time",
-                       "start_time", "end_time", "cache_hit_tokens", "token_calc_method", "error"]
+                       "start_time", "end_time", "cache_hit_tokens", "token_calc_method", "error",
+                       "gpu_util_peak", "gpu_power_peak_w", "gpu_temp_peak_c", "vram_peak_gb",
+                       "cpu_peak_pct", "mem_peak_gb"]
         initialize_csv(csv_columns, self.csv_file)
 
         # 启动DatabaseTest运行
@@ -2912,6 +2914,17 @@ class BenchmarkRunner:
                 ]
                 pregen_prompts = await asyncio.gather(*prompt_tasks)
 
+                # Per-cell 资源监控:每个 (并发×上下文) cell 独立采样,峰值得以按 cell 归因。
+                # 失败不影响测试（与 _start_resource_monitor 同防御）。
+                cell_monitor = None
+                try:
+                    from core.resource_monitor import ResourceMonitor
+                    cell_monitor = ResourceMonitor(interval=1.0)
+                    cell_monitor.start()
+                except Exception as e:
+                    logger.warning(f"per-cell 监控启动失败（不影响测试）: {e}")
+                    cell_monitor = None
+
                 # Use continuous execution with pre-generated prompts
                 results = await self._run_continuous_batch(
                     None,
@@ -2922,6 +2935,15 @@ class BenchmarkRunner:
                     session_counter
                 )
                 session_counter += total_reqs_for_level
+
+                # 停止 per-cell 监控,提取峰值
+                cell_peaks: dict = {}
+                if cell_monitor is not None:
+                    try:
+                        cell_summary = cell_monitor.stop() or {}
+                        cell_peaks = cell_summary.get("peaks") or {}
+                    except Exception:
+                        cell_peaks = {}
 
                 for i, res in enumerate(results):
                     if res and res.get("error") != "UserCancelled":
@@ -2945,6 +2967,18 @@ class BenchmarkRunner:
                             res['prefill_speed'] = uncached_prompt_tokens / res['ttft']
                         else:
                             res['prefill_speed'] = 0
+
+                        # per-cell 资源峰值:平铺到 CSV 列 + 落 extra_metrics（仓库 B 维度）
+                        res['gpu_util_peak'] = cell_peaks.get('gpu_util_percent')
+                        res['gpu_power_peak_w'] = cell_peaks.get('gpu_power_w')
+                        res['gpu_temp_peak_c'] = cell_peaks.get('gpu_temp_c')
+                        res['vram_peak_gb'] = cell_peaks.get('gpu_vram_gb')
+                        res['cpu_peak_pct'] = cell_peaks.get('cpu_percent')
+                        res['mem_peak_gb'] = cell_peaks.get('system_memory_gb')
+                        em = res.get('extra_metrics') or {}
+                        if isinstance(em, dict):
+                            em['cell_resource_peaks'] = cell_peaks
+                            res['extra_metrics'] = em
 
                         append_to_csv(res, csv_columns, self.csv_file)
                         self.results_list.append(res)
