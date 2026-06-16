@@ -48,11 +48,44 @@ def main():
     df = pd.concat(frames, ignore_index=True)
     df["ok"] = df["error"].isna()
     out = []
+    anomaly_rows = []  # 异常请求单独记录(不消灭,留痕)
     for (conc, ctx), sub in df.groupby(["concurrency", "context_length_target"]):
         ok = sub[sub["ok"]]
         rate = len(ok) / len(sub) if len(sub) else 0
         status, bottleneck = derive_status(rate, ctx, conc)
         ttfts = ok["ttft"].tolist()
+        # ---- 异常检测(不消灭,单独留痕):ttft>2×中位 或 prefill<0.5×中位 ----
+        notes = []
+        if rate < 1.0:
+            notes.append(f"成功率{rate*100:.0f}%")
+        n_anom = 0
+        anom_rate = 0.0
+        if len(ok) >= 2:
+            med_ttft = ok["ttft"].median()
+            med_ps = ok["prefill_speed"].median() if "prefill_speed" in ok else None
+            for _, row in ok.iterrows():
+                why = None
+                if row["ttft"] > 2 * med_ttft:
+                    why = "ttft>2×中位"
+                elif med_ps and row.get("prefill_speed") and row["prefill_speed"] < 0.5 * med_ps:
+                    why = "prefill<0.5×中位"
+                if why:
+                    n_anom += 1
+                    anomaly_rows.append({
+                        "concurrency": int(conc), "context_length_target": int(ctx),
+                        "ttft": round(row["ttft"], 3), "tps": round(row.get("tps", 0), 1),
+                        "prefill_speed": round(row.get("prefill_speed", 0)),
+                        "total_time": round(row.get("total_time", 0), 2),
+                        "reason": why, "cell_median_ttft": round(med_ttft, 3),
+                    })
+            anom_rate = n_anom / len(ok)
+            if n_anom:
+                notes.append(f"{n_anom}/{len(ok)} 异常(单独记录,见 anomalies.csv)")
+        # ---- 频发升级:异常率≥30% → "典型值"本身不稳,需排查,median 不可照用 ----
+        if anom_rate >= 0.30 and len(ok) >= 3:
+            status = "anomaly_prone"
+            bottleneck = "frequent_outliers_investigate"
+            notes.append(f"⚠异常率{anom_rate*100:.0f}% 频发,median 不可信,需排查")
         out.append({
             "测试场景": "throughput_matrix",
             "量化方式": "int4(compressed-tensors)",  # 模型级常量;多模型时按 model_spec 填
@@ -63,18 +96,18 @@ def main():
             "启动时间_s": "",      # 引擎级(P0 不按 cell;run 级 load_time 另记)
             "模型加载时间_s": "",   # 引擎级
             "冷启动TTFT_ms": "",   # P1 缺口:未区分冷/热
-            "热启动TTFT_ms": round(ok["ttft"].mean() * 1000) if len(ok) else "",  # 矩阵在 warmup 后,近似热启动
-            "Prefill速度_tokens/s": round(ok["prefill_speed"].mean()) if len(ok) and "prefill_speed" in ok else "",
-            "Decode速度_tokens/s": round(ok["tps"].mean(), 1) if len(ok) else "",
-            "端到端耗时_s": round(ok["total_time"].mean(), 2) if len(ok) else "",
-            "端到端吞吐_tokens/s": round(ok["system_output_throughput"].mean()) if len(ok) and "system_output_throughput" in ok else "",
+            "热启动TTFT_ms": round(ok["ttft"].median() * 1000) if len(ok) else "",  # 矩阵在 warmup 后,近似热启动
+            "Prefill速度_tokens/s": round(ok["prefill_speed"].median()) if len(ok) and "prefill_speed" in ok else "",
+            "Decode速度_tokens/s": round(ok["tps"].median(), 1) if len(ok) else "",
+            "端到端耗时_s": round(ok["total_time"].median(), 2) if len(ok) else "",
+            "端到端吞吐_tokens/s": round(ok["system_output_throughput"].median()) if len(ok) and "system_output_throughput" in ok else "",
             "峰值显存_GB": round(ok["vram_peak_gb"].max(), 1) if len(ok) and "vram_peak_gb" in ok else "",
             "峰值系统内存_GB": round(ok["mem_peak_gb"].max(), 1) if len(ok) and "mem_peak_gb" in ok else "",
             "CPU平均利用率_%": round(ok["cpu_peak_pct"].mean(), 1) if len(ok) and "cpu_peak_pct" in ok else "",
             "GPU平均利用率_%": round(ok["gpu_util_peak"].mean(), 1) if len(ok) and "gpu_util_peak" in ok else "",
             "功耗均值_W": round(ok["gpu_power_peak_w"].mean()) if len(ok) and "gpu_power_peak_w" in ok else "",
             "是否成功": "是" if rate >= 1.0 else ("部分" if rate > 0 else "否"),
-            "备注": f"ctx目标={int(ctx)};成功率{rate*100:.0f}%" if rate < 1.0 else "",
+            "备注": "; ".join(notes),
             "GPU平均温度_°C": round(ok["gpu_temp_peak_c"].max()) if len(ok) and "gpu_temp_peak_c" in ok else "",
             "p95延迟_ms": round(pct(ttfts, 95) * 1000) if ttfts else "",
             "p99延迟_ms": round(pct(ttfts, 99) * 1000) if ttfts else "",
@@ -86,10 +119,23 @@ def main():
     out_path = "raw_data/export/standard_perf.csv"
     os.makedirs("raw_data/export", exist_ok=True)
     result.to_csv(out_path, index=False, encoding="utf-8-sig")  # utf-8-sig 便于 Excel 直接开
-    print(f"✅ 标准对齐导出: {out_path} ({len(result)} cell)")
+
+    # 异常请求单独成表(不消灭,留痕供排查)
+    if anomaly_rows:
+        anom_df = pd.DataFrame(anomaly_rows)
+        anom_path = "raw_data/export/anomalies.csv"
+        anom_df.to_csv(anom_path, index=False, encoding="utf-8-sig")
+        prone = result[result["状态归因(status)"] == "anomaly_prone"]
+        print(f"✅ 标准对齐导出: {out_path} ({len(result)} cell)")
+        print(f"   异常请求单独记录: {anom_path} ({len(anomaly_rows)} 条)")
+        if len(prone):
+            print(f"   ⚠ 异常频发 cell({len(prone)} 个,median 不可信,需排查):")
+            print(prone[["并发数", "输入Tokens", "备注"]].to_string(index=False))
+        else:
+            print(f"   (异常均为偶发,无频发 cell;median 可信)")
+    else:
+        print(f"✅ 标准对齐导出: {out_path} ({len(result)} cell),无异常")
     print(f"   列与 Excel 基础性能测试表一致({len(COLS)}列),可直接粘入")
-    print(result[["并发数", "输入Tokens", "热启动TTFT_ms", "Decode速度_tokens/s",
-                   "GPU平均温度_°C", "p95延迟_ms", "状态归因(status)"]].head(8).to_string(index=False))
 
 
 if __name__ == "__main__":

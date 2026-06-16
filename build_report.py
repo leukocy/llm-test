@@ -49,7 +49,7 @@ def svg(fig) -> str:
 # ---------- 图1: 系统吞吐 vs 并发(饱和曲线) ----------
 fig, ax = plt.subplots(figsize=(7, 4.2))
 for ctx in [64, 4096, 32768, 131072]:
-    sub = ok[ok["context_length_target"] == ctx].groupby("concurrency")["system_output_throughput"].mean()
+    sub = ok[ok["context_length_target"] == ctx].groupby("concurrency")["system_output_throughput"].median()
     if len(sub):
         ax.plot(sub.index, sub.values, marker="o", label=f"ctx={lbl(ctx)} tok")
 ax.set_xlabel("Concurrency"); ax.set_ylabel("System output throughput (tok/s)")
@@ -61,7 +61,7 @@ chart1 = svg(fig)
 # ---------- 图2: 每流 decode TPS vs 上下文 ----------
 fig, ax = plt.subplots(figsize=(7, 4.2))
 for conc in [1, 4, 8, 16, 32]:
-    sub = ok[ok["concurrency"] == conc].groupby("context_length_target")["tps"].mean()
+    sub = ok[ok["concurrency"] == conc].groupby("context_length_target")["tps"].median()
     if len(sub):
         ax.plot(sub.index, sub.values, marker="o", label=f"conc={conc}")
 ax.set_xlabel("Context length (tokens)"); ax.set_ylabel("Per-stream decode TPS (tok/s)")
@@ -74,7 +74,7 @@ chart2 = svg(fig)
 # ---------- 图3: TTFT vs 上下文 ----------
 fig, ax = plt.subplots(figsize=(7, 4.2))
 for conc in [1, 4, 8]:
-    sub = ok[ok["concurrency"] == conc].groupby("context_length_target")["ttft"].mean()
+    sub = ok[ok["concurrency"] == conc].groupby("context_length_target")["ttft"].median()
     if len(sub):
         ax.plot(sub.index, sub.values, marker="o", label=f"conc={conc}")
 ax.set_xlabel("Context length (tokens)"); ax.set_ylabel("TTFT (s)")
@@ -88,7 +88,7 @@ chart3 = svg(fig)
 if "gpu_temp_peak_c" in ok.columns:
     fig, ax = plt.subplots(figsize=(7, 4.2))
     for conc in [1, 2, 4, 8, 16, 32]:
-        sub = ok[ok["concurrency"] == conc].groupby("context_length_target")["gpu_temp_peak_c"].max()
+        sub = ok[ok["concurrency"] == conc].groupby("context_length_target")["gpu_temp_peak_c"].median()
         if len(sub):
             ax.plot(sub.index, sub.values, marker="o", label=f"conc={conc}")
     ax.axhline(88, color="red", ls="--", alpha=0.4, label="热降频区(~88°C+)")
@@ -121,10 +121,27 @@ def matrix_table(metric, fmt="{:.1f}"):
         cells = ""
         for conc in CONC:
             sub = ok[(ok.concurrency == conc) & (ok.context_length_target == ctx)]
-            v = sub[metric].mean() if len(sub) else None
+            v = sub[metric].median() if len(sub) else None
             cells += f"<td>{fmt.format(v) if v is not None and pd.notna(v) else '—'}</td>"
         label = lbl(ctx)
         rows += f"<tr><th>{label}</th>{cells}</tr>"
+    head = "".join(f"<th>conc={c}</th>" for c in CONC)
+    return f'<table class="matrix"><thead><tr><th>ctx＼conc</th>{head}</tr></thead><tbody>{rows}</tbody></table>'
+
+
+def agg_prefill_table():
+    """聚合 prefill 吞吐 (N × tokens / max_ttft) — 计算密集应跨并发恒定(验证扩展效率)。"""
+    rows = ""
+    for ctx in CTX_ALL:
+        cells = ""
+        for conc in CONC:
+            sub = ok[(ok.concurrency == conc) & (ok.context_length_target == ctx)]
+            if len(sub) and sub["ttft"].max() > 0:
+                agg = sub["prefill_tokens"].median() * conc / sub["ttft"].max()
+                cells += f"<td>{agg:.0f}</td>"
+            else:
+                cells += "<td>—</td>"
+        rows += f"<tr><th>{lbl(ctx)}</th>{cells}</tr>"
     head = "".join(f"<th>conc={c}</th>" for c in CONC)
     return f'<table class="matrix"><thead><tr><th>ctx＼conc</th>{head}</tr></thead><tbody>{rows}</tbody></table>'
 
@@ -139,8 +156,8 @@ rate_table = f'<table class="matrix rate"><thead><tr><th>ctx＼conc</th>{rate_he
 
 # 关键数字
 # 峰值系统吞吐:max_num_seqs=64 下 conc=32 仍未饱和(482 tok/s),取测区内最大
-sat_tps = ok[(ok.context_length_target == 64)].groupby("concurrency")["system_output_throughput"].mean().max()
-peak_tps = ok[ok.concurrency == 1][ok.context_length_target == 64]["tps"].mean()
+sat_tps = ok[(ok.context_length_target == 64)].groupby("concurrency")["system_output_throughput"].median().max()
+peak_tps = ok[ok.concurrency == 1][ok.context_length_target == 64]["tps"].median()
 n_total = len(df)
 n_ok = int(df["ok"].sum())
 
@@ -218,8 +235,11 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 {matrix_table("tps", "{:.1f}")}
 <h3>TTFT (s)</h3>
 {matrix_table("ttft", "{:.2f}")}
-<h3>Prefill 速度 (tok/s,仅 conc≤8 有效)</h3>
+<h3>Prefill 速度 (tok/s,单流,仅 conc≤8 有效)</h3>
 {matrix_table("prefill_speed", "{:.0f}")}
+<h3>聚合 Prefill 吞吐 (tok/s = N×token/max_ttft) — 计算密集应跨并发恒定</h3>
+{agg_prefill_table()}
+<p class="sub">读法:此值跨并发应接近恒定(~5200-5700,比值≈1.0)= prefill 计算密集、扩展健康。下降=并发争用(仅超高并发×长上下文出现)。</p>
 
 <h2>成功率矩阵(绿=全过 / 黄=部分 / 红=全失败)</h2>
 {rate_table}
