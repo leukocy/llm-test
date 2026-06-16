@@ -55,6 +55,9 @@ HF_MODEL_MAPPING = {
     "deepseek-v4": "./tokenizers/DeepSeek-V4-Pro",
     "deepseek-v3.2": "./tokenizers/DeepSeek-V3.2",
     "deepseek": "./tokenizers/DeepSeek-V3.1-Terminus",
+    # kimi-k2.7 优先匹配:指向模型自带完整 tokenizer(与 vLLM 同源)。
+    # ./tokenizers/Kimi-K2.5 缺 tool_declaration_ts.py 会加载失败→校准回退错 tokenizer→欠生成。
+    "kimi-k2.7": "/DATA/Model/Kimi-K2.7-Code",
     "kimi-k2.5": "./tokenizers/Kimi-K2.5",
     "kimi-k2-thinking": "./tokenizers/Kimi-K2-Thinking",
     "kimi-k2": "./tokenizers/Kimi-K2.5",
