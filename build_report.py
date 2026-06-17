@@ -6,6 +6,7 @@ from __future__ import annotations
 import base64
 import io
 import os
+import os as _os
 import zipfile
 from datetime import datetime
 
@@ -121,7 +122,7 @@ else:
     chart4 = ""
 
 # ---------- 稳态测试图表(多张) ----------
-import json as _json, os as _os
+import json as _json
 chart5 = chart6 = chart7 = chart8 = ""
 steady_html = ""
 steady_path = "raw_data/decode_steady_full.csv"
