@@ -258,18 +258,15 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 </ul>
 </div>
 
-<h2>等效带宽诊断(权重 + KV 双分量)</h2>
-<p>batched decode 每步显存读取 = <b>权重(恒定)+ KV/激活(随 batch×ctx 增长)</b>:</p>
-<ul style="font-size:13px">
-<li><b>权重读取</b>:~29 GB/step(混合精度,所有序列共享,amortized)。per-token = 29/N → 随 batch 递减。</li>
-<li><b>KV/激活读取</b>:N × ctx × ~70 KB/token(MLA 压缩 KV)。短 ctx 可忽略(64 token=4.5MB/seq);长 ctx 显著(131K=9.2 GB/seq)→ <b>随 batch×ctx 线性增长,到带宽上限后不再增(纯加计算)</b>。</li>
-</ul>
-<table class="m" style="font-size:12px"><thead><tr><th>场景</th><th>每步权重</th><th>每步 KV(估)</th><th>带宽主导</th><th>瓶颈</th></tr></thead><tbody>
-<tr><td>conc=1, ctx=64</td><td>29 GB</td><td>~0</td><td>权重</td><td>延迟/comm(~10% bw)</td></tr>
-<tr><td>conc=32, ctx=64</td><td>29 GB</td><td>~0.14 GB</td><td>权重(摊薄)</td><td>compute/comm(~3% bw)</td></tr>
-<tr><td>conc=8, ctx=131K</td><td>29 GB</td><td>~74 GB</td><td><b>KV</b></td><td>带宽(KV 占大头)</td></tr>
+<h2>等效带宽诊断(固定权重 + 路由专家 + KV,三分类)</h2>
+<p>batched decode 每步显存读取必须<b>三分类</b>(各自的 batch 行为不同):</p>
+<table class="m" style="font-size:12px"><thead><tr><th>读取类型</th><th>每步量</th><th>随 batch 变化</th><th>说明</th></tr></thead><tbody>
+<tr><td><b>固定权重</b><br>(attn MLA + shared expert + dense + norm)</td><td>~15 GB</td><td><b>恒定</b>(batch 共享)</td><td>所有序列用同样的矩阵,一次读取 ×[N,hidden] 并行乘</td></tr>
+<tr><td><b>路由专家</b><br>(top-8 of 384, int4)</td><td>conc=1: ~11 GB<br>conc=32: 最多 ~86+ GB</td><td><b>随 batch 增长</b></td><td>不同序列激活不同专家 → batch 越大覆盖越多唯一专家(取决于路由多样性)</td></tr>
+<tr><td><b>KV cache</b><br>(MLA 压缩)</td><td>N × ctx × ~70 KB</td><td><b>随 batch×ctx 增长</b></td><td>每序列独立 KV;到带宽上限后不再增(纯加计算)</td></tr>
 </tbody></table>
-<p><b>结论:decode 瓶颈随 batch×ctx 组合变化</b>——短上下文 compute/comm-bound(权重摊薄,KV 可忽略);长上下文 + 高并发 KV 主导带宽;超高并发 KV 撞带宽上限后纯加计算。不能用单一 bytes/token 覆盖全场景。</p>
+<p><b>关键:不能拿单并发的读取量当基数</b>——只有固定权重是恒定的(15 GB);路由专家和 KV 都随 batch 增长。conc=1 总读取 ~26 GB(8 专家);conc=32 短 ctx 可能 ~100+ GB(更多专家);conc=8 长 ctx(KV 74 GB)更大。</p>
+<p><b>结论:decode 瓶颈随 batch×ctx 组合变化</b>。固定权重始终低占比(被摊薄);路由专家(随 batch)+ KV(随 batch×ctx)才是主导变量。精确量化需 nsys 剖析(路由多样性 + 三者占比),不能用单一 bytes/token 覆盖全场景。</p>
 
 <footer>
 数据源:<code>baseline_kimi_consolidated.csv</code>(散热修复后完整矩阵,共 {n_total} 请求 / 56 cell,KV 边界内全覆盖)。
