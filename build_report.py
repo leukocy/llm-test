@@ -30,14 +30,16 @@ ok = df[df["ok"]]
 # 因窗口横跨多轮 prefill 而稀释,不可靠;单流 tps 用 token 时间戳算,准确)。
 ok = ok.copy()
 ok["agg_decode"] = ok["concurrency"] * ok["tps"]
+CONC = [1, 2, 4, 8, 16, 32]
+CTX_ALL = [64, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 260000]
+CTX_LOW = [64, 1024, 2048, 4096, 8192]
 # 稳态数据(与性能矩阵同源,但 max_tokens=2048 + 逐token ITL)
 _spath = "raw_data/decode_steady_full.csv"
 if _os.path.exists(_spath):
     sfull = pd.read_csv(_spath)
     sfull = sfull.copy()
-    # 补 prefill_speed(稳态测试没存 prefill_tokens,用 ctx 目标近似)
     _ctx_map = {c: int(ok[ok.context_length_target == c]["prefill_tokens"].median()) for c in CTX_ALL if c != 260000}
-    _ctx_map[258000] = _ctx_map.get(260000, 260008)  # 258000≈260000
+    _ctx_map[258000] = _ctx_map.get(260000, 260008)
     _ctx_map[260000] = _ctx_map.get(260000, 260008)
     sfull["prefill_tokens"] = sfull["context_length_target"].map(_ctx_map)
     sfull["prefill_speed"] = sfull.apply(lambda r: r["prefill_tokens"] / r["ttft"] if r.get("ttft") and r["ttft"] > 0 else None, axis=1)
@@ -45,9 +47,6 @@ if _os.path.exists(_spath):
     sfull["squeeze_ratio"] = sfull.apply(lambda r: (r["tps_0_100"] / r["steady_state_tps"] * 100) if r.get("steady_state_tps") and r.get("tps_0_100") and r["steady_state_tps"] > 0 else None, axis=1)
 else:
     sfull = pd.DataFrame()
-CONC = [1, 2, 4, 8, 16, 32]
-CTX_ALL = [64, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 260000]
-CTX_LOW = [64, 1024, 2048, 4096, 8192]
 
 # 实际 prefill token 数(_calibrate_prompt 欠生成,~0.65 比例;用实际 token 作上下文轴,
 # TTFT 才与真实 prefill 对应)。ACT[target] = 该 cell 成功行的实际 token 中位数。
