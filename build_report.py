@@ -426,6 +426,47 @@ TTFT / Prefill 速度:稳态侧用原测试数据(prefill 阶段不受 max_token
 报告是切片,仓库是全集——下游数据消费请用 CSV。
 <br><b>上下文轴</b>:标签即实际 prefill token 数(校准已修正,目标 8k = 实际 8k)。
 </footer>
+
+<h2>综合评估:Kimi-K2.7 在 8× PRO 6000 上的表现</h2>
+<div class="box blue">
+<b>结论:符合预期,但非最优——瓶颈不在硬件算力,在 TP=8 通信开销。</b>
+</div>
+<table class="m"><thead><tr><th>维度</th><th>评分</th><th>关键数据</th><th>说明</th></tr></thead><tbody>
+<tr><td>Prefill</td><td>★★★★☆</td><td>5700 tok/s(4k-32k),跨并发恒定</td><td>计算密集,扩展健康。长 ctx(128k+)降速是 attention 变内存密集的正常行为。</td></tr>
+<tr><td>Decode 单流</td><td>★★☆☆☆</td><td>48 tok/s(conc=1)</td><td>理论 478 tok/s(纯带宽),实际 90% step 时间在 TP all-reduce(61层×8卡)+ MoE dispatch + kernel launch。<b>通信税吃掉绝大部分性能。</b></td></tr>
+<tr><td>Decode 聚合</td><td>★★★☆☆</td><td>448 tok/s(conc=32)</td><td>线性扩展(48→448 ≈ 9.3×),batch 摊薄固定开销。受 max_num_seqs=64 限,conc>64 不再涨。</td></tr>
+<tr><td>长上下文</td><td>★★★☆☆</td><td>260K 可跑,并发上限 5</td><td>KV 1.53M token 是硬约束(PRO 6000 96GB 已比 H100 80GB 多 20%)。</td></tr>
+<tr><td>稳定性</td><td>★★★★★</td><td>1482 请求 0 错误,最高 95°C 无降频</td><td>散热修复后稳定,温度可控。</td></tr>
+<tr><td>性价比</td><td>★★★★☆</td><td>工作站卡,比 H100 便宜得多</td><td>单流 decode ~54% of H100(与带宽比例一致),显存多 20%。</td></tr>
+</tbody></table>
+
+<h3>Roofline:为什么单流只有 48 tok/s?</h3>
+<div class="box">
+每 step 实际 21.2ms vs 理论最小 2.1ms(30GB / 14336 GB/s)。<b>90% 开销在通信:</b><br>
+• TP=8 的 <b>61 层 all-reduce</b>(每层一次跨 8 GPU 集合通信)<br>
+• <b>MoE expert dispatch</b>(384 专家 EP all-to-all)<br>
+• kernel launch / scheduler overhead<br>
+→ 这是 MoE 大模型在 8 卡 TP 上的通病,非 PRO 6000 特有。H100 上同样存在(只是带宽更大,绝对值更高)。
+</div>
+
+<h3>横向对比(参考值)</h3>
+<table class="m"><thead><tr><th>指标</th><th>8× PRO 6000(本机)</th><th>8× H100(参考)</th><th>比例</th></tr></thead><tbody>
+<tr><td>单 GPU HBM 带宽</td><td>1792 GB/s</td><td>3350 GB/s</td><td>54%</td></tr>
+<tr><td>单 GPU 显存</td><td>96 GB</td><td>80 GB</td><td>120%</td></tr>
+<tr><td>单 GPU TDP</td><td>600W</td><td>700W</td><td>86%</td></tr>
+<tr><td>单流 decode</td><td>~49 tok/s</td><td>~80-100(估)</td><td>~54%(与带宽成比例)</td></tr>
+<tr><td>聚合 decode(c=32)</td><td>~448 tok/s</td><td>~900+(估)</td><td>~50%</td></tr>
+<tr><td>Prefill</td><td>~5700 tok/s</td><td>~10000+(估)</td><td>~57%</td></tr>
+</tbody></table>
+<p class="sub">H100 数据为基于带宽比例的估算,非实测。实际还受 TP 通信开销、MoE dispatch 效率等影响。</p>
+
+<h3>改进建议</h3>
+<div class="box green">
+<b>① 试 TP=4 + DP=2</b>:all-reduce 层级减半(61 层跨 4 卡 vs 8 卡),单流 decode 预计提升 30-50%。代价:单卡显存压力增大,KV 并发减半。<br>
+<b>② KV 量化(fp8 KV cache)</b>:KV 占用减半,并发翻倍(260K: 5→10 并发)。精度损失通常可接受。<br>
+<b>③ CUDA Graph + 通信重叠</b>:减少 90% step 开销(kernel launch / all-reduce 等待)。vLLM 已部分支持(fuse_allreduce_rms 已开),可进一步调优。<br>
+<b>④ 增大 max_num_seqs(已 64)</b>:聚合吞吐还有空间(conc=32 未饱和)。
+</div>
 </body></html>"""
 
 with open(OUT_HTML, "w", encoding="utf-8") as f:
