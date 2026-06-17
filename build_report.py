@@ -217,7 +217,7 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 
 <h2>硬件 & 引擎配置</h2>
 <table class="hw">
-<tr><td>CPU</td><td>AMD EPYC 9355 32C/64T</td><td>内存</td><td>DDR5-6400 ×24 通道,1133GB,Multi-bit ECC</td></tr>
+<tr><td>CPU</td><td>2× AMD EPYC 9355(64C/128T,2 NUMA)</td><td>内存</td><td>DDR5-6400 ×24 通道,1133GB,Multi-bit ECC</td></tr>
 <tr><td>GPU</td><td>8× RTX PRO 6000 Blackwell(96GB GDDR7,1792 GB/s)</td><td>存储</td><td>ZHITAI TiPlus7100 4TB NVMe</td></tr>
 <tr><td>驱动/算</td><td>580.159.03 / CUDA 13.0</td><td>引擎</td><td>vLLM v0.23.0,<code>tp=8 dcp=8 ep</code>,<code>gpu_mem_util=0.94</code>,<code>max_num_seqs=64</code>,prefix-cache,fuse-allreduce-rms</td></tr>
 </table>
