@@ -193,15 +193,17 @@ MODEL_SPEC_REGISTRY: dict[str, ModelSpec] = {
     "kimi-k2": ModelSpec(
         # 架构字段逐字取自 Kimi-K2.7-Code/config.json 的 text_config（权威源）；
         # total/active 取 Moonshot 公开规格（1T 总参 / 32B 激活，与 384 专家 top-8 自洽）。
-        # 注：K2 base 是 bf16；K2.5/K2.6/K2.7 是原生 int4 量化（compressed-tensors，
-        # num_bits=4 / group_size=32 / symmetric，激活仍 bf16；KV 缓存未量化）。
+        # 注：K2.5/K2.6/K2.7 是混合精度量化(compressed-tensors)：routed experts=int4,
+        # 但 attention/shared_experts/dense/mlp_gate/lm_head=bf16(在 quantization ignore 列表)。
+        # 故 bytes_per_param ≠ 纯 int4 的 0.5 —— 有效约 0.91(73% int4@0.5 + 27% bf16@2.0)。
         name="Kimi-K2/K2.5/K2.7", family="Moonshot", architecture="moe",
         total_params_b=1000, active_params_b=32, num_experts=384, num_experts_per_tok=8,
         num_shared_experts=1, routed_scaling=2.827,
         num_layers=61, hidden_size=7168, num_attention_heads=64, num_kv_heads=64,
         head_dim=128, intermediate_size=18432,
         attention_type="mla", vocab_size=163840, max_position_embeddings=262144,
-        weight_dtype="int4", quant_method="compressed-tensors", group_size=32,
+        weight_dtype="int4+bf16(mixed)", quant_method="compressed-tensors", group_size=32,
+        bytes_per_param=0.91,  # 混合精度有效值(非纯int4 0.5)
         kv_dtype="bf16",
         is_multimodal=True, modalities=["text", "vision"],
         # num_nextn_predict_layers=0 → 该 checkpoint 未启用 MTP

@@ -25,6 +25,10 @@ plt.rcParams.update({"font.size": 10, "axes.grid": True, "grid.alpha": 0.3, "fig
 df = pd.read_csv(BASELINE)
 df["ok"] = df["error"].isna()
 ok = df[df["ok"]]
+# 聚合 decode 吞吐 = 并发 × 单流 tps(system_output_throughput 字段在长上下文×rounds>1 时
+# 因窗口横跨多轮 prefill 而稀释,不可靠;单流 tps 用 token 时间戳算,准确)。
+ok = ok.copy()
+ok["agg_decode"] = ok["concurrency"] * ok["tps"]
 CONC = [1, 2, 4, 8, 16, 32]
 CTX_ALL = [64, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 260000]
 CTX_LOW = [64, 1024, 2048, 4096, 8192]
@@ -49,7 +53,7 @@ def svg(fig) -> str:
 # ---------- 图1: 系统吞吐 vs 并发(饱和曲线) ----------
 fig, ax = plt.subplots(figsize=(7, 4.2))
 for ctx in [64, 4096, 32768, 131072]:
-    sub = ok[ok["context_length_target"] == ctx].groupby("concurrency")["system_output_throughput"].median()
+    sub = ok[ok["context_length_target"] == ctx].groupby("concurrency")["agg_decode"].median()
     if len(sub):
         ax.plot(sub.index, sub.values, marker="o", label=f"ctx={lbl(ctx)} tok")
 ax.set_xlabel("Concurrency"); ax.set_ylabel("System output throughput (tok/s)")
@@ -156,7 +160,7 @@ rate_table = f'<table class="matrix rate"><thead><tr><th>ctx＼conc</th>{rate_he
 
 # 关键数字
 # 峰值系统吞吐:max_num_seqs=64 下 conc=32 仍未饱和(482 tok/s),取测区内最大
-sat_tps = ok[(ok.context_length_target == 64)].groupby("concurrency")["system_output_throughput"].median().max()
+sat_tps = ok[(ok.context_length_target == 64)].groupby("concurrency")["agg_decode"].median().max()
 peak_tps = ok[ok.concurrency == 1][ok.context_length_target == 64]["tps"].median()
 n_total = len(df)
 n_ok = int(df["ok"].sum())
@@ -201,7 +205,7 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <h2 style="margin-top:0;border:0;padding:0;color:#1e40af">一句话结论</h2>
 <ul>
 <li><b>吞吐随并发持续上升</b>(max_num_seqs=64):系统 decode 吞吐 conc=1→49、8→223、16→351、32→482 tok/s,<b>测区内未饱和</b>(早期"conc=16 饱和"是旧 max_num_seqs=16 的配置上限,现已改 64)。单流 decode 随并发下降(49→15 tok/s),聚合靠 batch 摊薄。</li>
-<li><b>decode 非带宽受限</b>:int4 下 TP=8 真实每卡显存带宽利用率仅 ~5%,瓶颈在算力/TP 通信/调度,显存带宽余量充足。</li>
+<li><b>decode 瓶颈随并发切换</b>:低并发延迟受限(~10% 带宽,每步固定开销);高并发带宽受限(~86%,接近 HBM 峰值)。混合精度 bytes/token ~29 GB(int4 experts + bf16 attn/shared)。</li>
 <li><b>散热修复后 260K 稳定到 conc=4</b>(94°C,0 崩溃);矩阵天然边界是 <b>KV 容量 1.53M token</b>——<code>conc×ctx ≤ 1.53M</code> 可行,超过则 KV 排队不可行(见边界)。</li>
 <li>单流 decode 峰值 ~{peak_tps:.0f} tok/s(ctx=64);TTFT 随上下文近线性增长(131K @ conc=1 ≈ 20s);per-cell 温度监控全程无热降频。</li>
 </ul>
@@ -230,7 +234,7 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 
 <h2>性能矩阵</h2>
 <h3 style="margin-bottom:4px">系统 decode 吞吐 (tok/s)</h3>
-{matrix_table("system_output_throughput", "{:.0f}")}
+{matrix_table("agg_decode", "{:.0f}")}
 <h3>每流 decode TPS (tok/s)</h3>
 {matrix_table("tps", "{:.1f}")}
 <h3>TTFT (s)</h3>
@@ -255,7 +259,7 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 </div>
 
 <h2>等效带宽诊断(int4 roofline)</h2>
-<p>active_params=32B,int4(0.5 字节/参)→ 每 token 读 16 GB 权重。conc=1 单流等效带宽 ~736 GB/s,模块口径 41%;<b>TP=8 下真实每卡利用率 ≈ 5%</b>——decode 远未带宽受限,印证吞吐瓶颈在算力/通信而非显存。</p>
+<p>active_params=32B,混合精度(0.91 字节/参,routed int4 + attn/shared bf16)→ 每 token 读 ~29 GB。conc=1 聚合利用率 ~10%(延迟受限);<b>conc=32 聚合 ~86%(接近带宽饱和)</b>——低并发延迟受限,高并发带宽受限,经典 LLM decode 曲线。</p>
 
 <footer>
 数据源:<code>baseline_kimi_consolidated.csv</code>(散热修复后完整矩阵,共 {n_total} 请求 / 56 cell,KV 边界内全覆盖)。
