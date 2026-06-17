@@ -198,7 +198,7 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
   机器 <code>ab8652ab0b09bbd7</code>(ASRockRack TURIN2D24G-2L+,8× RTX PRO 6000 Blackwell) ·
   模型 Kimi-K2.7-Code(1T 总参/32B 激活 MoE,<b>原生 int4</b>) ·
   引擎 vLLM v0.23.0(TP=8 / DCP=8 / EP) ·
-  测试日期 2026-06-14 · 生成于 {datetime.now().strftime('%Y-%m-%d %H:%M')}
+  每请求输出 512 tokens (max_tokens=512) · 测试日期 2026-06-14 · 生成于 {datetime.now().strftime('%Y-%m-%d %H:%M')}
 </div>
 
 <div class="concl">
