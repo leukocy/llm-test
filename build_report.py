@@ -136,6 +136,23 @@ if _os.path.exists(steady_path):
     ax.set_title("Decode ITL Transition: prefill squeeze -> steady state")
     ax.legend(fontsize=8); ax.set_xlim(0, 150)
     chart5 = svg(fig)
+    # 计算挤压比列
+    sdf = sdf.copy()
+    sdf["squeeze_ratio"] = sdf.apply(lambda r: (r["tps_0_100"] / r["steady_state_tps"] * 100) if r.get("steady_state_tps") and r.get("tps_0_100") and r["steady_state_tps"] > 0 else None, axis=1)
+    # 稳态矩阵函数(和性能矩阵同格式:ctx 行 × conc 列)
+    STEADY_CTX = sorted(sdf["context_length_target"].unique()) if "context_length_target" in sdf.columns else CTX_ALL
+    STEADY_CONC = sorted(sdf["concurrency"].unique()) if "concurrency" in sdf.columns else CONC
+    def steady_matrix(metric, fmt="{:.1f}"):
+        rows = ""
+        for ctx in STEADY_CTX:
+            cells = ""
+            for conc in STEADY_CONC:
+                sub = sdf[(sdf.concurrency == conc) & (sdf.context_length_target == ctx)]
+                v = sub[metric].median() if len(sub) and metric in sub.columns and sub[metric].notna().any() else None
+                cells += f"<td>{fmt.format(v) if v is not None and pd.notna(v) else '—'}</td>"
+            rows += f"<tr><th>{lbl(int(ctx))}</th>{cells}</tr>"
+        head = "".join(f"<th>conc={int(c)}</th>" for c in STEADY_CONC)
+        return f'<table class="matrix"><thead><tr><th>ctx＼conc</th>{head}</tr></thead><tbody>{rows}</tbody></table>'
     # 挤压汇总表(全量,含收敛点 + 峰值 ITL)
     squeeze_rows = ""
     for (conc, ctx), sub in sdf.groupby(["concurrency", "context_length_target"]):
@@ -151,8 +168,17 @@ if _os.path.exists(steady_path):
 <h2>Decode 稳态测试(全量 · {len(sdf)} 行 · 逐 token ITL)</h2>
 <p>独特 prompt(独立 KV,生产真实),max_tokens=2048,逐 token ITL 采集。输入 = prefill tokens(各 cell 不同),输出 = 2048 tokens decode。{len(sdf.groupby(['concurrency','context_length_target']))} 个 cell(conc×ctx,KV 可行域全覆盖)。</p>
 <div class="chart">{chart5}</div>
-<table class="matrix" style="font-size:11px"><thead><tr><th>conc</th><th>ctx</th><th>前100<br>(tok/s)</th><th>稳态500+<br>(tok/s)</th><th>前100<br>/稳态</th><th>收敛<br>token</th><th>峰值<br>ITL</th></tr></thead><tbody>{squeeze_rows}</tbody></table>
-<p><b>发现:prefill squeeze 随 batch×ctx 急剧加深</b>——conc=1 全场景无挤压(收敛=0);短 ctx(64)任何并发无挤压(prefill 瞬时);<b>conc=32/32k 前 100 token 仅稳态 9%,收敛到第 118 个 token</b>(前 118 个 token 被挤压);conc=4/258k 收敛到第 181 个 token。峰值 ITL 最高达 4756ms(conc=4/258k,首个 token 等了近 5 秒)。<b>结论:并发吞吐测试 max_tokens 应≥2048;512 token 时被挤压 token 占比过高(~20%),聚合吞吐被严重拉低。</b></p>
+<h3>稳态 decode TPS (tok/s,单流,token 500+ 中位)</h3>
+{steady_matrix("steady_state_tps", "{:.1f}")}
+<h3>前 100 token TPS (tok/s,单流,含 prefill 挤压)</h3>
+{steady_matrix("tps_0_100", "{:.1f}")}
+<h3>挤压比(前100/稳态,<100%=被挤压)</h3>
+{steady_matrix("squeeze_ratio", "{:.0f}%")}
+<h3>收敛 token 数(ITL 降到 1.2× 稳态;0=无挤压)</h3>
+{steady_matrix("converge_token", "{:.0f}")}
+<h3>峰值 ITL (ms,首 token 可达数秒)</h3>
+{steady_matrix("peak_itl_ms", "{:.0f}")}
+<p><b>发现:prefill squeeze 随 batch×ctx 急剧加深</b>——conc=1 全场景无挤压(收敛=0);短 ctx(64)任何并发无挤压(prefill 瞬时);<b>conc=32/32k 前 100 token 仅稳态 9%,收敛到第 118 个 token</b>;conc=4/258k 收敛到第 181 个 token,峰值 ITL 4756ms(首个 token 等了近 5 秒)。<b>结论:并发吞吐测试 max_tokens 应≥2048;512 token 时被挤压 token 占比过高(~20%),聚合吞吐被严重拉低。</b></p>
 """
 
 
