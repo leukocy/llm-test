@@ -129,8 +129,8 @@ if _os.path.exists(steady_path):
                 min_len = min(len(a) for a in all_itls)
                 med_itl = [sorted([a[i] for a in all_itls if i < len(a)])[len([a for a in all_itls if i < len(a)])//2] * 1000
                            for i in range(min_len)]
-                # 平滑(窗口 10)
-                smooth = [sum(med_itl[max(0,i-5):i+5])/(min(10,i+5)-max(0,i-5)) for i in range(min_len)]
+                # 平滑(窗口 10,用 pandas rolling 避免除零)
+                smooth = pd.Series(med_itl).rolling(10, center=True, min_periods=1).mean().tolist()
                 ax.plot(range(min_len), smooth, label=f"conc={conc}", alpha=0.8)
     ax.set_xlabel("Token index (first 150)"); ax.set_ylabel("Inter-token latency (ms)")
     ax.set_title("Decode ITL Transition: prefill squeeze -> steady state")
