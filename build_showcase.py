@@ -131,7 +131,7 @@ footer{{margin-top:50px;color:#9ca3af;font-size:12px;border-top:1px solid #e5e7e
 </div>
 
 <h1>LLM 推理测试平台升级<br><span style="font-size:18px;color:#6b7280">从硬件到模型的全流程数据仓库</span></h1>
-<div class="sub">机器 <code>{fp.get('machine_id')}</code>({cpu.get('model_name','')}, {len(gpus)}× {gpu0.get('name','')}) · 模型 Kimi-K2.7-Code · 生成 {datetime.now().strftime('%Y-%m-%d %H:%M')}</div>
+<div class="sub">机器 <code>{fp.get('machine_id')}</code>({cpu.get('model_name','')}, {len(gpus)}× {gpu0.get('name','')}) · 每请求输出 512 tokens(max_tokens=512) · 模型 Kimi-K2.7-Code · 生成 {datetime.now().strftime('%Y-%m-%d %H:%M')}</div>
 
 <div class="aud">
 <a href="#summary">🧭 决策者<span class="r">3 分钟看价值</span></a>
