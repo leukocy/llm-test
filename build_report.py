@@ -167,33 +167,7 @@ if _os.path.exists(steady_path):
     ax.legend(fontsize=8)
     chart6 = svg(fig)
 
-    # --- 图7: 挤压比(前100/稳态%)热力 vs conc×ctx ---
-    fig, ax = plt.subplots(figsize=(7, 3.5))
-    for conc in [2, 4, 8, 16, 32]:
-        sub = sdf[sdf.concurrency == conc].groupby("context_length_target")["squeeze_ratio"].median()
-        if len(sub):
-            ax.plot(sub.index, sub.values, marker="o", label=f"conc={conc}", alpha=0.8)
-    ax.axhline(100, color="green", ls="--", alpha=0.4, label="100% = no squeeze")
-    ax.set_xlabel("Context length (tokens)"); ax.set_ylabel("First-100 / Steady (%)")
-    ax.set_title("Prefill Squeeze Ratio (lower = more squeezed)")
-    ax.set_xscale("log", base=2)
-    ctxs_present = sorted(sdf.context_length_target.unique())
-    ax.set_xticks(ctxs_present); ax.set_xticklabels([lbl(int(c)) for c in ctxs_present], rotation=30)
-    ax.legend(fontsize=8)
-    chart7 = svg(fig)
-
-    # --- 图8: 收敛 token 数 vs conc×ctx ---
-    fig, ax = plt.subplots(figsize=(7, 3.5))
-    for conc in [2, 4, 8, 16, 32]:
-        sub = sdf[sdf.concurrency == conc].groupby("context_length_target")["converge_token"].median()
-        if len(sub):
-            ax.plot(sub.index, sub.values, marker="o", label=f"conc={conc}", alpha=0.8)
-    ax.set_xlabel("Context length (tokens)"); ax.set_ylabel("Convergence token count")
-    ax.set_title("Squeeze Duration: tokens before reaching steady state")
-    ax.set_xscale("log", base=2)
-    ax.set_xticks(ctxs_present); ax.set_xticklabels([lbl(int(c)) for c in ctxs_present], rotation=30)
-    ax.legend(fontsize=8)
-    chart8 = svg(fig)
+    # 图7/图8 已移除(挤压比/收敛 token 数:矩阵已有,图冗余)
 
     # 稳态矩阵函数(和性能矩阵同格式:ctx 行 × conc 列)
     STEADY_CTX = sorted(sdf["context_length_target"].unique()) if "context_length_target" in sdf.columns else CTX_ALL
@@ -388,14 +362,15 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 </table>
 
 <h2>性能图表</h2>
-<div class="chart">{chart1}</div>
+<div style="display:flex;gap:12px;flex-wrap:wrap">
+<div style="flex:1;min-width:380px" class="chart">{chart1}</div>
+<div style="flex:1;min-width:380px" class="chart">{chart6}</div>
+</div>
+<p class="sub" style="margin:-8px 0 12px">左:max_tokens=512 聚合吞吐 | 右:max_tokens=2048 稳态单流 TPS(token 500+ 中位)</p>
 <div class="chart">{chart2}</div>
 <div class="chart">{chart3}</div>
 {('<div class="chart">' + chart4 + '</div>') if chart4 else ''}
 {('<div class="chart">' + chart5 + '</div>') if chart5 else ''}
-{('<div class="chart">' + chart6 + '</div>') if chart6 else ''}
-{('<div class="chart">' + chart7 + '</div>') if chart7 else ''}
-{('<div class="chart">' + chart8 + '</div>') if chart8 else ''}
 
 <h2>性能矩阵(max_tokens=512 vs 稳态 max_tokens=2048 并排)</h2>
 <div class="box blue" style="font-size:12px">
