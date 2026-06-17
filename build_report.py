@@ -29,6 +29,21 @@ ok = df[df["ok"]]
 # 因窗口横跨多轮 prefill 而稀释,不可靠;单流 tps 用 token 时间戳算,准确)。
 ok = ok.copy()
 ok["agg_decode"] = ok["concurrency"] * ok["tps"]
+# 稳态数据(与性能矩阵同源,但 max_tokens=2048 + 逐token ITL)
+_spath = "raw_data/decode_steady_full.csv"
+if _os.path.exists(_spath):
+    sfull = pd.read_csv(_spath)
+    sfull = sfull.copy()
+    # 补 prefill_speed(稳态测试没存 prefill_tokens,用 ctx 目标近似)
+    _ctx_map = {c: int(ok[ok.context_length_target == c]["prefill_tokens"].median()) for c in CTX_ALL if c != 260000}
+    _ctx_map[258000] = _ctx_map.get(260000, 260008)  # 258000≈260000
+    _ctx_map[260000] = _ctx_map.get(260000, 260008)
+    sfull["prefill_tokens"] = sfull["context_length_target"].map(_ctx_map)
+    sfull["prefill_speed"] = sfull.apply(lambda r: r["prefill_tokens"] / r["ttft"] if r.get("ttft") and r["ttft"] > 0 else None, axis=1)
+    sfull["agg_decode_steady"] = sfull["concurrency"] * sfull["steady_state_tps"]
+    sfull["squeeze_ratio"] = sfull.apply(lambda r: (r["tps_0_100"] / r["steady_state_tps"] * 100) if r.get("steady_state_tps") and r.get("tps_0_100") and r["steady_state_tps"] > 0 else None, axis=1)
+else:
+    sfull = pd.DataFrame()
 CONC = [1, 2, 4, 8, 16, 32]
 CTX_ALL = [64, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 260000]
 CTX_LOW = [64, 1024, 2048, 4096, 8192]
@@ -206,33 +221,22 @@ if _os.path.exists(steady_path):
             ctxlbl = f"{int(ctx)//1024}k" if ctx >= 1024 else str(int(ctx))
             squeeze_rows += f"<tr><td>{conc}</td><td>{ctxlbl}</td><td>{first100:.1f}</td><td>{steady:.1f}</td><td>{ratio}</td><td>{conv}</td><td>{peak}</td></tr>"
     steady_html = f"""
-<h2>Decode 稳态测试(全量 · {len(sdf)} 行 · 逐 token ITL)</h2>
-<p>独特 prompt(独立 KV,生产真实),max_tokens=2048,逐 token ITL 采集。输入 = prefill tokens(各 cell 不同),输出 = 2048 tokens decode。{len(sdf.groupby(['concurrency','context_length_target']))} 个 cell(conc×ctx,KV 可行域全覆盖)。</p>
+<h2>Decode 稳态测试图表(逐 token ITL,{len(sdf)} 行)</h2>
 <div class="box blue">
 <b>稳态 token 统计与计算逻辑:</b><br>
 • <b>ITL</b>(Inter-Token Latency)= 相邻两个 token 到达的时间差(从 vLLM 流式响应的 token_timestamps 计算)。<br>
 • <b>稳态 TPS</b> = token 500 ~ 末尾 的吞吐量(排除前 500 token 的 prefill 挤压段);<code>tps_window = (end_tok - start_tok) / (ts[end] - ts[start])</code>。<br>
 • <b>前 100 TPS</b> = token 0 ~ 100 的吞吐量(含 prefill 挤压);用于量化 squeeze。<br>
 • <b>挤压比</b> = 前 100 TPS / 稳态 TPS × 100%(&lt;100% 表示被挤压)。<br>
-• <b>收敛 token</b> = ITL 首次降到稳态 ITL 的 1.2 倍以下的 token 序号(0 = 无挤压,首个 token 就在稳态)。<br>
-• <b>峰值 ITL</b> = 前 50 个 token 中最大的 ITL(ms),反映 prefill 交叠时单个 token 的最长等待。<br>
+• <b>收敛 token</b> = ITL 首次降到稳态 ITL 的 1.2 倍以下的 token 序号(0 = 无挤压)。<br>
+• <b>峰值 ITL</b> = 前 50 个 token 中最大的 ITL(ms)。<br>
 • 所有值取该 cell 内各请求的<b>中位数</b>(median),抗单样本异常。
 </div>
 <div class="chart">{chart5}</div>
 <div class="chart">{chart6}</div>
 <div class="chart">{chart7}</div>
 <div class="chart">{chart8}</div>
-<h3>稳态 decode TPS (tok/s,单流,token 500+ 中位)</h3>
-{steady_matrix("steady_state_tps", "{:.1f}")}
-<h3>前 100 token TPS (tok/s,单流,含 prefill 挤压)</h3>
-{steady_matrix("tps_0_100", "{:.1f}")}
-<h3>挤压比(前100/稳态,<100%=被挤压)</h3>
-{steady_matrix("squeeze_ratio", "{:.0f}%")}
-<h3>收敛 token 数(ITL 降到 1.2× 稳态;0=无挤压)</h3>
-{steady_matrix("converge_token", "{:.0f}")}
-<h3>峰值 ITL (ms,首 token 可达数秒)</h3>
-{steady_matrix("peak_itl_ms", "{:.0f}")}
-<p><b>发现:prefill squeeze 随 batch×ctx 急剧加深</b>——conc=1 全场景无挤压(收敛=0);短 ctx(64)任何并发无挤压(prefill 瞬时);<b>conc=32/32k 前 100 token 仅稳态 9%,收敛到第 118 个 token</b>;conc=4/258k 收敛到第 181 个 token,峰值 ITL 4756ms(首个 token 等了近 5 秒)。<b>结论:并发吞吐测试 max_tokens 应≥2048;512 token 时被挤压 token 占比过高(~20%),聚合吞吐被严重拉低。</b></p>
+<p><b>发现:prefill squeeze 随 batch×ctx 急剧加深</b>——conc=1 全场景无挤压(收敛=0);短 ctx(64)任何并发无挤压(prefill 瞬时);<b>conc=32/32k 前 100 token 仅稳态 9%,收敛到第 118 个 token</b>;conc=4/258k 收敛到第 181 个 token,峰值 ITL 4756ms。<b>结论:并发吞吐测试 max_tokens 应≥2048。</b></p>
 """
 
 
@@ -278,6 +282,33 @@ def agg_prefill_table():
         rows += f"<tr><th>{lbl(ctx)}</th>{cells}</tr>"
     head = "".join(f"<th>conc={c}</th>" for c in CONC)
     return f'<table class="matrix"><thead><tr><th>ctx＼conc</th>{head}</tr></thead><tbody>{rows}</tbody></table>'
+
+
+def steady_matrix(metric, fmt="{:.1f}"):
+    """稳态测试矩阵(max_tokens=2048),和性能矩阵同格式。"""
+    if sfull.empty:
+        return "<p style='color:#999'>(稳态数据不可用)</p>"
+    rows = ""
+    for ctx in CTX_ALL:
+        cells = ""
+        for conc in CONC:
+            # 258000≈260000
+            lookup_ctx = 258000 if ctx == 260000 else ctx
+            sub = sfull[(sfull.concurrency == conc) & (sfull.context_length_target == lookup_ctx)]
+            v = sub[metric].median() if len(sub) and metric in sub.columns and sub[metric].notna().any() else None
+            cells += f"<td>{fmt.format(v) if v is not None and pd.notna(v) else '—'}</td>"
+        rows += f"<tr><th>{lbl(ctx)}</th>{cells}</tr>"
+    head = "".join(f"<th>conc={c}</th>" for c in CONC)
+    return f'<table class="matrix"><thead><tr><th>ctx＼conc</th>{head}</tr></thead><tbody>{rows}</tbody></table>'
+
+
+def paired(title, metric_512, metric_steady, fmt="{:.1f}", note=""):
+    """性能矩阵(左,max_tokens=512) + 稳态矩阵(右,max_tokens=2048)并排。"""
+    return f"""<h3 style="margin-bottom:4px">{title}</h3>
+<div style="display:flex;gap:12px;flex-wrap:wrap">
+<div style="flex:1;min-width:400px"><p style="font-size:11px;color:#666;margin:2px 0">max_tokens=512(原测试){(' — '+note) if note else ''}</p>{matrix_table(metric_512, fmt)}</div>
+<div style="flex:1;min-width:400px"><p style="font-size:11px;color:#666;margin:2px 0">max_tokens=2048(稳态测试,token 500+ 中位)</p>{steady_matrix(metric_steady, fmt)}</div>
+</div>"""
 
 
 rate_rows = ""
@@ -362,18 +393,23 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <div class="chart">{chart3}</div>
 {('<div class="chart">' + chart4 + '</div>') if chart4 else ''}
 
-<h2>性能矩阵</h2>
-<h3 style="margin-bottom:4px">系统 decode 吞吐 (tok/s)</h3>
-{matrix_table("agg_decode", "{:.0f}")}
-<h3>每流 decode TPS (tok/s)</h3>
-{matrix_table("tps", "{:.1f}")}
-<h3>TTFT (s)</h3>
-{matrix_table("ttft", "{:.2f}")}
-<h3>Prefill 速度 (tok/s,单流,仅 conc≤8 有效)</h3>
-{matrix_table("prefill_speed", "{:.0f}")}
-<h3>聚合 Prefill 吞吐 (tok/s = N×token/max_ttft) — 计算密集应跨并发恒定</h3>
+<h2>性能矩阵(max_tokens=512 vs 稳态 max_tokens=2048 并排)</h2>
+{paired("系统 decode 吞吐 (tok/s,聚合)", "agg_decode", "agg_decode_steady", "{:.0f}")}
+{paired("每流 decode TPS (tok/s)", "tps", "steady_state_tps", "{:.1f}")}
+{paired("TTFT (s)", "ttft", "ttft", "{:.2f}")}
+{paired("Prefill 速度 (tok/s)", "prefill_speed", "prefill_speed", "{:.0f}")}
+<h3 style="margin-bottom:4px">聚合 Prefill 吞吐 (tok/s = N×token/max_ttft) — 计算密集应跨并发恒定</h3>
 {agg_prefill_table()}
 <p class="sub">读法:此值跨并发应接近恒定(~5200-5700,比值≈1.0)= prefill 计算密集、扩展健康。下降=并发争用(仅超高并发×长上下文出现)。</p>
+<h3 style="margin-bottom:4px;margin-top:20px">稳态测试专属指标</h3>
+<h3 style="margin-bottom:4px">前 100 token TPS (tok/s,含 prefill 挤压)</h3>
+{steady_matrix("tps_0_100", "{:.1f}")}
+<h3 style="margin-bottom:4px">挤压比(前100/稳态 %,&lt;100%=被挤压)</h3>
+{steady_matrix("squeeze_ratio", "{:.0f}")}
+<h3 style="margin-bottom:4px">收敛 token 数(ITL 降到 1.2×稳态;0=无挤压)</h3>
+{steady_matrix("converge_token", "{:.0f}")}
+<h3 style="margin-bottom:4px">峰值 ITL (ms,首 token 可达数秒)</h3>
+{steady_matrix("peak_itl_ms", "{:.0f}")}
 
 <h2>成功率矩阵(绿=全过 / 黄=部分 / 红=全失败)</h2>
 {rate_table}
