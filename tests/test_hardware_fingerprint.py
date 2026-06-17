@@ -21,7 +21,7 @@ import core.hardware_fingerprint as hf
 def _fake_subprocess(commands_map: dict[tuple, str | None]):
     """根据 (args tuple) -> stdout 映射返回结果。未命中返回 None。"""
 
-    def fake_run(args, capture_output=True, text=True, timeout=None, check=False):
+    def fake_run(args, capture_output=True, text=True, timeout=None, check=False, env=None, **kwargs):
         class R:
             returncode = 0
 
@@ -110,6 +110,7 @@ def test_query_cpu_topology_psutil_fallback():
     cmds = {("lscpu",): None}
     with patch("core.hardware_fingerprint.subprocess.run", side_effect=_fake_subprocess(cmds)), \
          patch("core.hardware_fingerprint._platform_cpu_model", return_value="fallback cpu"), \
+         patch("core.hardware_fingerprint._proc_socket_count", return_value=None), \
          patch("core.hardware_fingerprint._psutil_cpu_count", side_effect=[64, 128]):
         cpu = hf._query_cpu_topology()
     assert cpu["model_name"] == "fallback cpu"

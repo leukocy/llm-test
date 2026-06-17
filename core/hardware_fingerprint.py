@@ -74,15 +74,22 @@ _GPU_BANDWIDTH_GBPS: list[tuple[str, float]] = [
 ]
 
 
-def _run_cmd(args: list[str], timeout: float = 8.0) -> str | None:
-    """运行外部命令，返回 stdout 文本；失败/超时返回 None（绝不抛异常）。"""
+def _run_cmd(args: list[str], timeout: float = 8.0, env: dict[str, str] | None = None) -> str | None:
+    """运行外部命令，返回 stdout 文本；失败/超时返回 None（绝不抛异常）。
+    env: 追加/覆盖的环境变量（与 os.environ 合并），如 {"LC_ALL": "C"} 强制英文 locale。
+    """
     try:
+        full_env = None
+        if env:
+            full_env = dict(os.environ)
+            full_env.update(env)
         result = subprocess.run(
             args,
             capture_output=True,
             text=True,
             timeout=timeout,
             check=False,
+            env=full_env,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -240,8 +247,8 @@ def _query_cpu_topology() -> dict[str, Any]:
         "numa_nodes": None,
     }
 
-    # lscpu（Linux 主路径）
-    out = _run_cmd(["lscpu"])
+    # lscpu(Linux 主路径,强制 C locale 避免 zh_CN 下键名"套接字/核"导致解析 miss)
+    out = _run_cmd(["lscpu"], env={"LC_ALL": "C", "LANG": "C"})
     parsed: dict[str, str] = {}
     if out:
         for line in out.splitlines():
@@ -255,20 +262,38 @@ def _query_cpu_topology() -> dict[str, Any]:
         info["threads_per_core"] = _to_int(parsed.get("Thread(s) per core"))
         info["numa_nodes"] = _to_int(parsed.get("NUMA node(s)"))
 
-    # psutil / platform 兜底
+    # /proc/cpuinfo 兜底交叉验证 socket 数(locale 无关,唯一 physical id 数 = socket 数)
+    proc_sockets = _proc_socket_count()
+    if proc_sockets:
+        info["sockets"] = proc_sockets
+
+    # psutil / platform 兜底(lscpu + /proc 都没给时,psutil 至少给核数/线程数,socket 默认 1)
     if info["model_name"] is None:
         info["model_name"] = _platform_cpu_model()
-    if info["sockets"] is None or info["cores_per_socket"] is None:
+    if info["cores_per_socket"] is None or info["sockets"] is None:
         phys = _psutil_cpu_count(logical=False)
         logical = _psutil_cpu_count(logical=True)
+        if info["sockets"] is None:
+            info["sockets"] = 1
         if phys is not None:
-            sockets = info["sockets"] or 1
-            info["sockets"] = sockets
-            info["cores_per_socket"] = phys // sockets if sockets else phys
-            if phys and logical:
-                info["threads_per_core"] = max(1, logical // phys)
+            info["cores_per_socket"] = phys // info["sockets"] if info["sockets"] else phys
+        if phys and logical:
+            info["threads_per_core"] = max(1, logical // phys)
 
     return info
+
+
+def _proc_socket_count() -> int | None:
+    """从 /proc/cpuinfo 数唯一 physical id(= socket 数)。locale 无关。失败返回 None。"""
+    try:
+        pids: set[str] = set()
+        with open("/proc/cpuinfo", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if line.lower().startswith("physical id"):
+                    pids.add(line.split(":", 1)[-1].strip())
+        return len(pids) or None
+    except OSError:
+        return None
 
 
 def _platform_cpu_model() -> str | None:
