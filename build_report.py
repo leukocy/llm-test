@@ -57,7 +57,7 @@ for ctx in [64, 4096, 32768, 131072]:
     if len(sub):
         ax.plot(sub.index, sub.values, marker="o", label=f"ctx={lbl(ctx)} tok")
 ax.set_xlabel("Concurrency"); ax.set_ylabel("System output throughput (tok/s)")
-ax.set_title("Throughput vs Concurrency (max_num_seqs=64, 未在测区内饱和)")
+ax.set_title("Throughput vs Concurrency (max_num_seqs=64, not saturated)")
 ax.set_xscale("log", base=2); ax.set_xticks(CONC); ax.set_xticklabels(CONC)
 ax.legend(fontsize=8, loc="upper left")
 chart1 = svg(fig)
@@ -95,9 +95,9 @@ if "gpu_temp_peak_c" in ok.columns:
         sub = ok[ok["concurrency"] == conc].groupby("context_length_target")["gpu_temp_peak_c"].median()
         if len(sub):
             ax.plot(sub.index, sub.values, marker="o", label=f"conc={conc}")
-    ax.axhline(88, color="red", ls="--", alpha=0.4, label="热降频区(~88°C+)")
-    ax.set_xlabel("Context length (tokens)"); ax.set_ylabel("GPU 峰值温度 (°C)")
-    ax.set_title("Per-cell GPU Temperature vs Context (散热监控)")
+    ax.axhline(88, color="red", ls="--", alpha=0.4, label="Throttle zone (~88°C+)")
+    ax.set_xlabel("Context length (tokens)"); ax.set_ylabel("GPU Peak Temperature (°C)")
+    ax.set_title("Per-cell GPU Temperature vs Context")
     ax.set_xscale("log", base=2); ax.set_xticks(CTX_ALL)
     ax.set_xticklabels([lbl(c) for c in CTX_ALL], rotation=30)
     ax.legend(fontsize=8)
