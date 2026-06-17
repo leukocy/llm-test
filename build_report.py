@@ -392,16 +392,26 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <div class="chart">{chart2}</div>
 <div class="chart">{chart3}</div>
 {('<div class="chart">' + chart4 + '</div>') if chart4 else ''}
+{('<div class="chart">' + chart5 + '</div>') if chart5 else ''}
+{('<div class="chart">' + chart6 + '</div>') if chart6 else ''}
+{('<div class="chart">' + chart7 + '</div>') if chart7 else ''}
+{('<div class="chart">' + chart8 + '</div>') if chart8 else ''}
 
 <h2>性能矩阵(max_tokens=512 vs 稳态 max_tokens=2048 并排)</h2>
+<div class="box blue" style="font-size:12px">
+<b>稳态 token 统计与计算逻辑:</b>
+ITL(Inter-Token Latency)= 相邻 token 到达时间差;稳态 TPS = token 500~末尾吞吐(排除 prefill 挤压);
+前 100 TPS = token 0~100(含挤压);挤压比 = 前100/稳态×100%;收敛 token = ITL 首次降到 1.2×稳态;峰值 ITL = 前 50 token 最大 ITL。所有值取 cell 内中位数。<br>
+TTFT / Prefill 速度:稳态侧用原测试数据(prefill 阶段不受 max_tokens 影响,512 与 2048 的 prefill 相同)。
+</div>
 {paired("系统 decode 吞吐 (tok/s,聚合)", "agg_decode", "agg_decode_steady", "{:.0f}")}
 {paired("每流 decode TPS (tok/s)", "tps", "steady_state_tps", "{:.1f}")}
-{paired("TTFT (s)", "ttft", "ttft", "{:.2f}")}
-{paired("Prefill 速度 (tok/s)", "prefill_speed", "prefill_speed", "{:.0f}")}
+{paired("TTFT (s)", "ttft", "ttft", "{:.2f}", note="稳态侧=原测试数据(prefill 不变)")}
+{paired("Prefill 速度 (tok/s)", "prefill_speed", "prefill_speed", "{:.0f}", note="稳态侧=原测试数据(prefill 不变)")}
 <h3 style="margin-bottom:4px">聚合 Prefill 吞吐 (tok/s = N×token/max_ttft) — 计算密集应跨并发恒定</h3>
 {agg_prefill_table()}
 <p class="sub">读法:此值跨并发应接近恒定(~5200-5700,比值≈1.0)= prefill 计算密集、扩展健康。下降=并发争用(仅超高并发×长上下文出现)。</p>
-<h3 style="margin-bottom:4px;margin-top:20px">稳态测试专属指标</h3>
+<h3 style="margin-bottom:4px;margin-top:20px">稳态测试专属指标(仅 max_tokens=2048)</h3>
 <h3 style="margin-bottom:4px">前 100 token TPS (tok/s,含 prefill 挤压)</h3>
 {steady_matrix("tps_0_100", "{:.1f}")}
 <h3 style="margin-bottom:4px">挤压比(前100/稳态 %,&lt;100%=被挤压)</h3>
@@ -410,6 +420,7 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 {steady_matrix("converge_token", "{:.0f}")}
 <h3 style="margin-bottom:4px">峰值 ITL (ms,首 token 可达数秒)</h3>
 {steady_matrix("peak_itl_ms", "{:.0f}")}
+<p style="font-size:12px;color:#666"><b>发现:prefill squeeze 随 batch×ctx 急剧加深</b>——conc=1 全场景无挤压;conc=32/32k 前 100 token 仅稳态 9%,收敛到第 118 个 token。结论:并发吞吐测试 max_tokens 应≥2048。</p>
 
 <h2>成功率矩阵(绿=全过 / 黄=部分 / 红=全失败)</h2>
 {rate_table}
@@ -433,8 +444,6 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 </tbody></table>
 <p><b>关键:不能拿单并发的读取量当基数</b>——只有固定权重恒定(19 GB,占总读取 64%);路由专家和 KV 都随 batch 增长。conc=1 总 ~30 GB(8 专家);conc=32 短 ctx 可能达 ~370 GB(固定 19 + 路由 350,最坏);conc=8 长 ctx(KV ~74 GB)另加。</p>
 <p><b>结论:decode 瓶颈随 batch×ctx 组合变化</b>。固定权重始终低占比(被摊薄);路由专家(随 batch,最坏 350 GB)+ KV(随 batch×ctx)才是主导变量。精确量化需 nsys 剖析(路由多样性 + 三者实际占比),不能用单一 bytes/token 覆盖全场景。</p>
-
-{steady_html}
 
 <footer>
 数据源:<code>baseline_kimi_consolidated.csv</code>(散热修复后完整矩阵,共 {n_total} 请求 / 56 cell,KV 边界内全覆盖)。
