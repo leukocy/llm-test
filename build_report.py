@@ -146,8 +146,8 @@ if _os.path.exists(steady_path):
             agg = sub.aggregate_tps.median()
             squeeze_rows += f"<tr><td>{conc}</td><td>{first100:.1f}</td><td>{steady:.1f}</td><td>{agg:.1f}</td><td>{(steady/agg-1)*100:.0f}%</td></tr>"
     steady_html = f"""
-<h2>Decode 稳态测试(长 max_tokens=4096 + 逐 token ITL)</h2>
-<p>验证 prefill 对并发 decode 的挤压效应。独特 prompt(独立 KV,生产真实),max_tokens=4096。</p>
+<h2>Decode 稳态测试(输入 4096 tokens prefill · 输出 4096 tokens decode · 逐 token ITL)</h2>
+<p>验证 prefill 对并发 decode 的挤压效应。独特 prompt(独立 KV,生产真实)。输入 4096 tokens(prefill)+ 输出 4096 tokens(decode),逐 token 采集 ITL。</p>
 <div class="chart">{chart5}</div>
 <table class="matrix"><thead><tr><th>conc</th><th>前100 token (tok/s)</th><th>稳态 500+ (tok/s)</th><th>聚合 4096 (tok/s)</th><th>prefill 挤压</th></tr></thead><tbody>{squeeze_rows}</tbody></table>
 <p><b>发现</b>:前 100 token 被严重挤压(conc=32: 3.9 vs 稳态 12.5 tok/s,仅 31%);但 4096 token 下挤压仅占 2.4% → 聚合≈稳态。<b>对比 512 token:100/512=20% 被挤压 → 聚合被拉低约 20%。</b> 结论:并发吞吐测试 max_tokens 应≥4096(或用 ITL 窗口排除 prefill 段)。</p>
