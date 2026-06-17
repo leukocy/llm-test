@@ -105,19 +105,21 @@ if "gpu_temp_peak_c" in ok.columns:
 else:
     chart4 = ""
 
-# ---------- 图5: decode 稳态 ITL 过渡(前 200 token,prefill→稳态)----------
+# ---------- 稳态测试图表(多张) ----------
 import json as _json, os as _os
-chart5 = ""
+chart5 = chart6 = chart7 = chart8 = ""
 steady_html = ""
 steady_path = "raw_data/decode_steady_full.csv"
 if _os.path.exists(steady_path):
     sdf = pd.read_csv(steady_path)
-    # ITL 过渡图(conc=8/16/32,前 200 token)
+    sdf = sdf.copy()
+    sdf["squeeze_ratio"] = sdf.apply(lambda r: (r["tps_0_100"] / r["steady_state_tps"] * 100) if r.get("steady_state_tps") and r.get("tps_0_100") and r["steady_state_tps"] > 0 else None, axis=1)
+
+    # --- 图5: ITL 过渡(conc=1,2,4,8,16,32,ctx=4k,前 150 token)---
     fig, ax = plt.subplots(figsize=(7, 3.5))
-    for conc in [8, 16, 32]:
-        sub = sdf[sdf.concurrency == conc]
+    for conc in [1, 2, 4, 8, 16, 32]:
+        sub = sdf[(sdf.concurrency == conc) & (sdf.context_length_target == 4096)]
         if len(sub):
-            # 解析每行的 itl_json,取前 150 token 的中位 ITL
             all_itls = []
             for _, row in sub.iterrows():
                 try:
@@ -129,13 +131,59 @@ if _os.path.exists(steady_path):
                 min_len = min(len(a) for a in all_itls)
                 med_itl = [sorted([a[i] for a in all_itls if i < len(a)])[len([a for a in all_itls if i < len(a)])//2] * 1000
                            for i in range(min_len)]
-                # 平滑(窗口 10,用 pandas rolling 避免除零)
                 smooth = pd.Series(med_itl).rolling(10, center=True, min_periods=1).mean().tolist()
                 ax.plot(range(min_len), smooth, label=f"conc={conc}", alpha=0.8)
     ax.set_xlabel("Token index (first 150)"); ax.set_ylabel("Inter-token latency (ms)")
-    ax.set_title("Decode ITL Transition: prefill squeeze -> steady state")
+    ax.set_title("ITL Transition @ ctx=4k: prefill squeeze -> steady state")
     ax.legend(fontsize=8); ax.set_xlim(0, 150)
     chart5 = svg(fig)
+
+    # --- 图6: 稳态 decode TPS vs 并发(各上下文) ---
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    for ctx in [64, 4096, 32768, 131072]:
+        sub = sdf[sdf.context_length_target == ctx].groupby("concurrency")["steady_state_tps"].median()
+        if len(sub):
+            ax.plot(sub.index, sub.values, marker="o", label=f"ctx={lbl(ctx)}", alpha=0.8)
+    ax.set_xlabel("Concurrency"); ax.set_ylabel("Steady-state decode TPS (tok/s)")
+    ax.set_title("Steady-state Decode TPS vs Concurrency")
+    ax.set_xscale("log", base=2)
+    concs_present = sorted(sdf.concurrency.unique())
+    ax.set_xticks(concs_present); ax.set_xticklabels([int(c) for c in concs_present])
+    ax.legend(fontsize=8)
+    chart6 = svg(fig)
+
+    # --- 图7: 挤压比(前100/稳态%)热力 vs conc×ctx ---
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    for conc in [2, 4, 8, 16, 32]:
+        sub = sdf[sdf.concurrency == conc].groupby("context_length_target")["squeeze_ratio"].median()
+        if len(sub):
+            ax.plot(sub.index, sub.values, marker="o", label=f"conc={conc}", alpha=0.8)
+    ax.axhline(100, color="green", ls="--", alpha=0.4, label="100% = no squeeze")
+    ax.set_xlabel("Context length (tokens)"); ax.set_ylabel("First-100 / Steady (%)")
+    ax.set_title("Prefill Squeeze Ratio (lower = more squeezed)")
+    ax.set_xscale("log", base=2)
+    ctxs_present = sorted(sdf.context_length_target.unique())
+    ax.set_xticks(ctxs_present); ax.set_xticklabels([lbl(int(c)) for c in ctxs_present], rotation=30)
+    ax.legend(fontsize=8)
+    chart7 = svg(fig)
+
+    # --- 图8: 收敛 token 数 vs conc×ctx ---
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    for conc in [2, 4, 8, 16, 32]:
+        sub = sdf[sdf.concurrency == conc].groupby("context_length_target")["converge_token"].median()
+        if len(sub):
+            ax.plot(sub.index, sub.values, marker="o", label=f"conc={conc}", alpha=0.8)
+    ax.set_xlabel("Context length (tokens)"); ax.set_ylabel("Convergence token count")
+    ax.set_title("Squeeze Duration: tokens before reaching steady state")
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(ctxs_present); ax.set_xticklabels([lbl(int(c)) for c in ctxs_present], rotation=30)
+    ax.legend(fontsize=8)
+    chart8 = svg(fig)
+
+    # 稳态矩阵函数(和性能矩阵同格式:ctx 行 × conc 列)
+    STEADY_CTX = sorted(sdf["context_length_target"].unique()) if "context_length_target" in sdf.columns else CTX_ALL
+    STEADY_CONC = sorted(sdf["concurrency"].unique()) if "concurrency" in sdf.columns else CONC
+    def steady_matrix(metric, fmt="{:.1f}"):
     # 计算挤压比列
     sdf = sdf.copy()
     sdf["squeeze_ratio"] = sdf.apply(lambda r: (r["tps_0_100"] / r["steady_state_tps"] * 100) if r.get("steady_state_tps") and r.get("tps_0_100") and r["steady_state_tps"] > 0 else None, axis=1)
@@ -167,7 +215,20 @@ if _os.path.exists(steady_path):
     steady_html = f"""
 <h2>Decode 稳态测试(全量 · {len(sdf)} 行 · 逐 token ITL)</h2>
 <p>独特 prompt(独立 KV,生产真实),max_tokens=2048,逐 token ITL 采集。输入 = prefill tokens(各 cell 不同),输出 = 2048 tokens decode。{len(sdf.groupby(['concurrency','context_length_target']))} 个 cell(conc×ctx,KV 可行域全覆盖)。</p>
+<div class="box blue">
+<b>稳态 token 统计与计算逻辑:</b><br>
+• <b>ITL</b>(Inter-Token Latency)= 相邻两个 token 到达的时间差(从 vLLM 流式响应的 token_timestamps 计算)。<br>
+• <b>稳态 TPS</b> = token 500 ~ 末尾 的吞吐量(排除前 500 token 的 prefill 挤压段);<code>tps_window = (end_tok - start_tok) / (ts[end] - ts[start])</code>。<br>
+• <b>前 100 TPS</b> = token 0 ~ 100 的吞吐量(含 prefill 挤压);用于量化 squeeze。<br>
+• <b>挤压比</b> = 前 100 TPS / 稳态 TPS × 100%(&lt;100% 表示被挤压)。<br>
+• <b>收敛 token</b> = ITL 首次降到稳态 ITL 的 1.2 倍以下的 token 序号(0 = 无挤压,首个 token 就在稳态)。<br>
+• <b>峰值 ITL</b> = 前 50 个 token 中最大的 ITL(ms),反映 prefill 交叠时单个 token 的最长等待。<br>
+• 所有值取该 cell 内各请求的<b>中位数</b>(median),抗单样本异常。
+</div>
 <div class="chart">{chart5}</div>
+<div class="chart">{chart6}</div>
+<div class="chart">{chart7}</div>
+<div class="chart">{chart8}</div>
 <h3>稳态 decode TPS (tok/s,单流,token 500+ 中位)</h3>
 {steady_matrix("steady_state_tps", "{:.1f}")}
 <h3>前 100 token TPS (tok/s,单流,含 prefill 挤压)</h3>
