@@ -109,7 +109,7 @@ else:
 import json as _json, os as _os
 chart5 = ""
 steady_html = ""
-steady_path = "raw_data/decode_steady_all.csv"
+steady_path = "raw_data/decode_steady_full.csv"
 if _os.path.exists(steady_path):
     sdf = pd.read_csv(steady_path)
     # ITL 过渡图(conc=8/16/32,前 200 token)
@@ -136,21 +136,23 @@ if _os.path.exists(steady_path):
     ax.set_title("Decode ITL Transition: prefill squeeze -> steady state")
     ax.legend(fontsize=8); ax.set_xlim(0, 150)
     chart5 = svg(fig)
-    # 挤压汇总表(多上下文)
+    # 挤压汇总表(全量,含收敛点 + 峰值 ITL)
     squeeze_rows = ""
     for (conc, ctx), sub in sdf.groupby(["concurrency", "context_length_target"]):
         if len(sub):
             first100 = sub.tps_0_100.median()
             steady = sub.steady_state_tps.median()
             ratio = f"{(first100/steady)*100:.0f}%" if steady and steady > 0 else "?"
+            conv = int(sub.converge_token.median()) if 'converge_token' in sub.columns and sub.converge_token.notna().any() else 0
+            peak = f"{sub.peak_itl_ms.median():.0f}ms" if 'peak_itl_ms' in sub.columns and sub.peak_itl_ms.notna().any() else ""
             ctxlbl = f"{int(ctx)//1024}k" if ctx >= 1024 else str(int(ctx))
-            squeeze_rows += f"<tr><td>{conc}</td><td>{ctxlbl}</td><td>{first100:.1f}</td><td>{steady:.1f}</td><td>{ratio}</td></tr>"
+            squeeze_rows += f"<tr><td>{conc}</td><td>{ctxlbl}</td><td>{first100:.1f}</td><td>{steady:.1f}</td><td>{ratio}</td><td>{conv}</td><td>{peak}</td></tr>"
     steady_html = f"""
-<h2>Decode 稳态测试(多上下文 · 逐 token ITL)</h2>
-<p>独特 prompt(独立 KV),max_tokens=4096,逐 token ITL 采集。输入 = prefill tokens(各 cell 不同),输出 = 4096 tokens decode。</p>
+<h2>Decode 稳态测试(全量 · {len(sdf)} 行 · 逐 token ITL)</h2>
+<p>独特 prompt(独立 KV,生产真实),max_tokens=2048,逐 token ITL 采集。输入 = prefill tokens(各 cell 不同),输出 = 2048 tokens decode。{len(sdf.groupby(['concurrency','context_length_target']))} 个 cell(conc×ctx,KV 可行域全覆盖)。</p>
 <div class="chart">{chart5}</div>
-<table class="matrix"><thead><tr><th>conc</th><th>ctx</th><th>前100 token (tok/s)</th><th>稳态 500+ (tok/s)</th><th>前100/稳态</th></tr></thead><tbody>{squeeze_rows}</tbody></table>
-<p><b>发现:prefill squeeze 随 batch×ctx 急剧加深</b>——短 ctx(64)无挤压(prefill 瞬时);ctx=32k/conc=32 时前 100 token 仅稳态的 <b>9%</b>。conc=1 无挤压(prefill/decode 分离)。长 max_tokens(4096)把挤压稀释到 2.4% → 聚合≈稳态;对比 512 token:100/512=20% 被挤压 → 聚合拉低约 20%。<b>结论:并发吞吐测试 max_tokens 应≥4096。</b></p>
+<table class="matrix" style="font-size:11px"><thead><tr><th>conc</th><th>ctx</th><th>前100<br>(tok/s)</th><th>稳态500+<br>(tok/s)</th><th>前100<br>/稳态</th><th>收敛<br>token</th><th>峰值<br>ITL</th></tr></thead><tbody>{squeeze_rows}</tbody></table>
+<p><b>发现:prefill squeeze 随 batch×ctx 急剧加深</b>——conc=1 全场景无挤压(收敛=0);短 ctx(64)任何并发无挤压(prefill 瞬时);<b>conc=32/32k 前 100 token 仅稳态 9%,收敛到第 118 个 token</b>(前 118 个 token 被挤压);conc=4/258k 收敛到第 181 个 token。峰值 ITL 最高达 4756ms(conc=4/258k,首个 token 等了近 5 秒)。<b>结论:并发吞吐测试 max_tokens 应≥2048;512 token 时被挤压 token 占比过高(~20%),聚合吞吐被严重拉低。</b></p>
 """
 
 
