@@ -205,7 +205,7 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <h2 style="margin-top:0;border:0;padding:0;color:#1e40af">一句话结论</h2>
 <ul>
 <li><b>吞吐随并发持续上升</b>(max_num_seqs=64):系统 decode 吞吐 conc=1→49、8→223、16→351、32→482 tok/s,<b>测区内未饱和</b>(早期"conc=16 饱和"是旧 max_num_seqs=16 的配置上限,现已改 64)。单流 decode 随并发下降(49→15 tok/s),聚合靠 batch 摊薄。</li>
-<li><b>decode 瓶颈随并发切换</b>:低并发延迟受限(~10% 带宽,每步固定开销);高并发带宽受限(~86%,接近 HBM 峰值)。混合精度 bytes/token ~29 GB(int4 experts + bf16 attn/shared)。</li>
+<li><b>decode 瓶颈取决于 batch×ctx</b>:权重读取恒定 ~29 GB/step(所有序列共享,amortized),但 <b>KV/激活读取随 batch×ctx 增长</b>。短上下文:权重主导 → 利用率低(3-10%)→ compute/comm-bound;长上下文:KV 主导 → 利用率上升 → 可能带宽受限;超高并发 KV 撞带宽上限后 → 再增 batch 只加计算。</li>
 <li><b>散热修复后 260K 稳定到 conc=4</b>(94°C,0 崩溃);矩阵天然边界是 <b>KV 容量 1.53M token</b>——<code>conc×ctx ≤ 1.53M</code> 可行,超过则 KV 排队不可行(见边界)。</li>
 <li>单流 decode 峰值 ~{peak_tps:.0f} tok/s(ctx=64);TTFT 随上下文近线性增长(131K @ conc=1 ≈ 20s);per-cell 温度监控全程无热降频。</li>
 </ul>
@@ -258,8 +258,18 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 </ul>
 </div>
 
-<h2>等效带宽诊断(int4 roofline)</h2>
-<p>active_params=32B,混合精度(0.91 字节/参,routed int4 + attn/shared bf16)→ 每 token 读 ~29 GB。conc=1 聚合利用率 ~10%(延迟受限);<b>conc=32 聚合 ~86%(接近带宽饱和)</b>——低并发延迟受限,高并发带宽受限,经典 LLM decode 曲线。</p>
+<h2>等效带宽诊断(权重 + KV 双分量)</h2>
+<p>batched decode 每步显存读取 = <b>权重(恒定)+ KV/激活(随 batch×ctx 增长)</b>:</p>
+<ul style="font-size:13px">
+<li><b>权重读取</b>:~29 GB/step(混合精度,所有序列共享,amortized)。per-token = 29/N → 随 batch 递减。</li>
+<li><b>KV/激活读取</b>:N × ctx × ~70 KB/token(MLA 压缩 KV)。短 ctx 可忽略(64 token=4.5MB/seq);长 ctx 显著(131K=9.2 GB/seq)→ <b>随 batch×ctx 线性增长,到带宽上限后不再增(纯加计算)</b>。</li>
+</ul>
+<table class="m" style="font-size:12px"><thead><tr><th>场景</th><th>每步权重</th><th>每步 KV(估)</th><th>带宽主导</th><th>瓶颈</th></tr></thead><tbody>
+<tr><td>conc=1, ctx=64</td><td>29 GB</td><td>~0</td><td>权重</td><td>延迟/comm(~10% bw)</td></tr>
+<tr><td>conc=32, ctx=64</td><td>29 GB</td><td>~0.14 GB</td><td>权重(摊薄)</td><td>compute/comm(~3% bw)</td></tr>
+<tr><td>conc=8, ctx=131K</td><td>29 GB</td><td>~74 GB</td><td><b>KV</b></td><td>带宽(KV 占大头)</td></tr>
+</tbody></table>
+<p><b>结论:decode 瓶颈随 batch×ctx 组合变化</b>——短上下文 compute/comm-bound(权重摊薄,KV 可忽略);长上下文 + 高并发 KV 主导带宽;超高并发 KV 撞带宽上限后纯加计算。不能用单一 bytes/token 覆盖全场景。</p>
 
 <footer>
 数据源:<code>baseline_kimi_consolidated.csv</code>(散热修复后完整矩阵,共 {n_total} 请求 / 56 cell,KV 边界内全覆盖)。
