@@ -105,6 +105,54 @@ if "gpu_temp_peak_c" in ok.columns:
 else:
     chart4 = ""
 
+# ---------- 图5: decode 稳态 ITL 过渡(前 200 token,prefill→稳态)----------
+import json as _json, os as _os
+chart5 = ""
+steady_html = ""
+steady_path = "raw_data/decode_steady_test.csv"
+if _os.path.exists(steady_path):
+    sdf = pd.read_csv(steady_path)
+    # ITL 过渡图(conc=8/16/32,前 200 token)
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    for conc in [8, 16, 32]:
+        sub = sdf[sdf.concurrency == conc]
+        if len(sub):
+            # 解析每行的 itl_json,取前 150 token 的中位 ITL
+            all_itls = []
+            for _, row in sub.iterrows():
+                try:
+                    itls = _json.loads(row.get("itl_json", "[]"))
+                    all_itls.append(itls[:150])
+                except Exception:
+                    pass
+            if all_itls:
+                min_len = min(len(a) for a in all_itls)
+                med_itl = [sorted([a[i] for a in all_itls if i < len(a)])[len([a for a in all_itls if i < len(a)])//2] * 1000
+                           for i in range(min_len)]
+                # 平滑(窗口 10)
+                smooth = [sum(med_itl[max(0,i-5):i+5])/(min(10,i+5)-max(0,i-5)) for i in range(min_len)]
+                ax.plot(range(min_len), smooth, label=f"conc={conc}", alpha=0.8)
+    ax.set_xlabel("Token index (first 150)"); ax.set_ylabel("Inter-token latency (ms)")
+    ax.set_title("Decode ITL Transition: prefill squeeze -> steady state")
+    ax.legend(fontsize=8); ax.set_xlim(0, 150)
+    chart5 = svg(fig)
+    # 挤压汇总表
+    squeeze_rows = ""
+    for conc in [1, 8, 16, 32]:
+        sub = sdf[sdf.concurrency == conc]
+        if len(sub):
+            first100 = sub.tps_0_100.median()
+            steady = sub.steady_state_tps.median()
+            agg = sub.aggregate_tps.median()
+            squeeze_rows += f"<tr><td>{conc}</td><td>{first100:.1f}</td><td>{steady:.1f}</td><td>{agg:.1f}</td><td>{(steady/agg-1)*100:.0f}%</td></tr>"
+    steady_html = f"""
+<h2>Decode 稳态测试(长 max_tokens=4096 + 逐 token ITL)</h2>
+<p>验证 prefill 对并发 decode 的挤压效应。独特 prompt(独立 KV,生产真实),max_tokens=4096。</p>
+<div class="chart">{chart5}</div>
+<table class="matrix"><thead><tr><th>conc</th><th>前100 token (tok/s)</th><th>稳态 500+ (tok/s)</th><th>聚合 4096 (tok/s)</th><th>prefill 挤压</th></tr></thead><tbody>{squeeze_rows}</tbody></table>
+<p><b>发现</b>:前 100 token 被严重挤压(conc=32: 3.9 vs 稳态 12.5 tok/s,仅 31%);但 4096 token 下挤压仅占 2.4% → 聚合≈稳态。<b>对比 512 token:100/512=20% 被挤压 → 聚合被拉低约 20%。</b> 结论:并发吞吐测试 max_tokens 应≥4096(或用 ITL 窗口排除 prefill 段)。</p>
+"""
+
 
 # ---------- HTML 表格(成功率热力 + 性能矩阵) ----------
 def rate_cell(conc, ctx):
@@ -267,6 +315,8 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 </tbody></table>
 <p><b>关键:不能拿单并发的读取量当基数</b>——只有固定权重恒定(19 GB,占总读取 64%);路由专家和 KV 都随 batch 增长。conc=1 总 ~30 GB(8 专家);conc=32 短 ctx 可能达 ~370 GB(固定 19 + 路由 350,最坏);conc=8 长 ctx(KV ~74 GB)另加。</p>
 <p><b>结论:decode 瓶颈随 batch×ctx 组合变化</b>。固定权重始终低占比(被摊薄);路由专家(随 batch,最坏 350 GB)+ KV(随 batch×ctx)才是主导变量。精确量化需 nsys 剖析(路由多样性 + 三者实际占比),不能用单一 bytes/token 覆盖全场景。</p>
+
+{steady_html}
 
 <footer>
 数据源:<code>baseline_kimi_consolidated.csv</code>(散热修复后完整矩阵,共 {n_total} 请求 / 56 cell,KV 边界内全覆盖)。
