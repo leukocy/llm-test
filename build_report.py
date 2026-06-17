@@ -184,13 +184,6 @@ if _os.path.exists(steady_path):
     STEADY_CTX = sorted(sdf["context_length_target"].unique()) if "context_length_target" in sdf.columns else CTX_ALL
     STEADY_CONC = sorted(sdf["concurrency"].unique()) if "concurrency" in sdf.columns else CONC
     def steady_matrix(metric, fmt="{:.1f}"):
-    # 计算挤压比列
-    sdf = sdf.copy()
-    sdf["squeeze_ratio"] = sdf.apply(lambda r: (r["tps_0_100"] / r["steady_state_tps"] * 100) if r.get("steady_state_tps") and r.get("tps_0_100") and r["steady_state_tps"] > 0 else None, axis=1)
-    # 稳态矩阵函数(和性能矩阵同格式:ctx 行 × conc 列)
-    STEADY_CTX = sorted(sdf["context_length_target"].unique()) if "context_length_target" in sdf.columns else CTX_ALL
-    STEADY_CONC = sorted(sdf["concurrency"].unique()) if "concurrency" in sdf.columns else CONC
-    def steady_matrix(metric, fmt="{:.1f}"):
         rows = ""
         for ctx in STEADY_CTX:
             cells = ""
