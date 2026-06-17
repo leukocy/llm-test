@@ -322,7 +322,7 @@ HTML = f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
 数据源:<code>baseline_kimi_consolidated.csv</code>(散热修复后完整矩阵,共 {n_total} 请求 / 56 cell,KV 边界内全覆盖)。
 机器可读仓库导出:<code>hmTest_kimi_baseline.csv</code> / <code>hwInventory_turin2d24g.csv</code>(手册标准字段)。
 报告是切片,仓库是全集——下游数据消费请用 CSV。
-<br><b>上下文轴说明</b>:矩阵/图表的上下文标签为<b>实际 prefill token 数</b>(非目标值)。<code>_calibrate_prompt</code> 按目标生成时欠生成约 0.65 倍(如目标 8192 实际 ~5.3k),故用实际 token 标注以保证 TTFT/Prefill 速度对应正确。prefill 速度 ~5500-6000 tok/s(8k-32k 区间)与独立手测一致。
+<br><b>上下文轴</b>:标签即实际 prefill token 数(校准已修正,目标 8k = 实际 8k)。
 </footer>
 </body></html>"""
 
