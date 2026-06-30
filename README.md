@@ -52,6 +52,51 @@ streamlit run app.py
 
 ---
 
+## Datasets
+
+The platform uses benchmark datasets for **quality evaluation** and **prompt-suffix
+pools** (the builder-class tests draw questions from these pools).
+
+### Self-contained (shipped)
+- **AIME** (2024/2025/2026) — 90 math problems, pre-measured and bucketed in
+  `aime_stable_pools.json` by stable decode-fill window. The **Math** prompt-suffix
+  type and **Custom Text → Test Pool Problems** work immediately after clone. ✅
+
+### Not shipped (in `.gitignore`, optional)
+
+These are **optional** — the platform runs without them, but the Science / Code /
+Longform prompt-suffix types will have empty pools:
+
+| Dataset | Type | Source |
+|---------|------|--------|
+| **GPQA Diamond** | Science | [Idavidrein/gpqa](https://huggingface.co/datasets/Idavidrein/gpqa) (gated) |
+| **HumanEval** | Code | [openai_humaneval](https://huggingface.co/datasets/openai_human_eval) |
+| **MBPP** | Code | [google-research-datasets/mbpp](https://huggingface.co/datasets/google-research-datasets/mbpp) |
+| **LongBench** | Longform | [THUDM/LongBench](https://huggingface.co/datasets/THUDM/LongBench) |
+| **SWE-Bench Lite** | Code | [princeton-nlp/SWE-bench_Lite](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Lite) |
+
+To download:
+
+```bash
+# Install huggingface datasets library
+pip install datasets huggingface_hub
+
+# For gated datasets (GPQA), log in first:
+huggingface-cli login
+
+# Download all
+python scripts/download_datasets.py --all
+
+# Or individual ones
+python scripts/download_datasets.py --gpqa
+python scripts/download_datasets.py --humaneval --mbpp
+
+# Check status
+python scripts/download_datasets.py --status
+```
+
+---
+
 ## Project Structure
 
 ```
