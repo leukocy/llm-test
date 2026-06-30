@@ -581,47 +581,97 @@ def render_test_panels(test_type, run_test_func):
     # Custom Text Test
     elif test_type == "Custom Text Test":
         st.header("📄 Custom Text Test")
-        st.info("Upload a TXT file as prompt context and add custom instructions. The system will automatically inject random noise to avoid caching.")
+        st.info("Choose a prompt source, optionally pad to a context length, and run. "
+                "No file required — pick problems from the test pool, or type your own.")
 
-        uploaded_file = st.file_uploader(
-            "Upload TXT File (Context)",
-            type=["txt"],
-            key="custom_uploaded_file"
+        # --- Prompt source ---
+        source_mode = st.radio(
+            "Prompt Source",
+            ["Test Pool Problems", "Upload TXT File", "Manual Input"],
+            index=0,
+            key="custom_source_mode",
+            horizontal=True,
         )
 
+        selected_problems = None  # list of (source_id, text)
+        base_prompt = ""
+        base_prompt_source = "custom_text"
+        uploaded_file = None
+
+        if source_mode == "Upload TXT File":
+            uploaded_file = st.file_uploader("Upload TXT File (base context)", type=["txt"], key="custom_uploaded_file")
+        elif source_mode == "Test Pool Problems":
+            try:
+                from core.benchmark_runner import _load_typed_pools, SUFFIX_TYPE_OPTIONS
+                typed = _load_typed_pools()
+                # Type selector
+                avail_types = [(k, lbl) for k, lbl, _ in SUFFIX_TYPE_OPTIONS if typed.get(k)]
+                if not avail_types:
+                    st.warning("No test-pool problems available.")
+                else:
+                    t_keys = [k for k, _ in avail_types]
+                    t_labels = {k: f"{lbl} ({len(typed[k])})" for k, lbl in avail_types}
+                    sel_type = st.selectbox(
+                        "Problem Type",
+                        options=t_keys,
+                        format_func=lambda k: t_labels[k],
+                        key="custom_problem_type",
+                    )
+                    problems = typed.get(sel_type, [])  # list of (source_id, text)
+                    labels = [sid for sid, _ in problems]
+                    chosen = st.multiselect(
+                        f"Select Problems ({len(labels)} available, rotate per request)",
+                        options=range(len(labels)),
+                        format_func=lambda i: labels[i],
+                        key="custom_selected_problems",
+                        help="Multiple problems are rotated one-per-request. Single selection repeats the same problem.",
+                    )
+                    if chosen:
+                        selected_problems = [(problems[i][0], problems[i][1]) for i in chosen]
+                        # Show the content of each selected problem
+                        st.markdown(f"**Selected problem content ({len(chosen)}):**")
+                        for i in chosen:
+                            sid, text = problems[i]
+                            with st.expander(f"{sid}  ({len(text)} chars)", expanded=False):
+                                st.text(text[:4000] + ("..." if len(text) > 4000 else ""))
+            except Exception as e:
+                st.warning(f"Could not load test pool: {e}")
+        else:  # Manual Input
+            base_prompt = st.text_area("Base Prompt", height=150, key="custom_manual_base")
+
+        # --- Optional suffix instruction (appended after the base/problem) ---
         suffix_instruction = st.text_area(
-            "Custom Suffix Instruction",
-            "Please summarize the above content.",
-            height=100,
-            key="custom_suffix_instruction"
+            "Extra Suffix Instruction (optional)",
+            "",
+            height=80,
+            key="custom_suffix_instruction",
+            help="Appended after the base/problem text. Leave empty when using test-pool problems (they are already tasks).",
         )
 
+        # --- Context length (padding) ---
+        context_length = st.number_input(
+            "Context Length (tokens)",
+            min_value=0,
+            value=0,
+            step=64,
+            key="custom_context_length",
+            help="0 = send prompt verbatim (no padding; may hit cache — use when you only care about output). "
+                 ">0 = pad each prompt with random noise to exactly this many tokens to avoid cache hits.",
+        )
+
+        # --- Concurrency (aligned with other tests) ---
         custom_concurrencies_select = st.multiselect(
             "Select Concurrency Levels",
-            [1, 2, 4, 6, 8, 16],
+            [1, 2, 4, 8, 16],
             default=[1, 2, 4],
             key="custom_concurrencies_select"
         )
-        custom_rounds = st.number_input(
-            "Rounds Per Level",
-            min_value=1,
-            value=1,
-            key="custom_rounds"
+        custom_concurrencies_csv = st.text_input(
+            "Custom Concurrency (comma-separated)",
+            key="custom_concurrencies_csv"
         )
-        custom_max_tokens = st.number_input(
-            "Max Output Tokens",
-            min_value=1,
-            value=512,
-            key="custom_max_tokens"
-        )
-
-        avoid_cache = st.checkbox(
-            "Avoid Caching (inject random noise)",
-            value=True,
-            disabled=True,
-            help="Forced on to meet test requirements",
-            key="custom_avoid_cache"
-        )
+        custom_rounds = st.number_input("Rounds Per Level", min_value=1, value=1, key="custom_rounds")
+        custom_max_tokens = st.number_input("Max Output Tokens", min_value=1, value=512, key="custom_max_tokens")
 
         st.sidebar.markdown("---")
         start_btn_custom_sidebar = st.sidebar.button(
@@ -630,39 +680,58 @@ def render_test_panels(test_type, run_test_func):
             type="primary",
             disabled=_get_button_disabled_state()
         )
-
         start_btn_custom_main = st.button(
             "🚀 Start Custom Text Test (M)",
             key="start_custom_main_btn",
             disabled=_get_button_disabled_state()
         )
+
         if start_btn_custom_main or start_btn_custom_sidebar:
-            if not uploaded_file:
-                st.error("Please upload a TXT file.")
-            elif not custom_concurrencies_select:
-                st.error("Please select at least one concurrency level.")
-            else:
+            # Resolve concurrency (preset + custom)
+            try:
+                custom_values = [int(c.strip()) for c in custom_concurrencies_csv.split(',')
+                                 if c.strip() and c.strip().isdigit()]
+            except (ValueError, AttributeError):
+                custom_values = []
+            selected_concurrencies = sorted(set(custom_concurrencies_select + custom_values))
+
+            # Resolve base prompt from file
+            if uploaded_file is not None:
                 try:
                     base_prompt = uploaded_file.read().decode("utf-8")
-                    from config.session_state import set_test_running
-                    set_current_test_type(test_type, sync_widget_key=False)
-                    st.session_state.current_test_config = {
-                        'concurrency_levels': custom_concurrencies_select,
-                        'rounds': custom_rounds,
-                        'max_tokens': custom_max_tokens,
-                        'avoid_cache': avoid_cache
-                    }
-                    st.session_state['_pending_test'] = {
-                        'test_type': test_type,
-                        'test_func': _get_benchmark_runner().run_custom_text_test,
-                        'runner_class': _get_benchmark_runner(),
-                        'args': (custom_concurrencies_select, custom_rounds,
-                                base_prompt, suffix_instruction, custom_max_tokens, avoid_cache)
-                    }
-                    set_test_running()
-                    st.rerun()
                 except Exception as e:
                     st.error(f"Failed to read file: {e}")
+                    base_prompt = ""
+
+            # Validate
+            if not selected_concurrencies:
+                st.error("Please select or enter at least one concurrency level.")
+            elif source_mode == "Upload TXT File" and not base_prompt:
+                st.error("Please upload a non-empty TXT file.")
+            elif source_mode == "Manual Input" and not base_prompt.strip():
+                st.error("Please enter a non-empty base prompt.")
+            elif source_mode == "Test Pool Problems" and not selected_problems:
+                st.error("Please select at least one problem.")
+            else:
+                from config.session_state import set_test_running
+                set_current_test_type(test_type, sync_widget_key=False)
+                st.session_state.current_test_config = {
+                    'concurrency_levels': selected_concurrencies,
+                    'rounds': custom_rounds,
+                    'max_tokens': custom_max_tokens,
+                    'context_length': int(context_length),
+                }
+                st.session_state['_pending_test'] = {
+                    'test_type': test_type,
+                    'test_func': _get_benchmark_runner().run_custom_text_test,
+                    'runner_class': _get_benchmark_runner(),
+                    'args': (selected_concurrencies, custom_rounds,
+                            base_prompt, suffix_instruction, custom_max_tokens,
+                            True, int(context_length), base_prompt_source, selected_problems)
+                }
+                set_test_running()
+                st.rerun()
+
 
     # All Tests
     elif test_type == "All Tests":

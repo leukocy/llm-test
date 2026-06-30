@@ -190,6 +190,8 @@ class TestExecutor:
                 ui_state=SessionStateBridge(st.session_state),
                 render_progress=_render_progress,
                 render_log=_render_log,
+                temperature=st.session_state.get('temperature', None),
+                custom_params=st.session_state.get('custom_params', []),
             )
 
             # 存储 runner 实例到 session_state，以便 Stop 按钮可以访问结果

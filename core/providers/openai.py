@@ -188,6 +188,11 @@ class OpenAIProvider(LLMProvider):
         else:
             payload["max_tokens"] = max_tokens
 
+        # Sampling temperature — only sent when explicitly provided (default: API default)
+        temperature = kwargs.pop('temperature', None)
+        if temperature is not None:
+            payload["temperature"] = temperature
+
         # 提取同步屏障（用于并发请求近乎同时发送）
         barrier = kwargs.pop('_barrier', None)
 
@@ -225,6 +230,13 @@ class OpenAIProvider(LLMProvider):
                 payload["extra_body"].update(thinking_params.pop("_extra_body_volcano"))
 
             payload.update(thinking_params)
+
+        # User-defined custom params destined for extra_body
+        custom_extra_body = kwargs.pop("_custom_extra_body", None)
+        if custom_extra_body:
+            if "extra_body" not in payload:
+                payload["extra_body"] = {}
+            payload["extra_body"].update(custom_extra_body)
 
         for k, v in kwargs.items():
             if v is not None:

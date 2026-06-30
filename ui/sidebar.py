@@ -15,6 +15,85 @@ import time
 import pandas as pd
 import streamlit as st
 
+
+def _parse_param_value(raw, ptype):
+    """Convert a raw string input to the requested type. Returns (value, error)."""
+    import json
+    raw = (raw or "").strip()
+    if ptype == "number":
+        try:
+            f = float(raw)
+            return (int(f) if f.is_integer() else f, None)
+        except ValueError:
+            return (None, f"无法解析为数字: {raw!r}")
+    if ptype == "boolean":
+        # raw comes from a checkbox widget normally; accept text too
+        return (raw.lower() in ("true", "1", "yes"), None)
+    if ptype == "json":
+        if not raw:
+            return (None, "JSON 值为空")
+        try:
+            return (json.loads(raw), None)
+        except Exception as e:
+            return (None, f"JSON 解析失败: {e}")
+    # text
+    return (raw, None)
+
+
+def _render_custom_params(st_module):
+    """Render the free-form custom request-parameter editor.
+
+    Each row: name + type (text/number/boolean/json) + value + location
+    (payload top-level / extra_body). Results are stored in
+    st.session_state.custom_params as a list of {name, value, location}.
+    """
+    st = st_module
+
+    st.markdown("##### ⚙️ Custom Request Parameters")
+    if "custom_params_rows" not in st.session_state:
+        st.session_state.custom_params_rows = []  # list of {name,type,loc}
+
+    rows = st.session_state.custom_params_rows
+    cadd, _ = st.columns([1, 3])
+    if cadd.button("➕ Add Parameter", key="custom_param_add", use_container_width=True):
+        rows.append({"name": "", "type": "text", "loc": "payload"})
+
+    parsed = []
+    for idx, row in enumerate(rows):
+        with st.container():
+            cols = st.columns([3, 2, 3, 2, 1])
+            row["name"] = cols[0].text_input("Name", value=row["name"],
+                                              key=f"cp_name_{idx}", placeholder="e.g. top_p")
+            row["type"] = cols[1].selectbox("Type", ["text", "number", "boolean", "json"],
+                                              index=["text", "number", "boolean", "json"].index(row["type"]),
+                                              key=f"cp_type_{idx}")
+            # value input depends on type
+            if row["type"] == "boolean":
+                raw_val = cols[2].selectbox("Value", ["false", "true"],
+                                             key=f"cp_val_{idx}")
+            else:
+                raw_val = cols[2].text_input("Value", key=f"cp_val_{idx}",
+                                              placeholder="{}" if row["type"] == "json" else "")
+            row["loc"] = cols[3].selectbox("Location", ["payload", "extra_body"],
+                                            index=["payload", "extra_body"].index(row["loc"]),
+                                            key=f"cp_loc_{idx}",
+                                            help="payload = request top-level; extra_body = OpenAI extra_body sub-object")
+            if cols[4].button("🗑", key=f"cp_del_{idx}", help="删除此参数"):
+                rows.pop(idx)
+                st.rerun()
+
+            # parse
+            name = row["name"].strip()
+            if name:
+                value, err = _parse_param_value(raw_val, row["type"])
+                if err:
+                    st.error(f"{name}: {err}", icon="⚠️")
+                else:
+                    parsed.append({"name": name, "value": value, "location": row["loc"]})
+
+    st.session_state.custom_params = parsed
+
+
 from config.session_state import set_current_test_type
 from config.settings import HF_MODEL_MAPPING
 from core.error_messages import ErrorMessages, get_error_info
@@ -344,6 +423,75 @@ def render_sidebar():
             help="For PD-separated providers: treat the 2nd token as generation start for TPS/TPOT, so decode speed is measured accurately. TTFT is unaffected."
         )
 
+        # Composable prompt-suffix builder: type (multi) x difficulty (single) x output-instruction (multi)
+        try:
+            from core.benchmark_runner import (
+                AIME_DIFFICULTY_OPTIONS, SUFFIX_TYPE_OPTIONS, SUFFIX_INSTRUCTION_OPTIONS,
+                set_aime_difficulty, get_aime_difficulty,
+                set_suffix_builder, get_suffix_builder,
+            )
+            st.markdown("##### 🧮 Prompt Suffix Builder")
+
+            # --- Question types (multi-select) ---
+            type_keys = [k for k, _, _ in SUFFIX_TYPE_OPTIONS]
+            type_labels = {k: lbl for k, lbl, _ in SUFFIX_TYPE_OPTIONS}
+            cur_types, cur_ins = get_suffix_builder()
+            # Seed default only on first render (before the widget key exists in
+            # session state); afterwards Streamlit owns the widget state. Using a
+            # dynamic default every render causes a "click twice to change" bug.
+            if "suffix_types_widget" not in st.session_state:
+                st.session_state["suffix_types_widget"] = list(cur_types)
+            sel_types = st.multiselect(
+                "Question Types (multi)",
+                options=type_keys,
+                default=st.session_state["suffix_types_widget"],
+                format_func=lambda k: type_labels[k],
+                key="suffix_types_widget",
+                help="Which kinds of tasks to draw suffix prompts from. Multiple = mixed sampling.",
+            )
+
+            # --- Difficulty (single; applies ONLY to the math/AIME type) ---
+            if "math" in sel_types:
+                difficulty_keys = [k for k, _, _ in AIME_DIFFICULTY_OPTIONS]
+                difficulty_labels = [lbl for _, lbl, _ in AIME_DIFFICULTY_OPTIONS]
+                default_idx = difficulty_keys.index(get_aime_difficulty()) if get_aime_difficulty() in difficulty_keys else 0
+                sel_idx = st.selectbox(
+                    "AIME Difficulty (math type)",
+                    options=range(len(difficulty_labels)),
+                    format_func=lambda i: difficulty_labels[i],
+                    index=default_idx,
+                    help="Stable-fill layer for the math (AIME) type. Harder layers reliably "
+                         "fill larger decode windows.",
+                )
+                set_aime_difficulty(difficulty_keys[sel_idx])
+            else:
+                # No math type selected -> difficulty is irrelevant; keep current value silently.
+                pass
+
+            # --- Output instructions (multi-select) ---
+            ins_keys = [k for k, _, _ in SUFFIX_INSTRUCTION_OPTIONS]
+            ins_labels = {k: lbl for k, lbl, _ in SUFFIX_INSTRUCTION_OPTIONS}
+            if "suffix_ins_widget" not in st.session_state:
+                st.session_state["suffix_ins_widget"] = list(cur_ins)
+            sel_ins = st.multiselect(
+                "Output Instructions (multi)",
+                options=ins_keys,
+                default=st.session_state["suffix_ins_widget"],
+                format_func=lambda k: ins_labels[k],
+                key="suffix_ins_widget",
+                help="题目之后追加的指令文本，用来引导输出形态/长度（让模型写得更详细更长，"
+                     "提高 decode 撞满 max_tokens 的概率）。多选则随机拼接多条；"
+                     "选 'none' 表示只用纯题干、不追加任何指令。仅对走构造器的测试生效"
+                     "（并发/prefill/长上下文/matrix/stability）；Custom Text Test 有独立的"
+                     " 'Extra Suffix Instruction' 输入框。",
+            )
+
+            set_suffix_builder(sel_types, sel_ins)
+            st.session_state.suffix_builder_types = sel_types
+            st.session_state.suffix_builder_instructions = sel_ins
+        except Exception:
+            pass
+
         # Random seed (for reproducibility)
         st.markdown("##### 🎲 Random Seed")
         col_seed_1, col_seed_2 = st.columns([3, 1])
@@ -368,6 +516,35 @@ def render_sidebar():
                 st.session_state.random_seed = random_seed
             else:
                 st.session_state.random_seed = None
+
+        # Sampling temperature (default: not sent -> API default)
+        st.markdown("##### 🌡️ Sampling Temperature")
+        temp_enabled = st.checkbox(
+            "Override Temperature",
+            value=False,
+            key="temperature_enabled",
+            help="When OFF, no temperature is sent to the API (uses the provider's default). "
+                 "When ON, set a specific sampling temperature."
+        )
+        if temp_enabled:
+            temperature = st.slider(
+                "Temperature",
+                min_value=0.0,
+                max_value=2.0,
+                value=0.7,
+                step=0.05,
+                key="temperature_value",
+                help="Lower = more deterministic; higher = more random. Sent as the 'temperature' field."
+            )
+            st.session_state.temperature = temperature
+        else:
+            st.session_state.temperature = None
+
+        # Custom request parameters (free-form: name + type + value + location)
+        try:
+            _render_custom_params(st)
+        except Exception:
+            st.session_state.custom_params = []
 
         tokenizer_option = st.selectbox(
             "Token Counting Method",
