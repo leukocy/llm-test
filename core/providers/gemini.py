@@ -71,8 +71,12 @@ class GeminiProvider(LLMProvider):
 
         generation_config = {
             "maxOutputTokens": max_tokens,
-            "temperature": kwargs.pop('temperature', 0.7)
         }
+
+        # Sampling temperature — only sent when explicitly provided (default: API default)
+        temperature = kwargs.pop('temperature', None)
+        if temperature is not None:
+            generation_config["temperature"] = temperature
 
         # 提取同步屏障（用于并发请求近乎同时发送）
         barrier = kwargs.pop('_barrier', None)
@@ -96,6 +100,12 @@ class GeminiProvider(LLMProvider):
                 generation_config.update(thinking_params["_generation_config_gemini"])
 
         # 允许其他 Gemini 特定参数传递
+        # (Gemini has no extra_body concept; custom params merge into generationConfig)
+        custom_extra_body = kwargs.pop("_custom_extra_body", None)
+        if custom_extra_body:
+            for k, v in custom_extra_body.items():
+                if k not in generation_config:
+                    generation_config[k] = v
         for k, v in kwargs.items():
             if k not in generation_config and k != 'temperature':
                  generation_config[k] = v
