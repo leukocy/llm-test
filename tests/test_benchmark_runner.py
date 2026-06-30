@@ -314,7 +314,7 @@ class TestBenchmarkRunnerInitialization:
             "session_id", "ttft", "tps", "prefill_speed",
             "prefill_tokens", "decode_tokens", "api_prefill", "api_decode",
             "cache_hit_tokens",
-            "token_calc_method", "error", "system_output_throughput",
+            "token_calc_method", "prompt_source", "error", "system_output_throughput",
             "system_input_throughput", "rps", "tpot_p95", "tpot_p99"
         ]
 

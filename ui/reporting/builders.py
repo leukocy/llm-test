@@ -262,12 +262,17 @@ def build_long_context_summary(df_group: pd.DataFrame) -> pd.DataFrame:
         "system_input_throughput",
         "Max_System_Input_Throughput",
     )
-    summary_sys_output = summarize_metric_extreme(
-        work,
-        "context_length_target",
-        "system_output_throughput",
-        "Max_System_Output_Throughput",
+    # Long-context is a single-stream decode test (no concurrency). Per request,
+    # system_output_throughput == 1000 / tpot. To guarantee the throughput chart
+    # is the exact reciprocal of the TPOT_Mean chart (so mean(tpot) x tps = 1000
+    # at every context level), derive throughput directly from the aggregated
+    # TPOT_Mean. Averaging tps separately would NOT invert mean(tpot), because
+    # mean(1/x) != 1/mean(x); the gap widens with per-round variance (e.g. 32k).
+    summary_sys_output = stats[["context_length_target", "TPOT_Mean"]].copy()
+    summary_sys_output["Max_System_Output_Throughput"] = (
+        1000.0 / summary_sys_output["TPOT_Mean"]
     )
+    summary_sys_output = summary_sys_output.drop(columns=["TPOT_Mean"])
     summary_sys_total = summarize_metric_extreme(
         work,
         "context_length_target",

@@ -104,12 +104,14 @@ def test_build_long_context_summary_includes_phase_throughputs_and_success_rate(
     assert first["Max_Prefill_Speed"] == 700.0
     assert first["Max_TPS"] == 80.0
     assert first["Max_System_Input_Throughput"] == 300.0
-    assert first["Max_System_Output_Throughput"] == 80.0
+    # Output throughput is the exact reciprocal of TPOT_Mean for long-context
+    # (single-stream decode). TPOT_Mean = 0.012 s = 12.0 ms -> 1000/12.0 t/s.
+    assert first["Max_System_Output_Throughput"] == pytest.approx(1000.0 / 12.0)
     assert first["Max_System_Throughput"] == 500.0
     assert first["x_label"] == "4.0k"
 
 
-def test_build_long_context_summary_uses_tps_for_output_throughput_when_loaded_data_is_stale():
+def test_build_long_context_summary_derives_output_throughput_from_tpot_mean():
     df = pd.DataFrame(
         {
             "context_length_target": [4096, 4096],
@@ -136,4 +138,8 @@ def test_build_long_context_summary_uses_tps_for_output_throughput_when_loaded_d
 
     first = summary[summary["context_length_target"] == 4096].iloc[0]
     assert first["Max_TPS"] == pytest.approx(16.7)
-    assert first["Max_System_Output_Throughput"] == pytest.approx(16.7)
+    # Output throughput is derived from TPOT_Mean (reciprocal), not from tps,
+    # so it stays paired with the TPOT chart regardless of stale loaded tps.
+    # mean(tpot) = (0.0597 + 0.0633)/2 = 0.0615 s -> 1000/61.5 t/s.
+    assert first["TPOT_Mean"] == pytest.approx(61.5)
+    assert first["Max_System_Output_Throughput"] == pytest.approx(1000.0 / 61.5)

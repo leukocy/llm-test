@@ -35,6 +35,346 @@ PREFILL_PROMPT_OVERHEAD = 0
 _SUFFIX_PROMPT_POOL: list[str] | None = None
 _SUFFIX_POOL_LOCK = threading.Lock()
 
+# ---------------------------------------------------------------------------
+# AIME stable-fill difficulty pools (for decode-fill guarantees).
+# Loaded from aime_stable_pools.json (see _probe / _export scripts). Each pool
+# is a set of AIME problems whose every observed trial reached the pool's
+# window, so they reliably force long decode output without early EOS.
+# ---------------------------------------------------------------------------
+AIME_POOLS_CACHE: dict[str, list[str]] | None = None
+AIME_POOLS_LOCK = threading.Lock()
+# Difficulty key -> (json pool key, human label, description). Order = UI order.
+AIME_DIFFICULTY_OPTIONS = [
+    ("fill_32768plus", "极难 (稳定撑满 32768, 11题)", "最难，真实长度 ≥32768，任意窗口都撑满"),
+    ("fill_8192plus", "难 (稳定撑满 8192, 33题)", "稳定撑满 8192，适合长 decode 测试"),
+    ("fill_4096plus", "中等 (稳定撑满 4096, 60题)", "稳定撑满 4096，2048 窗口下 100% 撑满"),
+    ("fill_2048plus", "易 (稳定撑满 2048, 73题)", "稳定撑满 2048"),
+    ("none", "不使用 AIME (原随机题池)", "回退到原 dataset 混合题池"),
+]
+# Currently selected difficulty key. Default = the 11 hardest problems.
+AIME_DIFFICULTY: str = "fill_32768plus"
+
+
+def _load_aime_pools() -> dict[str, list[str]]:
+    """Load AIME difficulty pools from aime_stable_pools.json (cached).
+
+    Returns a dict mapping pool key (e.g. 'fill_32768plus') -> list of problem
+    strings. Returns {} if the file is missing or unreadable.
+    """
+    global AIME_POOLS_CACHE
+    with AIME_POOLS_LOCK:
+        if AIME_POOLS_CACHE is not None:
+            return AIME_POOLS_CACHE
+        import json as _json
+        import os as _os
+        # Resolve relative to project root (this file is core/benchmark_runner.py)
+        candidates = [
+            _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "aime_stable_pools.json"),
+            "aime_stable_pools.json",
+        ]
+        data = None
+        for path in candidates:
+            try:
+                with open(path, encoding="utf-8") as f:
+                    data = _json.load(f)
+                break
+            except Exception:
+                continue
+        cache: dict[str, list[str]] = {}
+        if isinstance(data, dict):
+            for key, entry in (data.get("cumulative_pools") or {}).items():
+                probs = (entry or {}).get("problems") or []
+                cache[key] = [p.get("problem", "") for p in probs if p.get("problem")]
+        AIME_POOLS_CACHE = cache
+        return cache
+
+
+# Cache of AIME pools WITH source ids: {pool_key: [(source_id, text), ...]}
+AIME_POOLS_ID_CACHE: dict[str, list[tuple[str, str]]] | None = None
+
+
+def _load_aime_pools_with_id() -> dict[str, list[tuple[str, str]]]:
+    """Like _load_aime_pools but each entry carries a source id.
+
+    id format: '<source>_<problem_id>' e.g. 'aime2026_2026-II-12'.
+    """
+    global AIME_POOLS_ID_CACHE
+    with AIME_POOLS_LOCK:
+        if AIME_POOLS_ID_CACHE is not None:
+            return AIME_POOLS_ID_CACHE
+        import json as _json
+        import os as _os
+        candidates = [
+            _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "aime_stable_pools.json"),
+            "aime_stable_pools.json",
+        ]
+        data = None
+        for path in candidates:
+            try:
+                with open(path, encoding="utf-8") as f:
+                    data = _json.load(f)
+                break
+            except Exception:
+                continue
+        cache: dict[str, list[tuple[str, str]]] = {}
+        if isinstance(data, dict):
+            for key, entry in (data.get("cumulative_pools") or {}).items():
+                probs = (entry or {}).get("problems") or []
+                items = []
+                for p in probs:
+                    text = p.get("problem", "")
+                    if not text:
+                        continue
+                    src = (p.get("source") or "aime").strip()
+                    pid = str(p.get("problem_id") or "").strip()
+                    sid = f"{src}_{pid}" if pid else src
+                    items.append((sid, text))
+                cache[key] = items
+        AIME_POOLS_ID_CACHE = cache
+        return cache
+
+
+def set_aime_difficulty(key: str) -> None:
+    """Set the global AIME difficulty pool used for prompt suffixes."""
+    global AIME_DIFFICULTY
+    if key is None or key == "none":
+        AIME_DIFFICULTY = "none"
+        return
+    pools = _load_aime_pools()
+    if key in pools:
+        AIME_DIFFICULTY = key
+    else:
+        AIME_DIFFICULTY = "fill_32768plus"
+
+
+def get_aime_difficulty() -> str:
+    return AIME_DIFFICULTY
+
+
+# ---------------------------------------------------------------------------
+# Composable prompt-suffix builder (type x difficulty x output-instruction).
+# Replaces the single AIME-difficulty dropdown as the global suffix policy.
+# ---------------------------------------------------------------------------
+
+# Question types (multi-select). Each maps to a loader producing [problem_str].
+SUFFIX_TYPE_OPTIONS = [
+    ("math", "数学 (AIME)", "AIME 竞赛数学题，带 stable-fill 难度分层"),
+    ("science", "科学 (GPQA)", "GPQA 研究生级科学分析题"),
+    ("code", "代码 (HumanEval+MBPP)", "编程实现任务，天然较长输出"),
+    ("longform", "长文 (LongBench)", "长上下文推理/补全任务"),
+]
+
+# Output-instruction styles (multi-select). Appended after the question to
+# steer output length/shape. Drawn from the existing variant-suffix family.
+SUFFIX_INSTRUCTION_OPTIONS = [
+    ("reasoning", "详细逐步推理", (
+        "\n\n请逐步详细求解。展示完整推理过程与所有中间计算，不能只给最终答案。"
+    )),
+    ("verify", "多方法验证/反例", (
+        "\n\n得出答案后，请用至少两种不同方法验证，并讨论反例与边界情况。"
+    )),
+    ("generalize", "推广+变体", (
+        "\n\n完成后，请将问题推广到一个更难的变体并求解，说明原问题与变体之间的联系。"
+    )),
+    ("bilingual", "中英双语作答", (
+        "\n\n请用中文和英文双语作答，两部分都需完整。"
+    )),
+    ("none", "不附加指令", ""),
+]
+
+# Currently selected builder config (module-global, set from sidebar).
+SUFFIX_TYPES: tuple[str, ...] = ("math",)          # selected question types
+SUFFIX_INSTRUCTIONS: tuple[str, ...] = ("reasoning",)  # selected output instructions
+
+# Typed question pools cache: {type_key: [problem_str, ...]}
+TYPED_POOLS_CACHE: dict[str, list[str]] | None = None
+TYPED_POOLS_LOCK = threading.Lock()
+
+
+def _load_typed_pools() -> dict[str, list[str]]:
+    """Load question pools keyed by type: math / science / code / longform.
+
+    math uses aime_stable_pools.json (so it respects difficulty layering);
+    the others reuse the mixed dataset pool, filtered by source prefix that
+    _load_suffix_prompt_pool bakes into each entry.
+    """
+    global TYPED_POOLS_CACHE
+    with TYPED_POOLS_LOCK:
+        if TYPED_POOLS_CACHE is not None:
+            return TYPED_POOLS_CACHE
+        # Each pool is a list of (source_id, text). ids follow '<set>_<number>'
+        # for non-AIME sets (stable per process via deterministic load order);
+        # AIME uses its real source+problem_id (e.g. 'aime2026_2026-II-12').
+        cache: dict[str, list[tuple[str, str]]] = {}
+
+        # math: from AIME stable pools (default = all layers combined)
+        aime = _load_aime_pools_with_id()
+        math_seen: set[str] = set()
+        math_items: list[tuple[str, str]] = []
+        for key, items in aime.items():
+            for sid, text in items:
+                if text and text not in math_seen:
+                    math_seen.add(text)
+                    math_items.append((sid, text))
+        cache["math"] = math_items
+
+        # others: from the mixed dataset pool. _load_suffix_prompt_pool embeds
+        # a source header like "AIME 2024 competition math problem:\n..." so we
+        # can classify by keyword. Assign stable '<set>_<n>' ids by load order.
+        try:
+            mixed = _load_suffix_prompt_pool()
+        except Exception:
+            mixed = []
+        science: list[tuple[str, str]] = []
+        code: list[tuple[str, str]] = []
+        longform: list[tuple[str, str]] = []
+        g_i = c_i = l_i = 0
+        for entry in mixed:
+            head = entry[:80].lower()
+            if "gpqa" in head or "science" in head:
+                science.append((f"gpqa_{g_i}", entry)); g_i += 1
+            elif "humaneval" in head:
+                code.append((f"humaneval_{c_i}", entry)); c_i += 1
+            elif "mbpp" in head or "programming" in head:
+                code.append((f"mbpp_{c_i}", entry)); c_i += 1
+            elif "longbench" in head or "repobench" in head or "lcc" in head or "qasper" in head:
+                longform.append((f"longbench_{l_i}", entry)); l_i += 1
+        cache["science"] = science
+        cache["code"] = code
+        cache["longform"] = longform
+
+        TYPED_POOLS_CACHE = cache
+        return cache
+
+
+def set_suffix_builder(types: list[str] | tuple[str, ...] | None,
+                       instructions: list[str] | tuple[str, ...] | None) -> None:
+    """Set the global suffix-builder selection.
+
+    types: selected question types (math/science/code/longform). Empty -> all.
+    instructions: selected output-instruction styles. Empty -> none appended.
+    """
+    global SUFFIX_TYPES, SUFFIX_INSTRUCTIONS
+    valid_types = {k for k, _, _ in SUFFIX_TYPE_OPTIONS}
+    sel_types = tuple(t for t in (types or ()) if t in valid_types)
+    SUFFIX_TYPES = sel_types if sel_types else tuple(k for k, _, _ in SUFFIX_TYPE_OPTIONS)
+
+    valid_ins = {k for k, _, _ in SUFFIX_INSTRUCTION_OPTIONS}
+    sel_ins = tuple(i for i in (instructions or ()) if i in valid_ins)
+    SUFFIX_INSTRUCTIONS = sel_ins  # empty means "no instruction"
+
+
+def get_suffix_builder() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    return SUFFIX_TYPES, SUFFIX_INSTRUCTIONS
+
+
+def _build_output_instruction() -> str:
+    """Concatenate the selected output-instruction styles (random order)."""
+    if not SUFFIX_INSTRUCTIONS or SUFFIX_INSTRUCTIONS == ("none",):
+        return ""
+    texts = [t for k, _, t in SUFFIX_INSTRUCTION_OPTIONS
+             if k in SUFFIX_INSTRUCTIONS and k != "none" and t]
+    random.shuffle(texts)
+    return "".join(texts)
+
+
+def _get_random_typed_prompt(target_token_budget: int, tokenizer,
+                              prefer_shortest: bool = False) -> tuple[str, str] | None:
+    """Pick a question from the currently-selected type(s), respecting the
+    AIME difficulty layer for the math type.
+
+    Returns (source_id, question_text). source_id identifies the problem
+    (e.g. 'aime2026_2026-II-12', 'gpqa_42'). None if nothing fits."""
+    pools = _load_typed_pools()
+    # Build the candidate pool from selected types. For math, apply difficulty.
+    # Each candidate is (source_id, text).
+    candidates: list[tuple[str, str]] = []
+    for t in SUFFIX_TYPES:
+        if t == "math":
+            # Respect AIME_DIFFICULTY layer if set to a real pool (with ids)
+            aime_pools = _load_aime_pools_with_id()
+            layer = aime_pools.get(AIME_DIFFICULTY) if AIME_DIFFICULTY != "none" else None
+            src = layer or pools.get("math", [])
+        else:
+            src = pools.get(t, [])
+        candidates.extend(src)
+    # dedupe by text preserving order (first id wins)
+    seen: set[str] = set(); uniq: list[tuple[str, str]] = []
+    for sid, text in candidates:
+        if text not in seen:
+            seen.add(text); uniq.append((sid, text))
+    if not uniq:
+        return None
+
+    def _len(item):
+        return len(tokenizer.encode(item[1], add_special_tokens=False))
+
+    fitting = [c for c in uniq if _len(c) <= target_token_budget]
+    if fitting:
+        if prefer_shortest:
+            fitting.sort(key=_len)
+            return random.choice(fitting[: min(5, len(fitting))])
+        return random.choice(random.sample(fitting, min(10, len(fitting))))
+    # nothing fits whole: trim the shortest
+    if target_token_budget < 8:
+        return None
+    best = min(uniq, key=_len)
+    sid, text = best
+    tokens = tokenizer.encode(text, add_special_tokens=False)
+    trimmed = tokenizer.decode(tokens[:target_token_budget], skip_special_tokens=True)
+    return (f"{sid}~trimmed", trimmed)
+
+
+def _get_random_aime_prompt(target_token_budget: int, tokenizer, prefer_shortest: bool = False) -> tuple[str, str] | None:
+    """Pick an AIME problem from the currently-selected difficulty pool.
+
+    Args:
+        target_token_budget: max tokens the suffix may occupy.
+        prefer_shortest: when True (small budgets), pick the SHORTEST problem
+            that fits, rather than a random one. Used for ultra-short prefill
+            (target_tokens < 200) where only a few short problems fit at all.
+
+    Returns (source_id, text), or None if difficulty is 'none', the pool is
+    empty, or the budget is too small to hold even a truncated problem head.
+    """
+    if AIME_DIFFICULTY == "none":
+        return None
+    pools = _load_aime_pools_with_id()
+    pool = pools.get(AIME_DIFFICULTY) or []
+    if not pool or target_token_budget <= 0:
+        return None
+
+    def _len(item):
+        return len(tokenizer.encode(item[1], add_special_tokens=False))
+
+    scored = [(c, _len(c)) for c in pool]
+
+    # Problems that fit the budget as-is
+    fitting = [(c, n) for c, n in scored if n <= target_token_budget]
+    if fitting:
+        if prefer_shortest:
+            # Pick among the few shortest that fit (small randomization for variety)
+            fitting.sort(key=lambda x: x[1])
+            top = fitting[: min(5, len(fitting))]
+            return random.choice(top)[0]
+        # Normal mode: random among fitting, biased toward shorter for diversity
+        candidates = random.sample(pool, min(10, len(pool)))
+        for cand in candidates:
+            if _len(cand) <= target_token_budget:
+                return cand
+        # (shouldn't reach here since fitting is non-empty, but keep safe)
+        return fitting[0][0]
+
+    # Nothing fits whole: trim the shortest problem to the budget (keep its head).
+    # Only meaningful when budget >= some minimum so the truncation isn't absurd.
+    if target_token_budget < 8:
+        return None
+    best = min(scored, key=lambda x: x[1])
+    sid, text = best[0]
+    tokens = tokenizer.encode(text, add_special_tokens=False)
+    trimmed = tokenizer.decode(tokens[:target_token_budget], skip_special_tokens=True)
+    return (f"{sid}~trimmed", trimmed)
+
 
 def _load_suffix_prompt_pool() -> list[str]:
     """
@@ -232,19 +572,31 @@ def _load_suffix_prompt_pool() -> list[str]:
     _SUFFIX_PROMPT_POOL = pool
     return pool
 
-def _get_random_suffix_prompt(target_token_budget: int, tokenizer) -> str:
+def _get_random_suffix_prompt(target_token_budget: int, tokenizer,
+                               prefer_shortest: bool = False) -> tuple[str, str]:
     """
-    Pick a random real question from the dataset pool and trim it to fit
-    within the given token budget. Falls back to a short generic prompt
-    if the pool is unavailable.
+    Pick a question to use as the prompt suffix task, using the composable
+    suffix builder (type x difficulty x output-instruction).
+
+    Returns (source_id, question_text). source_id identifies the problem
+    (e.g. 'aime2026_2026-II-12', 'gpqa_42', 'generic'). The question text fits
+    within target_token_budget; the caller appends the output-instruction text
+    separately via _build_output_instruction() when token budget allows.
+
+    Falls back to a short generic prompt if no typed question is available.
     """
+    q = _get_random_typed_prompt(target_token_budget, tokenizer, prefer_shortest=prefer_shortest)
+    if q:
+        return q
+
+    # Fallback: mixed dataset pool (legacy) — no stable id available here
     try:
         pool = _load_suffix_prompt_pool()
     except Exception:
         pool = []
 
     if not pool:
-        return "Continue writing a detailed response."
+        return ("generic", "Continue writing a detailed response.")
 
     # Shuffle pick
     candidates = random.sample(pool, min(10, len(pool)))
@@ -252,22 +604,22 @@ def _get_random_suffix_prompt(target_token_budget: int, tokenizer) -> str:
     for candidate in candidates:
         tokens = tokenizer.encode(candidate, add_special_tokens=False)
         if len(tokens) <= target_token_budget:
-            return candidate
+            return ("legacy", candidate)
 
     # If all candidates too long, trim the shortest one
     best = min(candidates, key=lambda c: len(tokenizer.encode(c, add_special_tokens=False)))
     tokens = tokenizer.encode(best, add_special_tokens=False)
     if len(tokens) > target_token_budget:
         trimmed = tokenizer.decode(tokens[:target_token_budget], skip_special_tokens=True)
-        return trimmed
+        return ("legacy~trimmed", trimmed)
 
-    return best
+    return ("legacy", best)
 
 # Module logger
 logger = get_logger(__name__)
 
 class BenchmarkRunner:
-    def __init__(self, placeholder, progress_bar, status_text, api_base_url, model_id, tokenizer_option, csv_filename, api_key, log_placeholder, provider, dashboard=None, output_placeholder=None, hf_tokenizer_model_id=None, latency_offset=0.0, thinking_enabled=None, thinking_budget=None, reasoning_effort=None, random_seed=None, skip_first_token_for_tps=False, template_tokens=0):
+    def __init__(self, placeholder, progress_bar, status_text, api_base_url, model_id, tokenizer_option, csv_filename, api_key, log_placeholder, provider, dashboard=None, output_placeholder=None, hf_tokenizer_model_id=None, latency_offset=0.0, thinking_enabled=None, thinking_budget=None, reasoning_effort=None, random_seed=None, skip_first_token_for_tps=False, template_tokens=0, temperature=None, custom_params=None):
         self.placeholder, self.progress_bar, self.status_text = placeholder, progress_bar, status_text
         self.api_base_url = api_base_url
         self.model_id = model_id
@@ -288,6 +640,13 @@ class BenchmarkRunner:
         self.thinking_enabled = thinking_enabled
         self.thinking_budget = thinking_budget
         self.reasoning_effort = reasoning_effort
+
+        # Sampling temperature. None = do not send temperature (use API default).
+        self.temperature = temperature
+
+        # User-defined custom request params. List of
+        # {"name": str, "value": Any, "location": "payload"|"extra_body"}.
+        self.custom_params = list(custom_params) if custom_params else []
 
         # Random seed for reproducibility
         self.random_seed = random_seed
@@ -332,7 +691,7 @@ class BenchmarkRunner:
             "context_length_target",
             "session_id", "ttft", "tps", "prefill_speed",
             "prefill_tokens", "decode_tokens", "api_prefill", "api_decode", "cache_hit_tokens",
-            "token_calc_method", "error", "system_output_throughput", "system_input_throughput", "rps", "tpot_p95", "tpot_p99"
+            "token_calc_method", "prompt_source", "error", "system_output_throughput", "system_input_throughput", "rps", "tpot_p95", "tpot_p99"
         ]
 
         # Cache for transformers tokenizer
@@ -687,7 +1046,10 @@ class BenchmarkRunner:
 
         # Generate initial body (try to get close)
         # Pass the pre-loaded tokenizer to avoid thread-safety issues
-        body_text, _, _ = self._get_text_for_token_count(body_target_tokens, force_random=True, _tokenizer=tokenizer)
+        body_text, _, _, body_source = self._get_text_for_token_count(body_target_tokens, force_random=True, _tokenizer=tokenizer)
+        # Track which question was used: only meaningful when no external suffix
+        # overrides the internally-selected question.
+        self._last_prompt_source = body_source if suffix == "" else "generic"
 
         # 2. Fine-grained Character Adjustment Loop
         # Only needed when body + suffix doesn't exactly match target.
@@ -723,6 +1085,21 @@ class BenchmarkRunner:
             diff = current_count - target_tokens
 
         return body_text + suffix
+
+    def _calibrate_prompt_with_source(self, target_tokens, suffix="", _tokenizer=None, source_override=None):
+        """Like _calibrate_prompt but also returns the prompt-source id.
+
+        Returns (prompt_str, source_id). source_id identifies the question used
+        (e.g. 'aime2026_2026-II-12'), or 'generic' when no typed question was
+        selected. When source_override is given (e.g. custom_text pad mode where
+        the suffix IS the question), it takes precedence over the generic fallback.
+        """
+        prompt_str = self._calibrate_prompt(target_tokens, suffix=suffix, _tokenizer=_tokenizer)
+        if source_override is not None:
+            self._last_prompt_source = source_override
+        source_id = getattr(self, "_last_prompt_source", "generic")
+        source_id = getattr(self, "_last_prompt_source", "generic")
+        return prompt_str, source_id
 
     def _get_text_for_token_count(self, target_tokens, force_random=False, _tokenizer=None):
         """
@@ -777,19 +1154,18 @@ class BenchmarkRunner:
 
             selected_suffix = ""
             suffix_tokens = []
+            current_source_id = "generic"  # tracks which question was selected
 
             if target_tokens >= 200:
                 # Use real question from dataset pool with separator
                 sep_tokens = encode_no_special(suffix_separator)
                 budget = effective_target - len(sep_tokens)
                 if budget > 10:
-                    question = _get_random_suffix_prompt(budget, tokenizer)
+                    current_source_id, question = _get_random_suffix_prompt(budget, tokenizer)
                     question_tokens = encode_no_special(question)
-                    # Append minimum-output enforcement instruction
-                    output_enforcement = (
-                        "\n\n请务必写出2000字以上的详细回答。你必须展示完整的推理过程，"
-                        "不能只给出简短答案。"
-                    )
+                    # Output instruction comes from the composable suffix builder
+                    # (selected styles; empty string when "none").
+                    output_enforcement = _build_output_instruction()
                     enforcement_tokens = encode_no_special(output_enforcement)
                     if len(sep_tokens) + len(question_tokens) + len(enforcement_tokens) <= effective_target:
                         selected_suffix = suffix_separator + question + output_enforcement
@@ -806,15 +1182,25 @@ class BenchmarkRunner:
             if not suffix_tokens and target_tokens >= 60:
                 # Medium: try a short real question without separator
                 budget = effective_target
-                question = _get_random_suffix_prompt(budget, tokenizer)
+                current_source_id, question = _get_random_suffix_prompt(budget, tokenizer)
                 question_tokens = encode_no_special(question)
                 if len(question_tokens) <= effective_target:
                     selected_suffix = question
                     suffix_tokens = question_tokens
+                else:
+                    current_source_id = "generic"  # didn't fit, will fall through
 
             if not suffix_tokens and target_tokens >= 20:
-                selected_suffix = suffix_micro
-                suffix_tokens = encode_no_special(selected_suffix)
+                # Ultra-short prefill: use a SHORT AIME problem if one fits
+                # (prefer_shortest picks the smallest problem statements);
+                # otherwise fall back to the generic micro prompt.
+                aime_short = _get_random_aime_prompt(effective_target, tokenizer, prefer_shortest=True)
+                if aime_short:
+                    current_source_id, selected_suffix = aime_short
+                    suffix_tokens = encode_no_special(selected_suffix)
+                else:
+                    selected_suffix = suffix_micro
+                    suffix_tokens = encode_no_special(selected_suffix)
 
             if not suffix_tokens and target_tokens >= 8:
                 selected_suffix = suffix_nano
@@ -961,7 +1347,7 @@ class BenchmarkRunner:
                 if first_line:
                     question_summary = first_line[:80]
 
-            return prompt_text, actual_tokens, question_summary
+            return prompt_text, actual_tokens, question_summary, current_source_id
 
         except Exception as e:
             st.error(f"use tokenizer Process文本失败: {e}。")
@@ -1144,6 +1530,21 @@ class BenchmarkRunner:
             kwargs['thinking_budget'] = self.thinking_budget
         if self.reasoning_effort is not None:
             kwargs['reasoning_effort'] = self.reasoning_effort
+        if self.temperature is not None:
+            kwargs['temperature'] = self.temperature
+        # User-defined custom params. Top-level params pass through as kwargs
+        # (provider merges them into payload); extra_body params are bundled.
+        extra_body_params = {}
+        for cp in (self.custom_params or []):
+            name = cp.get("name")
+            if not name:
+                continue
+            if cp.get("location") == "extra_body":
+                extra_body_params[name] = cp.get("value")
+            else:
+                kwargs[name] = cp.get("value")
+        if extra_body_params:
+            kwargs["_custom_extra_body"] = extra_body_params
         if barrier is not None:
             kwargs['_barrier'] = barrier
 
@@ -1727,7 +2128,8 @@ class BenchmarkRunner:
                        "ttft", "tps", "tpot", "prefill_speed",
                        "system_throughput", "system_input_throughput", "rps",
                        "prefill_tokens", "decode_tokens", "total_time", "decode_time",
-                       "start_time", "end_time", "cache_hit_tokens", "token_calc_method", "input_tokens_target", "error"]
+                       "start_time", "end_time", "cache_hit_tokens", "token_calc_method", "input_tokens_target",
+                       "prompt_source", "error"]
         initialize_csv(csv_columns, self.csv_file)
 
         # 启动DatabaseTest运行
@@ -1834,10 +2236,12 @@ class BenchmarkRunner:
                 # Parallelize prompt generation using thread pool with pre-loaded tokenizer
                 loop = asyncio.get_event_loop()
                 prompt_tasks = [
-                    loop.run_in_executor(None, self._calibrate_prompt, target_tokens, "", cached_tokenizer)
+                    loop.run_in_executor(None, self._calibrate_prompt_with_source, target_tokens, "", cached_tokenizer)
                     for _ in range(concurrency)
                 ]
-                batch_prompts = await asyncio.gather(*prompt_tasks)
+                batch_pairs = await asyncio.gather(*prompt_tasks)
+                batch_prompts = [p for p, _ in batch_pairs]
+                batch_sources = [s for _, s in batch_pairs]
 
                 results = await self._run_concurrency_batch(
                     None,
@@ -1851,10 +2255,11 @@ class BenchmarkRunner:
                 processed_counter += concurrency
 
                 # Assign Round info and save
-                for res in results:
+                for i, res in enumerate(results):
                     if res and res.get("error") != "UserCancelled":
                         res['concurrency'] = concurrency
                         res['round'] = r + 1
+                        res['prompt_source'] = batch_sources[i] if i < len(batch_sources) else "generic"
                         self._add_result(res, csv_columns)
 
                 self.update_ui()
@@ -1876,7 +2281,8 @@ class BenchmarkRunner:
                        "ttft", "tps", "tpot", "prefill_speed",
                        "system_throughput", "system_input_throughput", "rps",
                        "prefill_tokens", "decode_tokens", "total_time", "decode_time",
-                       "start_time", "end_time", "cache_hit_tokens", "token_calc_method", "error"]
+                       "start_time", "end_time", "cache_hit_tokens", "token_calc_method",
+                       "prompt_source", "error"]
         initialize_csv(csv_columns, self.csv_file)
 
         # 启动DatabaseTest运行
@@ -1918,15 +2324,16 @@ class BenchmarkRunner:
                     # Generate fresh random prompt of exact length
                     # Sync with Strict Calibration Logic
                     if tokens_target <= 32:
-                         raw_prompt = self._calibrate_prompt(self._prompt_generation_target(tokens_target, PREFILL_PROMPT_OVERHEAD), suffix="")
+                         raw_prompt, _prompt_source = self._calibrate_prompt_with_source(self._prompt_generation_target(tokens_target, PREFILL_PROMPT_OVERHEAD), suffix="")
                     else:
                          suffix_inst = "\n\n请先Statistics前文都多少字数然后尽你所能直接创作一越长越好超长篇科幻小说。"
-                         raw_prompt = self._calibrate_prompt(self._prompt_generation_target(tokens_target, PREFILL_PROMPT_OVERHEAD), suffix=suffix_inst)
+                         raw_prompt, _prompt_source = self._calibrate_prompt_with_source(self._prompt_generation_target(tokens_target, PREFILL_PROMPT_OVERHEAD), suffix=suffix_inst)
 
                     res = await self.get_completion(None, i, raw_prompt, max_tokens)
 
                     if res and res.get("error") != "UserCancelled":
                         res['input_tokens_target'] = tokens_target
+                        res['prompt_source'] = _prompt_source
 
                         # Ensure prefill_tokens is used
                         actual_prompt_tokens = res.get('prefill_tokens', 0)
@@ -1979,10 +2386,12 @@ class BenchmarkRunner:
                 cached_tokenizer = self._get_tokenizer()
                 loop = asyncio.get_event_loop()
                 prompt_tasks = [
-                    loop.run_in_executor(None, self._calibrate_prompt, local_tokens_to_generate, "", cached_tokenizer)
+                    loop.run_in_executor(None, self._calibrate_prompt_with_source, local_tokens_to_generate, "", cached_tokenizer)
                     for _ in range(requests_per_level)
                 ]
-                pregen_prompts = await asyncio.gather(*prompt_tasks)
+                pregen_pairs = await asyncio.gather(*prompt_tasks)
+                pregen_prompts = [p for p, _ in pregen_pairs]
+                pregen_sources = [s for _, s in pregen_pairs]
 
                 for i in range(requests_per_level):
                     # Generate fresh prompt for each request
@@ -1991,6 +2400,7 @@ class BenchmarkRunner:
 
                     if res and res.get("error") != "UserCancelled":
                         res['input_tokens_target'] = tokens_target
+                        res['prompt_source'] = pregen_sources[i] if i < len(pregen_sources) else "generic"
 
                         # Ensure prefill_tokens is used
                         actual_prompt_tokens = res.get('prefill_tokens', 0)
@@ -2425,7 +2835,7 @@ class BenchmarkRunner:
                        "ttft", "tps", "tpot", "prefill_speed",
                        "system_throughput", "system_input_throughput", "system_output_throughput", "rps",
                        "prefill_tokens", "decode_tokens", "cache_hit_tokens",
-                       "token_calc_method", "error"]
+                       "token_calc_method", "prompt_source", "error"]
         initialize_csv(csv_columns, self.csv_file)
 
         # 启动DatabaseTest运行
@@ -2446,7 +2856,7 @@ class BenchmarkRunner:
             if length_target < 20:
                 self.status_text.info(f"currentlyTest (目标: {length_target}, 精细模式)...")
                 for r in range(rounds_per_level):
-                    raw_prompt, _, _ = self._get_text_for_token_count(self._prompt_generation_target(length_target))
+                    raw_prompt, _, _, _prompt_source = self._get_text_for_token_count(self._prompt_generation_target(length_target))
                     res = await self.get_completion(None, 0, raw_prompt, max_tokens)
 
                     if res and res.get("error") != "UserCancelled":
@@ -2457,7 +2867,8 @@ class BenchmarkRunner:
                         res.update({
                             'test_type': 'long_context',
                             'context_length_target': length_target,
-                            'round': r + 1
+                            'round': r + 1,
+                            'prompt_source': _prompt_source
                         })
 
                         # 仅use未缓存 token Calculate输入速度
@@ -2509,10 +2920,10 @@ class BenchmarkRunner:
                     self.status_text.info(f"currentlyTest (目标: {length_target}, 轮数: {r+1}/{rounds_per_level})...")
                     # Generate unique prompt per request
                     if length_target <= 32:
-                        long_prompt = self._calibrate_prompt(self._prompt_generation_target(length_target), suffix="") # PREFILL_PROMPT_OVERHEAD removed
+                        long_prompt, _prompt_source = self._calibrate_prompt_with_source(self._prompt_generation_target(length_target), suffix="") # PREFILL_PROMPT_OVERHEAD removed
                     else:
                         # Use adaptive suffix system
-                        long_prompt = self._calibrate_prompt(self._prompt_generation_target(length_target), suffix="") # PREFILL_PROMPT_OVERHEAD removed
+                        long_prompt, _prompt_source = self._calibrate_prompt_with_source(self._prompt_generation_target(length_target), suffix="") # PREFILL_PROMPT_OVERHEAD removed
 
                     res = await self._run_long_context_request(None, long_prompt, max_tokens, 0)
 
@@ -2525,7 +2936,8 @@ class BenchmarkRunner:
                         res.update({
                             'test_type': 'long_context',
                             'context_length_target': length_target,
-                            'round': r + 1
+                            'round': r + 1,
+                            'prompt_source': _prompt_source
                         })
 
                         # 仅use未缓存 token Calculate输入速度
@@ -2577,7 +2989,8 @@ class BenchmarkRunner:
                        "ttft", "tps", "tpot", "prefill_speed",
                        "system_output_throughput", "system_input_throughput", "rps",
                        "prefill_tokens", "decode_tokens", "total_time", "decode_time",
-                       "start_time", "end_time", "cache_hit_tokens", "token_calc_method", "error"]
+                       "start_time", "end_time", "cache_hit_tokens", "token_calc_method",
+                       "prompt_source", "error"]
         initialize_csv(csv_columns, self.csv_file)
 
         # 启动DatabaseTest运行
@@ -2610,10 +3023,12 @@ class BenchmarkRunner:
                 target_len = self._prompt_generation_target(length_target)
                 loop = asyncio.get_event_loop()
                 prompt_tasks = [
-                    loop.run_in_executor(None, self._calibrate_prompt, target_len, "", cached_tokenizer)
+                    loop.run_in_executor(None, self._calibrate_prompt_with_source, target_len, "", cached_tokenizer)
                     for _ in range(total_reqs_for_level)
                 ]
-                pregen_prompts = await asyncio.gather(*prompt_tasks)
+                pregen_pairs = await asyncio.gather(*prompt_tasks)
+                pregen_prompts = [p for p, _ in pregen_pairs]
+                pregen_sources = [s for _, s in pregen_pairs]
 
                 # Use continuous execution with pre-generated prompts
                 results = await self._run_continuous_batch(
@@ -2637,7 +3052,8 @@ class BenchmarkRunner:
                             'test_type': 'matrix',
                             'concurrency': concurrency,
                             'context_length_target': length_target,
-                            'round': (i // concurrency) + 1
+                            'round': (i // concurrency) + 1,
+                            'prompt_source': pregen_sources[i] if i < len(pregen_sources) else "generic"
                         })
 
                         # 仅use未缓存 token Calculate输入速度
@@ -2658,36 +3074,63 @@ class BenchmarkRunner:
 
         return pd.DataFrame(self.results_list)
 
-    async def run_custom_text_test(self, selected_concurrencies, rounds_per_level, base_prompt, suffix_instruction, max_tokens, avoid_cache=True):
+    async def run_custom_text_test(self, selected_concurrencies, rounds_per_level, base_prompt, suffix_instruction,
+                                    max_tokens, avoid_cache=True, context_length=0,
+                                    base_prompt_source="custom_text", selected_problems=None):
+        """Custom Text Test.
+
+        Prompt sources (mutually managed by caller):
+          - base_prompt: a single base text (manual input or uploaded file content)
+          - selected_problems: list of (source_id, text) chosen from test pools;
+            when provided, each request rotates through them (one problem per request).
+        Context filling:
+          - context_length > 0: pad each prompt with random noise to exactly that many
+            tokens (avoids cache hits). Uses _calibrate_prompt_with_source.
+          - context_length == 0: send the problem/base text verbatim (no padding; may
+            hit cache — intended for "only care about output" runs).
+        base_prompt_source: source id used when selected_problems is not provided.
+        """
         self.total_requests = sum(c * rounds_per_level for c in selected_concurrencies)
         csv_columns = ["session_id", "concurrency", "round",
                        "ttft", "tps", "tpot", "prefill_speed", "system_output_throughput", "system_input_throughput",
                        "prefill_tokens", "decode_tokens", "total_time", "decode_time",
-                       "start_time", "end_time", "cache_hit_tokens", "token_calc_method", "error"]
+                       "start_time", "end_time", "cache_hit_tokens", "token_calc_method",
+                       "prompt_source", "error"]
         initialize_csv(csv_columns, self.csv_file)
 
         # 启动DatabaseTest运行
         config = {
             "selected_concurrencies": selected_concurrencies,
             "rounds_per_level": rounds_per_level,
-            "base_prompt": base_prompt[:100] + "..." if len(base_prompt) > 100 else base_prompt,
+            "base_prompt": (base_prompt or "")[:100] + "..." if base_prompt and len(base_prompt) > 100 else (base_prompt or ""),
             "max_tokens": max_tokens,
             "avoid_cache": avoid_cache,
+            "context_length": context_length,
+            "num_selected_problems": len(selected_problems) if selected_problems else 0,
         }
         self._start_db_run("custom_text", config)
+
+        # Normalize selected_problems (rotation pool). Each entry: (source_id, text).
+        problems = list(selected_problems) if selected_problems else []
+        suffix_instruction = (suffix_instruction or "").strip()
 
         session_counter = 0
         # No client needed - requests library creates connections per-request
         for concurrency in selected_concurrencies:
             self.status_text.info(f"currently以 {concurrency} Concurrency运行Custom Text Test (总请求: {concurrency * rounds_per_level})...")
 
-            full_prompt = f"{base_prompt}\n\n{suffix_instruction}"
             total_reqs_for_level = concurrency * rounds_per_level
 
-            # Use continuous execution
+            # Build per-request (prompt, source_id) list
+            prompts, sources = self._build_custom_prompts(
+                total_reqs_for_level, base_prompt, suffix_instruction,
+                context_length, base_prompt_source, problems,
+            )
+
+            # Use continuous execution with a prompt list
             results = await self._run_continuous_batch(
                 None,
-                full_prompt,
+                prompts,
                 max_tokens,
                 concurrency,
                 total_reqs_for_level,
@@ -2699,6 +3142,7 @@ class BenchmarkRunner:
                 if res and res.get("error") != "UserCancelled":
                     res['concurrency'] = concurrency
                     res['round'] = (i // concurrency) + 1
+                    res['prompt_source'] = sources[i] if i < len(sources) else base_prompt_source
                     append_to_csv(res, csv_columns, self.csv_file)
                     self.results_list.append(res)
 
@@ -2707,6 +3151,42 @@ class BenchmarkRunner:
         self._complete_db_run(success=True)
 
         return pd.DataFrame(self.results_list)
+
+    def _build_custom_prompts(self, n, base_prompt, suffix_instruction, context_length,
+                               base_prompt_source, problems):
+        """Build a list of (prompt, source_id) of length n for custom text test."""
+        prompts = []
+        sources = []
+
+        if context_length and context_length > 0:
+            # Pad each prompt to exactly context_length tokens with random noise
+            # (avoids cache hits). Problems rotate one-per-request when provided.
+            cached_tokenizer = self._get_tokenizer()
+            for i in range(n):
+                if problems:
+                    sid, text = problems[i % len(problems)]
+                    full = text + (("\n\n" + suffix_instruction) if suffix_instruction else "")
+                else:
+                    sid = base_prompt_source
+                    full = (base_prompt or "") + (("\n\n" + suffix_instruction) if suffix_instruction else "")
+                prompt, _ = self._calibrate_prompt_with_source(context_length, suffix=full,
+                                                                _tokenizer=cached_tokenizer,
+                                                                source_override=sid)
+                prompts.append(prompt)
+                sources.append(sid)
+            return prompts, sources
+
+        # No padding: verbatim text, rotate through problems
+        for i in range(n):
+            if problems:
+                sid, text = problems[i % len(problems)]
+                full = text + (("\n\n" + suffix_instruction) if suffix_instruction else "")
+            else:
+                sid = base_prompt_source
+                full = (base_prompt or "") + (("\n\n" + suffix_instruction) if suffix_instruction else "")
+            prompts.append(full)
+            sources.append(sid)
+        return prompts, sources
 
     async def run_dataset_test(self, dataset_rows, concurrency, max_tokens, rounds=1, dataset_filename="custom_dataset"):
         self.total_requests = len(dataset_rows) * rounds
@@ -2796,17 +3276,20 @@ class BenchmarkRunner:
 
                 loop = asyncio.get_event_loop()
                 prompt_tasks = [
-                    loop.run_in_executor(None, self._calibrate_prompt, self._prompt_generation_target(input_tokens_c), "", cached_tokenizer)
+                    loop.run_in_executor(None, self._calibrate_prompt_with_source, self._prompt_generation_target(input_tokens_c), "", cached_tokenizer)
                     for _ in range(concurrency)
                 ]
-                batch_prompts = await asyncio.gather(*prompt_tasks)
+                batch_pairs = await asyncio.gather(*prompt_tasks)
+                batch_prompts = [p for p, _ in batch_pairs]
+                batch_sources = [s for _, s in batch_pairs]
 
                 results = await self._run_concurrency_batch(None, batch_prompts, max_tokens_c, concurrency, session_counter)
                 session_counter += concurrency
 
-                for res in results:
+                for i, res in enumerate(results):
                     if res and res.get("error") != "UserCancelled":
-                        res.update({'test_type': 'concurrency', 'concurrency': concurrency, 'round': r + 1})
+                        res.update({'test_type': 'concurrency', 'concurrency': concurrency, 'round': r + 1,
+                                    'prompt_source': batch_sources[i] if i < len(batch_sources) else "generic"})
                         append_to_csv(res, self.combined_csv_columns, self.csv_file)
                         self.results_list.append(res)
 
@@ -2825,7 +3308,7 @@ class BenchmarkRunner:
                 st.warning(f"目标 Token {tokens_target} 太小，跳过。")
                 self.completed_requests += req_per_level_p
                 continue
-            prompt_text, local_token_estimate, q_summary = self._get_text_for_token_count(local_tokens_to_generate)
+            prompt_text, local_token_estimate, q_summary, _prompt_source = self._get_text_for_token_count(local_tokens_to_generate)
             long_prompt = prompt_text
 
             status_msg = f"currentlyTest (目标: {tokens_target})..."
@@ -2843,7 +3326,8 @@ class BenchmarkRunner:
 
                     res.update({
                         'test_type': 'prefill',
-                        'input_tokens_target': tokens_target
+                        'input_tokens_target': tokens_target,
+                        'prompt_source': _prompt_source
                     })
 
                     # 仅use未缓存 token Calculate输入速度
@@ -2876,7 +3360,7 @@ class BenchmarkRunner:
 
             for r in range(rounds_per_level_l):
                 # Generate unique prompt
-                prompt_text, _, q_summary = self._get_text_for_token_count(local_tokens_to_generate, force_random=True)
+                prompt_text, _, q_summary, _prompt_source = self._get_text_for_token_count(local_tokens_to_generate, force_random=True)
                 long_prompt = prompt_text
 
                 status_msg = f"currentlyTest (目标: {length_target}, 轮数: {r+1}/{rounds_per_level_l})..."
@@ -2895,7 +3379,8 @@ class BenchmarkRunner:
                     res.update({
                         'test_type': 'long_context',
                         'context_length_target': length_target,
-                        'round': r + 1
+                        'round': r + 1,
+                        'prompt_source': _prompt_source
                     })
 
                     # 仅use未缓存 token Calculate输入速度
@@ -2956,16 +3441,22 @@ class BenchmarkRunner:
                 session_counter[0] += 1
 
                 # Determine prompt
+                _worker_prompt_source = "generic"
                 if isinstance(prompt_func_or_str, list):
                     prompt = prompt_func_or_str[session_id % len(prompt_func_or_str)]
                 elif callable(prompt_func_or_str):
                     prompt = prompt_func_or_str(session_id)
                 else:
                     prompt = prompt_func_or_str
+                # callable may return (prompt, source_id)
+                if isinstance(prompt, tuple) and len(prompt) == 2:
+                    prompt, _worker_prompt_source = prompt
 
                 req_start_time = time.time()
                 try:
                     res = await self.get_completion(client, session_id, prompt, max_tokens)
+                    if res:
+                        res["_prompt_source"] = _worker_prompt_source
                 except asyncio.CancelledError:
                     break
                 except Exception as e:
@@ -3044,7 +3535,8 @@ class BenchmarkRunner:
                        "ttft", "tps", "tpot", "prefill_speed",
                        "system_throughput", "system_input_throughput", "rps",
                        "prefill_tokens", "decode_tokens", "total_time", "decode_time",
-                       "start_time", "end_time", "cache_hit_tokens", "token_calc_method", "input_tokens_target", "error"]
+                       "start_time", "end_time", "cache_hit_tokens", "token_calc_method", "input_tokens_target",
+                       "prompt_source", "error"]
         initialize_csv(csv_columns, self.csv_file)
 
         # 启动DatabaseTest运行
@@ -3058,13 +3550,13 @@ class BenchmarkRunner:
 
         self.status_text.info(f"currently以 {concurrency} Concurrency运行Stability Test (持续 {duration_seconds} seconds)...")
 
-        # Generator for prompts
+        # Generator for prompts (returns (prompt, source_id))
         if input_tokens_target > 0:
              def prompt_source(i):
-                 return self._calibrate_prompt(self._prompt_generation_target(input_tokens_target), suffix="")
+                 return self._calibrate_prompt_with_source(self._prompt_generation_target(input_tokens_target), suffix="")
         else:
              def prompt_source(i):
-                 return self._calibrate_prompt(self._prompt_generation_target(64), suffix="")
+                 return self._calibrate_prompt_with_source(self._prompt_generation_target(64), suffix="")
 
         results = await self._run_time_based_batch(
             None,
@@ -3079,6 +3571,7 @@ class BenchmarkRunner:
             if res and res.get("error") != "UserCancelled":
                 res['concurrency'] = concurrency
                 res['timestamp'] = res.get('end_time')
+                res['prompt_source'] = res.pop("_prompt_source", "generic")
                 append_to_csv(res, csv_columns, self.csv_file)
                 self.results_list.append(res)
 

@@ -124,6 +124,8 @@ class TestExecutor:
                 random_seed=st.session_state.get('random_seed'),
                 skip_first_token_for_tps=st.session_state.get('skip_first_token_for_tps', False),
                 template_tokens=st.session_state.get('template_tokens', self.config.get('template_tokens', 0)),
+                temperature=st.session_state.get('temperature', None),
+                custom_params=st.session_state.get('custom_params', []),
             )
 
             # 存储 runner 实例到 session_state，以便 Stop 按钮可以访问结果
