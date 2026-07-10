@@ -23,28 +23,28 @@ import pandas as pd
 
 # ===== Color Scheme =====
 COLORS = {
-    'prefill': '#4bc0c0',       # Teal - Prefill speed
-    'output': '#ff6384',        # Pink - Output speed
-    'ttft': '#36a2eb',          # Blue - TTFT
-    'throughput': '#9966ff',    # Purple - Throughput
-    'tps': '#ff9f40',           # Orange - TPS
-    'success': '#4bc07a',       # Green - Success rate
-    'primary': '#007bff',       # Primary - Blue
-    'secondary': '#6c757d',     # Secondary - Gray
-    'grid': '#e0e0e0',          # Grid line color
-    'axis': '#000000',          # Axis color
-    'text': '#000000',          # Text color
-    'background': '#ffffff',    # Background color
+    "prefill": "#4bc0c0",  # Teal - Prefill speed
+    "output": "#ff6384",  # Pink - Output speed
+    "ttft": "#36a2eb",  # Blue - TTFT
+    "throughput": "#9966ff",  # Purple - Throughput
+    "tps": "#ff9f40",  # Orange - TPS
+    "success": "#4bc07a",  # Green - Success rate
+    "primary": "#007bff",  # Primary - Blue
+    "secondary": "#6c757d",  # Secondary - Gray
+    "grid": "#e0e0e0",  # Grid line color
+    "axis": "#000000",  # Axis color
+    "text": "#000000",  # Text color
+    "background": "#ffffff",  # Background color
 }
 
 # ===== Font Configuration =====
-FONT_CONFIG = {
-    'family': 'Microsoft YaHei, SimHei, Arial, sans-serif',
-    'title_size': 20,
-    'label_size': 16,
-    'tick_size': 15,
-    'data_point_size': 15,
-    'info_size': 15,
+FONT_CONFIG: dict[str, Any] = {
+    "family": "Microsoft YaHei, SimHei, Arial, sans-serif",
+    "title_size": 20,
+    "label_size": 16,
+    "tick_size": 15,
+    "data_point_size": 15,
+    "info_size": 15,
 }
 
 
@@ -87,11 +87,11 @@ def get_smart_formatter(max_value: float):
         Format function (value, position) -> str
     """
     if max_value > 100:
-        return lambda x, p: f'{x:.0f}'
+        return lambda x, p: f"{x:.0f}"
     elif max_value > 10:
-        return lambda x, p: f'{x:.1f}'
+        return lambda x, p: f"{x:.1f}"
     else:
-        return lambda x, p: f'{x:.2f}'
+        return lambda x, p: f"{x:.2f}"
 
 
 class StaticChartGenerator:
@@ -109,11 +109,11 @@ class StaticChartGenerator:
 
     def _setup_matplotlib(self):
         """Configure matplotlib global settings"""
-        plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'Arial']
-        plt.rcParams['axes.unicode_minus'] = False
-        plt.rcParams['figure.facecolor'] = 'white'
-        plt.rcParams['axes.facecolor'] = 'white'
-        plt.rcParams['figure.dpi'] = self.dpi
+        plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "Arial"]
+        plt.rcParams["axes.unicode_minus"] = False
+        plt.rcParams["figure.facecolor"] = "white"
+        plt.rcParams["axes.facecolor"] = "white"
+        plt.rcParams["figure.dpi"] = self.dpi
 
     def _get_nice_max_value(self, max_val: float) -> float:
         """
@@ -130,7 +130,7 @@ class StaticChartGenerator:
             return 1
 
         exp = np.floor(np.log10(max_val))
-        base = 10 ** exp
+        base = 10**exp
 
         nice_max = base
         if max_val > base:
@@ -141,7 +141,7 @@ class StaticChartGenerator:
             else:
                 nice_max = 10 * base
 
-        return nice_max
+        return float(nice_max)
 
     def draw_line_chart(
         self,
@@ -150,9 +150,9 @@ class StaticChartGenerator:
         title: str,
         x_label: str,
         y_label: str,
-        line_color: str = '#4bc0c0',
+        line_color: str = "#4bc0c0",
         system_info: dict[str, str] | None = None,
-        figsize: tuple[int, int] = (10, 8) # Increase height
+        figsize: tuple[int, int] = (10, 8),  # Increase height
     ) -> plt.Figure:
         """
         Draw single line chart with system info display
@@ -160,8 +160,15 @@ class StaticChartGenerator:
         fig = plt.figure(figsize=figsize)
 
         # Top title
-        fig.text(0.5, 0.95, title, fontsize=FONT_CONFIG['title_size'] + 2,
-                 fontweight='bold', ha='center', va='top')
+        fig.text(
+            0.5,
+            0.95,
+            title,
+            fontsize=FONT_CONFIG["title_size"] + 2,
+            fontweight="bold",
+            ha="center",
+            va="top",
+        )
 
         # Draw system info (if provided)
         chart_top = 0.85
@@ -186,47 +193,56 @@ class StaticChartGenerator:
 
         # X-axis ticks: 0 + actual data labels
         x_tick_positions = [0] + x_positions
-        x_tick_labels = ['0'] + [str(int(x)) if x == int(x) else str(x) for x in x_data]
+        x_tick_labels = ["0"] + [str(int(x)) if x == int(x) else str(x) for x in x_data]
 
         # Set axis range
         ax.set_xlim(-0.5, n_points + 0.8)  # Leave right space for X-axis labels
         ax.set_ylim(0, y_max * 1.05)
 
         # Draw grid lines
-        ax.grid(True, linestyle='-', linewidth=1, color=COLORS['grid'], alpha=0.8)
+        ax.grid(True, linestyle="-", linewidth=1, color=COLORS["grid"], alpha=0.8)
         ax.set_axisbelow(True)  # Grid lines below data
 
         # Set axis style
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_linewidth(2)
-        ax.spines['bottom'].set_linewidth(2)
-        ax.spines['left'].set_color(COLORS['axis'])
-        ax.spines['bottom'].set_color(COLORS['axis'])
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_linewidth(2)
+        ax.spines["bottom"].set_linewidth(2)
+        ax.spines["left"].set_color(COLORS["axis"])
+        ax.spines["bottom"].set_color(COLORS["axis"])
 
         # Draw lines
         ax.plot(x_positions, y_data, color=line_color, linewidth=3, zorder=2)
 
         # Draw data points using scatter (avoids axis aspect ratio issues)
         # Outer ring: white fill, colored border
-        ax.scatter(x_positions, y_data, s=250, c='white', edgecolors=line_color,
-                   linewidths=2, zorder=3)
+        ax.scatter(
+            x_positions, y_data, s=250, c="white", edgecolors=line_color, linewidths=2, zorder=3
+        )
         # Inner ring: solid fill
         ax.scatter(x_positions, y_data, s=60, c=line_color, zorder=4)
 
         # Data point value labels
         for i, (x_pos, y) in enumerate(zip(x_positions, y_data, strict=False)):
-            value_text = smart_format_value(float(y), y_max) if isinstance(y, (int, float)) else str(y)
-            ax.annotate(value_text, (x_pos, y), textcoords="offset points",
-                       xytext=(0, 15), ha='center', fontsize=FONT_CONFIG['data_point_size'],
-                       color=COLORS['text'], zorder=5)
+            value_text = (
+                smart_format_value(float(y), y_max) if isinstance(y, (int, float)) else str(y)
+            )
+            ax.annotate(
+                value_text,
+                (x_pos, y),
+                textcoords="offset points",
+                xytext=(0, 15),
+                ha="center",
+                fontsize=FONT_CONFIG["data_point_size"],
+                color=COLORS["text"],
+                zorder=5,
+            )
 
         # Set title
         # Title already drawn at top, no need for set_title here
 
         # Set axis label - Y-axis label
-        ax.set_ylabel(y_label, fontsize=FONT_CONFIG['label_size'], fontweight='bold',
-                     labelpad=10)
+        ax.set_ylabel(y_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold", labelpad=10)
 
         # Smart process X-axis tick labels to prevent overlap
         max_label_len = max([len(l) for l in x_tick_labels])
@@ -246,16 +262,16 @@ class StaticChartGenerator:
                 visible_indices.add(i)
             visible_indices.add(n_points - 1)
 
-            filtered_positions = [x_tick_positions[i+1] for i in sorted(visible_indices)]
-            filtered_labels = [x_tick_labels[i+1] for i in sorted(visible_indices)]
+            filtered_positions = [x_tick_positions[i + 1] for i in sorted(visible_indices)]
+            filtered_labels = [x_tick_labels[i + 1] for i in sorted(visible_indices)]
             ax.set_xticks([0] + filtered_positions)
-            ax.set_xticklabels(['0'] + filtered_labels)
+            ax.set_xticklabels(["0"] + filtered_labels)
         else:
             ax.set_xticks(x_tick_positions)
             ax.set_xticklabels(x_tick_labels)
 
         ax.set_yticks(y_ticks)
-        ax.tick_params(axis='both', which='major', labelsize=FONT_CONFIG['tick_size'])
+        ax.tick_params(axis="both", which="major", labelsize=FONT_CONFIG["tick_size"])
 
         # Label anti-overlap: rotate if many labels or long text
         needs_rotation = n_points > 6 or max_label_len > 4
@@ -267,11 +283,12 @@ class StaticChartGenerator:
                 rotation_angle = 35
             else:
                 rotation_angle = 25
-            plt.setp(ax.get_xticklabels(), rotation=rotation_angle, ha="right", rotation_mode="anchor")
+            plt.setp(
+                ax.get_xticklabels(), rotation=rotation_angle, ha="right", rotation_mode="anchor"
+            )
 
         # Use set_xlabel to add X-axis label
-        ax.set_xlabel(x_label, fontsize=FONT_CONFIG['label_size'], fontweight='bold',
-                      labelpad=10)
+        ax.set_xlabel(x_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold", labelpad=10)
 
         # Format Y-axis tick labels
         ax.yaxis.set_major_formatter(plt.FuncFormatter(get_smart_formatter(y_max)))
@@ -288,10 +305,10 @@ class StaticChartGenerator:
         x_label: str,
         y1_label: str,
         y2_label: str,
-        y1_color: str = '#4bc0c0',
-        y2_color: str = '#ff6384',
+        y1_color: str = "#4bc0c0",
+        y2_color: str = "#ff6384",
         system_info: dict[str, str] | None = None,
-        figsize: tuple[int, int] = (10, 10) # Increase height to accommodate info
+        figsize: tuple[int, int] = (10, 10),  # Increase height to accommodate info
     ) -> plt.Figure:
         """
         Draw dual line chart (stacked vertically) with system info display
@@ -299,23 +316,32 @@ class StaticChartGenerator:
         fig = plt.figure(figsize=figsize)
 
         # Top title
-        fig.text(0.5, 0.95, title, fontsize=FONT_CONFIG['title_size'] + 4,
-                 fontweight='bold', ha='center', va='top')
+        fig.text(
+            0.5,
+            0.95,
+            title,
+            fontsize=FONT_CONFIG["title_size"] + 4,
+            fontweight="bold",
+            ha="center",
+            va="top",
+        )
 
         # Draw system info (if provided)
         # Default chart start height slightly lowered to prevent title overlap
         chart_top = 0.82
 
         # If title contains newline (long title) and no system info, move down a bit
-        if '\n' in title and not system_info:
-             chart_top = 0.78
+        if "\n" in title and not system_info:
+            chart_top = 0.78
 
         if system_info:
             chart_top = self._draw_system_info(fig, system_info, chart_top)
 
         # Dynamically calculate chart height and position with sufficient spacing
         bottom_margin = 0.08
-        inter_chart_gap = 0.18  # Increase spacing to prevent X-axis labels overlapping with the bottom title
+        inter_chart_gap = (
+            0.18  # Increase spacing to prevent X-axis labels overlapping with the bottom title
+        )
 
         # Available height = top start - bottom margin - inter-chart gap
         available_height = chart_top - bottom_margin - inter_chart_gap
@@ -324,14 +350,16 @@ class StaticChartGenerator:
         # Draw chart 1 (Top)
         # top_chart_bottom = chart_top - chart_height
         ax1 = fig.add_axes([0.1, chart_top - chart_height, 0.85, chart_height])
-        self._draw_single_chart(ax1, x_data, y1_data, y1_label, x_label,
-                                f"{y1_label} (token/s)", y1_color)
+        self._draw_single_chart(
+            ax1, x_data, y1_data, y1_label, x_label, f"{y1_label} (token/s)", y1_color
+        )
 
         # Draw chart 2 (Bottom)
         # bottom_chart_bottom = 0.08 (bottom_margin)
         ax2 = fig.add_axes([0.1, bottom_margin, 0.85, chart_height])
-        self._draw_single_chart(ax2, x_data, y2_data, y2_label, x_label,
-                                f"{y2_label} (token/s)", y2_color)
+        self._draw_single_chart(
+            ax2, x_data, y2_data, y2_label, x_label, f"{y2_label} (token/s)", y2_color
+        )
 
         return fig
 
@@ -343,7 +371,7 @@ class StaticChartGenerator:
         title: str,
         x_label: str,
         y_label: str,
-        line_color: str
+        line_color: str,
     ):
         """Draw single line chart on given Axes (equal-width categorical X-axis)"""
         # Ensure all y_data are numeric
@@ -365,19 +393,19 @@ class StaticChartGenerator:
         # X-axis ticks: 0 + actual data labels
         # Note: for concurrency etc. non-zero starting data, keeping 0 as origin is good visual style
         x_tick_positions = [0] + x_positions
-        x_tick_labels = ['0'] + [format_label(x) for x in x_data]
+        x_tick_labels = ["0"] + [format_label(x) for x in x_data]
 
         # Set axis range
         ax.set_xlim(-0.5, n_points + 0.8)
         ax.set_ylim(0, y_max * 1.05)
 
-        ax.grid(True, linestyle='-', linewidth=1, color=COLORS['grid'], alpha=0.8)
+        ax.grid(True, linestyle="-", linewidth=1, color=COLORS["grid"], alpha=0.8)
         ax.set_axisbelow(True)
 
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_linewidth(2)
-        ax.spines['bottom'].set_linewidth(2)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_linewidth(2)
+        ax.spines["bottom"].set_linewidth(2)
 
         # Draw lines
         ax.plot(x_positions, y_data, color=line_color, linewidth=3, zorder=2)
@@ -386,13 +414,14 @@ class StaticChartGenerator:
         # Data point size dynamically adjusted based on canvas width to prevent crowding
         s_outer = 250
         s_inner = 60
-        if n_points > 15: # If many points, reduce point size
+        if n_points > 15:  # If many points, reduce point size
             s_outer = 150
             s_inner = 40
 
         # Outer ring: white fill, colored border
-        ax.scatter(x_positions, y_data, s=s_outer, c='white', edgecolors=line_color,
-                   linewidths=2, zorder=3)
+        ax.scatter(
+            x_positions, y_data, s=s_outer, c="white", edgecolors=line_color, linewidths=2, zorder=3
+        )
         # Inner ring: solid fill
         ax.scatter(x_positions, y_data, s=s_inner, c=line_color, zorder=4)
 
@@ -400,17 +429,24 @@ class StaticChartGenerator:
         # If many points, display every other or only max/min values
         skip_step = 1
         if n_points > 20:
-             skip_step = 2 # Simple sampling
+            skip_step = 2  # Simple sampling
 
         for i, (x_pos, y) in enumerate(zip(x_positions, y_data, strict=False)):
             if i % skip_step == 0:
                 value_text = smart_format_value(float(y), y_max)
-                ax.annotate(value_text, (x_pos, y), textcoords="offset points",
-                           xytext=(0, 12), ha='center', fontsize=FONT_CONFIG['data_point_size'] - 2,
-                           color=COLORS['text'], zorder=5)
+                ax.annotate(
+                    value_text,
+                    (x_pos, y),
+                    textcoords="offset points",
+                    xytext=(0, 12),
+                    ha="center",
+                    fontsize=FONT_CONFIG["data_point_size"] - 2,
+                    color=COLORS["text"],
+                    zorder=5,
+                )
 
-        ax.set_title(title, fontsize=FONT_CONFIG['title_size'], fontweight='bold', pad=15)
-        ax.set_ylabel(y_label, fontsize=FONT_CONFIG['label_size'], fontweight='bold')
+        ax.set_title(title, fontsize=FONT_CONFIG["title_size"], fontweight="bold", pad=15)
+        ax.set_ylabel(y_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold")
 
         # Smart process X-axis tick labels to prevent overlap
         # Determine tick sampling based on data point count and label length
@@ -436,11 +472,11 @@ class StaticChartGenerator:
             visible_indices.add(n_points - 1)  # Always include last point
 
             # Only display sampled ticks
-            filtered_positions = [x_tick_positions[i+1] for i in sorted(visible_indices)]
-            filtered_labels = [x_tick_labels[i+1] for i in sorted(visible_indices)]
+            filtered_positions = [x_tick_positions[i + 1] for i in sorted(visible_indices)]
+            filtered_labels = [x_tick_labels[i + 1] for i in sorted(visible_indices)]
             # Add origin 0
             ax.set_xticks([0] + filtered_positions)
-            ax.set_xticklabels(['0'] + filtered_labels)
+            ax.set_xticklabels(["0"] + filtered_labels)
         else:
             ax.set_xticks(x_tick_positions)
             ax.set_xticklabels(x_tick_labels)
@@ -456,14 +492,15 @@ class StaticChartGenerator:
                 rotation_angle = 35
             else:
                 rotation_angle = 25
-            plt.setp(ax.get_xticklabels(), rotation=rotation_angle, ha="right", rotation_mode="anchor")
+            plt.setp(
+                ax.get_xticklabels(), rotation=rotation_angle, ha="right", rotation_mode="anchor"
+            )
 
         # Use set_xlabel to add X-axis label, leveraging matplotlib auto-avoidance of tick label overlap
-        ax.set_xlabel(x_label, fontsize=FONT_CONFIG['label_size'], fontweight='bold',
-                      labelpad=10)
+        ax.set_xlabel(x_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold", labelpad=10)
 
         ax.set_yticks(y_ticks)
-        ax.tick_params(axis='both', which='major', labelsize=FONT_CONFIG['tick_size'])
+        ax.tick_params(axis="both", which="major", labelsize=FONT_CONFIG["tick_size"])
         ax.yaxis.set_major_formatter(plt.FuncFormatter(get_smart_formatter(y_max)))
 
     def create_performance_report_image(
@@ -471,7 +508,7 @@ class StaticChartGenerator:
         test_results: list[dict[str, Any]],
         system_info: dict[str, str],
         test_time: datetime | None = None,
-        figsize: tuple[int, int] = (10, 12)
+        figsize: tuple[int, int] = (10, 12),
     ) -> plt.Figure:
         """
         Create complete performance test report image
@@ -487,9 +524,13 @@ class StaticChartGenerator:
             matplotlib Figure object
         """
         # Extract data
-        input_lengths = [r.get('input_length', r.get('inputLength', 0)) for r in test_results]
-        prefill_speeds = [float(r.get('prefill_speed', r.get('prefillSpeed', 0))) for r in test_results]
-        output_speeds = [float(r.get('output_speed', r.get('outputSpeed', 0))) for r in test_results]
+        input_lengths = [r.get("input_length", r.get("inputLength", 0)) for r in test_results]
+        prefill_speeds = [
+            float(r.get("prefill_speed", r.get("prefillSpeed", 0))) for r in test_results
+        ]
+        output_speeds = [
+            float(r.get("output_speed", r.get("outputSpeed", 0))) for r in test_results
+        ]
 
         # Create canvas
         fig = plt.figure(figsize=figsize)
@@ -500,27 +541,33 @@ class StaticChartGenerator:
         (1 - title_height - info_height) / 2
 
         # Add main title
-        fig.text(0.5, 1 - title_height/2, 'Local LLM Inference Performance Test Results',
-                fontsize=FONT_CONFIG['title_size'] + 8, fontweight='bold',
-                ha='center', va='center')
+        fig.text(
+            0.5,
+            1 - title_height / 2,
+            "Local LLM Inference Performance Test Results",
+            fontsize=FONT_CONFIG["title_size"] + 8,
+            fontweight="bold",
+            ha="center",
+            va="center",
+        )
 
         # Add system info area
         # Restore to top layout, below title
         info_y_start = 0.88
         # Build info list containing only valid info
         raw_info = [
-            ("Processor", system_info.get('processor')),
-            ("Mainboard", system_info.get('mainboard')),
-            ("Memory", system_info.get('memory')),
-            ("GPU", system_info.get('gpu')),
-            ("System", system_info.get('system')),
-            ("Engine Name", system_info.get('engine_name')),
-            ("Model Name", system_info.get('model_name')),
+            ("Processor", system_info.get("processor")),
+            ("Mainboard", system_info.get("mainboard")),
+            ("Memory", system_info.get("memory")),
+            ("GPU", system_info.get("gpu")),
+            ("System", system_info.get("system")),
+            ("Engine Name", system_info.get("engine_name")),
+            ("Model Name", system_info.get("model_name")),
         ]
 
         valid_info_lines = []
         for label, value in raw_info:
-            if value and value not in ['N/A', 'no', 'None', '']:
+            if value and value not in ["N/A", "no", "None", ""]:
                 valid_info_lines.append(f"{label}:{value}")
 
         if test_time:
@@ -541,21 +588,33 @@ class StaticChartGenerator:
                 x_pos = right_col_x
                 y_pos = info_y_start - (i - items_per_col) * 0.025
 
-            fig.text(x_pos, y_pos, line, fontsize=FONT_CONFIG['info_size'], ha='left', va='center')
+            fig.text(x_pos, y_pos, line, fontsize=FONT_CONFIG["info_size"], ha="left", va="center")
 
         # Add prefill speed chart
         # Move chart down, leave space at top
         # [left, bottom, width, height]
         ax1 = fig.add_axes([0.1, 0.48, 0.85, 0.28])
-        self._draw_single_chart(ax1, input_lengths, prefill_speeds,
-                               'Prefill Speed', 'Input Length', 'Prefill Speed (token/s)',
-                                COLORS['prefill'])
+        self._draw_single_chart(
+            ax1,
+            input_lengths,
+            prefill_speeds,
+            "Prefill Speed",
+            "Input Length",
+            "Prefill Speed (token/s)",
+            COLORS["prefill"],
+        )
 
         # Add output speed chart
         ax2 = fig.add_axes([0.1, 0.08, 0.85, 0.28])
-        self._draw_single_chart(ax2, input_lengths, output_speeds,
-                               'Output Speed', 'Input Length', 'Output Speed (token/s)',
-                                COLORS['output'])
+        self._draw_single_chart(
+            ax2,
+            input_lengths,
+            output_speeds,
+            "Output Speed",
+            "Input Length",
+            "Output Speed (token/s)",
+            COLORS["output"],
+        )
 
         return fig
 
@@ -567,7 +626,7 @@ class StaticChartGenerator:
         x_label: str,
         y_label: str,
         system_info: dict[str, str] | None = None,
-        figsize: tuple[int, int] = (12, 8)
+        figsize: tuple[int, int] = (12, 8),
     ) -> plt.Figure:
         """
         Draw a chart with multiple lines (e.g., for different concurrencies).
@@ -590,8 +649,15 @@ class StaticChartGenerator:
         fig = plt.figure(figsize=figsize)
 
         # Title
-        fig.text(0.5, 0.95, title, fontsize=FONT_CONFIG['title_size'] + 2,
-                 fontweight='bold', ha='center', va='top')
+        fig.text(
+            0.5,
+            0.95,
+            title,
+            fontsize=FONT_CONFIG["title_size"] + 2,
+            fontweight="bold",
+            ha="center",
+            va="top",
+        )
 
         # System Info
         chart_top = 0.85
@@ -609,7 +675,7 @@ class StaticChartGenerator:
         # Calculate global Y Max
         all_y_values = []
         for ds in datasets:
-            all_y_values.extend([v for v in ds['data'] if v is not None])
+            all_y_values.extend([v for v in ds["data"] if v is not None])
 
         if not all_y_values:
             all_y_values = [100]
@@ -628,51 +694,58 @@ class StaticChartGenerator:
                 return str(int(x)) if x == int(x) else f"{x:.1f}"
             return str(x)
 
-        x_tick_labels = ['0'] + [format_label(x) for x in x_data]
+        x_tick_labels = ["0"] + [format_label(x) for x in x_data]
 
         # Axes limits
         ax.set_xlim(-0.5, n_points + 0.8)
         ax.set_ylim(0, y_max * 1.05)
 
         # Grid
-        ax.grid(True, linestyle='-', linewidth=1, color=COLORS['grid'], alpha=0.8)
+        ax.grid(True, linestyle="-", linewidth=1, color=COLORS["grid"], alpha=0.8)
         ax.set_axisbelow(True)
 
         # Spines
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_linewidth(2)
-        ax.spines['bottom'].set_linewidth(2)
-        ax.spines['left'].set_color(COLORS['axis'])
-        ax.spines['bottom'].set_color(COLORS['axis'])
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_linewidth(2)
+        ax.spines["bottom"].set_linewidth(2)
+        ax.spines["left"].set_color(COLORS["axis"])
+        ax.spines["bottom"].set_color(COLORS["axis"])
 
         # Plot each line
         s_outer = 150 if len(datasets) > 3 else 200
         s_inner = 50 if len(datasets) > 3 else 60
 
         for ds in datasets:
-            y_dataset = ds['data']
-            line_color = ds.get('color', COLORS['primary'])
-            label = ds.get('label', '')
+            y_dataset = ds["data"]
+            line_color = ds.get("color", COLORS["primary"])
+            label = ds.get("label", "")
 
             ax.plot(x_positions, y_dataset, color=line_color, linewidth=2.5, zorder=2, label=label)
-            ax.scatter(x_positions, y_dataset, s=s_outer, c='white', edgecolors=line_color,
-                       linewidths=2, zorder=3)
+            ax.scatter(
+                x_positions,
+                y_dataset,
+                s=s_outer,
+                c="white",
+                edgecolors=line_color,
+                linewidths=2,
+                zorder=3,
+            )
             ax.scatter(x_positions, y_dataset, s=s_inner, c=line_color, zorder=4)
 
         # Labels
-        ax.set_ylabel(y_label, fontsize=FONT_CONFIG['label_size'], fontweight='bold', labelpad=10)
-        ax.set_xlabel(x_label, fontsize=FONT_CONFIG['label_size'], fontweight='bold', labelpad=10)
+        ax.set_ylabel(y_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold", labelpad=10)
+        ax.set_xlabel(x_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold", labelpad=10)
 
         # Ticks
         ax.set_xticks(x_tick_positions)
         ax.set_xticklabels(x_tick_labels)
         ax.set_yticks(y_ticks)
-        ax.tick_params(axis='both', which='major', labelsize=FONT_CONFIG['tick_size'])
+        ax.tick_params(axis="both", which="major", labelsize=FONT_CONFIG["tick_size"])
         ax.yaxis.set_major_formatter(plt.FuncFormatter(get_smart_formatter(y_max)))
 
         # Legend
-        ax.legend(loc='upper left', frameon=True, fontsize=12, ncol=len(datasets) // 4 + 1)
+        ax.legend(loc="upper left", frameon=True, fontsize=12, ncol=len(datasets) // 4 + 1)
 
         return fig
 
@@ -689,18 +762,18 @@ class StaticChartGenerator:
             Updated chart_top (after moving down)
         """
         raw_info = [
-            ("Processor", system_info.get('processor')),
-            ("Mainboard", system_info.get('mainboard')),
-            ("Memory", system_info.get('memory')),
-            ("GPU", system_info.get('gpu')),
-            ("System", system_info.get('system')),
-            ("Engine Name", system_info.get('engine_name')),
-            ("Model Name", system_info.get('model_name')),
+            ("Processor", system_info.get("processor")),
+            ("Mainboard", system_info.get("mainboard")),
+            ("Memory", system_info.get("memory")),
+            ("GPU", system_info.get("gpu")),
+            ("System", system_info.get("system")),
+            ("Engine Name", system_info.get("engine_name")),
+            ("Model Name", system_info.get("model_name")),
         ]
 
         valid_info_lines = []
         for label, value in raw_info:
-            if value and value not in ['N/A', 'no', 'None', '']:
+            if value and value not in ["N/A", "no", "None", ""]:
                 if len(str(value)) > 40:
                     value = str(value)[:37] + "..."
                 valid_info_lines.append(f"{label}:{value}")
@@ -718,7 +791,7 @@ class StaticChartGenerator:
                 else:
                     x = right_col_x
                     y = info_y_start - (i - items_per_col) * 0.025
-                fig.text(x, y, line, fontsize=FONT_CONFIG['info_size'], ha='left', va='center')
+                fig.text(x, y, line, fontsize=FONT_CONFIG["info_size"], ha="left", va="center")
 
             return 0.75  # After info display, chart start position moves down
 
@@ -731,7 +804,7 @@ class StaticChartGenerator:
         title: str,
         x_label: str,
         system_info: dict[str, str] | None = None,
-        figsize: tuple[int, int] = (14, 14)
+        figsize: tuple[int, int] = (14, 14),
     ) -> plt.Figure:
         """
         Draw unified 2x2 quad-panel chart.
@@ -761,8 +834,15 @@ class StaticChartGenerator:
         fig = plt.figure(figsize=figsize)
 
         # Top title
-        fig.text(0.5, 0.97, title, fontsize=FONT_CONFIG['title_size'] + 4,
-                 fontweight='bold', ha='center', va='top')
+        fig.text(
+            0.5,
+            0.97,
+            title,
+            fontsize=FONT_CONFIG["title_size"] + 4,
+            fontweight="bold",
+            ha="center",
+            va="top",
+        )
 
         # System info
         chart_top = 0.88
@@ -783,10 +863,10 @@ class StaticChartGenerator:
 
         # Sub-chart positions: [left, bottom, width, height]
         positions = [
-            [left_margin, chart_top - chart_h, chart_w, chart_h],                           # Top-left
-            [left_margin + chart_w + h_gap, chart_top - chart_h, chart_w, chart_h],          # Top-right
-            [left_margin, bottom_margin, chart_w, chart_h],                                  # Bottom-left
-            [left_margin + chart_w + h_gap, bottom_margin, chart_w, chart_h],                # Bottom-right
+            [left_margin, chart_top - chart_h, chart_w, chart_h],  # Top-left
+            [left_margin + chart_w + h_gap, chart_top - chart_h, chart_w, chart_h],  # Top-right
+            [left_margin, bottom_margin, chart_w, chart_h],  # Bottom-left
+            [left_margin + chart_w + h_gap, bottom_margin, chart_w, chart_h],  # Bottom-right
         ]
 
         for i, chart_cfg in enumerate(charts):
@@ -798,16 +878,16 @@ class StaticChartGenerator:
             self._draw_single_chart(
                 ax,
                 x_data,
-                chart_cfg['y_data'],
-                chart_cfg['title'],
+                chart_cfg["y_data"],
+                chart_cfg["title"],
                 x_label,
-                chart_cfg['y_label'],
-                chart_cfg['color']
+                chart_cfg["y_label"],
+                chart_cfg["color"],
             )
 
         return fig
 
-    def save_figure_to_bytes(self, fig: plt.Figure, format: str = 'png') -> BytesIO:
+    def save_figure_to_bytes(self, fig: plt.Figure, format: str = "png") -> BytesIO:
         """
         Save chart to byte stream
 
@@ -819,13 +899,19 @@ class StaticChartGenerator:
             BytesIO object
         """
         buf = BytesIO()
-        fig.savefig(buf, format=format, dpi=self.dpi, bbox_inches='tight',
-                   facecolor='white', edgecolor='none')
+        fig.savefig(
+            buf,
+            format=format,
+            dpi=self.dpi,
+            bbox_inches="tight",
+            facecolor="white",
+            edgecolor="none",
+        )
         buf.seek(0)
         plt.close(fig)
         return buf
 
-    def save_figure_to_base64(self, fig: plt.Figure, format: str = 'png') -> str:
+    def save_figure_to_base64(self, fig: plt.Figure, format: str = "png") -> str:
         """
         Save chart as Base64 encoded string
 
@@ -839,7 +925,7 @@ class StaticChartGenerator:
         buf = self.save_figure_to_bytes(fig, format)
         return base64.b64encode(buf.read()).decode()
 
-    def save_figure_to_file(self, fig: plt.Figure, filepath: str, format: str = 'png'):
+    def save_figure_to_file(self, fig: plt.Figure, filepath: str, format: str = "png"):
         """
         Save chart to file
 
@@ -848,8 +934,14 @@ class StaticChartGenerator:
             filepath: File path
             format: Image format
         """
-        fig.savefig(filepath, format=format, dpi=self.dpi, bbox_inches='tight',
-                   facecolor='white', edgecolor='none')
+        fig.savefig(
+            filepath,
+            format=format,
+            dpi=self.dpi,
+            bbox_inches="tight",
+            facecolor="white",
+            edgecolor="none",
+        )
         plt.close(fig)
 
 
@@ -860,7 +952,7 @@ def create_benchmark_chart_from_dataframe(
     title: str,
     x_label: str,
     y_label: str,
-    color: str = '#4bc0c0'
+    color: str = "#4bc0c0",
 ) -> plt.Figure:
     """
     Quick function to create chart from DataFrame
@@ -885,9 +977,9 @@ def create_benchmark_chart_from_dataframe(
 
 def create_concurrency_static_chart(
     df: pd.DataFrame,
-    metric: str = 'system_output_throughput',
-    title: str = 'System Throughput vs Concurrency',
-    color: str = '#4bc0c0'
+    metric: str = "system_output_throughput",
+    title: str = "System Throughput vs Concurrency",
+    color: str = "#4bc0c0",
 ) -> plt.Figure:
     """
     Create concurrency test static chart
@@ -904,27 +996,27 @@ def create_concurrency_static_chart(
     generator = StaticChartGenerator()
 
     # Sort by concurrency
-    df_sorted = df.sort_values('concurrency')
-    x_data = df_sorted['concurrency'].tolist()
+    df_sorted = df.sort_values("concurrency")
+    x_data = df_sorted["concurrency"].tolist()
     y_data = df_sorted[metric].tolist()
 
     # Determine Y-axis label based on metric
     y_label_map = {
-        'system_output_throughput': 'System Output Throughput (tokens/s)',
-        'tps': 'TPS (tokens/s)',
-        'ttft': 'TTFT (s)',
-        'prefill_speed': 'Prefill Speed (tokens/s)',
+        "system_output_throughput": "System Output Throughput (tokens/s)",
+        "tps": "TPS (tokens/s)",
+        "ttft": "TTFT (s)",
+        "prefill_speed": "Prefill Speed (tokens/s)",
     }
     y_label = y_label_map.get(metric, metric)
 
-    return generator.draw_line_chart(x_data, y_data, title, 'Concurrency', y_label, color)
+    return generator.draw_line_chart(x_data, y_data, title, "Concurrency", y_label, color)
 
 
 def create_prefill_static_chart(
     df: pd.DataFrame,
-    metric: str = 'prefill_speed',
-    title: str = 'Prefill Speed vs Input Length',
-    color: str = '#4bc0c0'
+    metric: str = "prefill_speed",
+    title: str = "Prefill Speed vs Input Length",
+    color: str = "#4bc0c0",
 ) -> plt.Figure:
     """
     Create prefill test static chart
@@ -941,26 +1033,27 @@ def create_prefill_static_chart(
     generator = StaticChartGenerator()
 
     # Sort by input length
-    df_sorted = df.sort_values('prefill_tokens')
-    x_data = df_sorted['prefill_tokens'].tolist()
+    df_sorted = df.sort_values("prefill_tokens")
+    x_data = df_sorted["prefill_tokens"].tolist()
     y_data = df_sorted[metric].tolist()
 
     y_label_map = {
-        'prefill_speed': 'Prefill Speed (tokens/s)',
-        'ttft': 'TTFT (s)',
-        'tps': 'TPS (tokens/s)',
+        "prefill_speed": "Prefill Speed (tokens/s)",
+        "ttft": "TTFT (s)",
+        "tps": "TPS (tokens/s)",
     }
     y_label = y_label_map.get(metric, metric)
 
-    return generator.draw_line_chart(x_data, y_data, title, 'Input Length (tokens)', y_label, color)
+    return generator.draw_line_chart(x_data, y_data, title, "Input Length (tokens)", y_label, color)
 
 
 # ===== HTML Report Generation =====
 
+
 def generate_static_html_report(
     test_results: list[dict[str, Any]],
     system_info: dict[str, str],
-    test_time: datetime | None = None
+    test_time: datetime | None = None,
 ) -> str:
     """
     Generate static HTML report (can be opened directly in browser)
@@ -1040,4 +1133,3 @@ def generate_static_html_report(
 </html>
 """
     return html
-

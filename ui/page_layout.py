@@ -15,7 +15,8 @@ from ui import reports
 
 def apply_custom_css():
     """Apply custom CSS styles"""
-    st.markdown("""
+    st.markdown(
+        """
     <style>
     /* Hide Streamlit default elements */
     #MainMenu {visibility: hidden;}
@@ -61,8 +62,57 @@ def apply_custom_css():
     ::-webkit-scrollbar-thumb:hover {
         background: #484f58;
     }
+
+    /* === Semantic design system (replaces emoji) === */
+    /* CSS custom properties — single source of truth for status colors */
+    :root {
+        --ui-success: #28a745;
+        --ui-info:    #17a2b8;
+        --ui-warning: #ffc107;
+        --ui-danger:  #dc3545;
+        --ui-muted:   #6c757d;
+        --ui-accent:  #4a9eff;
+    }
+
+    /* Inline SVG icons inherit text color by default */
+    .ui-icon {
+        display: inline-block;
+        vertical-align: middle;
+        flex-shrink: 0;
+    }
+
+    /* Semantic badges (replaces status emoji like ✅❌⚠️) */
+    .ui-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.85em;
+        font-weight: 600;
+        line-height: 1.4;
+        white-space: nowrap;
+        border: 1px solid transparent;
+    }
+    .ui-badge-success { background: rgba(40,167,69,.15);  color: var(--ui-success); border-color: rgba(40,167,69,.35); }
+    .ui-badge-info    { background: rgba(23,162,184,.15); color: var(--ui-info);    border-color: rgba(23,162,184,.35); }
+    .ui-badge-warning { background: rgba(255,193,7,.15);  color: var(--ui-warning); border-color: rgba(255,193,7,.35); }
+    .ui-badge-danger  { background: rgba(220,53,69,.15);  color: var(--ui-danger);  border-color: rgba(220,53,69,.35); }
+    .ui-badge-muted   { background: rgba(108,117,125,.15); color: var(--ui-muted);  border-color: rgba(108,117,125,.35); }
+
+    /* Section titles with a colored accent bar (replaces "📊 Title" headers) */
+    .ui-section-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 700;
+        margin: 1rem 0 0.5rem;
+    }
+    .ui-section-title .ui-icon { color: var(--ui-accent); }
     </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_page_header():
@@ -125,7 +175,9 @@ def _detect_test_type_from_df(df):
                 return display
 
     # 2. Fallback: detect from column heuristics
-    if "cumulative_mode" in cols or ("effective_prefill_tokens" in cols and "cache_hit_source" in cols):
+    if "cumulative_mode" in cols or (
+        "effective_prefill_tokens" in cols and "cache_hit_source" in cols
+    ):
         return "Segmented Context Test"
     if "context_length_target" in cols and "concurrency" in cols:
         return "Concurrency-Context Matrix Test"
@@ -162,32 +214,25 @@ def render_results_section(test_type=None):
         display_df = format_results_for_display(raw_df, display_type)
 
         # Display formatted dataframe
-        st.dataframe(
-            display_df,
-            use_container_width=True,
-            height=400
-        )
+        st.dataframe(display_df, use_container_width=True, height=400)
 
         # Expand to view raw data
         with st.expander("🔍 View Full Raw Data", expanded=False):
-            st.dataframe(
-                raw_df,
-                use_container_width=True,
-                height=300
-            )
+            st.dataframe(raw_df, use_container_width=True, height=300)
 
         # Download button (always downloads full raw data)
-        csv = raw_df.to_csv(index=False).encode('utf-8')
+        csv = raw_df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="📥 Download Results CSV (Full Data)",
             data=csv,
             file_name=f"results_{st.session_state.get('current_csv_file', 'results')}",
-            mime='text/csv'
+            mime="text/csv",
         )
 
         # 数据仓库富信息：指纹卡 / 资源时序 / 等效带宽偏差 / 可对外闸门 / markdown 报告
         try:
             from ui.warehouse_report import render_warehouse_panel
+
             render_warehouse_panel(display_type, st.session_state.get("current_model_id", ""))
         except Exception:
             pass
@@ -208,16 +253,20 @@ def render_report_section(test_type):
         # disk while sidebar widgets return their defaults, so prefer restored
         # result metadata when available.
         restored_context = (
-            st.session_state.get('restored_result_context', {})
-            if st.session_state.get('restored_from_csv')
+            st.session_state.get("restored_result_context", {})
+            if st.session_state.get("restored_from_csv")
             else {}
         )
-        model_id = restored_context.get('model_id') or st.session_state.get('current_model_id', 'Unknown')
-        provider = restored_context.get('provider') or st.session_state.get('current_provider', 'Unknown')
-        duration = restored_context.get('duration', st.session_state.get('test_duration', 0))
-        test_config = restored_context.get('test_config') or st.session_state.get('test_config', {})
-        system_info = restored_context.get('system_info') or st.session_state.get('system_info', {})
-        test_type = restored_context.get('test_type') or test_type
+        model_id = restored_context.get("model_id") or st.session_state.get(
+            "current_model_id", "Unknown"
+        )
+        provider = restored_context.get("provider") or st.session_state.get(
+            "current_provider", "Unknown"
+        )
+        duration = restored_context.get("duration", st.session_state.get("test_duration", 0))
+        test_config = restored_context.get("test_config") or st.session_state.get("test_config", {})
+        system_info = restored_context.get("system_info") or st.session_state.get("system_info", {})
+        test_type = restored_context.get("test_type") or test_type
 
         # Infer the *actual* test type from the data itself so that switching
         # the sidebar selector does not try to render e.g. a Prefill report
@@ -244,7 +293,7 @@ def render_report_section(test_type):
                 provider=provider,
                 duration=duration,
                 test_config=test_config,
-                system_info=system_info
+                system_info=system_info,
             )
         elif internal_type in ("Prefill 压力Test", "Prefill Stress Test"):
             st.session_state.report = reports.generate_prefill_report(
@@ -253,7 +302,7 @@ def render_report_section(test_type):
                 provider=provider,
                 duration=duration,
                 test_config=test_config,
-                system_info=system_info
+                system_info=system_info,
             )
         elif internal_type in ("长onunder文Test", "Long Context Test"):
             st.session_state.report = reports.generate_long_context_report(
@@ -262,7 +311,7 @@ def render_report_section(test_type):
                 provider=provider,
                 duration=duration,
                 test_config=test_config,
-                system_info=system_info
+                system_info=system_info,
             )
         elif internal_type in ("并发-onunder文 综合Test", "Concurrency-Context Matrix Test"):
             st.session_state.report = reports.generate_matrix_report(
@@ -271,7 +320,7 @@ def render_report_section(test_type):
                 provider=provider,
                 duration=duration,
                 test_config=test_config,
-                system_info=system_info
+                system_info=system_info,
             )
         elif internal_type in ("分段onunder文Test", "Segmented Context Test"):
             st.session_state.report = reports.generate_segmented_report(
@@ -280,7 +329,7 @@ def render_report_section(test_type):
                 provider=provider,
                 duration=duration,
                 test_config=test_config,
-                system_info=system_info
+                system_info=system_info,
             )
         else:
             st.session_state.report = f"# Test Completed ({report_type})\n\nPlease refer to the data table above for results."
@@ -293,18 +342,19 @@ def render_report_section(test_type):
             label="📥 Download Report (Markdown)",
             data=st.session_state.report,
             file_name=f"report_{st.session_state.get('current_csv_file', 'report')}.md",
-            mime='text/markdown'
+            mime="text/markdown",
         )
 
 
 def render_log_section():
     """Render log viewer area"""
-    if st.session_state.get('logger') and st.session_state.logger.entries:
+    if st.session_state.get("logger") and st.session_state.logger.entries:
         st.markdown("---")
         st.header("📋 Log Viewer")
 
         if st.button("🔍 Open Log Viewer"):
             from ui.log_viewer import render_log_viewer
+
             render_log_viewer(st.session_state.logger)
 
 
@@ -314,7 +364,8 @@ class PageLayout:
     @staticmethod
     def show_empty_state():
         """Render empty state prompt"""
-        st.info("""
+        st.info(
+            """
         ### 👋 Welcome to LLM Performance Benchmark Platform V2
 
         Please configure test parameters in the left sidebar, then select a test type to begin.
@@ -332,7 +383,8 @@ class PageLayout:
         - 📦 Modular Architecture
         - 🔧 Cleaner Code Organization
         - 🚀 Better Maintainability
-        """)
+        """
+        )
 
     @staticmethod
     def render(test_type):
