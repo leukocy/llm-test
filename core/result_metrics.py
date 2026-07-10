@@ -50,7 +50,9 @@ def count_successful_requests(error_values: pd.Series | Iterable[object]) -> int
     return int(success_mask_from_error(error_values).sum())
 
 
-def calculate_success_rate(error_values: pd.Series | Iterable[object], *, percent: bool = False) -> float:
+def calculate_success_rate(
+    error_values: pd.Series | Iterable[object], *, percent: bool = False
+) -> float:
     """Calculate request success rate from an error column."""
     mask = success_mask_from_error(error_values)
     if mask.empty:
@@ -79,7 +81,11 @@ def is_performance_metric_column(column: object) -> bool:
 
 def _resolve_columns(df: pd.DataFrame, columns: Iterable[object] | None) -> list[object]:
     candidates = df.columns if columns is None else columns
-    return [column for column in candidates if column in df.columns and is_performance_metric_column(column)]
+    return [
+        column
+        for column in candidates
+        if column in df.columns and is_performance_metric_column(column)
+    ]
 
 
 def valid_performance_series(series: pd.Series) -> pd.Series:
@@ -102,20 +108,20 @@ def sanitize_performance_metrics(
 
 
 def positive_mean(series: pd.Series) -> float:
-    return valid_performance_series(series).mean()
+    return float(valid_performance_series(series).mean())
 
 
 def positive_min(series: pd.Series) -> float:
-    return valid_performance_series(series).min()
+    return float(valid_performance_series(series).min())
 
 
 def positive_max(series: pd.Series) -> float:
-    return valid_performance_series(series).max()
+    return float(valid_performance_series(series).max())
 
 
 def positive_quantile(series: pd.Series, q: float) -> float:
     valid = valid_performance_series(series).dropna()
-    return valid.quantile(q) if not valid.empty else np.nan
+    return float(valid.quantile(q)) if not valid.empty else float(np.nan)
 
 
 def summarize_metric_extreme(
@@ -176,7 +182,9 @@ def summarize_metric_row(
 
     ascending = how == "min"
     selected = (
-        work.sort_values(group_cols + [metric_col], ascending=[True] * len(group_cols) + [ascending])
+        work.sort_values(
+            group_cols + [metric_col], ascending=[True] * len(group_cols) + [ascending]
+        )
         .groupby(group_cols, as_index=False, dropna=False)
         .first()
     )
