@@ -119,7 +119,9 @@ def test_badge_escapes_text():
 def test_semantic_colors_are_hex():
     """Every public color constant must be a valid hex color string."""
     public = [
-        v for k, v in vars(SemanticColor).items() if not k.startswith("_") and isinstance(v, str)
+        v
+        for k, v in vars(SemanticColor).items()
+        if not k.startswith("_") and isinstance(v, str)
     ]
     assert len(public) >= 6
     for color in public:

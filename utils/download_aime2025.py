@@ -101,7 +101,9 @@ def download_from_huggingface():
     print(
         f"   - AIME I: {len([s for s in all_samples if '2025-I' in s.get('source', '') and 'II' not in s.get('source', '')])} 道题"
     )
-    print(f"   - AIME II: {len([s for s in all_samples if '2025-II' in s.get('source', '')])} 道题")
+    print(
+        f"   - AIME II: {len([s for s in all_samples if '2025-II' in s.get('source', '')])} 道题"
+    )
     print(f"   - 总计: {len(all_samples)} 道题")
 
     return True

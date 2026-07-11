@@ -83,11 +83,15 @@ def download_gpqa():
                             "Incorrect Answer 3",
                             item.get("C", item.get("choice_c", "")),
                         ),
-                        item.get("Correct Answer", item.get("D", item.get("choice_d", ""))),
+                        item.get(
+                            "Correct Answer", item.get("D", item.get("choice_d", ""))
+                        ),
                     ]
 
                 # Answer
-                ans_raw = item.get("Correct Answer", item.get("answer", item.get("Answer", "D")))
+                ans_raw = item.get(
+                    "Correct Answer", item.get("answer", item.get("Answer", "D"))
+                )
                 if isinstance(ans_raw, int):
                     answer = ans_raw
                 elif isinstance(ans_raw, str):
@@ -242,7 +246,9 @@ def download_swebench_lite():
 
         print("🔄 currently从 HuggingFace under载...")
         try:
-            ds = load_dataset("princeton-nlp/SWE-bench_Lite", split="test", trust_remote_code=True)
+            ds = load_dataset(
+                "princeton-nlp/SWE-bench_Lite", split="test", trust_remote_code=True
+            )
 
             output_file = os.path.join(output_dir, "swe-bench-lite.jsonl")
             with open(output_file, "w", encoding="utf-8") as f:

@@ -224,7 +224,9 @@ class DatasetDownloader:
         print("=" * 60)
 
 
-def download_math500(output_dir: str = "datasets/math500", max_samples: int = 500) -> bool:
+def download_math500(
+    output_dir: str = "datasets/math500", max_samples: int = 500
+) -> bool:
     """
     专门under载 MATH-500 Dataset便捷函数
     """
@@ -247,7 +249,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Datasetunder载工具")
     parser.add_argument("--dataset", "-d", type=str, help="要under载Dataset名称")
     parser.add_argument("--all", "-a", action="store_true", help="under载所hasDataset")
-    parser.add_argument("--status", "-s", action="store_true", help="DisplayDatasetStatus")
+    parser.add_argument(
+        "--status", "-s", action="store_true", help="DisplayDatasetStatus"
+    )
     parser.add_argument("--force", "-f", action="store_true", help="强制重新under载")
     parser.add_argument("--max-rows", "-m", type=int, default=None, help="最大行数")
 
@@ -260,7 +264,9 @@ if __name__ == "__main__":
     elif args.all:
         downloader.download_all(force=args.force)
     elif args.dataset:
-        downloader.download_dataset(args.dataset, max_rows=args.max_rows, force=args.force)
+        downloader.download_dataset(
+            args.dataset, max_rows=args.max_rows, force=args.force
+        )
     else:
         parser.print_help()
         print("\n示例:")

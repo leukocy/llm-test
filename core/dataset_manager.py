@@ -321,7 +321,9 @@ class DatasetManager:
 
         try:
             if progress_callback:
-                progress_callback(0.1, f"currently从 HuggingFace Load {config.hf_path}...")
+                progress_callback(
+                    0.1, f"currently从 HuggingFace Load {config.hf_path}..."
+                )
 
             # LoadDataset
             # Process特殊情况
@@ -336,7 +338,9 @@ class DatasetManager:
             elif name == "aime2025" or name == "arena_hard":
                 dataset = load_dataset(config.hf_path, split="train")
             elif name == "swebench_lite":
-                dataset = load_dataset(config.hf_path, split="test", trust_remote_code=True)
+                dataset = load_dataset(
+                    config.hf_path, split="test", trust_remote_code=True
+                )
             elif name == "ceval":
                 dataset = load_dataset(config.hf_path, "all")
             elif name == "longbench":
@@ -367,7 +371,9 @@ class DatasetManager:
                 splits_saved += 1
                 if progress_callback:
                     progress = 0.5 + 0.5 * (splits_saved / total_splits)
-                    progress_callback(progress, f"Saved {split_name} ({len(samples)} 样本)")
+                    progress_callback(
+                        progress, f"Saved {split_name} ({len(samples)} 样本)"
+                    )
 
                 self._log(f"Saved {split_name}: {len(samples)} 样本")
 
@@ -583,7 +589,9 @@ class DatasetManager:
                     else:
                         with open(filepath, encoding="utf-8") as f:
                             data = json.load(f)
-                            samples = data if isinstance(data, list) else data.get("data", [])
+                            samples = (
+                                data if isinstance(data, list) else data.get("data", [])
+                            )
 
                     self._log(f"从 {filepath.name} Load {len(samples)}  samples")
                     break

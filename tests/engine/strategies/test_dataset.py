@@ -61,7 +61,9 @@ async def test_execute(strategy, mock_event_bus):
 
         mock_engine.run_batch = AsyncMock(side_effect=[results_r1, results_r2])
 
-        results = await strategy.execute(config, params, mock_provider, mock_tokenizer, mock_pg)
+        results = await strategy.execute(
+            config, params, mock_provider, mock_tokenizer, mock_pg
+        )
 
         assert len(results) == 4
         assert mock_engine.run_batch.call_count == 2

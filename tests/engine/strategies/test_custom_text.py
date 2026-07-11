@@ -50,7 +50,9 @@ async def test_execute(strategy, mock_event_bus):
 
         mock_engine.run_continuous = AsyncMock(return_value=results)
 
-        results = await strategy.execute(config, params, mock_provider, mock_tokenizer, mock_pg)
+        results = await strategy.execute(
+            config, params, mock_provider, mock_tokenizer, mock_pg
+        )
 
         assert len(results) == 2
         assert mock_engine.run_continuous.call_count == 1

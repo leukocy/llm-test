@@ -118,7 +118,9 @@ def test_log_execution(db_writer):
     run = db_writer.start_run("concurrency", "gpt-4")
 
     db_writer.log_execution(run.id, "Test started", level="INFO")
-    db_writer.log_execution(run.id, "Request failed", level="ERROR", metrics={"retry": 1})
+    db_writer.log_execution(
+        run.id, "Request failed", level="ERROR", metrics={"retry": 1}
+    )
 
     with db_writer._session() as session:
         logs = session.query(ExecLogModel).filter_by(run_id=run.id).all()

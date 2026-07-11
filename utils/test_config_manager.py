@@ -118,7 +118,9 @@ class TestConfigManager:
         """
         try:
             # 查找匹配文件
-            safe_name = "".join(c if c.isalnum() or c in (" ", "-", "_") else "_" for c in name)
+            safe_name = "".join(
+                c if c.isalnum() or c in (" ", "-", "_") else "_" for c in name
+            )
             pattern = safe_name.lower().replace(" ", "_") + "*.json"
             matching_files = list(self.config_dir.glob(pattern))
 
@@ -172,7 +174,9 @@ class TestConfigManager:
             is否Deletesucceeded
         """
         try:
-            safe_name = "".join(c if c.isalnum() or c in (" ", "-", "_") else "_" for c in name)
+            safe_name = "".join(
+                c if c.isalnum() or c in (" ", "-", "_") else "_" for c in name
+            )
             pattern = safe_name.lower().replace(" ", "_") + "*.json"
             matching_files = list(self.config_dir.glob(pattern))
 
@@ -419,7 +423,9 @@ def render_preset_manager():
                                 st.rerun()
 
                     with col_del:
-                        if st.button("🗑️", key=f"del_{preset['name']}", help="Delete预设"):
+                        if st.button(
+                            "🗑️", key=f"del_{preset['name']}", help="Delete预设"
+                        ):
                             if config_manager.delete_preset(preset["name"]):
                                 st.rerun()
 
@@ -534,7 +540,9 @@ def _as_positive_int(value):
     return value if value > 0 else None
 
 
-def _apply_preset_to_widget_state(config: dict[str, Any], selected_test_type: str | None) -> None:
+def _apply_preset_to_widget_state(
+    config: dict[str, Any], selected_test_type: str | None
+) -> None:
     """Sync preset values to the Streamlit widget keys used by the panels."""
     test_type = normalize_test_type(selected_test_type or config.get("test_type"))
 
@@ -544,7 +552,9 @@ def _apply_preset_to_widget_state(config: dict[str, Any], selected_test_type: st
 
     if "template_tokens" in config:
         try:
-            st.session_state.template_tokens_input = max(0, int(config.get("template_tokens") or 0))
+            st.session_state.template_tokens_input = max(
+                0, int(config.get("template_tokens") or 0)
+            )
         except (TypeError, ValueError):
             st.session_state.template_tokens_input = 0
 
@@ -641,7 +651,9 @@ def render_config_import_export():
                     preset_data = config_manager.load_preset(selected_preset)
 
                     if preset_data:
-                        json_data = json.dumps(preset_data.to_dict(), ensure_ascii=False, indent=2)
+                        json_data = json.dumps(
+                            preset_data.to_dict(), ensure_ascii=False, indent=2
+                        )
                         st.download_button(
                             label="⬇️ under载Configure文件",
                             data=json_data,

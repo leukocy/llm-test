@@ -29,8 +29,14 @@ class DatasetLoader:
                         or tries to access files outside the datasets directory.
         """
         # Check for path traversal patterns（含 Windows 盘符绝对路径 C:\...）
-        if ".." in filename or filename.startswith(("/", "\\")) or _WIN_ABS_PATH_RE.match(filename):
-            raise ValueError("Path traversal detected: filename must be a simple name, not a path")
+        if (
+            ".." in filename
+            or filename.startswith(("/", "\\"))
+            or _WIN_ABS_PATH_RE.match(filename)
+        ):
+            raise ValueError(
+                "Path traversal detected: filename must be a simple name, not a path"
+            )
 
         # Join with datasets directory and resolve to absolute path
         full_path = os.path.abspath(os.path.join(self.datasets_dir, filename))
@@ -38,12 +44,16 @@ class DatasetLoader:
         # Verify the resolved path is within the datasets directory
         # （用 commonpath 严格判断，比 startswith 更稳，避免 /foo/bar 与 /foo/bar2 误判）
         try:
-            inside = os.path.commonpath([full_path, self.datasets_dir]) == self.datasets_dir
+            inside = (
+                os.path.commonpath([full_path, self.datasets_dir]) == self.datasets_dir
+            )
         except ValueError:
             # 跨盘符等无法比较的情况，一律拒绝
             inside = False
         if not inside:
-            raise ValueError("Path traversal detected: resolved path is outside datasets directory")
+            raise ValueError(
+                "Path traversal detected: resolved path is outside datasets directory"
+            )
 
         return full_path
 

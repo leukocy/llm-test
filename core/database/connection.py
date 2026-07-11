@@ -199,7 +199,9 @@ class Database:
         cursor = self.execute(sql, tuple(data.values()))
         return cast(int, cursor.lastrowid)
 
-    def update(self, table: str, data: dict[str, Any], where: str, where_params: tuple = ()) -> int:
+    def update(
+        self, table: str, data: dict[str, Any], where: str, where_params: tuple = ()
+    ) -> int:
         """
         Update记录
 
@@ -257,7 +259,9 @@ class Database:
 
     def get_schema_version(self) -> str:
         """Get Schema Version"""
-        result = self.fetch_one("SELECT value FROM db_meta WHERE key = 'schema_version'")
+        result = self.fetch_one(
+            "SELECT value FROM db_meta WHERE key = 'schema_version'"
+        )
         return str(result["value"]) if result else "unknown"
 
     def vacuum(self):

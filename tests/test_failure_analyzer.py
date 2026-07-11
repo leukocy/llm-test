@@ -380,12 +380,16 @@ class TestFailureAnalyzer:
 
     def test_suggestions_for_hallucination(self, analyzer):
         """Test幻觉Suggestion"""
-        suggestions = analyzer._generate_suggestions(FailureCategory.HALLUCINATION, "引入额外信息")
+        suggestions = analyzer._generate_suggestions(
+            FailureCategory.HALLUCINATION, "引入额外信息"
+        )
         assert len(suggestions) > 0
 
     def test_suggestions_for_unknown_category(self, analyzer):
         """Test未知类别defaultSuggestion"""
-        suggestions = analyzer._generate_suggestions(FailureCategory.UNKNOWN, "未知Error")
+        suggestions = analyzer._generate_suggestions(
+            FailureCategory.UNKNOWN, "未知Error"
+        )
         assert len(suggestions) == 1
         assert "人工分析" in suggestions[0]
 
@@ -501,7 +505,9 @@ class TestFailureAnalysisReport:
 
     def test_create_report_minimal(self):
         """TestCreate最小报告"""
-        report = FailureAnalysisReport(total_samples=100, failed_samples=10, failure_rate=10.0)
+        report = FailureAnalysisReport(
+            total_samples=100, failed_samples=10, failure_rate=10.0
+        )
         assert report.total_samples == 100
         assert report.failed_samples == 10
         assert report.failure_rate == 10.0

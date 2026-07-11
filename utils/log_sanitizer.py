@@ -40,7 +40,9 @@ def sanitize_log_message(message: Any, max_length: int = 10000) -> str:
     message_str = ansi_escape.sub("", message_str)
 
     # Remove other control characters (except tab)
-    message_str = "".join(char for char in message_str if char == "\t" or char.isprintable())
+    message_str = "".join(
+        char for char in message_str if char == "\t" or char.isprintable()
+    )
 
     # Limit length to prevent log flooding
     if len(message_str) > max_length:

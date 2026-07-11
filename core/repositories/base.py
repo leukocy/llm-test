@@ -48,7 +48,9 @@ class BaseRepository(ABC, Generic[T]):
         row = self.db.fetch_one(sql, (id,))
         return self._from_row(row) if row else None
 
-    def find_all(self, limit: int = 100, offset: int = 0, order_by: str = "id DESC") -> list[T]:
+    def find_all(
+        self, limit: int = 100, offset: int = 0, order_by: str = "id DESC"
+    ) -> list[T]:
         """
         查找所has记录
 
@@ -153,7 +155,9 @@ class BaseRepository(ABC, Generic[T]):
         """
         return self.db.delete(self._table_name, where, params)
 
-    def update_by(self, data: dict[str, Any], where: str, where_params: tuple = ()) -> int:
+    def update_by(
+        self, data: dict[str, Any], where: str, where_params: tuple = ()
+    ) -> int:
         """
         条件Update
 
@@ -210,7 +214,9 @@ class BaseRepository(ABC, Generic[T]):
             sql = f"SELECT * FROM {self._table_name} WHERE {where} ORDER BY {order_by} LIMIT ? OFFSET ?"
             rows = self.db.fetch_all(sql, params + (page_size, offset))
         else:
-            sql = f"SELECT * FROM {self._table_name} ORDER BY {order_by} LIMIT ? OFFSET ?"
+            sql = (
+                f"SELECT * FROM {self._table_name} ORDER BY {order_by} LIMIT ? OFFSET ?"
+            )
             rows = self.db.fetch_all(sql, (page_size, offset))
 
         items = [self._from_row(r) for r in rows]

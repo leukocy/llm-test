@@ -51,7 +51,9 @@ def download_from_huggingface():
 
         for config, lang_name in language_configs:
             try:
-                ds = load_dataset("mrlbenchmarks/global-piqa-nonparallel", config, split="test")
+                ds = load_dataset(
+                    "mrlbenchmarks/global-piqa-nonparallel", config, split="test"
+                )
 
                 for i, item in enumerate(ds):
                     # Data集use字段名: prompt, solution0, solution1, label
@@ -61,7 +63,9 @@ def download_from_huggingface():
                         "sol1": item.get("solution0", item.get("sol1", "")),
                         "sol2": item.get("solution1", item.get("sol2", "")),
                         "label": (
-                            int(item.get("label", 0)) if item.get("label") is not None else 0
+                            int(item.get("label", 0))
+                            if item.get("label") is not None
+                            else 0
                         ),
                         "language": lang_name,
                         "country": item.get("country", ""),

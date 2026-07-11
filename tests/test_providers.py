@@ -163,7 +163,9 @@ class TestProviderFactory:
 
     def test_get_openai_provider(self):
         """TestGet OpenAI provider"""
-        provider = get_provider("OpenAI", "https://api.openai.com/v1", "test-key", "gpt-4")
+        provider = get_provider(
+            "OpenAI", "https://api.openai.com/v1", "test-key", "gpt-4"
+        )
         assert isinstance(provider, OpenAIProvider)
         assert provider.api_base_url == "https://api.openai.com/v1"
         assert provider.api_key == "test-key"
@@ -184,12 +186,16 @@ class TestProviderFactory:
 
     def test_get_provider_with_gemini_in_name(self):
         """Test带 Gemini 名称 provider 识别"""
-        provider = get_provider("Google Gemini", "https://api.example.com", "key", "model")
+        provider = get_provider(
+            "Google Gemini", "https://api.example.com", "key", "model"
+        )
         assert isinstance(provider, GeminiProvider)
 
     def test_get_provider_defaults_to_openai(self):
         """TestdefaultReturn OpenAI provider"""
-        provider = get_provider("UnknownProvider", "https://api.example.com/v1", "key", "model")
+        provider = get_provider(
+            "UnknownProvider", "https://api.example.com/v1", "key", "model"
+        )
         assert isinstance(provider, OpenAIProvider)
 
 
@@ -228,7 +234,9 @@ class TestOpenAIProvider:
 
     def test_initialization_deepseek_platform(self):
         """Test DeepSeek 平台检测"""
-        provider = OpenAIProvider("https://api.deepseek.com/v1", "deepseek-key", "deepseek-chat")
+        provider = OpenAIProvider(
+            "https://api.deepseek.com/v1", "deepseek-key", "deepseek-chat"
+        )
         assert provider.platform == "deepseek"
 
     @pytest.mark.asyncio
@@ -334,7 +342,9 @@ class TestOpenAIProvider:
         assert result["full_response_content"] == "Thinking...Answer"
 
     @pytest.mark.asyncio
-    async def test_get_completion_with_mimo_thinking_params(self, mock_requests_session):
+    async def test_get_completion_with_mimo_thinking_params(
+        self, mock_requests_session
+    ):
         """Test MiMo 平台Thinking parameters"""
         provider = OpenAIProvider("https://api.mimo.pm/v1", "mimo-key", "mimo-v2-flash")
 
@@ -551,7 +561,9 @@ class TestOpenAIProvider:
 
         # The cancellation is checked at the beginning of the method
         with pytest.raises(asyncio.CancelledError):
-            await provider.get_completion(mock_client, session_id=1, prompt="Test", max_tokens=100)
+            await provider.get_completion(
+                mock_client, session_id=1, prompt="Test", max_tokens=100
+            )
 
         # Reset stop flag
         openai_provider.set_stop_requested(False)
@@ -564,7 +576,9 @@ class TestOpenAIProvider:
         # Ensure stop flag is not set
         openai_provider.set_stop_requested(False)
 
-        provider = OpenAIProvider("https://api.deepseek.com/v1", "test-key", "deepseek-chat")
+        provider = OpenAIProvider(
+            "https://api.deepseek.com/v1", "test-key", "deepseek-chat"
+        )
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -696,7 +710,9 @@ class TestOpenAIProvider:
         # Ensure stop flag is not set
         openai_provider.set_stop_requested(False)
 
-        provider = OpenAIProvider("https://api.minimax.chat/v1", "test-key", "minimax-m2")
+        provider = OpenAIProvider(
+            "https://api.minimax.chat/v1", "test-key", "minimax-m2"
+        )
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -729,7 +745,9 @@ class TestOpenAIProvider:
         assert payload["extra_body"]["reasoning_split"] is True
 
     @pytest.mark.asyncio
-    async def test_get_completion_siliconflow_thinking_params(self, mock_requests_session):
+    async def test_get_completion_siliconflow_thinking_params(
+        self, mock_requests_session
+    ):
         """Test硅基流动 thinking 参数"""
         from core.providers import openai as openai_provider
 
@@ -774,14 +792,18 @@ class TestOpenAIProvider:
         assert payload["thinking_budget"] == 20000
 
     @pytest.mark.asyncio
-    async def test_get_completion_openrouter_thinking_params(self, mock_requests_session):
+    async def test_get_completion_openrouter_thinking_params(
+        self, mock_requests_session
+    ):
         """Test OpenRouter thinking 参数"""
         from core.providers import openai as openai_provider
 
         # Ensure stop flag is not set
         openai_provider.set_stop_requested(False)
 
-        provider = OpenAIProvider("https://openrouter.ai/api/v1", "test-key", "openai/o3")
+        provider = OpenAIProvider(
+            "https://openrouter.ai/api/v1", "test-key", "openai/o3"
+        )
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -1239,7 +1261,9 @@ class TestPlatformDetection:
 
     def test_zhipu_platform_detection(self):
         """Test智谱 AI 平台检测"""
-        provider = OpenAIProvider("https://open.bigmodel.cn/api/paas/v4", "key", "model")
+        provider = OpenAIProvider(
+            "https://open.bigmodel.cn/api/paas/v4", "key", "model"
+        )
         assert provider.platform == "zhipu"
 
     def test_openrouter_platform_detection(self):
@@ -1249,7 +1273,9 @@ class TestPlatformDetection:
 
     def test_gemini_platform_detection(self):
         """Test Gemini 平台检测"""
-        provider = GeminiProvider("https://generativelanguage.googleapis.com", "key", "model")
+        provider = GeminiProvider(
+            "https://generativelanguage.googleapis.com", "key", "model"
+        )
         assert provider.platform == "gemini"
 
     def test_unknown_platform_detection(self):
@@ -1452,7 +1478,9 @@ class TestEdgeCases:
 
         # This tests a hypothetical scenario where multiple platforms
         # might try to set extra_body parameters
-        provider = OpenAIProvider("https://api.custom.com/v1", "test-key", "custom-model")
+        provider = OpenAIProvider(
+            "https://api.custom.com/v1", "test-key", "custom-model"
+        )
 
         mock_response = MagicMock()
         mock_response.status_code = 200

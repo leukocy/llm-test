@@ -58,7 +58,9 @@ def capture_system_info() -> dict[str, Any]:
         fingerprint = capture_hardware_fingerprint()
         info["hardware_fingerprint"] = fingerprint
         info["machine_id"] = fingerprint.get("machine_id")
-        gpu_names = [g.get("name") for g in fingerprint.get("gpus", []) if g.get("name")]
+        gpu_names = [
+            g.get("name") for g in fingerprint.get("gpus", []) if g.get("name")
+        ]
         info["gpu"] = "; ".join(gpu_names) if gpu_names else _get_gpu_info()
     except Exception:
         info["hardware_fingerprint"] = {}
@@ -296,7 +298,9 @@ def format_system_info(info: dict[str, Any]) -> str:
     # 基础信息
     lines.append(f"Python: {info.get('python_version', 'N/A')}")
     lines.append(f"OS: {info.get('os_name', 'N/A')} {info.get('os_version', '')}")
-    lines.append(f"CPU: {info.get('cpu_model', 'N/A')} ({info.get('cpu_count', 'N/A')} cores)")
+    lines.append(
+        f"CPU: {info.get('cpu_model', 'N/A')} ({info.get('cpu_count', 'N/A')} cores)"
+    )
 
     # 内存
     mem = info.get("memory_total_mb")

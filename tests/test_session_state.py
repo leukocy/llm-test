@@ -34,7 +34,9 @@ def session_state_module():
 class TestInitSessionState:
     """Test init_session_state 函数"""
 
-    def test_init_creates_test_control_states(self, mock_session_state, session_state_module):
+    def test_init_creates_test_control_states(
+        self, mock_session_state, session_state_module
+    ):
         """TestInitializeCreateTest控制Status变量"""
         session_state_module.init_session_state()
 
@@ -43,7 +45,9 @@ class TestInitSessionState:
         assert mock_session_state._data["test_running"] == False
         assert mock_session_state._data["stop_requested"] == False
 
-    def test_init_creates_results_data_states(self, mock_session_state, session_state_module):
+    def test_init_creates_results_data_states(
+        self, mock_session_state, session_state_module
+    ):
         """TestInitializeCreateResultDataStatus变量"""
         session_state_module.init_session_state()
 
@@ -54,7 +58,9 @@ class TestInitSessionState:
         assert mock_session_state._data["report"] == ""
         assert mock_session_state._data["logger"] is None
 
-    def test_init_creates_test_config_states(self, mock_session_state, session_state_module):
+    def test_init_creates_test_config_states(
+        self, mock_session_state, session_state_module
+    ):
         """TestInitializeCreateTestConfigureStatus变量"""
         session_state_module.init_session_state()
 
@@ -63,7 +69,9 @@ class TestInitSessionState:
         assert mock_session_state._data["test_duration"] == 0.0
         assert mock_session_state._data["test_config"] == {}
 
-    def test_init_creates_latency_offset_state(self, mock_session_state, session_state_module):
+    def test_init_creates_latency_offset_state(
+        self, mock_session_state, session_state_module
+    ):
         """TestInitializeCreate延迟校准Status变量"""
         session_state_module.init_session_state()
 
@@ -79,7 +87,9 @@ class TestInitSessionState:
         assert mock_session_state._data["current_csv_file"] == ""
         assert mock_session_state._data["current_log_file"] == ""
 
-    def test_init_creates_system_info_states(self, mock_session_state, session_state_module):
+    def test_init_creates_system_info_states(
+        self, mock_session_state, session_state_module
+    ):
         """TestInitializeCreate系统信息Status变量"""
         session_state_module.init_session_state()
 
@@ -95,7 +105,9 @@ class TestInitSessionState:
         assert mock_session_state._data["fetched_models"] == []
         assert mock_session_state._data["custom_sys_info"] == {}
 
-    def test_init_creates_quality_test_states(self, mock_session_state, session_state_module):
+    def test_init_creates_quality_test_states(
+        self, mock_session_state, session_state_module
+    ):
         """TestInitializeCreate质量TestStatus变量"""
         session_state_module.init_session_state()
 
@@ -104,7 +116,9 @@ class TestInitSessionState:
         assert mock_session_state._data["quality_results"] == {}
         assert mock_session_state._data["quality_test_running"] == False
 
-    def test_init_creates_ab_comparison_states(self, mock_session_state, session_state_module):
+    def test_init_creates_ab_comparison_states(
+        self, mock_session_state, session_state_module
+    ):
         """TestInitializeCreate A/B 对比Status变量"""
         session_state_module.init_session_state()
 
@@ -113,14 +127,18 @@ class TestInitSessionState:
         assert mock_session_state._data["ab_result"] == {}
         assert mock_session_state._data["ab_comparison_running"] == False
 
-    def test_init_creates_test_outputs_state(self, mock_session_state, session_state_module):
+    def test_init_creates_test_outputs_state(
+        self, mock_session_state, session_state_module
+    ):
         """TestInitializeCreateTest输出Status变量"""
         session_state_module.init_session_state()
 
         assert "test_outputs" in mock_session_state._data
         assert mock_session_state._data["test_outputs"] == []
 
-    def test_init_preserves_existing_values(self, mock_session_state, session_state_module):
+    def test_init_preserves_existing_values(
+        self, mock_session_state, session_state_module
+    ):
         """TestInitialize保留已has值"""
         mock_session_state._data["test_running"] = True
         mock_session_state._data["latency_offset"] = 0.5
@@ -141,12 +159,18 @@ class TestGetState:
         result = session_state_module.get_state("existing_key")
         assert result == "test_value"
 
-    def test_get_nonexistent_key_with_default(self, mock_session_state, session_state_module):
+    def test_get_nonexistent_key_with_default(
+        self, mock_session_state, session_state_module
+    ):
         """TestGetnot存in键，Returndefault值"""
-        result = session_state_module.get_state("nonexistent_key", default="default_value")
+        result = session_state_module.get_state(
+            "nonexistent_key", default="default_value"
+        )
         assert result == "default_value"
 
-    def test_get_nonexistent_key_without_default(self, mock_session_state, session_state_module):
+    def test_get_nonexistent_key_without_default(
+        self, mock_session_state, session_state_module
+    ):
         """TestGetnot存in键，nodefault值Return None"""
         result = session_state_module.get_state("nonexistent_key")
         assert result is None
@@ -210,7 +234,9 @@ class TestResetTestState:
         session_state_module.reset_test_state()
         assert mock_session_state._data["test_duration"] == 0.0
 
-    def test_reset_does_not_affect_other_states(self, mock_session_state, session_state_module):
+    def test_reset_does_not_affect_other_states(
+        self, mock_session_state, session_state_module
+    ):
         """TestResetnot影响otherStatus变量"""
         mock_session_state._data["test_running"] = True
         mock_session_state._data["stop_requested"] = True
@@ -263,7 +289,9 @@ class TestResetResults:
         session_state_module.reset_results()
         assert mock_session_state._data["test_outputs"] == []
 
-    def test_reset_does_not_affect_other_states(self, mock_session_state, session_state_module):
+    def test_reset_does_not_affect_other_states(
+        self, mock_session_state, session_state_module
+    ):
         """TestResetnot影响otherStatus变量"""
         mock_session_state._data["results_df"] = pd.DataFrame({"a": [1]})
         mock_session_state._data["report"] = "report"
@@ -286,7 +314,9 @@ class TestIsTestRunning:
         mock_session_state._data["test_running"] = True
         assert session_state_module.is_test_running() == True
 
-    def test_returns_false_when_not_running(self, mock_session_state, session_state_module):
+    def test_returns_false_when_not_running(
+        self, mock_session_state, session_state_module
+    ):
         """TestTest未运行时Return False"""
         mock_session_state._data["test_running"] = False
         assert session_state_module.is_test_running() == False
@@ -295,12 +325,16 @@ class TestIsTestRunning:
 class TestIsStopRequested:
     """Test is_stop_requested 函数"""
 
-    def test_returns_true_when_requested(self, mock_session_state, session_state_module):
+    def test_returns_true_when_requested(
+        self, mock_session_state, session_state_module
+    ):
         """Test请求停止时Return True"""
         mock_session_state._data["stop_requested"] = True
         assert session_state_module.is_stop_requested() == True
 
-    def test_returns_false_when_not_requested(self, mock_session_state, session_state_module):
+    def test_returns_false_when_not_requested(
+        self, mock_session_state, session_state_module
+    ):
         """Test未请求停止时Return False"""
         mock_session_state._data["stop_requested"] = False
         assert session_state_module.is_stop_requested() == False
@@ -309,7 +343,9 @@ class TestIsStopRequested:
 class TestRequestStop:
     """Test request_stop 函数"""
 
-    def test_sets_stop_requested_to_true(self, mock_session_state, session_state_module):
+    def test_sets_stop_requested_to_true(
+        self, mock_session_state, session_state_module
+    ):
         """TestSet stop_requested is True"""
         mock_session_state._data["stop_requested"] = False
         session_state_module.request_stop()
@@ -321,7 +357,9 @@ class TestRequestStop:
         session_state_module.request_stop()
         assert mock_session_state._data["test_running"] == False
 
-    def test_can_be_called_multiple_times(self, mock_session_state, session_state_module):
+    def test_can_be_called_multiple_times(
+        self, mock_session_state, session_state_module
+    ):
         """Testcan多次调用"""
         mock_session_state._data["stop_requested"] = False
         mock_session_state._data["test_running"] = True

@@ -63,7 +63,9 @@ def test_round_trip_preserves_fields():
 
 
 def test_from_row_handles_none_success_and_missing():
-    c = ApplicationCase.from_row({"case_id": "c3", "success": None, "external_level": None})
+    c = ApplicationCase.from_row(
+        {"case_id": "c3", "success": None, "external_level": None}
+    )
     assert c.success is None
     assert c.external_level == "internal"  # 默认
     assert c.extra == {}

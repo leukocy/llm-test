@@ -245,9 +245,15 @@ class ErrorMessages:
         """
         error_info = cls.API_ERRORS.get(error_type, cls._get_default_error())
 
-        title = error_info.get(f"title_{language}", error_info.get("title_zh", error_type))
-        details = error_info.get(f"details_{language}", error_info.get("details_zh", ""))
-        solutions = error_info.get(f"solutions_{language}", error_info.get("solutions_zh", []))
+        title = error_info.get(
+            f"title_{language}", error_info.get("title_zh", error_type)
+        )
+        details = error_info.get(
+            f"details_{language}", error_info.get("details_zh", "")
+        )
+        solutions = error_info.get(
+            f"solutions_{language}", error_info.get("solutions_zh", [])
+        )
 
         result = {
             "title": title,
@@ -274,7 +280,9 @@ class ErrorMessages:
         }
 
     @classmethod
-    def format_for_display(cls, error_data: dict[str, Any], language: str = "zh") -> str:
+    def format_for_display(
+        cls, error_data: dict[str, Any], language: str = "zh"
+    ) -> str:
         """
         FormatError消息用于Display
 
@@ -326,11 +334,15 @@ class ErrorMessages:
         # 检测Error type
         if any(code in error_str for code in ["401", "unauthorized", "authentication"]):
             error_type = "authentication_error"
-        elif any(code in error_str for code in ["429", "rate limit", "too many requests"]):
+        elif any(
+            code in error_str for code in ["429", "rate limit", "too many requests"]
+        ):
             error_type = "rate_limit_error"
         elif any(code in error_str for code in ["timeout", "timed out"]):
             error_type = "timeout_error"
-        elif any(code in error_str for code in ["500", "502", "503", "504", "server error"]):
+        elif any(
+            code in error_str for code in ["500", "502", "503", "504", "server error"]
+        ):
             error_type = "server_error"
         elif any(code in error_str for code in ["connection", "connect", "network"]):
             error_type = "connection_error"
@@ -350,7 +362,9 @@ class ErrorMessages:
         return error_data
 
 
-def get_enhanced_error(error: Exception, context: str | None = None, language: str = "zh") -> str:
+def get_enhanced_error(
+    error: Exception, context: str | None = None, language: str = "zh"
+) -> str:
     """
     GetFormat增强Error消息
 

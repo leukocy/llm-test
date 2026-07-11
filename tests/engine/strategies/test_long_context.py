@@ -59,7 +59,9 @@ async def test_execute(strategy, mock_event_bus):
             ]
         )
 
-        results = await strategy.execute(config, params, mock_provider, mock_tokenizer, mock_pg)
+        results = await strategy.execute(
+            config, params, mock_provider, mock_tokenizer, mock_pg
+        )
 
         assert len(results) == 4
         assert results[0].context_length_target == 10

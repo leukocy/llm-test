@@ -132,7 +132,9 @@ class TaskConfigLoader:
             target_delimiter=data.get("target_delimiter", " "),
             output_type=data.get("output_type", "generate_until"),
             num_fewshot=data.get("num_fewshot", 0),
-            metric_list=data.get("metric_list", [{"metric": "accuracy", "aggregation": "mean"}]),
+            metric_list=data.get(
+                "metric_list", [{"metric": "accuracy", "aggregation": "mean"}]
+            ),
             generation_kwargs=data.get("generation_kwargs", {}),
             filter_list=data.get("filter_list", []),
             metadata=data.get("metadata", {}),
@@ -150,7 +152,11 @@ class TaskConfigLoader:
 
     def list_tasks_by_tag(self, tag: str) -> list[str]:
         """列出指定Label所has任务"""
-        return [name for name, config in self.configs.items() if config.tag and tag in config.tag]
+        return [
+            name
+            for name, config in self.configs.items()
+            if config.tag and tag in config.tag
+        ]
 
 
 class PromptRenderer:
@@ -326,18 +332,27 @@ class MetricCalculator:
             if ignore_punctuation:
                 import string
 
-                preds = [p.translate(str.maketrans("", "", string.punctuation)) for p in preds]
-                refs = [r.translate(str.maketrans("", "", string.punctuation)) for r in refs]
+                preds = [
+                    p.translate(str.maketrans("", "", string.punctuation))
+                    for p in preds
+                ]
+                refs = [
+                    r.translate(str.maketrans("", "", string.punctuation)) for r in refs
+                ]
 
             # Calculate
             if metric_name in ["accuracy", "acc", "exact_match"]:
                 correct = sum(
-                    1 for p, r in zip(preds, refs, strict=False) if p.strip() == r.strip()
+                    1
+                    for p, r in zip(preds, refs, strict=False)
+                    if p.strip() == r.strip()
                 )
                 value = correct / len(preds) if preds else 0.0
 
             elif metric_name == "contains":
-                correct = sum(1 for p, r in zip(preds, refs, strict=False) if r.strip() in p)
+                correct = sum(
+                    1 for p, r in zip(preds, refs, strict=False) if r.strip() in p
+                )
                 value = correct / len(preds) if preds else 0.0
 
             elif metric_name == "f1":

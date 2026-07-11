@@ -66,7 +66,9 @@ class ARCEvaluator(BaseEvaluator):
                     "content": self.format_prompt(ex, include_answer=False),
                 }
             )
-            messages.append({"role": "assistant", "content": self.get_correct_answer(ex)})
+            messages.append(
+                {"role": "assistant", "content": self.get_correct_answer(ex)}
+            )
 
         messages.append(
             {
@@ -76,7 +78,9 @@ class ARCEvaluator(BaseEvaluator):
         )
         return messages
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         question = sample.get("question", "")
         choices_data = sample.get("choices", {})
         labels = choices_data.get("label", [])

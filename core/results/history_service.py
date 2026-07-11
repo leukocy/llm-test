@@ -152,7 +152,9 @@ def _restore_snapshot_to_session(
 
     session_state["results_df"] = df
     session_state["current_csv_file"] = str(csv_path)
-    session_state["current_test_type"] = snapshot.get("test_type") or _infer_test_type(csv_path)
+    session_state["current_test_type"] = snapshot.get("test_type") or _infer_test_type(
+        csv_path
+    )
     session_state["current_model_id"] = snapshot.get("model_id") or ""
     session_state["current_provider"] = snapshot.get("provider") or "Unknown"
     session_state["test_duration"] = float(snapshot.get("duration") or 0)

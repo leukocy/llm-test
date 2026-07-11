@@ -54,7 +54,9 @@ async def test_execute(strategy, mock_event_bus):
             return_value=[TestResult(session_id=1, ttft=0.1, tps=100.0)]
         )
 
-        results = await strategy.execute(config, params, mock_provider, mock_tokenizer, mock_pg)
+        results = await strategy.execute(
+            config, params, mock_provider, mock_tokenizer, mock_pg
+        )
 
         assert len(results) == 1
         assert results[0].ttft == 0.1

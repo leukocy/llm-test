@@ -26,14 +26,22 @@ SAMPLE_VLLM_LOG = """\
 
 # ---------- 适配器探测 ----------
 def test_detect_adapters():
-    assert detect_adapter("vllm/vllm-openai:v0.23", "vllm serve /m", None).name == "vLLM"
-    assert detect_adapter("lmsysorg/sglang:latest", "python -m sglang", None).name == "SGLang"
     assert (
-        detect_adapter("ghcr.io/ggerganov/llama.cpp:server", "llama-server -m x.gguf", None).name
+        detect_adapter("vllm/vllm-openai:v0.23", "vllm serve /m", None).name == "vLLM"
+    )
+    assert (
+        detect_adapter("lmsysorg/sglang:latest", "python -m sglang", None).name
+        == "SGLang"
+    )
+    assert (
+        detect_adapter(
+            "ghcr.io/ggerganov/llama.cpp:server", "llama-server -m x.gguf", None
+        ).name
         == "llama.cpp"
     )
     assert (
-        detect_adapter("ktransformers/ktransformers", "ktransformers", None).name == "ktransformers"
+        detect_adapter("ktransformers/ktransformers", "ktransformers", None).name
+        == "ktransformers"
     )
     assert detect_adapter("custom/image", "/custom", None) is None
 

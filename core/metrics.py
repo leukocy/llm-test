@@ -215,7 +215,9 @@ class ThinkingMetrics:
                 result.ttut_ms = (self._first_content_time - self._request_start) * 1000
 
             if self._first_reasoning_time:
-                result.ttr_ms = (self._first_reasoning_time - self._request_start) * 1000
+                result.ttr_ms = (
+                    self._first_reasoning_time - self._request_start
+                ) * 1000
 
             if self._request_end:
                 result.total_time_ms = (self._request_end - self._request_start) * 1000
@@ -244,7 +246,9 @@ class ThinkingMetrics:
         # 成本估算
         pricing = self.PRICING.get(self.platform, {"input": 0.5, "output": 0.5})
         prompt_tokens = self._usage.get("prompt_tokens", 0) if self._usage else 0
-        completion_tokens = self._usage.get("completion_tokens", 0) if self._usage else 0
+        completion_tokens = (
+            self._usage.get("completion_tokens", 0) if self._usage else 0
+        )
 
         input_cost = (prompt_tokens / 1_000_000) * pricing["input"]
         output_cost = (completion_tokens / 1_000_000) * pricing["output"]
@@ -292,10 +296,22 @@ def format_metrics_report(metrics: ThinkingMetricsResult) -> str:
         f"Model: {metrics.model_id}",
         "",
         "【Latency指标】",
-        (f"  TTFT (首Token): {metrics.ttft_ms:.0f}ms" if metrics.ttft_ms else "  TTFT: N/A"),
+        (
+            f"  TTFT (首Token): {metrics.ttft_ms:.0f}ms"
+            if metrics.ttft_ms
+            else "  TTFT: N/A"
+        ),
         f"  TTR (首推理): {metrics.ttr_ms:.0f}ms" if metrics.ttr_ms else "  TTR: N/A",
-        (f"  TTUT (首正文): {metrics.ttut_ms:.0f}ms" if metrics.ttut_ms else "  TTUT: N/A"),
-        (f"  总耗时: {metrics.total_time_ms:.0f}ms" if metrics.total_time_ms else "  总耗时: N/A"),
+        (
+            f"  TTUT (首正文): {metrics.ttut_ms:.0f}ms"
+            if metrics.ttut_ms
+            else "  TTUT: N/A"
+        ),
+        (
+            f"  总耗时: {metrics.total_time_ms:.0f}ms"
+            if metrics.total_time_ms
+            else "  总耗时: N/A"
+        ),
         (
             f"  推理阶段: {metrics.reasoning_time_ms:.0f}ms"
             if metrics.reasoning_time_ms
@@ -373,7 +389,9 @@ def exact_match(predictions: list[str], references: list[str]) -> float:
     if not predictions or not references:
         return 0.0
     correct = sum(
-        1 for p, r in zip(predictions, references, strict=False) if str(p).strip() == str(r).strip()
+        1
+        for p, r in zip(predictions, references, strict=False)
+        if str(p).strip() == str(r).strip()
     )
     return correct / len(predictions)
 
@@ -522,14 +540,18 @@ def rouge_l(prediction: str, reference: str) -> dict[str, float]:
 
     precision = lcs_len / len(pred_tokens)
     recall = lcs_len / len(ref_tokens)
-    f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
+    f1 = (
+        2 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
+    )
 
     return {"precision": precision, "recall": recall, "f1": f1}
 
 
 def rouge_l_batch(predictions: list[str], references: list[str]) -> float:
     """批量 ROUGE-L F1 Average值"""
-    scores = [rouge_l(p, r)["f1"] for p, r in zip(predictions, references, strict=False)]
+    scores = [
+        rouge_l(p, r)["f1"] for p, r in zip(predictions, references, strict=False)
+    ]
     return sum(scores) / len(scores) if scores else 0.0
 
 
@@ -560,7 +582,9 @@ def pass_at_k(n: int, c: int, k: int) -> float:
 def estimate_pass_at_k(num_samples: list[int], num_correct: list[int], k: int) -> float:
     """估计整体 pass@k"""
     total = sum(
-        pass_at_k(n, c, k) for n, c in zip(num_samples, num_correct, strict=False) if n >= k
+        pass_at_k(n, c, k)
+        for n, c in zip(num_samples, num_correct, strict=False)
+        if n >= k
     )
     count = sum(1 for n in num_samples if n >= k)
     return total / count if count > 0 else 0.0
@@ -575,7 +599,9 @@ def mean_absolute_error(predictions: list[float], references: list[float]) -> fl
     """Average绝对误差 (MAE)"""
     if not predictions or not references:
         return 0.0
-    errors = [abs(float(p) - float(r)) for p, r in zip(predictions, references, strict=False)]
+    errors = [
+        abs(float(p) - float(r)) for p, r in zip(predictions, references, strict=False)
+    ]
     return sum(errors) / len(errors)
 
 
@@ -584,7 +610,8 @@ def root_mean_squared_error(predictions: list[float], references: list[float]) -
     if not predictions or not references:
         return 0.0
     squared_errors = [
-        (float(p) - float(r)) ** 2 for p, r in zip(predictions, references, strict=False)
+        (float(p) - float(r)) ** 2
+        for p, r in zip(predictions, references, strict=False)
     ]
     return math.sqrt(sum(squared_errors) / len(squared_errors))
 
@@ -718,7 +745,9 @@ class EvalMetricsCalculator:
 
             try:
                 value = self.METRICS[metric_name](predictions, references)
-                result = EvalMetricResult(name=metric_name, value=value, count=len(predictions))
+                result = EvalMetricResult(
+                    name=metric_name, value=value, count=len(predictions)
+                )
 
                 if self.compute_ci and metric_name in ["accuracy", "exact_match"]:
                     result.stderr = standard_error(is_correct)
@@ -757,7 +786,10 @@ class EvalMetricsCalculator:
         """Calculate pass@k 指标"""
         if k_values is None:
             k_values = [1, 5, 10]
-        return {f"pass@{k}": estimate_pass_at_k(num_samples, num_correct, k) for k in k_values}
+        return {
+            f"pass@{k}": estimate_pass_at_k(num_samples, num_correct, k)
+            for k in k_values
+        }
 
 
 # ============================================
@@ -797,6 +829,10 @@ def compute_accuracy_with_ci(
     return {
         "accuracy": acc_result.value,
         "stderr": acc_result.stderr or 0.0,
-        "ci_lower": (acc_result.confidence_interval[0] if acc_result.confidence_interval else 0.0),
-        "ci_upper": (acc_result.confidence_interval[1] if acc_result.confidence_interval else 1.0),
+        "ci_lower": (
+            acc_result.confidence_interval[0] if acc_result.confidence_interval else 0.0
+        ),
+        "ci_upper": (
+            acc_result.confidence_interval[1] if acc_result.confidence_interval else 1.0
+        ),
     }

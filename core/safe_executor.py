@@ -68,7 +68,10 @@ def validate_math_expression(expr: str) -> bool:
             elif isinstance(node, ast.Call):
                 # Only allow math function calls
                 if isinstance(node.func, ast.Attribute):
-                    if isinstance(node.func.value, ast.Name) and node.func.value.id == "math":
+                    if (
+                        isinstance(node.func.value, ast.Name)
+                        and node.func.value.id == "math"
+                    ):
                         continue
                 return False
             # Check for imports
@@ -177,7 +180,10 @@ def safe_exec_code(
     for dangerous in dangerous_keywords:
         dangerous_lower = dangerous.lower()
         # Check for "import os" or "from os import"
-        if f"import {dangerous_lower}" in code_lower or f"from {dangerous_lower}" in code_lower:
+        if (
+            f"import {dangerous_lower}" in code_lower
+            or f"from {dangerous_lower}" in code_lower
+        ):
             return False, f"Import of '{dangerous}' is not allowed", None
 
     # Check for direct access to dangerous modules through builtins

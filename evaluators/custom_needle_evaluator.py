@@ -134,7 +134,9 @@ class CustomNeedleEvaluator(BaseEvaluator):
         self.samples = samples
         return samples
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """FormatTest prompt"""
         context = sample.get("context", "")
         question = sample.get("question", "")
@@ -336,7 +338,10 @@ class NeedleTestRunner:
         calc_multiplier = test_config.get("calc_multiplier")
         if calc_base and calc_multiplier:
             expected_result = calc_base * calc_multiplier
-            if str(expected_result) in model_response or f"{expected_result:,}" in model_response:
+            if (
+                str(expected_result) in model_response
+                or f"{expected_result:,}" in model_response
+            ):
                 is_correct = True
 
         return {

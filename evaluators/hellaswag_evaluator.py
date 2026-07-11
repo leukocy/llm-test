@@ -54,7 +54,9 @@ class HellaSwagEvaluator(BaseEvaluator):
         try:
             from core.dataset_manager import get_dataset
 
-            samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
+            samples = get_dataset(
+                self.dataset_name, split="test", max_samples=None, seed=self.seed
+            )
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for HellaSwag: {e}")
 
@@ -92,7 +94,9 @@ class HellaSwagEvaluator(BaseEvaluator):
         samples = self._normalize_samples(samples)
         random.shuffle(samples)
 
-        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
+        total_needed = self.num_shots + (
+            self.max_samples if self.max_samples else len(samples)
+        )
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
@@ -212,9 +216,7 @@ class HellaSwagEvaluator(BaseEvaluator):
         """Build structured chat messages with system prompt, few-shot turns, and user question."""
         messages = []
 
-        system_instruction = (
-            "Complete the following scenario by choosing the most plausible continuation."
-        )
+        system_instruction = "Complete the following scenario by choosing the most plausible continuation."
         messages.append({"role": "system", "content": system_instruction})
 
         for ex in self.few_shot_examples[: self.num_shots]:
@@ -224,7 +226,9 @@ class HellaSwagEvaluator(BaseEvaluator):
                     "content": self.format_prompt(ex, include_answer=False),
                 }
             )
-            messages.append({"role": "assistant", "content": self.get_correct_answer(ex)})
+            messages.append(
+                {"role": "assistant", "content": self.get_correct_answer(ex)}
+            )
 
         messages.append(
             {
@@ -234,7 +238,9 @@ class HellaSwagEvaluator(BaseEvaluator):
         )
         return messages
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """Format HellaSwag 样本"""
         context = sample.get("context", "")
         choices = sample.get("choices", [])
@@ -255,7 +261,9 @@ class HellaSwagEvaluator(BaseEvaluator):
         if include_answer:
             answer_idx = sample.get("answer", 0)
             answer_letter = (
-                chr(ord("A") + answer_idx) if isinstance(answer_idx, int) else answer_idx
+                chr(ord("A") + answer_idx)
+                if isinstance(answer_idx, int)
+                else answer_idx
             )
             prompt_lines.append(f"Answer: {answer_letter}")
         else:
@@ -265,9 +273,7 @@ class HellaSwagEvaluator(BaseEvaluator):
 
     def build_full_prompt(self, sample: dict[str, Any]) -> str:
         """Build完整 prompt"""
-        instruction = (
-            "Complete the following scenario by choosing the most plausible continuation.\n\n"
-        )
+        instruction = "Complete the following scenario by choosing the most plausible continuation.\n\n"
 
         examples = []
         for example in self.few_shot_examples[: self.num_shots]:

@@ -189,7 +189,9 @@ class TestThinkingMetrics:
         time.sleep(0.01)
         metrics.record_reasoning_chunk("Thinking")
         time.sleep(0.01)
-        metrics.record_reasoning_chunk("More thinking")  # 二推理块用于Calculate reasoning_time
+        metrics.record_reasoning_chunk(
+            "More thinking"
+        )  # 二推理块用于Calculate reasoning_time
         time.sleep(0.01)
         metrics.record_content_chunk("Answer")
         time.sleep(0.01)
@@ -223,7 +225,9 @@ class TestThinkingMetrics:
         metrics.record_content_chunk("Answer")
         metrics.record_request_end()
 
-        metrics.set_usage({"prompt_tokens": 1000, "completion_tokens": 500, "total_tokens": 1500})
+        metrics.set_usage(
+            {"prompt_tokens": 1000, "completion_tokens": 500, "total_tokens": 1500}
+        )
 
         # quality_score = 8/10
         result = metrics.calculate(quality_score=8.0)
@@ -240,7 +244,9 @@ class TestThinkingMetrics:
         """免费平台成本is0"""
         metrics = ThinkingMetrics(platform="mimo")
 
-        metrics.set_usage({"prompt_tokens": 1000, "completion_tokens": 500, "total_tokens": 1500})
+        metrics.set_usage(
+            {"prompt_tokens": 1000, "completion_tokens": 500, "total_tokens": 1500}
+        )
 
         result = metrics.calculate()
         # MiMo 免费
@@ -361,7 +367,9 @@ class TestReasoningRatio:
         """推理占比Calculate"""
         metrics = ThinkingMetrics()
 
-        metrics.set_usage({"total_tokens": 100, "completion_tokens": 60, "reasoning_tokens": 40})
+        metrics.set_usage(
+            {"total_tokens": 100, "completion_tokens": 60, "reasoning_tokens": 40}
+        )
 
         result = metrics.calculate()
         # reasoning_ratio = reasoning_tokens / total_tokens

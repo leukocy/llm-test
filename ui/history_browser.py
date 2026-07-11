@@ -10,12 +10,13 @@ import streamlit as st
 
 from core.database import db_manager
 from core.models import TestRun
+from ui.components import status_icon
 
 
 def render_history_browser():
     """Render history browser"""
 
-    st.subheader("📚 Test History")
+    st.subheader("Test History")
 
     # Initialize
     db = db_manager
@@ -24,7 +25,9 @@ def render_history_browser():
     col1, col2, col3 = st.columns([2, 1, 1])
 
     with col1:
-        search_query = st.text_input("Search", placeholder="Enter model ID, label, or notes...")
+        search_query = st.text_input(
+            "Search", placeholder="Enter model ID, label, or notes..."
+        )
 
     with col2:
         filter_type = st.selectbox(
@@ -74,10 +77,14 @@ def render_history_browser():
         _render_run_card(run, db)
 
     # Pagination info
-    st.caption(f"Showing {start_idx + 1}-{min(end_idx, len(runs))}  of {len(runs)} records")
+    st.caption(
+        f"Showing {start_idx + 1}-{min(end_idx, len(runs))}  of {len(runs)} records"
+    )
 
 
-def _query_runs(db, search_query: str, filter_type: str, filter_days: str) -> list[TestRun]:
+def _query_runs(
+    db, search_query: str, filter_type: str, filter_days: str
+) -> list[TestRun]:
     """Query test runs"""
     # Base query
     if search_query:
@@ -134,57 +141,53 @@ def _render_stats(db, runs: list[TestRun]):
 def _render_run_card(run: TestRun, db):
     """Render single test run card"""
 
-    # Status colors
-    status_colors = {
-        "completed": "🟢",
-        "running": "🔵",
-        "paused": "🟡",
-        "cancelled": "⚪",
-        "failed": "🔴",
-    }
-    status_icon = status_colors.get(run.status, "⚪")
+    # Status icon via ui.components (single source of truth)
+    run_icon = status_icon(run.status)
 
     with st.container():
         col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
 
         with col1:
-            st.markdown(f"**{status_icon} {run.test_type}** - {run.model_id}")
+            st.markdown(
+                f"**{run_icon} {run.test_type}** - {run.model_id}",
+                unsafe_allow_html=True,
+            )
             if run.tags:
                 tags_str = " ".join([f"`{t}`" for t in run.tags[:3]])
                 st.markdown(f"<small>{tags_str}</small>", unsafe_allow_html=True)
 
         with col2:
             if run.created_at:
-                st.caption(f"📅 {run.created_at.strftime('%Y-%m-%d %H:%M')}")
+                st.caption(f"{run.created_at.strftime('%Y-%m-%d %H:%M')}")
 
         with col3:
             progress = f"{run.completed_requests}/{run.total_requests}"
-            st.caption(f"📊 {progress}")
+            st.caption(f"{progress}")
 
         with col4:
             if run.avg_ttft:
-                st.caption(f"⏱️ TTFT: {run.avg_ttft:.3f}s")
+                st.caption(f"TTFT: {run.avg_ttft:.3f}s")
             if run.avg_tps:
-                st.caption(f"🚀 TPS: {run.avg_tps:.1f}")
+                st.caption(f"TPS: {run.avg_tps:.1f}")
 
         # Action buttons
         btn_col1, btn_col2, btn_col3, btn_col4 = st.columns(4)
 
         with btn_col1:
-            if st.button("📋 Details", key=f"detail_{run.id}"):
+            if st.button("Details", key=f"detail_{run.id}"):
                 st.session_state.selected_run_id = run.id
                 st.rerun()
 
         with btn_col2:
-            if st.button("📊 Metrics", key=f"metrics_{run.id}"):
+            if st.button("Metrics", key=f"metrics_{run.id}"):
                 _show_run_metrics(run, db)
 
         with btn_col3:
-            if st.button("📥 Export", key=f"export_{run.id}"):
+            if st.button("Export", key=f"export_{run.id}"):
                 _export_run(run, db)
 
         with btn_col4:
-            if st.button("🗑️ Delete", key=f"delete_{run.id}"):
+            if st.button("Delete", key=f"delete_{run.id}"):
                 if db.runs.delete_by_id(run.id):
                     st.success("Deleted")
                     st.rerun()
@@ -194,7 +197,7 @@ def _render_run_card(run: TestRun, db):
 
 def _show_run_metrics(run: TestRun, db):
     """Showing detailed test run metrics"""
-    with st.expander(f"📊 Detailed Metrics - {run.test_id}", expanded=True):
+    with st.expander(f"Detailed Metrics - {run.test_id}", expanded=True):
         # Get result statistics
         stats = db.results.get_aggregate_metrics(run.id)
 
@@ -228,7 +231,8 @@ def _show_run_metrics(run: TestRun, db):
         with col3:
             st.metric(
                 "Total Tokens",
-                stats.get("total_prefill_tokens", 0) + stats.get("total_decode_tokens", 0),
+                stats.get("total_prefill_tokens", 0)
+                + stats.get("total_decode_tokens", 0),
             )
             st.metric("Cache Hits", stats.get("total_cache_hit_tokens", 0))
             st.metric(
@@ -243,7 +247,7 @@ def _show_run_metrics(run: TestRun, db):
 
 def _export_run(run: TestRun, db):
     """Export test run"""
-    with st.expander(f"📥 Export - {run.test_id}", expanded=True):
+    with st.expander(f"Export - {run.test_id}", expanded=True):
         col1, col2, col3 = st.columns(3)
 
         with col1:
@@ -268,7 +272,7 @@ def _export_run(run: TestRun, db):
 def render_import_panel():
     """Render data import panel"""
 
-    st.subheader("📥 Import Historical Data")
+    st.subheader("Import Historical Data")
 
     st.info("Import existing CSV test results into the database")
 
@@ -282,7 +286,9 @@ def render_import_panel():
 
         col1, col2 = st.columns(2)
         with col1:
-            model_id = st.text_input("Model ID (optional, leave blank for auto-detection)")
+            model_id = st.text_input(
+                "Model ID (optional, leave blank for auto-detection)"
+            )
         with col2:
             test_type = st.text_input("Test Type (optional)")
 
@@ -304,7 +310,9 @@ def render_import_panel():
             with st.spinner("Scanning..."):
                 success, total, errors = db_manager.importer.import_directory(directory)
 
-            st.success(f"Complete! Successfully imported {success} files, total {total} records")
+            st.success(
+                f"Complete! Successfully imported {success} files, total {total} records"
+            )
 
             if errors:
                 with st.expander(f"View Errors ({len(errors)} items)"):
@@ -315,7 +323,7 @@ def render_import_panel():
 def render_dashboard():
     """Render dashboard"""
 
-    st.subheader("📊 Dashboard")
+    st.subheader("Dashboard")
 
     db = db_manager
     stats = db.get_dashboard_stats()
@@ -357,8 +365,8 @@ def render_dashboard():
     recent = stats.get("recent_runs", [])
     if recent:
         for run in recent[:5]:
-            status_icons = {"completed": "🟢", "running": "🔵", "failed": "🔴"}
-            icon = status_icons.get(run.status, "⚪")
+            run_icon = status_icon(run.status)
             st.markdown(
-                f"- {icon} **{run.test_type}** - {run.model_id} ({run.created_at.strftime('%Y-%m-%d %H:%M') if run.created_at else ''})"
+                f"- {run_icon} **{run.test_type}** - {run.model_id} ({run.created_at.strftime('%Y-%m-%d %H:%M') if run.created_at else ''})",
+                unsafe_allow_html=True,
             )

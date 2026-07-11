@@ -236,7 +236,9 @@ class TestGetParserForDataset:
 
     def test_choice_datasets(self):
         for name in ["mmlu", "gpqa", "hellaswag", "truthfulqa", "winogrande", "arc"]:
-            assert isinstance(get_parser_for_dataset(name), MultiChoiceParser), f"{name}"
+            assert isinstance(
+                get_parser_for_dataset(name), MultiChoiceParser
+            ), f"{name}"
 
     def test_math_datasets(self):
         for name in ["gsm8k", "math500", "aime2025", "aime"]:
@@ -534,7 +536,10 @@ class TestTextAnswerParserEdgeCases:
 
     def test_partial_overlap(self):
         """Fuzzy match with partial overlap."""
-        assert TextAnswerParser.check_answer("The capital of France", "capital of France") is True
+        assert (
+            TextAnswerParser.check_answer("The capital of France", "capital of France")
+            is True
+        )
 
     def test_completely_different(self):
         assert TextAnswerParser.check_answer("apple", "orange") is False
@@ -565,7 +570,10 @@ class TestMultiChoiceParserEdgeCases:
         assert result == "B"
 
     def test_choice_e_and_f(self):
-        assert self.parser.parse("Answer: E", choices=["A", "B", "C", "D", "E", "F"]) == "E"
+        assert (
+            self.parser.parse("Answer: E", choices=["A", "B", "C", "D", "E", "F"])
+            == "E"
+        )
 
     def test_chinese_答案是_with_paren(self):
         assert self.parser.parse("答案是（C）") == "C"
@@ -609,7 +617,9 @@ class TestEvalScopeChoicePatterns:
 
     def test_evalscope_format_example(self):
         """EvalScope format_example outputs: 'ANSWER: X'."""
-        response = "What is the capital of France?\nA) London\nB) Paris\nC) Berlin\nANSWER: B"
+        response = (
+            "What is the capital of France?\nA) London\nB) Paris\nC) Berlin\nANSWER: B"
+        )
         assert self.parser.parse(response) == "B"
 
     def test_fallback_last_uppercase(self):

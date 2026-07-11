@@ -48,11 +48,23 @@ def test_application_quality_fields_left_none():
 
 
 def test_scenario_mapping_per_evaluator():
-    assert _build_case_from_sample(_sample(), "humaneval", "M", "d").scenario == "coding"
-    assert _build_case_from_sample(_sample(), "longbench", "M", "d").scenario == "long_doc"
-    assert _build_case_from_sample(_sample(), "needle_haystack", "M", "d").scenario == "retrieval"
-    assert _build_case_from_sample(_sample(), "arena_hard", "M", "d").scenario == "dialogue"
-    assert _build_case_from_sample(_sample(), "mmlu", "M", "d").scenario == "knowledge_qa"
+    assert (
+        _build_case_from_sample(_sample(), "humaneval", "M", "d").scenario == "coding"
+    )
+    assert (
+        _build_case_from_sample(_sample(), "longbench", "M", "d").scenario == "long_doc"
+    )
+    assert (
+        _build_case_from_sample(_sample(), "needle_haystack", "M", "d").scenario
+        == "retrieval"
+    )
+    assert (
+        _build_case_from_sample(_sample(), "arena_hard", "M", "d").scenario
+        == "dialogue"
+    )
+    assert (
+        _build_case_from_sample(_sample(), "mmlu", "M", "d").scenario == "knowledge_qa"
+    )
 
 
 def test_case_id_format_and_metadata():

@@ -20,7 +20,9 @@ from core.result_metrics import (
 def build_concurrency_summary(df_group: pd.DataFrame) -> pd.DataFrame:
     """Build the concurrency report summary without Streamlit dependencies."""
     if "concurrency" not in df_group.columns:
-        raise ValueError("Concurrency summary failed: missing 'concurrency' column in data.")
+        raise ValueError(
+            "Concurrency summary failed: missing 'concurrency' column in data."
+        )
 
     work = df_group.copy()
     work = work[pd.to_numeric(work["concurrency"], errors="coerce").notna()]
@@ -97,8 +99,12 @@ def build_concurrency_summary(df_group: pd.DataFrame) -> pd.DataFrame:
     )
     summary_rps = summarize_metric_extreme(work, "concurrency", "rps", "Max_RPS")
 
-    summary_sys_tps = pd.merge(summary_output, summary_input, on="concurrency", how="left")
-    summary_sys_tps = pd.merge(summary_sys_tps, summary_rps, on="concurrency", how="left")
+    summary_sys_tps = pd.merge(
+        summary_output, summary_input, on="concurrency", how="left"
+    )
+    summary_sys_tps = pd.merge(
+        summary_sys_tps, summary_rps, on="concurrency", how="left"
+    )
     summary_sys_tps["Max_QPM"] = summary_sys_tps["Max_RPS"] * 60
 
     req_stats = (
@@ -124,7 +130,9 @@ def build_concurrency_summary(df_group: pd.DataFrame) -> pd.DataFrame:
 def build_prefill_summary(df_group: pd.DataFrame) -> pd.DataFrame:
     """Build the prefill stress report summary without Streamlit dependencies."""
     if "input_tokens_target" not in df_group.columns:
-        raise ValueError("Prefill summary failed: missing 'input_tokens_target' column in data.")
+        raise ValueError(
+            "Prefill summary failed: missing 'input_tokens_target' column in data."
+        )
 
     work = df_group.copy()
     if work.empty:
@@ -176,7 +184,9 @@ def build_prefill_summary(df_group: pd.DataFrame) -> pd.DataFrame:
         on="input_tokens_target",
         how="left",
     )
-    summary["x_label"] = (summary["input_tokens_target"] / 1024).round(1).astype(str) + "k"
+    summary["x_label"] = (summary["input_tokens_target"] / 1024).round(1).astype(
+        str
+    ) + "k"
     summary = summary.sort_values(by="input_tokens_target").reset_index(drop=True)
     summary.attrs["requests_per_level"] = int(requests_per_level)
     return summary
@@ -219,7 +229,9 @@ def build_long_context_summary(df_group: pd.DataFrame) -> pd.DataFrame:
     # while tps/tpot already use the corrected skip-first-token decode window.
     tps_values = pd.to_numeric(work["tps"], errors="coerce")
     output_values = pd.to_numeric(work["system_output_throughput"], errors="coerce")
-    work["system_output_throughput"] = output_values.where(~(tps_values > 0), tps_values)
+    work["system_output_throughput"] = output_values.where(
+        ~(tps_values > 0), tps_values
+    )
 
     work = sanitize_performance_metrics(work)
 
@@ -252,7 +264,9 @@ def build_long_context_summary(df_group: pd.DataFrame) -> pd.DataFrame:
         "prefill_speed",
         "Max_Prefill_Speed",
     )
-    summary_tps = summarize_metric_extreme(work, "context_length_target", "tps", "Max_TPS")
+    summary_tps = summarize_metric_extreme(
+        work, "context_length_target", "tps", "Max_TPS"
+    )
 
     summary = pd.merge(stats, summary_ttft, on="context_length_target", how="left")
     summary = pd.merge(summary, summary_prefill, on="context_length_target", how="left")
@@ -276,9 +290,17 @@ def build_long_context_summary(df_group: pd.DataFrame) -> pd.DataFrame:
         "system_throughput",
         "Max_System_Throughput",
     )
-    summary = pd.merge(summary, summary_sys_input, on="context_length_target", how="left")
-    summary = pd.merge(summary, summary_sys_output, on="context_length_target", how="left")
-    summary = pd.merge(summary, summary_sys_total, on="context_length_target", how="left")
-    summary["x_label"] = (summary["context_length_target"] / 1024).round(1).astype(str) + "k"
+    summary = pd.merge(
+        summary, summary_sys_input, on="context_length_target", how="left"
+    )
+    summary = pd.merge(
+        summary, summary_sys_output, on="context_length_target", how="left"
+    )
+    summary = pd.merge(
+        summary, summary_sys_total, on="context_length_target", how="left"
+    )
+    summary["x_label"] = (summary["context_length_target"] / 1024).round(1).astype(
+        str
+    ) + "k"
     summary.attrs["requests_per_level"] = int(requests_per_level)
     return summary

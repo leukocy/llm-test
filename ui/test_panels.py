@@ -103,9 +103,11 @@ def _execute_pending_test(run_test_func, test_type):
 
             # 显示恢复信息
             completed = resume_data.get("current_index", 0)
-            total = resume_data.get("total_samples", 0) or resume_data.get("total_requests", 0)
+            total = resume_data.get("total_samples", 0) or resume_data.get(
+                "total_requests", 0
+            )
             st.info(
-                f"🔄 Resuming {test_type} from saved progress... ({completed}/{total} completed)"
+                f"Resuming {test_type} from saved progress... ({completed}/{total} completed)"
             )
         else:
             st.warning("No saved progress found, starting fresh test.")
@@ -143,8 +145,8 @@ def render_test_panels(test_type, run_test_func):
 
     # Concurrency Test
     if test_type == "Concurrency Test":
-        st.header("⚡ Concurrency Test")
-        with st.sidebar.expander("📊 Parameter Settings", expanded=True):
+        st.header("Concurrency Test")
+        with st.sidebar.expander("Parameter Settings", expanded=True):
             concurrencies_select = st.multiselect(
                 "Select Concurrency Levels",
                 [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],
@@ -170,14 +172,14 @@ def render_test_panels(test_type, run_test_func):
             )
             st.markdown("---")
             start_btn_con_sidebar = st.button(
-                "🚀 Start Concurrency Test (S)",
+                "Start Concurrency Test (S)",
                 key="start_con_sidebar_btn",
                 type="primary",
                 disabled=_get_button_disabled_state(),
             )
 
         start_btn_con_main = st.button(
-            "🚀 Start Concurrency Test (M)",
+            "Start Concurrency Test (M)",
             key="start_con_main_btn",
             disabled=_get_button_disabled_state(),
         )
@@ -225,8 +227,8 @@ def render_test_panels(test_type, run_test_func):
 
     # Prefill Stress Test
     elif test_type == "Prefill Stress Test":
-        st.header("🔥 Prefill Stress Test")
-        with st.sidebar.expander("📊 Parameter Settings", expanded=True):
+        st.header("Prefill Stress Test")
+        with st.sidebar.expander("Parameter Settings", expanded=True):
             prefill_tokens_select = st.multiselect(
                 "Select Token Counts",
                 [
@@ -271,19 +273,21 @@ def render_test_panels(test_type, run_test_func):
             )
             st.markdown("---")
             start_btn_prefill_sidebar = st.button(
-                "🚀 Start Prefill Test (S)",
+                "Start Prefill Test (S)",
                 key="start_prefill_sidebar_btn",
                 type="primary",
                 disabled=_get_button_disabled_state(),
             )
 
         start_btn_prefill_main = st.button(
-            "🚀 Start Prefill Stress Test (M)",
+            "Start Prefill Stress Test (M)",
             key="start_prefill_main_btn",
             disabled=_get_button_disabled_state(),
         )
         if start_btn_prefill_main or start_btn_prefill_sidebar:
-            max_tokens_to_use = 1 if prefill_isolation_mode else max_tokens_prefill_input
+            max_tokens_to_use = (
+                1 if prefill_isolation_mode else max_tokens_prefill_input
+            )
 
             if prefill_isolation_mode:
                 st.info("Prefill isolation test activated (max_tokens=1).")
@@ -317,7 +321,7 @@ def render_test_panels(test_type, run_test_func):
 
     # Segmented Context Test
     elif test_type == "Segmented Context Test":
-        st.header("📊 Segmented Context Test (Prefix Caching)")
+        st.header("Segmented Context Test (Prefix Caching)")
         st.info(
             """
         **Test Description**: Simulates real-world scenarios where users send cumulative long text in segments (e.g., document Q&A, multi-turn conversations).
@@ -327,7 +331,7 @@ def render_test_panels(test_type, run_test_func):
         """
         )
 
-        with st.sidebar.expander("📊 Parameter Settings", expanded=True):
+        with st.sidebar.expander("Parameter Settings", expanded=True):
             # Segment level selection
             segment_presets = {
                 "Progressive": [2000, 8000, 20000, 40000, 60000],
@@ -405,14 +409,14 @@ def render_test_panels(test_type, run_test_func):
             )
 
             start_btn_segment_sidebar = st.button(
-                "🚀 Start Segmented Test (S)",
+                "Start Segmented Test (S)",
                 key="start_segment_sidebar_btn",
                 type="primary",
                 disabled=_get_button_disabled_state(),
             )
 
         start_btn_segment_main = st.button(
-            "🚀 Start Segmented Context Test (M)",
+            "Start Segmented Context Test (M)",
             key="start_segment_main_btn",
             disabled=_get_button_disabled_state(),
         )
@@ -459,8 +463,8 @@ def render_test_panels(test_type, run_test_func):
 
     # Long Context Test
     elif test_type == "Long Context Test":
-        st.header("📏 Long Context Test")
-        with st.sidebar.expander("📊 Parameter Settings", expanded=True):
+        st.header("Long Context Test")
+        with st.sidebar.expander("Parameter Settings", expanded=True):
             context_lengths_select = st.multiselect(
                 "Select Context Lengths",
                 [
@@ -491,14 +495,14 @@ def render_test_panels(test_type, run_test_func):
             )
             st.markdown("---")
             start_btn_long_sidebar = st.button(
-                "🚀 Start Long Context Test (S)",
+                "Start Long Context Test (S)",
                 key="start_long_sidebar_btn",
                 type="primary",
                 disabled=_get_button_disabled_state(),
             )
 
         start_btn_long_main = st.button(
-            "🚀 Start Long Context Test (M)",
+            "Start Long Context Test (M)",
             key="start_long_main_btn",
             disabled=_get_button_disabled_state(),
         )
@@ -532,8 +536,8 @@ def render_test_panels(test_type, run_test_func):
 
     # Concurrency-Context Matrix Test
     elif test_type == "Concurrency-Context Matrix Test":
-        st.header("🔬 Concurrency-Context Matrix Test")
-        with st.sidebar.expander("📊 Parameter Settings", expanded=True):
+        st.header("Concurrency-Context Matrix Test")
+        with st.sidebar.expander("Parameter Settings", expanded=True):
             matrix_concurrencies_select = st.multiselect(
                 "Select Concurrency Levels",
                 [1, 2, 4, 8, 16, 64, 128, 256, 512, 1024],
@@ -569,14 +573,14 @@ def render_test_panels(test_type, run_test_func):
             )
             st.markdown("---")
             start_btn_matrix_sidebar = st.button(
-                "🚀 Start Matrix Test (S)",
+                "Start Matrix Test (S)",
                 key="start_matrix_sidebar_btn",
                 type="primary",
                 disabled=_get_button_disabled_state(),
             )
 
         start_btn_matrix_main = st.button(
-            "🚀 Start Concurrency-Context Matrix Test (M)",
+            "Start Concurrency-Context Matrix Test (M)",
             key="start_matrix_main_btn",
             disabled=_get_button_disabled_state(),
         )
@@ -587,7 +591,9 @@ def render_test_panels(test_type, run_test_func):
                     for c in matrix_concurrencies_custom.split(",")
                     if c.strip() and c.strip().isdigit()
                 ]
-                selected_concurrencies = sorted(set(matrix_concurrencies_select + custom_cons))
+                selected_concurrencies = sorted(
+                    set(matrix_concurrencies_select + custom_cons)
+                )
 
                 custom_ctxs = [
                     int(l.strip())
@@ -597,7 +603,9 @@ def render_test_panels(test_type, run_test_func):
                 selected_contexts = sorted(set(matrix_context_select + custom_ctxs))
 
                 if not selected_concurrencies or not selected_contexts:
-                    st.error("Please select at least one concurrency level and one context length.")
+                    st.error(
+                        "Please select at least one concurrency level and one context length."
+                    )
                 else:
                     from config.session_state import set_test_running
 
@@ -624,11 +632,13 @@ def render_test_panels(test_type, run_test_func):
                     set_test_running()
                     st.rerun()
             except ValueError:
-                st.error("Invalid custom value format. Please use comma-separated numbers.")
+                st.error(
+                    "Invalid custom value format. Please use comma-separated numbers."
+                )
 
     # Custom Text Test
     elif test_type == "Custom Text Test":
-        st.header("📄 Custom Text Test")
+        st.header("Custom Text Test")
         st.info(
             "Upload a TXT file as prompt context and add custom instructions. The system will automatically inject random noise to avoid caching."
         )
@@ -667,14 +677,14 @@ def render_test_panels(test_type, run_test_func):
 
         st.sidebar.markdown("---")
         start_btn_custom_sidebar = st.sidebar.button(
-            "🚀 Start Custom Test (S)",
+            "Start Custom Test (S)",
             key="start_custom_sidebar_btn",
             type="primary",
             disabled=_get_button_disabled_state(),
         )
 
         start_btn_custom_main = st.button(
-            "🚀 Start Custom Text Test (M)",
+            "Start Custom Text Test (M)",
             key="start_custom_main_btn",
             disabled=_get_button_disabled_state(),
         )
@@ -715,11 +725,15 @@ def render_test_panels(test_type, run_test_func):
 
     # All Tests
     elif test_type == "All Tests":
-        st.header("🎯 All Tests")
-        st.warning("This option will run all test types sequentially, which may take a long time.")
+        st.header("All Tests")
+        st.warning(
+            "This option will run all test types sequentially, which may take a long time."
+        )
 
         st.subheader("Concurrency Test Configuration")
-        all_con = st.text_input("Concurrency Levels (comma-separated)", "1,2", key="all_con_levels")
+        all_con = st.text_input(
+            "Concurrency Levels (comma-separated)", "1,2", key="all_con_levels"
+        )
         all_con_rounds = st.number_input(
             "Concurrency Test Rounds", min_value=1, value=1, key="all_con_rounds"
         )
@@ -772,21 +786,25 @@ def render_test_panels(test_type, run_test_func):
 
         st.sidebar.markdown("---")
         start_btn_all_sidebar = st.sidebar.button(
-            "🚀 Start All Tests (S)",
+            "Start All Tests (S)",
             key="start_all_sidebar_btn",
             type="primary",
             disabled=_get_button_disabled_state(),
         )
 
         start_btn_all_main = st.button(
-            "🚀 Start All Tests (M)",
+            "Start All Tests (M)",
             key="start_all_main_btn",
             disabled=_get_button_disabled_state(),
         )
         if start_btn_all_main or start_btn_all_sidebar:
             try:
-                token_levels_list = [int(t.strip()) for t in all_prefill.split(",") if t.strip()]
-                context_lengths_list = [int(l.strip()) for l in all_context.split(",") if l.strip()]
+                token_levels_list = [
+                    int(t.strip()) for t in all_prefill.split(",") if t.strip()
+                ]
+                context_lengths_list = [
+                    int(l.strip()) for l in all_context.split(",") if l.strip()
+                ]
 
                 from config.session_state import set_test_running
 
@@ -827,8 +845,8 @@ def render_test_panels(test_type, run_test_func):
 
     # Stability Test
     elif test_type == "Stability Test":
-        st.header("⏱️ Stability Test (Time-based Stability)")
-        with st.sidebar.expander("📊 Parameter Settings", expanded=True):
+        st.header("Stability Test (Time-based Stability)")
+        with st.sidebar.expander("Parameter Settings", expanded=True):
             st.info("This mode will continuously run tests for the specified duration.")
 
             stability_concurrency = st.number_input(
@@ -862,14 +880,14 @@ def render_test_panels(test_type, run_test_func):
 
             st.markdown("---")
             start_btn_stability_sidebar = st.button(
-                "🚀 Start Stability Test (S)",
+                "Start Stability Test (S)",
                 key="start_stability_sidebar_btn",
                 type="primary",
                 disabled=_get_button_disabled_state(),
             )
 
         start_btn_stability_main = st.button(
-            "🚀 Start Stability Test (M)",
+            "Start Stability Test (M)",
             key="start_stability_main_btn",
             disabled=_get_button_disabled_state(),
         )

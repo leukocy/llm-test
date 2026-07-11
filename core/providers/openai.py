@@ -157,7 +157,9 @@ class OpenAIProvider(LLMProvider):
         token_timestamps: list[float] = []
         request_timeout = kwargs.pop("request_timeout", None)
         input_tokens_hint = kwargs.pop("input_tokens_hint", None)
-        actual_messages = messages if messages else [{"role": "user", "content": prompt}]
+        actual_messages = (
+            messages if messages else [{"role": "user", "content": prompt}]
+        )
         request_timeout_seconds = get_request_timeout_seconds(
             prompt=prompt,
             messages=messages,
@@ -170,7 +172,9 @@ class OpenAIProvider(LLMProvider):
         if client is None:
             client = httpx.AsyncClient(
                 transport=httpx.AsyncHTTPTransport(
-                    limits=httpx.Limits(max_connections=2048, max_keepalive_connections=256),
+                    limits=httpx.Limits(
+                        max_connections=2048, max_keepalive_connections=256
+                    ),
                 ),
                 timeout=request_timeout_seconds,
             )
@@ -226,7 +230,9 @@ class OpenAIProvider(LLMProvider):
             if "_extra_body_deepseek" in thinking_params:
                 if "extra_body" not in payload:
                     payload["extra_body"] = {}
-                payload["extra_body"].update(thinking_params.pop("_extra_body_deepseek"))
+                payload["extra_body"].update(
+                    thinking_params.pop("_extra_body_deepseek")
+                )
 
             if "_extra_body_volcano" in thinking_params:
                 if "extra_body" not in payload:
@@ -263,7 +269,9 @@ class OpenAIProvider(LLMProvider):
                 ) as response:
                     if response.status_code != 200:
                         status_code = response.status_code
-                        error_text = (await response.aread())[:200].decode("utf-8", errors="ignore")
+                        error_text = (await response.aread())[:200].decode(
+                            "utf-8", errors="ignore"
+                        )
                         if log_callback:
                             log_callback(f"API Error {status_code}: {error_text}")
 
@@ -308,7 +316,11 @@ class OpenAIProvider(LLMProvider):
                         if event.usage:
                             usage_info = event.usage
 
-                        if event.has_choice and event.raw_chunk and len(raw_stream_chunks) < 5:
+                        if (
+                            event.has_choice
+                            and event.raw_chunk
+                            and len(raw_stream_chunks) < 5
+                        ):
                             raw_stream_chunks.append(event.raw_chunk)
 
                         if event.reasoning:
@@ -325,7 +337,11 @@ class OpenAIProvider(LLMProvider):
                             ]
 
                             if first_token_time is None:
-                                if not is_only_tag or is_only_tag and len(text_chunk) > 10:
+                                if (
+                                    not is_only_tag
+                                    or is_only_tag
+                                    and len(text_chunk) > 10
+                                ):
                                     first_token_time = current_time
 
                             token_timestamps.append(current_time)
@@ -489,7 +505,9 @@ class OpenAIProvider(LLMProvider):
             if isinstance(e, asyncio.CancelledError):
                 raise
             error_msg = f"{str(e)}. Exception"
-            error_info = get_error_info(e, context=f"Model: {self.model_id}", language="zh")
+            error_info = get_error_info(
+                e, context=f"Model: {self.model_id}", language="zh"
+            )
             from ..request_logger import get_request_logger
 
             req_logger = get_request_logger()

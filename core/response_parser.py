@@ -91,7 +91,9 @@ class UnifiedResponseParser:
         Returns:
             ParsedChunk: Parse后响应块
         """
-        result = ParsedChunk(raw_chunk=chunk if self._total_chunks < self.max_snapshots else None)
+        result = ParsedChunk(
+            raw_chunk=chunk if self._total_chunks < self.max_snapshots else None
+        )
 
         # Save快照
         if self._total_chunks < self.max_snapshots:
@@ -139,7 +141,9 @@ class UnifiedResponseParser:
 
         return result
 
-    def _parse_standard_chunk(self, delta: dict[str, Any], result: ParsedChunk) -> ParsedChunk:
+    def _parse_standard_chunk(
+        self, delta: dict[str, Any], result: ParsedChunk
+    ) -> ParsedChunk:
         """Parse标准格式响应块 (OpenAI 兼容)"""
         # 提取正文
         content = delta.get(self.content_field, "") or ""
@@ -151,7 +155,9 @@ class UnifiedResponseParser:
 
         return result
 
-    def _parse_gemini_chunk(self, delta: dict[str, Any], result: ParsedChunk) -> ParsedChunk:
+    def _parse_gemini_chunk(
+        self, delta: dict[str, Any], result: ParsedChunk
+    ) -> ParsedChunk:
         """Parse Gemini 格式响应块"""
         # Gemini  delta 可能直接包含 parts，也可能is标准格式
         parts = delta.get("parts", [])
@@ -217,7 +223,9 @@ class UnifiedResponseParser:
         return len(self._full_reasoning) / total
 
 
-def parse_stream_response(chunks: list[dict[str, Any]], platform: str) -> ParsedResponse:
+def parse_stream_response(
+    chunks: list[dict[str, Any]], platform: str
+) -> ParsedResponse:
     """
     便捷函数：Parse完整流式响应
 

@@ -52,7 +52,9 @@ def _build_case_from_sample(
         success=bool(sample.is_correct) if sample.is_correct is not None else None,
         ttft_s=(sample.ttft_ms / 1000.0) if sample.ttft_ms else None,
         prefill_latency_s=(sample.ttft_ms / 1000.0) if sample.ttft_ms else None,
-        total_latency_s=((sample.total_time_ms / 1000.0) if sample.total_time_ms else None),
+        total_latency_s=(
+            (sample.total_time_ms / 1000.0) if sample.total_time_ms else None
+        ),
         decode_tps=sample.tps or None,
         input_tokens=sample.input_tokens or None,
         output_tokens=sample.output_tokens or None,
@@ -66,7 +68,10 @@ def _build_case_from_sample(
         external_level="internal",
         extra={
             "engine_version": engine_version or "",
-            "reasoning_quality_overall": getattr(sample, "reasoning_quality_overall", None) or None,
+            "reasoning_quality_overall": getattr(
+                sample, "reasoning_quality_overall", None
+            )
+            or None,
             "failure_category": getattr(sample, "failure_category", "") or "",
             "evaluation_method": getattr(sample, "evaluation_method", "") or "",
             "category": getattr(sample, "category", "") or "",
@@ -258,10 +263,14 @@ class QualityEvaluator:
                     return
 
             # 3. 最终失败
-            self._log(f"no法Load tokenizer: {model_id}，willuse字符估算", LogLevel.WARNING)
+            self._log(
+                f"no法Load tokenizer: {model_id}，willuse字符估算", LogLevel.WARNING
+            )
 
         except Exception as e:
-            self._log(f"Initialize tokenizer 失败: {e}，willuse字符估算", LogLevel.WARNING)
+            self._log(
+                f"Initialize tokenizer 失败: {e}，willuse字符估算", LogLevel.WARNING
+            )
             self.tokenizer = None
 
     def count_tokens(self, text: str) -> int:
@@ -299,7 +308,9 @@ class QualityEvaluator:
                 "total_entries": cache_stats.total_entries,
                 "total_bytes": cache_stats.total_bytes,
                 "total_bytes_mb": (
-                    cache_stats.total_bytes / (1024 * 1024) if cache_stats.total_bytes else 0
+                    cache_stats.total_bytes / (1024 * 1024)
+                    if cache_stats.total_bytes
+                    else 0
                 ),
             }
         except Exception:
@@ -357,7 +368,9 @@ class QualityEvaluator:
                     "content": cached_response,
                     "error": None,
                     "input_tokens": self.count_tokens(cache_key) if cache_key else 0,
-                    "output_tokens": (self.count_tokens(cached_response) if cached_response else 0),
+                    "output_tokens": (
+                        self.count_tokens(cached_response) if cached_response else 0
+                    ),
                     "ttft_ms": 0,
                     "tps": 0,
                     "total_time_ms": 0,
@@ -416,7 +429,9 @@ class QualityEvaluator:
 
                 # Calculate TPS
                 tps = 0
-                decode_time_ms = total_time_ms - ttft_ms if ttft_ms > 0 else total_time_ms
+                decode_time_ms = (
+                    total_time_ms - ttft_ms if ttft_ms > 0 else total_time_ms
+                )
                 if decode_time_ms > 0 and output_tokens > 0:
                     tps = output_tokens / (decode_time_ms / 1000)
 
@@ -488,7 +503,9 @@ class QualityEvaluator:
             raise Exception(result["error"])
         return str(result.get("content", ""))
 
-    def register_evaluator(self, dataset_name: str, evaluator_class: type[BaseEvaluator]):
+    def register_evaluator(
+        self, dataset_name: str, evaluator_class: type[BaseEvaluator]
+    ):
         """RegisterEvaluator类"""
         self.EVALUATOR_CLASSES[dataset_name] = evaluator_class
 
@@ -517,7 +534,9 @@ class QualityEvaluator:
             actual_dataset_name = "custom_needle"
 
         if actual_dataset_name not in self.EVALUATOR_CLASSES:
-            self._log(f"Not foundDataset '{actual_dataset_name}' Evaluator", LogLevel.WARNING)
+            self._log(
+                f"Not foundDataset '{actual_dataset_name}' Evaluator", LogLevel.WARNING
+            )
             return None
 
         dataset_path = self.DATASET_PATHS.get(
@@ -574,7 +593,10 @@ class QualityEvaluator:
         Returns:
             Evaluation result
         """
-        self._log(f"开始评估Dataset: {dataset_name}" + (f" (子集: {subset})" if subset else ""))
+        self._log(
+            f"开始评估Dataset: {dataset_name}"
+            + (f" (子集: {subset})" if subset else "")
+        )
 
         evaluator = self.get_evaluator(dataset_name, config)
         if not evaluator:
@@ -658,7 +680,9 @@ class QualityEvaluator:
                     )
 
                 if progress_callback:
-                    progress_callback(current, total, f"评估 {dataset_name}: {current}/{total}")
+                    progress_callback(
+                        current, total, f"评估 {dataset_name}: {current}/{total}"
+                    )
 
             # ResultCallback - 收集每 samplesResult用于Real-time logging
             def on_result_complete(result):
@@ -701,12 +725,15 @@ class QualityEvaluator:
                 failed_dicts = [
                     s.to_dict()
                     for s in sample_results
-                    if not s.is_correct and not s.error  # 排除系统Error，只分析逻辑Error
+                    if not s.is_correct
+                    and not s.error  # 排除系统Error，只分析逻辑Error
                 ]
 
                 if failed_dicts:
                     self._log(f"currently分析 {len(failed_dicts)} 失败案例...")
-                    failure_report = analyze_failures(failed_dicts, total=len(sample_results))
+                    failure_report = analyze_failures(
+                        failed_dicts, total=len(sample_results)
+                    )
 
                     # will分析报告摘要存入 extended_metrics
                     result.extended_metrics["failure_analysis"] = {
@@ -716,7 +743,9 @@ class QualityEvaluator:
                         "suggestions": failure_report.improvement_suggestions,
                     }
 
-                    self._log(f"分析完成: 主要问题 - {', '.join(failure_report.top_issues[:2])}")
+                    self._log(
+                        f"分析完成: 主要问题 - {', '.join(failure_report.top_issues[:2])}"
+                    )
             except Exception as e:
                 self._log(f"失败分析出错: {e}", LogLevel.WARNING)
             # --------------------------
@@ -788,7 +817,9 @@ class QualityEvaluator:
                     self.should_stop = True
                     break
 
-                self._log(f"=== 评估Dataset [{i + 1}/{total_datasets}]: {dataset_name} ===")
+                self._log(
+                    f"=== 评估Dataset [{i + 1}/{total_datasets}]: {dataset_name} ==="
+                )
 
                 # Checkis否has指定子集
                 subsets = None
@@ -882,7 +913,9 @@ class QualityEvaluator:
 
         # Save JSON Detailed Results
         for name, result in self.results.items():
-            filepath = os.path.join(self.output_dir, self.model_id, f"{name}_{timestamp}.json")
+            filepath = os.path.join(
+                self.output_dir, self.model_id, f"{name}_{timestamp}.json"
+            )
             result.save_to_json(filepath)
             self._log(f"ResultSaved: {filepath}")
 
@@ -897,7 +930,9 @@ class QualityEvaluator:
 
             # BuildThinking mode描述
             if thinking_enabled:
-                thinking_mode = f"Enabled (Budget: {thinking_budget}, Effort: {reasoning_effort})"
+                thinking_mode = (
+                    f"Enabled (Budget: {thinking_budget}, Effort: {reasoning_effort})"
+                )
             else:
                 thinking_mode = "Disabled"
 
@@ -918,7 +953,9 @@ class QualityEvaluator:
 
         if summary_data:
             df = pd.DataFrame(summary_data)
-            csv_path = os.path.join(self.output_dir, self.model_id, f"summary_{timestamp}.csv")
+            csv_path = os.path.join(
+                self.output_dir, self.model_id, f"summary_{timestamp}.csv"
+            )
             os.makedirs(os.path.dirname(csv_path), exist_ok=True)
             df.to_csv(csv_path, index=False)
             self._log(f"汇总Saved: {csv_path}")
@@ -1012,7 +1049,9 @@ class QualityEvaluator:
             os.makedirs(report_dir, exist_ok=True)
 
             # Export多种格式
-            json_path = exporter.to_json(os.path.join(report_dir, f"standard_{timestamp}.json"))
+            json_path = exporter.to_json(
+                os.path.join(report_dir, f"standard_{timestamp}.json")
+            )
             self._log(f"标准报告Saved: {json_path}")
 
             lm_eval_path = exporter.to_lm_eval_format(
@@ -1020,7 +1059,9 @@ class QualityEvaluator:
             )
             self._log(f"lm-eval 格式Saved: {lm_eval_path}")
 
-            md_path = exporter.to_markdown(os.path.join(report_dir, f"report_{timestamp}.md"))
+            md_path = exporter.to_markdown(
+                os.path.join(report_dir, f"report_{timestamp}.md")
+            )
             self._log(f"Markdown 报告Saved: {md_path}")
 
         except ImportError:
@@ -1109,8 +1150,12 @@ async def quick_evaluate(
     )
     ```
     """
-    config = QualityTestConfig(datasets=datasets, num_shots=num_shots, max_samples=max_samples)
+    config = QualityTestConfig(
+        datasets=datasets, num_shots=num_shots, max_samples=max_samples
+    )
 
-    evaluator = QualityEvaluator(api_base_url=api_base_url, model_id=model_id, api_key=api_key)
+    evaluator = QualityEvaluator(
+        api_base_url=api_base_url, model_id=model_id, api_key=api_key
+    )
 
     return await evaluator.run_evaluation(config)

@@ -45,7 +45,7 @@ def show_login_page():
     if "authenticated" in st.session_state and st.session_state.authenticated:
         return True
 
-    st.title("🔐 LLM Test Platform - Login")
+    st.title("LLM Test Platform - Login")
 
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")

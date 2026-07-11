@@ -39,7 +39,9 @@ def test_bytes_per_token_read_moe_uses_active():
 
 
 def test_bytes_per_token_read_int4():
-    spec = ModelSpec(name="x", total_params_b=30, active_params_b=30, weight_dtype="int4")
+    spec = ModelSpec(
+        name="x", total_params_b=30, active_params_b=30, weight_dtype="int4"
+    )
     assert spec.bytes_per_token_read() == pytest.approx(15e9, rel=1e-6)
 
 
@@ -57,7 +59,9 @@ def test_resolve_spec_unknown_returns_none_without_override():
 
 
 def test_resolve_spec_unknown_with_override_builds_spec():
-    spec = resolve_spec("my-custom-model", override={"active_params_b": 10, "weight_dtype": "bf16"})
+    spec = resolve_spec(
+        "my-custom-model", override={"active_params_b": 10, "weight_dtype": "bf16"}
+    )
     assert spec is not None
     assert spec.active_params_b == 10
     assert spec.bytes_per_token_read() == pytest.approx(20e9, rel=1e-6)
@@ -149,7 +153,9 @@ def test_serving_config_unknown_keys_ignored():
 
 def test_effective_bandwidth_deepseek():
     spec = resolve_spec("DeepSeek-V3.1")  # 37B active, fp8 → 37 GB/token
-    bw = compute_effective_bandwidth(decode_tps=50.0, spec=spec, nominal_gpu_bandwidth_gbps=3350.0)
+    bw = compute_effective_bandwidth(
+        decode_tps=50.0, spec=spec, nominal_gpu_bandwidth_gbps=3350.0
+    )
     # 50 * 37e9 / 1e9 = 1850 GB/s
     assert bw["effective_bandwidth_gbps"] == pytest.approx(1850.0, rel=1e-3)
     assert bw["bandwidth_utilization_pct"] == pytest.approx(1850 / 3350 * 100, rel=1e-3)
@@ -157,7 +163,10 @@ def test_effective_bandwidth_deepseek():
 
 
 def test_effective_bandwidth_skips_when_missing():
-    assert compute_effective_bandwidth(None, None, None)["effective_bandwidth_gbps"] is None
+    assert (
+        compute_effective_bandwidth(None, None, None)["effective_bandwidth_gbps"]
+        is None
+    )
     spec = resolve_spec("DeepSeek-V3.1")
     # 无 nominal → 有 effective，无 utilization
     bw = compute_effective_bandwidth(50.0, spec, None)

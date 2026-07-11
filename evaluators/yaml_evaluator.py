@@ -204,7 +204,9 @@ class YAMLEvaluator(BaseEvaluator):
         self.samples = samples
         return samples
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """use YAML 模板Format prompt"""
         renderer = _get_prompt_renderer()
         assert self.config is not None
@@ -224,7 +226,9 @@ class YAMLEvaluator(BaseEvaluator):
         assert self.config is not None
 
         return str(
-            renderer.build_prompt(self.config, sample, self.few_shot_examples, include_target=False)
+            renderer.build_prompt(
+                self.config, sample, self.few_shot_examples, include_target=False
+            )
         )
 
     def parse_response(self, response: str) -> str:

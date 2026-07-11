@@ -164,7 +164,9 @@ class DataImportService:
 
         return success_count, total_imported, all_errors
 
-    def _row_to_result(self, row: dict[str, Any], run_id: int, index: int) -> TestResult:
+    def _row_to_result(
+        self, row: dict[str, Any], run_id: int, index: int
+    ) -> TestResult:
         """will CSV 行Convertis TestResult"""
 
         def parse_float(value):
@@ -216,7 +218,11 @@ class DataImportService:
             cache_hit_source=row.get("cache_hit_source"),
             start_time=parse_float(row.get("start_time")),
             end_time=parse_float(row.get("end_time")),
-            error=(row.get("error") if row.get("error") and row.get("error") != "None" else None),
+            error=(
+                row.get("error")
+                if row.get("error") and row.get("error") != "None"
+                else None
+            ),
             created_at=datetime.now(),
         )
 

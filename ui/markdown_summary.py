@@ -19,13 +19,21 @@ def _generate_markdown_summary(df, test_type, duration):
 
     total_requests = len(df)
     error_col = df.get("error")
-    successful = count_successful_requests(error_col) if error_col is not None else total_requests
+    successful = (
+        count_successful_requests(error_col)
+        if error_col is not None
+        else total_requests
+    )
     success_rate = (successful / total_requests * 100) if total_requests > 0 else 0
-    total_input = int(df["prefill_tokens"].sum()) if "prefill_tokens" in df.columns else 0
-    total_output = int(df["decode_tokens"].sum()) if "decode_tokens" in df.columns else 0
+    total_input = (
+        int(df["prefill_tokens"].sum()) if "prefill_tokens" in df.columns else 0
+    )
+    total_output = (
+        int(df["decode_tokens"].sum()) if "decode_tokens" in df.columns else 0
+    )
     df_ok = df[success_mask_from_error(df["error"])] if "error" in df.columns else df
 
-    md = "### 📊 Test Summary\n\n"
+    md = "### Test Summary\n\n"
 
     # Common stats
     md += f"- **Total Requests**: {total_requests} (succeeded: {successful}, Success Rate: {success_rate:.1f}%)\n"
@@ -33,7 +41,9 @@ def _generate_markdown_summary(df, test_type, duration):
 
     if test_type == "concurrency":
         conc_levels = (
-            sorted(df_ok["concurrency"].unique()) if "concurrency" in df_ok.columns else []
+            sorted(df_ok["concurrency"].unique())
+            if "concurrency" in df_ok.columns
+            else []
         )
         if len(conc_levels) >= 2:
             lo, hi = conc_levels[0], conc_levels[-1]
@@ -47,7 +57,11 @@ def _generate_markdown_summary(df, test_type, duration):
             tp_col = (
                 "system_output_throughput"
                 if "system_output_throughput" in df_ok.columns
-                else ("system_throughput" if "system_throughput" in df_ok.columns else None)
+                else (
+                    "system_throughput"
+                    if "system_throughput" in df_ok.columns
+                    else None
+                )
             )
             if tp_col:
                 tp_by_c = df_ok.groupby("concurrency")[tp_col].max()
@@ -66,13 +80,17 @@ def _generate_markdown_summary(df, test_type, duration):
             peak_tps_val = tps_by_c.max()
             peak_tps_c = int(tps_by_c.idxmax())
 
-            md += f"- **Best TTFT**: {best_ttft_val:.3f}s (@ Concurrency {best_ttft_c})\n"
+            md += (
+                f"- **Best TTFT**: {best_ttft_val:.3f}s (@ Concurrency {best_ttft_c})\n"
+            )
             md += f"- **Peak Single-Stream TPS**: {peak_tps_val:.1f} t/s (@ Concurrency {peak_tps_c})\n"
 
             # TTFT trend
             ttft_vals = [ttft_by_c[c] for c in conc_levels]
             if len(ttft_vals) >= 3:
-                diffs = [ttft_vals[i + 1] - ttft_vals[i] for i in range(len(ttft_vals) - 1)]
+                diffs = [
+                    ttft_vals[i + 1] - ttft_vals[i] for i in range(len(ttft_vals) - 1)
+                ]
                 max_jump_idx = max(range(len(diffs)), key=lambda i: diffs[i])
                 jump_from = int(conc_levels[max_jump_idx])
                 jump_to = int(conc_levels[max_jump_idx + 1])
@@ -116,8 +134,12 @@ def _generate_markdown_summary(df, test_type, duration):
                 df_ok[df_ok["input_tokens_target"] == sm],
                 df_ok[df_ok["input_tokens_target"] == lg],
             )
-            ps_sm = sm_df["prefill_speed"].mean() if "prefill_speed" in sm_df.columns else 0
-            ps_lg = lg_df["prefill_speed"].mean() if "prefill_speed" in lg_df.columns else 0
+            ps_sm = (
+                sm_df["prefill_speed"].mean() if "prefill_speed" in sm_df.columns else 0
+            )
+            ps_lg = (
+                lg_df["prefill_speed"].mean() if "prefill_speed" in lg_df.columns else 0
+            )
             ratio = ps_lg / ps_sm if ps_sm > 0 else 0
 
             md += f"- **Prefill Speed Trend**: When input length increased from {_fmt(sm)} to {_fmt(lg)}, prefill speed went from {ps_sm:.0f} t/s to {ps_lg:.0f} t/s (retention rate {ratio*100:.1f}%).\n"
@@ -137,7 +159,11 @@ def _generate_markdown_summary(df, test_type, duration):
             ps_vals = [ps_by_level[lv] for lv in levels]
             if len(ps_vals) >= 3:
                 drops = [
-                    ((ps_vals[i] - ps_vals[i + 1]) / ps_vals[i] * 100 if ps_vals[i] > 0 else 0)
+                    (
+                        (ps_vals[i] - ps_vals[i + 1]) / ps_vals[i] * 100
+                        if ps_vals[i] > 0
+                        else 0
+                    )
                     for i in range(len(ps_vals) - 1)
                 ]
                 max_drop_idx = max(range(len(drops)), key=lambda i: drops[i])
@@ -158,11 +184,11 @@ def _generate_markdown_summary(df, test_type, duration):
                     else 1
                 )
                 if ttft_ratio_full > input_ratio * 1.5:
-                    md += f"- **TTFT Growth Pattern**: Super-linear growth (TTFT grew {ttft_ratio_full:.1f}x while input only grew {input_ratio:.1f}x) ⚠️\n"
+                    md += f"- **TTFT Growth Pattern**: Super-linear growth (TTFT grew {ttft_ratio_full:.1f}x while input only grew {input_ratio:.1f}x).\n"
                 elif ttft_ratio_full > input_ratio * 0.8:
                     md += "- **TTFT Growth Pattern**: approximately linear.\n"
                 else:
-                    md += "- **TTFT Growth Pattern**: Sub-linear (TTFT grew slower than input) ✅\n"
+                    md += "- **TTFT Growth Pattern**: Sub-linear (TTFT grew slower than input).\n"
 
     elif test_type == "long_context":
         levels = (
@@ -193,7 +219,9 @@ def _generate_markdown_summary(df, test_type, duration):
             peak_tps_ctx = int(tps_by_ctx.idxmax())
 
             md += f"- **Peak Prefill Speed**: {peak_ps_val:.0f} t/s (@ {_fmt(peak_ps_ctx)} ctx)\n"
-            md += f"- **Peak TPS**: {peak_tps_val:.1f} t/s (@ {_fmt(peak_tps_ctx)} ctx)\n"
+            md += (
+                f"- **Peak TPS**: {peak_tps_val:.1f} t/s (@ {_fmt(peak_tps_ctx)} ctx)\n"
+            )
 
             # TTFT inflection detection
             ttft_by_ctx = df_ok.groupby("context_length_target")["ttft"].mean()
@@ -218,7 +246,11 @@ def _generate_markdown_summary(df, test_type, duration):
 
             # TPS stability
             tps_vals = [tps_by_ctx[lv] for lv in levels]
-            tps_cv = (np.std(tps_vals) / np.mean(tps_vals) * 100) if np.mean(tps_vals) > 0 else 0
+            tps_cv = (
+                (np.std(tps_vals) / np.mean(tps_vals) * 100)
+                if np.mean(tps_vals) > 0
+                else 0
+            )
             if tps_cv > 10:
                 md += f"- **Overall TPS Fluctuation**: Coefficient of variation {tps_cv:.0f}%,showing significant fluctuation.\n"
             else:
@@ -226,7 +258,9 @@ def _generate_markdown_summary(df, test_type, duration):
 
     elif test_type == "segmented":
         cache_total = (
-            int(df_ok["cache_hit_tokens"].sum()) if "cache_hit_tokens" in df_ok.columns else 0
+            int(df_ok["cache_hit_tokens"].sum())
+            if "cache_hit_tokens" in df_ok.columns
+            else 0
         )
         cache_rate = (cache_total / total_input * 100) if total_input > 0 else 0
 
@@ -242,12 +276,28 @@ def _generate_markdown_summary(df, test_type, duration):
                 df_ok[df_ok["context_length_target"] == l_seg],
             )
 
-            ch_f = int(f_df["cache_hit_tokens"].sum()) if "cache_hit_tokens" in f_df.columns else 0
-            in_f = int(f_df["prefill_tokens"].sum()) if "prefill_tokens" in f_df.columns else 0
+            ch_f = (
+                int(f_df["cache_hit_tokens"].sum())
+                if "cache_hit_tokens" in f_df.columns
+                else 0
+            )
+            in_f = (
+                int(f_df["prefill_tokens"].sum())
+                if "prefill_tokens" in f_df.columns
+                else 0
+            )
             r_f = (ch_f / in_f * 100) if in_f > 0 else 0
 
-            ch_l = int(l_df["cache_hit_tokens"].sum()) if "cache_hit_tokens" in l_df.columns else 0
-            in_l = int(l_df["prefill_tokens"].sum()) if "prefill_tokens" in l_df.columns else 0
+            ch_l = (
+                int(l_df["cache_hit_tokens"].sum())
+                if "cache_hit_tokens" in l_df.columns
+                else 0
+            )
+            in_l = (
+                int(l_df["prefill_tokens"].sum())
+                if "prefill_tokens" in l_df.columns
+                else 0
+            )
             r_l = (ch_l / in_l * 100) if in_l > 0 else 0
 
             md += f"- **Prefix Caching**: Overall Cache Hit Rate {cache_rate:.1f}% (hit {_fmt(cache_total)} tokens).\n"
@@ -264,7 +314,11 @@ def _generate_markdown_summary(df, test_type, duration):
                     if "cache_hit_tokens" in lv_df.columns
                     else 0
                 )
-                inp = int(lv_df["prefill_tokens"].sum()) if "prefill_tokens" in lv_df.columns else 0
+                inp = (
+                    int(lv_df["prefill_tokens"].sum())
+                    if "prefill_tokens" in lv_df.columns
+                    else 0
+                )
                 cache_by_seg[lv] = (ch / inp * 100) if inp > 0 else 0
 
             peak_cache_seg = max(cache_by_seg, key=lambda k: cache_by_seg[k])
@@ -282,7 +336,8 @@ def _generate_markdown_summary(df, test_type, duration):
             cache_vals = [cache_by_seg[lv] for lv in levels]
             if len(cache_vals) >= 3:
                 increasing = all(
-                    cache_vals[i + 1] >= cache_vals[i] - 1 for i in range(len(cache_vals) - 1)
+                    cache_vals[i + 1] >= cache_vals[i] - 1
+                    for i in range(len(cache_vals) - 1)
                 )
                 if increasing and cache_vals[-1] > cache_vals[0] + 5:
                     md += "- **Cache Rate Trend**: continuously increasing, cache effectiveness grows significantly with segments.\n"
@@ -299,7 +354,9 @@ def _generate_markdown_summary(df, test_type, duration):
         )
         if tp_col:
             combo = (
-                df_ok.groupby(["concurrency", "context_length_target"])[tp_col].max().reset_index()
+                df_ok.groupby(["concurrency", "context_length_target"])[tp_col]
+                .max()
+                .reset_index()
             )
             best = combo.loc[combo[tp_col].idxmax()]
             worst = combo.loc[combo[tp_col].idxmin()]
@@ -307,7 +364,9 @@ def _generate_markdown_summary(df, test_type, duration):
             md += f"- **Worst Configuration**: Concurrency {int(worst['concurrency'])} × context {_fmt(worst['context_length_target'])} throughput was {worst[tp_col]:.1f} t/s.\n"
 
             # TTFT range
-            ttft_all = df_ok[df_ok["ttft"] > 0]["ttft"] if "ttft" in df_ok.columns else None
+            ttft_all = (
+                df_ok[df_ok["ttft"] > 0]["ttft"] if "ttft" in df_ok.columns else None
+            )
             if ttft_all is not None and not ttft_all.empty:
                 md += f"- **TTFT Range**: {ttft_all.min():.3f}s ~ {ttft_all.max():.3f}s.\n"
 

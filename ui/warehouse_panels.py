@@ -15,8 +15,8 @@ from core.test_attribution import TestStatusDetail
 
 
 def render_engine_runtime_panel(api_base_url: str) -> None:
-    """🔌 推理引擎接入面板——记录引擎自身的运行（/metrics 轮询 + 启动日志 KV 容量）。"""
-    with st.sidebar.expander("🔌 推理引擎接入（记录引擎运行）", expanded=False):
+    """推理引擎接入面板——记录引擎自身的运行（/metrics 轮询 + 启动日志 KV 容量）。"""
+    with st.sidebar.expander("推理引擎接入（记录引擎运行）", expanded=False):
         st.caption(
             "测试期间轮询 vLLM/SGLang 的 Prometheus `/metrics`，记录引擎 KV cache 占用、"
             "调度队列、抢救数；并解析启动日志拿 KV 容量。留空则按 api_base 自动推导端点。"
@@ -40,7 +40,9 @@ def render_engine_runtime_panel(api_base_url: str) -> None:
             help="vLLM/SGLang 启动 stdout 日志，用于解析 KV 容量/max_num_seqs",
             key="er_log_path",
         )
-        enabled = st.checkbox("启用引擎运行时采集", value=er.get("enabled", True), key="er_enabled")
+        enabled = st.checkbox(
+            "启用引擎运行时采集", value=er.get("enabled", True), key="er_enabled"
+        )
 
         st.session_state.engine_runtime = {
             "metrics_url": metrics_url.strip() or None,
@@ -50,9 +52,11 @@ def render_engine_runtime_panel(api_base_url: str) -> None:
 
 
 def render_model_spec_panel(model_id: str) -> None:
-    """📐 模型架构规格面板（自动从注册表预填，可覆盖；用于等效带宽与模型身份证）。"""
-    with st.sidebar.expander("📐 模型架构规格（等效带宽）", expanded=False):
-        st.caption("自动从注册表预填；覆盖后用于等效带宽计算与模型身份证。留空则用注册表默认。")
+    """模型架构规格面板（自动从注册表预填，可覆盖；用于等效带宽与模型身份证）。"""
+    with st.sidebar.expander("模型架构规格（等效带宽）", expanded=False):
+        st.caption(
+            "自动从注册表预填；覆盖后用于等效带宽计算与模型身份证。留空则用注册表默认。"
+        )
 
         spec = resolve_spec(model_id)
         if spec:
@@ -105,8 +109,12 @@ def render_model_spec_panel(model_id: str) -> None:
                 "权重精度",
                 ["", "bf16", "fp16", "fp8", "int4", "fp4", "int8"],
                 index=(
-                    ["", "bf16", "fp16", "fp8", "int4", "fp4", "int8"].index(spec.weight_dtype)
-                    if spec and spec.weight_dtype in ["bf16", "fp16", "fp8", "int4", "fp4", "int8"]
+                    ["", "bf16", "fp16", "fp8", "int4", "fp4", "int8"].index(
+                        spec.weight_dtype
+                    )
+                    if spec
+                    and spec.weight_dtype
+                    in ["bf16", "fp16", "fp8", "int4", "fp4", "int8"]
                     else 0
                 ),
                 key="ms_weight_dtype",
@@ -161,9 +169,11 @@ def render_model_spec_panel(model_id: str) -> None:
 
 
 def render_serving_config_panel() -> None:
-    """⚙️ 服务/启动配置面板（引擎/并行/后端/调度/MTP）。"""
-    with st.sidebar.expander("⚙️ 服务/启动配置（引擎/并行/后端）", expanded=False):
-        st.caption("记录模型是怎么被服务起来的：引擎版本、TP/DP/EP/PP、注意力/MoE 后端等。")
+    """服务/启动配置面板（引擎/并行/后端/调度/MTP）。"""
+    with st.sidebar.expander("服务/启动配置（引擎/并行/后端）", expanded=False):
+        st.caption(
+            "记录模型是怎么被服务起来的：引擎版本、TP/DP/EP/PP、注意力/MoE 后端等。"
+        )
 
         sc = st.session_state.get("serving_config", {})
         if not isinstance(sc, dict):
@@ -316,20 +326,26 @@ def render_serving_config_panel() -> None:
 
 
 def render_test_metadata_panel() -> None:
-    """🏷️ 测试元数据 & 可对外等级面板（tester/notes/状态/可对外）。"""
-    with st.sidebar.expander("🏷️ 测试元数据 & 可对外等级", expanded=False):
-        st.caption("测试人、备注、状态、可对外等级与下一步动作（数据仓库可筛选/可追溯字段）。")
+    """测试元数据 & 可对外等级面板（tester/notes/状态/可对外）。"""
+    with st.sidebar.expander("测试元数据 & 可对外等级", expanded=False):
+        st.caption(
+            "测试人、备注、状态、可对外等级与下一步动作（数据仓库可筛选/可追溯字段）。"
+        )
 
         tm = st.session_state.get("test_metadata", {})
         if not isinstance(tm, dict):
             tm = {}
 
-        tester = st.text_input("测试人 (tester)", value=tm.get("tester", ""), key="tm_tester")
+        tester = st.text_input(
+            "测试人 (tester)", value=tm.get("tester", ""), key="tm_tester"
+        )
         status = st.selectbox(
             "状态明细",
             [""] + [s.value for s in TestStatusDetail],
             index=(
-                ([""] + [s.value for s in TestStatusDetail]).index(tm.get("status_detail", ""))
+                ([""] + [s.value for s in TestStatusDetail]).index(
+                    tm.get("status_detail", "")
+                )
                 if tm.get("status_detail", "") in [s.value for s in TestStatusDetail]
                 else 0
             ),
@@ -339,8 +355,11 @@ def render_test_metadata_panel() -> None:
             "可对外等级 (external_level)",
             ["internal", "review", "publishable"],
             index=(
-                ["internal", "review", "publishable"].index(tm.get("external_level", "internal"))
-                if tm.get("external_level", "internal") in ["internal", "review", "publishable"]
+                ["internal", "review", "publishable"].index(
+                    tm.get("external_level", "internal")
+                )
+                if tm.get("external_level", "internal")
+                in ["internal", "review", "publishable"]
                 else 0
             ),
             key="tm_external",
@@ -360,7 +379,9 @@ def render_test_metadata_panel() -> None:
             value=tm.get("supersedes_test_id", ""),
             key="tm_supersedes",
         )
-        notes = st.text_area("备注 (notes)", value=tm.get("notes", ""), height=60, key="tm_notes")
+        notes = st.text_area(
+            "备注 (notes)", value=tm.get("notes", ""), height=60, key="tm_notes"
+        )
 
         st.session_state.test_metadata = {
             "tester": tester,

@@ -36,7 +36,9 @@ def download_from_huggingface():
             ds = load_dataset("lmarena-ai/arena-hard-auto", split="train")
         except Exception:
             try:
-                ds = load_dataset("lmarena-ai/arena-hard-auto", "default", split="train")
+                ds = load_dataset(
+                    "lmarena-ai/arena-hard-auto", "default", split="train"
+                )
             except Exception:
                 ds = load_dataset(
                     "lmarena-ai/arena-hard-auto", trust_remote_code=True, split="train"

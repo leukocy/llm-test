@@ -170,7 +170,9 @@ class BatchTestConfig:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "BatchTestConfig":
         """从字典Create"""
-        items = [BatchTestItem.from_dict(item_data) for item_data in data.get("items", [])]
+        items = [
+            BatchTestItem.from_dict(item_data) for item_data in data.get("items", [])
+        ]
         return cls(
             name=data["name"],
             description=data.get("description", ""),
@@ -319,7 +321,9 @@ def _create_batch_csv_filename(item: BatchTestItem) -> str:
     return str(temp_dir / f"batch_{safe_name}_{timestamp}.csv")
 
 
-def _extract_metrics_from_dataframe(df: pd.DataFrame, item: BatchTestItem) -> dict[str, Any]:
+def _extract_metrics_from_dataframe(
+    df: pd.DataFrame, item: BatchTestItem
+) -> dict[str, Any]:
     """从Test Results DataFrame in提取关键指标"""
     if df.empty:
         return {
@@ -607,8 +611,12 @@ class BatchTestScheduler:
                 provider="OpenAI",
                 dashboard=None,
                 output_placeholder=output_placeholder,
-                thinking_enabled=(item.thinking_enabled if item.thinking_enabled else None),
-                thinking_budget=(item.thinking_budget if item.thinking_budget > 0 else None),
+                thinking_enabled=(
+                    item.thinking_enabled if item.thinking_enabled else None
+                ),
+                thinking_budget=(
+                    item.thinking_budget if item.thinking_budget > 0 else None
+                ),
                 reasoning_effort=item.reasoning_effort or None,
             )
 
@@ -624,7 +632,9 @@ class BatchTestScheduler:
                 )
 
             elif item.test_type == "prefill":
-                token_levels = item.extra_params.get("token_levels", [512, 1024, 2048, 4096])
+                token_levels = item.extra_params.get(
+                    "token_levels", [512, 1024, 2048, 4096]
+                )
                 result_df = await runner.run_prefill_test(
                     token_levels=token_levels,
                     requests_per_level=1,
@@ -632,7 +642,9 @@ class BatchTestScheduler:
                 )
 
             elif item.test_type == "long_context":
-                context_lengths = item.extra_params.get("context_lengths", [1024, 2048, 4096, 8192])
+                context_lengths = item.extra_params.get(
+                    "context_lengths", [1024, 2048, 4096, 8192]
+                )
                 result_df = await runner.run_long_context_test(
                     context_lengths=context_lengths,
                     rounds_per_level=1,
@@ -705,7 +717,9 @@ class BatchTestManager:
     def load_config(self, name: str) -> BatchTestConfig | None:
         """Load批量Test Configuration"""
         try:
-            safe_name = "".join(c if c.isalnum() or c in (" ", "-", "_") else "_" for c in name)
+            safe_name = "".join(
+                c if c.isalnum() or c in (" ", "-", "_") else "_" for c in name
+            )
             pattern = safe_name.lower().replace(" ", "_") + ".json"
             matching_files = list(self.save_dir.glob(pattern))
 
@@ -733,9 +747,9 @@ class BatchTestManager:
                         "name": data.get("name", config_file.stem),
                         "description": data.get("description", ""),
                         "test_count": len(data.get("items", [])),
-                        "file_time": datetime.fromtimestamp(config_file.stat().st_mtime).strftime(
-                            "%Y-%m-%d %H:%M:%S"
-                        ),
+                        "file_time": datetime.fromtimestamp(
+                            config_file.stat().st_mtime
+                        ).strftime("%Y-%m-%d %H:%M:%S"),
                     }
                 )
             except Exception:
@@ -747,7 +761,8 @@ class BatchTestManager:
         """Save批量Test Results"""
         try:
             safe_name = "".join(
-                c if c.isalnum() or c in (" ", "-", "_") else "_" for c in result.batch_name
+                c if c.isalnum() or c in (" ", "-", "_") else "_"
+                for c in result.batch_name
             )
             filename = f"{safe_name.lower().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             filepath = self.save_dir / "results" / filename
@@ -769,7 +784,11 @@ class BatchTestManager:
                 json.dump(result_data, f, ensure_ascii=False, indent=2)
 
             # Save对比CSV
-            csv_path = self.save_dir / "results" / filepath.stem.replace(".json", "_comparison.csv")
+            csv_path = (
+                self.save_dir
+                / "results"
+                / filepath.stem.replace(".json", "_comparison.csv")
+            )
             result.get_comparison_df().to_csv(csv_path, index=False, encoding="utf-8")
 
             return True

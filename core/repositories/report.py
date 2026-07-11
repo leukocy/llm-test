@@ -61,7 +61,9 @@ class ReportRepository(BaseRepository[Report]):
         """based on报告类型查找"""
         return self.find_by("report_type = ?", (report_type,), limit)
 
-    def find_by_date_range(self, start: datetime, end: datetime, limit: int = 100) -> list[Report]:
+    def find_by_date_range(
+        self, start: datetime, end: datetime, limit: int = 100
+    ) -> list[Report]:
         """based on日期范围查找"""
         return self.find_by(
             "created_at BETWEEN ? AND ?", (start.isoformat(), end.isoformat()), limit
@@ -120,4 +122,6 @@ class ReportRepository(BaseRepository[Report]):
     def delete_old_reports(self, days: int = 90) -> int:
         """Delete旧报告"""
         cutoff = datetime.now().timestamp() - (days * 86400)
-        return self.delete_by("created_at < ?", (datetime.fromtimestamp(cutoff).isoformat(),))
+        return self.delete_by(
+            "created_at < ?", (datetime.fromtimestamp(cutoff).isoformat(),)
+        )

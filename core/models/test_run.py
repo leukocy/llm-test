@@ -137,9 +137,13 @@ class TestRun:
         """Convertis字典"""
         data = asdict(self)
         # Process特殊字段
-        data["config_json"] = json.dumps(self.config, ensure_ascii=False) if self.config else None
+        data["config_json"] = (
+            json.dumps(self.config, ensure_ascii=False) if self.config else None
+        )
         data["system_info_json"] = (
-            json.dumps(self.system_info, ensure_ascii=False) if self.system_info else None
+            json.dumps(self.system_info, ensure_ascii=False)
+            if self.system_info
+            else None
         )
         data["tags"] = ",".join(self.tags) if self.tags else None
         data["thinking_enabled"] = int(self.thinking_enabled)
@@ -149,13 +153,19 @@ class TestRun:
             json.dumps(self.model_spec, ensure_ascii=False) if self.model_spec else None
         )
         data["serving_config_json"] = (
-            json.dumps(self.serving_config, ensure_ascii=False) if self.serving_config else None
+            json.dumps(self.serving_config, ensure_ascii=False)
+            if self.serving_config
+            else None
         )
         data["resource_monitor_json"] = (
-            json.dumps(self.resource_monitor, ensure_ascii=False) if self.resource_monitor else None
+            json.dumps(self.resource_monitor, ensure_ascii=False)
+            if self.resource_monitor
+            else None
         )
         data["engine_metrics_json"] = (
-            json.dumps(self.engine_metrics, ensure_ascii=False) if self.engine_metrics else None
+            json.dumps(self.engine_metrics, ensure_ascii=False)
+            if self.engine_metrics
+            else None
         )
         if self.mtp_enabled is not None:
             data["mtp_enabled"] = int(self.mtp_enabled)
@@ -166,7 +176,9 @@ class TestRun:
         # Process时间
         data["created_at"] = self.created_at.isoformat() if self.created_at else None
         data["started_at"] = self.started_at.isoformat() if self.started_at else None
-        data["completed_at"] = self.completed_at.isoformat() if self.completed_at else None
+        data["completed_at"] = (
+            self.completed_at.isoformat() if self.completed_at else None
+        )
 
         # 移除原始字段
         data.pop("config", None)
@@ -275,17 +287,23 @@ class TestRun:
 
     def complete(self, success: bool = True):
         """标记Test completed"""
-        self.status = TestRunStatus.COMPLETED.value if success else TestRunStatus.FAILED.value
+        self.status = (
+            TestRunStatus.COMPLETED.value if success else TestRunStatus.FAILED.value
+        )
         self.completed_at = datetime.now()
         if self.started_at:
-            self.duration_seconds = (self.completed_at - self.started_at).total_seconds()
+            self.duration_seconds = (
+                self.completed_at - self.started_at
+            ).total_seconds()
 
     def cancel(self):
         """CancelTest"""
         self.status = TestRunStatus.CANCELLED.value
         self.completed_at = datetime.now()
         if self.started_at:
-            self.duration_seconds = (self.completed_at - self.started_at).total_seconds()
+            self.duration_seconds = (
+                self.completed_at - self.started_at
+            ).total_seconds()
 
     def pause(self):
         """Pause Test"""

@@ -100,7 +100,10 @@ def test_start_stop_lifecycle_samples_cpu_mem():
         summary = mon.stop()
 
     assert summary["sample_count"] >= 2
-    assert summary["peaks"]["cpu_percent"] is not None and summary["peaks"]["cpu_percent"] > 0
+    assert (
+        summary["peaks"]["cpu_percent"] is not None
+        and summary["peaks"]["cpu_percent"] > 0
+    )
     assert summary["peaks"]["system_memory_gb"] == pytest.approx(8.0, abs=0.1)
     assert summary["peaks"]["gpu_vram_gb"] is None  # NVML 关闭
     assert summary["duration_seconds"] >= 0.2
@@ -188,7 +191,9 @@ def test_gpu_aggregation_across_multiple_gpus():
 
     assert summary["gpu_monitored"] is True
     assert summary["peaks"]["gpu_vram_gb"] == pytest.approx(10.0, abs=0.2)  # 4+6
-    assert summary["peaks"]["gpu_util_percent"] == pytest.approx(50.0, abs=0.2)  # (60+40)/2
+    assert summary["peaks"]["gpu_util_percent"] == pytest.approx(
+        50.0, abs=0.2
+    )  # (60+40)/2
     assert summary["peaks"]["gpu_power_w"] == pytest.approx(250.0, abs=0.5)  # 100+150
     assert summary["peaks"]["gpu_temp_c"] == 75  # max
 

@@ -83,7 +83,9 @@ class TestSmartAnswerParser:
 
     def test_parse_number_last_fallback(self, parser):
         """Test最后一数字兜底策略"""
-        result = parser.parse("After calculation we get approximately 42 units", AnswerType.NUMBER)
+        result = parser.parse(
+            "After calculation we get approximately 42 units", AnswerType.NUMBER
+        )
         assert result.extracted_answer == "42"
         assert result.method == "rule_last_number"
         assert result.confidence == 0.4

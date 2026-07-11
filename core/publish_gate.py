@@ -120,7 +120,9 @@ def evaluate_publish_gate(
         sr_label = f"Wilson 95% 下界 {wilson_lower:.0%}"
     else:
         sr_ok = success_rate is None or success_rate >= success_rate_threshold
-        sr_label = f"成功率 {success_rate:.0%}" if success_rate is not None else "成功率"
+        sr_label = (
+            f"成功率 {success_rate:.0%}" if success_rate is not None else "成功率"
+        )
 
     # 样本量门槛（仅当 sample_size 传入）
     enough_samples = sample_size is None or sample_size >= min_sample_size
@@ -131,7 +133,9 @@ def evaluate_publish_gate(
     if not sr_ok:
         reasons.append(f"{sr_label} 低于阈值 {success_rate_threshold:.0%}")
     if not enough_samples and sample_size is not None:
-        reasons.append(f"样本量 {sample_size} 不足（建议≥{min_sample_size}，成功率不可信）")
+        reasons.append(
+            f"样本量 {sample_size} 不足（建议≥{min_sample_size}，成功率不可信）"
+        )
     if not has_monitor:
         reasons.append("缺资源监控数据")
 

@@ -19,6 +19,7 @@ from config.session_state import set_current_test_type
 from config.settings import HF_MODEL_MAPPING
 from core.error_messages import ErrorMessages, get_error_info
 from core.tokenizer_utils import get_cached_tokenizer
+from ui.components import status_icon
 from utils.custom_config import get_all_models, get_all_providers
 
 
@@ -130,9 +131,11 @@ def _render_tokenizer_status_panel():
     with st.expander("Tokenizer Status", expanded=False):
         # Show status for all registered tokenizers
         for t in tokenizers:
-            icon = "✅" if t["available"] else "❌"
+            status = status_icon("completed" if t["available"] else "failed")
             size_str = f"{t['size_mb']:.1f} MB" if t["available"] else "—"
-            st.markdown(f"{icon} **{t['name']}** — {size_str}")
+            st.markdown(
+                f"{status} **{t['name']}** — {size_str}", unsafe_allow_html=True
+            )
 
         # Download buttons for missing tokenizers
         if missing:
@@ -280,7 +283,7 @@ def render_sidebar():
         col_model_1, col_model_2 = st.columns([3, 1])
         with col_model_2:
             if st.button(
-                "🔄", key="fetch_models_btn", help="Fetch model list from API"
+                "Refresh", key="fetch_models_btn", help="Fetch model list from API"
             ):
                 with st.spinner("Fetching..."):
                     models = fetch_models(api_base_url, api_key)
@@ -319,7 +322,7 @@ def render_sidebar():
         st.markdown("---")
 
         # System calibration
-        st.markdown("##### ⚡ System Calibration")
+        st.markdown("##### System Calibration")
 
         # Probe button section - rendered FIRST so its callback can update state before widget is created
         col_cal_1, col_cal_2 = st.columns([2, 1])
@@ -340,7 +343,7 @@ def render_sidebar():
 
                     measured_rtt = min(t_starts)
                     st.session_state["latency_offset_input"] = measured_rtt
-                    st.toast(f"Calibrated latency: {measured_rtt:.3f}s", icon="⚡")
+                    st.toast(f"Calibrated latency: {measured_rtt:.3f}s")
                     # 无需 rerun，Streamlit 自动检测 widget key 值变化
 
         # Number input section
@@ -383,7 +386,7 @@ def render_sidebar():
         )
 
         # Random seed (for reproducibility)
-        st.markdown("##### 🎲 Random Seed")
+        st.markdown("##### Random Seed")
         col_seed_1, col_seed_2 = st.columns([3, 1])
         with col_seed_1:
             seed_enabled = st.checkbox(
@@ -464,7 +467,7 @@ def render_sidebar():
                 hf_tokenizer_model_id = selected_hf_preset
 
         # Token counter
-        with st.sidebar.expander("🧮 Token Counter", expanded=False):
+        with st.sidebar.expander("Token Counter", expanded=False):
             st.caption(
                 f"Current Tokenizer: {hf_tokenizer_model_id if hf_tokenizer_model_id else 'Not Selected'}"
             )
@@ -497,7 +500,7 @@ def render_sidebar():
     st.sidebar.markdown("---")
 
     # Test configuration
-    st.sidebar.header("🧪 Test Configuration")
+    st.sidebar.header("Test Configuration")
 
     # Check optional modules
     import importlib
@@ -677,7 +680,7 @@ def render_sidebar_bottom():
             st.warning(f"Saved result loader unavailable: {e}")
 
     # Config presets
-    with st.sidebar.expander("📁 Config Presets", expanded=False):
+    with st.sidebar.expander("Config Presets", expanded=False):
         try:
             from utils.test_config_manager import config_manager
 
@@ -705,14 +708,14 @@ def render_sidebar_bottom():
 
                     with col_load:
                         if st.button(
-                            "📥 Apply", key="preset_load_btn", use_container_width=True
+                            "Apply", key="preset_load_btn", use_container_width=True
                         ):
                             st.session_state["_pending_preset_apply"] = selected_preset
                             st.rerun()
 
                     with col_del:
                         if st.button(
-                            "🗑️",
+                            "Delete",
                             key="preset_del_btn",
                             help="Delete preset",
                             use_container_width=True,
@@ -726,7 +729,7 @@ def render_sidebar_bottom():
             st.warning(f"Preset management unavailable: {e}")
 
     # Save current config as preset
-    with st.sidebar.expander("💾 Save Current Config", expanded=False):
+    with st.sidebar.expander("Save Current Config", expanded=False):
         preset_name = st.text_input(
             "Preset Name", key="save_preset_name", placeholder="e.g.: My Quick Test"
         )
@@ -736,9 +739,7 @@ def render_sidebar_bottom():
             placeholder="Describe config purpose...",
         )
 
-        if st.button(
-            "💾 Save as Preset", key="save_preset_btn", use_container_width=True
-        ):
+        if st.button("Save as Preset", key="save_preset_btn", use_container_width=True):
             if preset_name:
                 try:
                     from utils.test_config_manager import ConfigPreset, get_current_config
@@ -768,7 +769,7 @@ def render_sidebar_bottom():
                 st.warning("Please enter a preset name")
 
     # Report info configuration
-    with st.sidebar.expander("🖥️ Report Info Config", expanded=False):
+    with st.sidebar.expander("Report Info Config", expanded=False):
         st.caption(
             "Manually enter hardware info here, which will be displayed in generated charts.\n(Leave empty to hide; defaults to empty for API tests)"
         )

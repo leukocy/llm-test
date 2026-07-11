@@ -124,9 +124,15 @@ class MMLUEvaluator(BaseEvaluator):
 
                 if all_samples:
                     if "subject" in all_samples[0]:
-                        samples = [s for s in all_samples if s.get("subject") in subjects_to_keep]
+                        samples = [
+                            s
+                            for s in all_samples
+                            if s.get("subject") in subjects_to_keep
+                        ]
                     else:
-                        print("[WARNING] MMLU samples lack 'subject' field, cannot filter.")
+                        print(
+                            "[WARNING] MMLU samples lack 'subject' field, cannot filter."
+                        )
                         samples = all_samples
                 else:
                     samples = []
@@ -193,9 +199,7 @@ class MMLUEvaluator(BaseEvaluator):
 
         subject = sample.get("subject", "general knowledge")
         subject_display = subject.replace("_", " ").title()
-        system_instruction = (
-            f"The following are multiple choice questions (with answers) about {subject_display}."
-        )
+        system_instruction = f"The following are multiple choice questions (with answers) about {subject_display}."
         messages.append({"role": "system", "content": system_instruction})
 
         for ex in self.few_shot_examples[: self.num_shots]:
@@ -205,7 +209,9 @@ class MMLUEvaluator(BaseEvaluator):
                     "content": self.format_prompt(ex, include_answer=False),
                 }
             )
-            messages.append({"role": "assistant", "content": self.get_correct_answer(ex)})
+            messages.append(
+                {"role": "assistant", "content": self.get_correct_answer(ex)}
+            )
 
         messages.append(
             {
@@ -215,7 +221,9 @@ class MMLUEvaluator(BaseEvaluator):
         )
         return messages
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """Format MMLU question and choices."""
         question = sample.get("question", "")
         choices = sample.get("choices", [])

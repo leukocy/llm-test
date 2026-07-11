@@ -96,7 +96,9 @@ def test_migration_1_1_0_to_latest_adds_all_warehouse_columns(tmp_path):
         CREATE TABLE reports (id INTEGER PRIMARY KEY);
         """
         conn.executescript(legacy_ddl)
-        conn.execute("INSERT INTO db_meta (key, value) VALUES ('schema_version', '1.1.0')")
+        conn.execute(
+            "INSERT INTO db_meta (key, value) VALUES ('schema_version', '1.1.0')"
+        )
         conn.commit()
 
         assert "machine_id" not in _columns(conn)
@@ -111,7 +113,9 @@ def test_migration_1_1_0_to_latest_adds_all_warehouse_columns(tmp_path):
         # 1.3.0 引擎列必须在
         for c in ENGINE_COLUMNS:
             assert c in cols
-        ver = conn.execute("SELECT value FROM db_meta WHERE key='schema_version'").fetchone()[0]
+        ver = conn.execute(
+            "SELECT value FROM db_meta WHERE key='schema_version'"
+        ).fetchone()[0]
         assert ver == SCHEMA_VERSION
     finally:
         conn.close()

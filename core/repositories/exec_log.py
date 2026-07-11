@@ -76,7 +76,9 @@ class ExecLogRepository(BaseRepository[ExecLog]):
         """查找Error Logs"""
         return self.find_by_level(LogLevel.ERROR.value, run_id, limit)
 
-    def find_warnings(self, run_id: int | None = None, limit: int = 100) -> list[ExecLog]:
+    def find_warnings(
+        self, run_id: int | None = None, limit: int = 100
+    ) -> list[ExecLog]:
         """查找WarningLog"""
         return self.find_by_level(LogLevel.WARNING.value, run_id, limit)
 
@@ -94,14 +96,20 @@ class ExecLogRepository(BaseRepository[ExecLog]):
         rows = self.db.fetch_all(sql, params)
         return {row["level"]: row["count"] for row in rows}
 
-    def search(self, query: str, run_id: int | None = None, limit: int = 50) -> list[ExecLog]:
+    def search(
+        self, query: str, run_id: int | None = None, limit: int = 50
+    ) -> list[ExecLog]:
         """搜索Log"""
         pattern = f"%{query}%"
         if run_id:
-            return self.find_by("run_id = ? AND message LIKE ?", (run_id, pattern), limit)
+            return self.find_by(
+                "run_id = ? AND message LIKE ?", (run_id, pattern), limit
+            )
         return self.find_by("message LIKE ?", (pattern,), limit)
 
     def cleanup_old_logs(self, days: int = 30) -> int:
         """Cleanup旧Log"""
         cutoff = datetime.now().timestamp() - (days * 86400)
-        return self.delete_by("timestamp < ?", (datetime.fromtimestamp(cutoff).isoformat(),))
+        return self.delete_by(
+            "timestamp < ?", (datetime.fromtimestamp(cutoff).isoformat(),)
+        )

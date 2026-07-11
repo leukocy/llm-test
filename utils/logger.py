@@ -106,7 +106,9 @@ class BenchmarkLogger:
 
     def log(self, level: LogLevel, message: str, **kwargs) -> LogEntry:
         """记录Log"""
-        entry = LogEntry(timestamp=datetime.now(), level=level, message=message, **kwargs)
+        entry = LogEntry(
+            timestamp=datetime.now(), level=level, message=message, **kwargs
+        )
 
         self.entries.append(entry)
 
@@ -189,7 +191,9 @@ class BenchmarkLogger:
 
     def export_json(self) -> str:
         """ExportisJSON"""
-        return json.dumps([e.to_dict() for e in self.entries], ensure_ascii=False, indent=2)
+        return json.dumps(
+            [e.to_dict() for e in self.entries], ensure_ascii=False, indent=2
+        )
 
     def export_text(self, include_metrics=True) -> str:
         """Exportis文本"""

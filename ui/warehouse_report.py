@@ -29,7 +29,7 @@ def render_hardware_fingerprint_card() -> None:
     fp = sys_info.get("hardware_fingerprint") or {}
     if not fp:
         return
-    with st.expander("🔩 硬件指纹（配置冻结）", expanded=False):
+    with st.expander("硬件指纹（配置冻结）", expanded=False):
         cpu = fp.get("cpu") or {}
         mem = fp.get("memory") or {}
         gpus = fp.get("gpus") or []
@@ -102,13 +102,17 @@ def render_resource_timeline() -> None:
         )
     if "gpu_util_percent" in df:
         fig.add_trace(
-            go.Scatter(x=df["t"], y=df["gpu_util_percent"], name="GPU%", line={"width": 1}),
+            go.Scatter(
+                x=df["t"], y=df["gpu_util_percent"], name="GPU%", line={"width": 1}
+            ),
             secondary_y=False,
         )
     # 容量（右轴）
     if "gpu_vram_gb" in df:
         fig.add_trace(
-            go.Scatter(x=df["t"], y=df["gpu_vram_gb"], name="显存(GB)", line={"dash": "dot"}),
+            go.Scatter(
+                x=df["t"], y=df["gpu_vram_gb"], name="显存(GB)", line={"dash": "dot"}
+            ),
             secondary_y=True,
         )
     if "system_memory_gb" in df:
@@ -133,7 +137,7 @@ def render_resource_timeline() -> None:
     fig.update_yaxes(title_text="容量 (GB)", secondary_y=True)
 
     peaks = mon.get("peaks") or {}
-    with st.expander("📈 资源监控（利用率 / 显存 / 内存峰值）", expanded=False):
+    with st.expander("资源监控（利用率 / 显存 / 内存峰值）", expanded=False):
         st.plotly_chart(fig, use_container_width=True)
         p1, p2, p3, p4 = st.columns(4)
         p1.metric("GPU 利用率峰值", f"{peaks.get('gpu_util_percent') or '—'}%")
@@ -156,7 +160,7 @@ def render_deviation_analysis() -> None:
         return
     from core.effective_bandwidth import summarize_gap
 
-    with st.expander("📡 等效带宽偏差分析", expanded=False):
+    with st.expander("等效带宽偏差分析", expanded=False):
         c1, c2, c3 = st.columns(3)
         c1.metric("标称显存带宽", f"{bw.get('nominal_bandwidth_gbps') or '—'} GB/s")
         c2.metric("实测等效带宽", f"{bw.get('effective_bandwidth_gbps')} GB/s")
@@ -223,12 +227,14 @@ def render_engine_runtime() -> None:
         margin={"l": 10, "r": 10, "t": 40, "b": 10},
     )
     fig.update_xaxes(title_text="时间 (s)")
-    fig.update_yaxes(title_text="KV cache 占用 (0~1)", secondary_y=False, range=[0, 1.05])
+    fig.update_yaxes(
+        title_text="KV cache 占用 (0~1)", secondary_y=False, range=[0, 1.05]
+    )
     fig.update_yaxes(title_text="请求数", secondary_y=True)
 
     peaks = eng.get("peaks") or {}
     cc = eng.get("cache_config") or {}
-    with st.expander("🔌 推理引擎运行时（KV / 队列 / 抢救）", expanded=False):
+    with st.expander("推理引擎运行时（KV / 队列 / 抢救）", expanded=False):
         st.plotly_chart(fig, use_container_width=True)
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("KV 占用峰值", f"{(peaks.get('gpu_cache_usage_perc') or 0)*100:.0f}%")
@@ -236,7 +242,9 @@ def render_engine_runtime() -> None:
         c3.metric("运行队列峰值", peaks.get("num_requests_running") or "—")
         c4.metric(
             "KV 容量(tokens)",
-            cc.get("kv_capacity_tokens") or st.session_state.get("kv_cache_capacity_tokens") or "—",
+            cc.get("kv_capacity_tokens")
+            or st.session_state.get("kv_cache_capacity_tokens")
+            or "—",
         )
         if cc.get("num_gpu_blocks"):
             st.caption(
@@ -255,14 +263,16 @@ def render_client_vs_engine_analysis() -> None:
 
     df = st.session_state.get("results_df")
     eng = st.session_state.get("engine_metrics")
-    if (df is None or getattr(df, "empty", True)) and not (eng or {}).get("engine_means"):
+    if (df is None or getattr(df, "empty", True)) and not (eng or {}).get(
+        "engine_means"
+    ):
         return
 
     r = compute_client_vs_engine_latency(df, eng)
     if r["client_ttft_s"] is None and r["engine_ttft_s"] is None:
         return
 
-    with st.expander("⏱️ 客户端 vs 引擎侧延迟对照", expanded=False):
+    with st.expander("客户端 vs 引擎侧延迟对照", expanded=False):
         c1, c2, c3 = st.columns(3)
         c1.metric(
             "客户端 TTFT(中位)",
@@ -289,7 +299,11 @@ def render_client_vs_engine_analysis() -> None:
         )
         c6.metric(
             "TPOT 开销",
-            (f"{r['tpot_overhead_ms']:.1f} ms" if r["tpot_overhead_ms"] is not None else "—"),
+            (
+                f"{r['tpot_overhead_ms']:.1f} ms"
+                if r["tpot_overhead_ms"] is not None
+                else "—"
+            ),
         )
         st.caption(r["verdict"])
 
@@ -325,7 +339,7 @@ def render_publish_gate_badge() -> None:
     cols = st.columns(4)
     for i, (key, label_cn) in enumerate(GATE_LABELS.items()):
         passed = result.gates.get(key, False)
-        cols[i].metric(label_cn, "✅" if passed else "❌")
+        cols[i].metric(label_cn, "Pass" if passed else "Fail")
     if result.reasons:
         st.caption("未通过：" + "；".join(result.reasons))
 
@@ -382,7 +396,9 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
             f"- GPU: {g.get('name')} {g.get('vram_gb')}GB / 带宽 {g.get('nominal_bandwidth_gbps')}GB/s / PCIe Gen{g.get('pcie_gen')}×{g.get('pcie_width')}"
         )
     cuda = fp.get("cuda") or {}
-    lines.append(f"- CUDA/驱动: {cuda.get('cuda_version') or '—'} / {cuda.get('driver') or '—'}")
+    lines.append(
+        f"- CUDA/驱动: {cuda.get('cuda_version') or '—'} / {cuda.get('driver') or '—'}"
+    )
     lines.append("")
 
     lines.append("## 配置快照\n")
@@ -410,8 +426,12 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
     if eng and eng.get("sample_count", 0) > 0:
         ep = eng.get("peaks") or {}
         cc = eng.get("cache_config") or {}
-        lines.append(f"- 引擎: {eng.get('engine_family', '?')} @ {eng.get('metrics_url', '?')}")
-        lines.append(f"- KV cache 占用峰值: {(ep.get('gpu_cache_usage_perc') or 0)*100:.0f}%")
+        lines.append(
+            f"- 引擎: {eng.get('engine_family', '?')} @ {eng.get('metrics_url', '?')}"
+        )
+        lines.append(
+            f"- KV cache 占用峰值: {(ep.get('gpu_cache_usage_perc') or 0)*100:.0f}%"
+        )
         lines.append(
             f"- 运行队列峰值: {ep.get('num_requests_running') or '—'} / 等待峰值: {ep.get('num_requests_waiting') or '—'}"
         )
@@ -450,7 +470,7 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
 
     for key, label_cn in _GL.items():
         passed = (gate.get("gates") or {}).get(key)
-        lines.append(f"- {label_cn}: {'✅' if passed else '❌'}")
+        lines.append(f"- {label_cn}: {'Pass' if passed else 'Fail'}")
     if gate.get("reasons"):
         lines.append(f"- 未通过：{'；'.join(gate['reasons'])}")
     lines.append("")
@@ -475,7 +495,7 @@ def render_warehouse_panel(test_type: str, model_id: str) -> None:
     """在结果区后渲染全部富信息 + 导出按钮。任一段失败不阻塞其它。"""
     try:
         st.markdown("---")
-        st.header("🗂️ 数据仓库记录（八维）")
+        st.header("数据仓库记录（八维）")
 
         # 闸门徽标
         render_publish_gate_badge()
@@ -487,10 +507,10 @@ def render_warehouse_panel(test_type: str, model_id: str) -> None:
         render_client_vs_engine_analysis()
 
         # 单次测试报告导出
-        if st.button("📄 导出单次测试报告 (Markdown)", key="export_single_report"):
+        if st.button("导出单次测试报告 (Markdown)", key="export_single_report"):
             md = build_single_test_report(_collect_report_context(test_type, model_id))
             st.download_button(
-                label="⬇️ 下载 .md",
+                label="下载 .md",
                 data=md.encode("utf-8"),
                 file_name=f"test_report_{model_id}_{test_type}.md",
                 mime="text/markdown",
@@ -502,7 +522,9 @@ def render_warehouse_panel(test_type: str, model_id: str) -> None:
 def _client_vs_engine_for_report(ss) -> dict[str, Any]:
     from core.latency_analysis import compute_client_vs_engine_latency
 
-    return compute_client_vs_engine_latency(ss.get("results_df"), ss.get("engine_metrics"))
+    return compute_client_vs_engine_latency(
+        ss.get("results_df"), ss.get("engine_metrics")
+    )
 
 
 def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
@@ -516,7 +538,8 @@ def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
         tester=tm.get("tester"),
         machine_id=fp.get("machine_id") or sys_info.get("machine_id"),
         has_hardware_fingerprint=bool(fp),
-        seed_recorded=(st.session_state.get("test_config") or {}).get("random_seed") is not None,
+        seed_recorded=(st.session_state.get("test_config") or {}).get("random_seed")
+        is not None,
         insights=st.session_state.get("insights"),
         success_rate=_success_rate(),
         has_monitor=bool(mon and mon.get("timeline")),
@@ -527,7 +550,8 @@ def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
         "model_id": model_id,
         "tester": tm.get("tester"),
         "machine_id": fp.get("machine_id"),
-        "status_detail": st.session_state.get("status_detail") or tm.get("status_detail"),
+        "status_detail": st.session_state.get("status_detail")
+        or tm.get("status_detail"),
         "bottleneck": st.session_state.get("bottleneck"),
         "hardware_fingerprint": fp,
         "test_config": st.session_state.get("test_config") or {},

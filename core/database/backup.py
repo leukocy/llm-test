@@ -23,7 +23,9 @@ class DatabaseBackup:
     - RestoreBackup
     """
 
-    def __init__(self, db_path: str = "data/benchmark.db", backup_dir: str = "data/backups"):
+    def __init__(
+        self, db_path: str = "data/benchmark.db", backup_dir: str = "data/backups"
+    ):
         self.db_path = Path(db_path)
         self.backup_dir = Path(backup_dir)
         self.backup_dir.mkdir(parents=True, exist_ok=True)

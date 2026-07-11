@@ -76,7 +76,9 @@ class ModelSpec:
 
     # modality
     is_multimodal: bool = False
-    modalities: list[str] = field(default_factory=list)  # ["text","vision","audio","video"]
+    modalities: list[str] = field(
+        default_factory=list
+    )  # ["text","vision","audio","video"]
     vision_encoder: str = ""
 
     # precision
@@ -125,7 +127,11 @@ class ModelSpec:
         ≈ active_params_b * 1e9 * bytes_per_param。
         MoE 只读激活专家权重；dense 读全部权重。
         """
-        active = self.active_params_b if self.active_params_b is not None else self.total_params_b
+        active = (
+            self.active_params_b
+            if self.active_params_b is not None
+            else self.total_params_b
+        )
         bpp = self.bytes_per_param
         if active is None or bpp is None:
             return None
@@ -360,7 +366,9 @@ def _normalize_key(model_id: str) -> str:
     return (model_id or "").lower().strip()
 
 
-def resolve_spec(model_id: str, override: dict[str, Any] | None = None) -> ModelSpec | None:
+def resolve_spec(
+    model_id: str, override: dict[str, Any] | None = None
+) -> ModelSpec | None:
     """按 model_id 模糊匹配注册表；override 中的字段覆盖命中规格。未命中返回 None。"""
     key = _normalize_key(model_id)
     if not key:
@@ -376,7 +384,8 @@ def resolve_spec(model_id: str, override: dict[str, Any] | None = None) -> Model
     if base is None:
         # 没有命中注册表：若 override 给了关键架构字段，仍构造一个（供用户自填）
         if override and any(
-            override.get(k) for k in ("active_params_b", "total_params_b", "weight_dtype")
+            override.get(k)
+            for k in ("active_params_b", "total_params_b", "weight_dtype")
         ):
             base = ModelSpec(name=model_id)
         else:
@@ -415,7 +424,8 @@ def from_local_config(config_path: str | Path) -> ModelSpec | None:
         name=cfg.get("model_type", path.parent.name),
         architecture="moe" if is_moe else "dense",
         num_experts=cfg.get("num_experts") or cfg.get("n_routed_experts"),
-        num_experts_per_tok=cfg.get("num_experts_per_tok") or cfg.get("num_selected_experts"),
+        num_experts_per_tok=cfg.get("num_experts_per_tok")
+        or cfg.get("num_selected_experts"),
         num_shared_experts=cfg.get("num_shared_experts") or cfg.get("n_shared_experts"),
         num_layers=cfg.get("num_hidden_layers") or cfg.get("n_layers"),
         hidden_size=cfg.get("hidden_size") or cfg.get("n_embd"),

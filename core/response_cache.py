@@ -197,7 +197,9 @@ class ResponseCache:
                 return data.decode("utf-8")
         return data.decode("utf-8")
 
-    def get(self, prompt: str, model_id: str = "", include_expired: bool = False) -> str | None:
+    def get(
+        self, prompt: str, model_id: str = "", include_expired: bool = False
+    ) -> str | None:
         """
         Get缓存响应
 
@@ -508,11 +510,15 @@ class ResponseCache:
 _global_cache: ResponseCache | None = None
 
 
-def get_cache(cache_dir: str = "cache", max_size_mb: int = 500, **kwargs) -> ResponseCache:
+def get_cache(
+    cache_dir: str = "cache", max_size_mb: int = 500, **kwargs
+) -> ResponseCache:
     """Get全局缓存实例"""
     global _global_cache
     if _global_cache is None:
-        _global_cache = ResponseCache(cache_dir=cache_dir, max_size_mb=max_size_mb, **kwargs)
+        _global_cache = ResponseCache(
+            cache_dir=cache_dir, max_size_mb=max_size_mb, **kwargs
+        )
     return _global_cache
 
 

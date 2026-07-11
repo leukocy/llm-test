@@ -37,9 +37,15 @@ def test_insert_and_find(tmp_path):
 
 def test_upsert_dedups_by_case_id(tmp_path):
     repo = _fresh_repo(tmp_path)
-    repo.upsert(ApplicationCase(case_id="dup1", scenario="coding", model_name="M1", success=True))
     repo.upsert(
-        ApplicationCase(case_id="dup1", scenario="coding", model_name="M1", failure_reason="oom")
+        ApplicationCase(
+            case_id="dup1", scenario="coding", model_name="M1", success=True
+        )
+    )
+    repo.upsert(
+        ApplicationCase(
+            case_id="dup1", scenario="coding", model_name="M1", failure_reason="oom"
+        )
     )
     assert repo.count("case_id = 'dup1'") == 1
     got = repo.find_one_by("case_id = ?", ("dup1",))
@@ -49,7 +55,9 @@ def test_upsert_dedups_by_case_id(tmp_path):
 def test_find_by_filter(tmp_path):
     repo = _fresh_repo(tmp_path)
     repo.insert(
-        ApplicationCase(case_id="a", scenario="coding", model_name="M1", external_level="internal")
+        ApplicationCase(
+            case_id="a", scenario="coding", model_name="M1", external_level="internal"
+        )
     )
     repo.insert(
         ApplicationCase(
@@ -60,7 +68,9 @@ def test_find_by_filter(tmp_path):
         )
     )
     repo.insert(
-        ApplicationCase(case_id="c", scenario="coding", model_name="M1", external_level="review")
+        ApplicationCase(
+            case_id="c", scenario="coding", model_name="M1", external_level="review"
+        )
     )
 
     coding_m1 = repo.find_by_filter(scenario="coding", model_name="M1")

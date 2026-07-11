@@ -34,7 +34,9 @@ def test_bottleneck_latency():
 
 def test_bottleneck_memory_bandwidth_from_util():
     insights = ["🚀 **Good**: steady."]
-    assert derive_bottleneck(insights, bandwidth_utilization_pct=88) == "memory_bandwidth"
+    assert (
+        derive_bottleneck(insights, bandwidth_utilization_pct=88) == "memory_bandwidth"
+    )
 
 
 def test_bottleneck_none_when_positive():
@@ -54,7 +56,10 @@ def test_status_abnormal_on_failure():
 
 
 def test_status_abnormal_on_critical():
-    assert derive_status_detail(True, ["❌ **High Latency**: bad"]) == TestStatusDetail.ABNORMAL
+    assert (
+        derive_status_detail(True, ["❌ **High Latency**: bad"])
+        == TestStatusDetail.ABNORMAL
+    )
 
 
 def test_status_needs_retest_on_borderline_success_rate():

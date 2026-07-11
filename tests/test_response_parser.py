@@ -139,9 +139,13 @@ class TestUnifiedResponseParser:
         parser = UnifiedResponseParser("mimo")
 
         # 一块
-        parser.parse_chunk({"choices": [{"delta": {"content": "Hello "}, "finish_reason": None}]})
+        parser.parse_chunk(
+            {"choices": [{"delta": {"content": "Hello "}, "finish_reason": None}]}
+        )
         # 二块
-        parser.parse_chunk({"choices": [{"delta": {"content": "world"}, "finish_reason": "stop"}]})
+        parser.parse_chunk(
+            {"choices": [{"delta": {"content": "world"}, "finish_reason": "stop"}]}
+        )
 
         response = parser.get_result()
         assert response.full_content == "Hello world"
@@ -154,7 +158,9 @@ class TestUnifiedResponseParser:
         parser = UnifiedResponseParser("deepseek")
 
         # 推理块
-        parser.parse_chunk({"choices": [{"delta": {"reasoning_content": "Thinking... "}}]})
+        parser.parse_chunk(
+            {"choices": [{"delta": {"reasoning_content": "Thinking... "}}]}
+        )
         # 正文块
         parser.parse_chunk({"choices": [{"delta": {"content": "Answer"}}]})
 
@@ -189,7 +195,9 @@ class TestUnifiedResponseParser:
         """Test reasoning_ratio 属性"""
         parser = UnifiedResponseParser("deepseek")
 
-        parser.parse_chunk({"choices": [{"delta": {"reasoning_content": "AAAA", "content": "BB"}}]})
+        parser.parse_chunk(
+            {"choices": [{"delta": {"reasoning_content": "AAAA", "content": "BB"}}]}
+        )
 
         # 4字符推理 / 6字符总计 = 2/3
         assert parser.reasoning_ratio == pytest.approx(4 / 6)
@@ -243,7 +251,9 @@ class TestGeminiParsing:
         parser = UnifiedResponseParser("gemini")
 
         # Gemini use text 字段作is内容
-        chunk = {"choices": [{"delta": {"text": "Standard content"}, "finish_reason": None}]}
+        chunk = {
+            "choices": [{"delta": {"text": "Standard content"}, "finish_reason": None}]
+        }
 
         result = parser.parse_chunk(chunk)
         assert result.content == "Standard content"
@@ -252,8 +262,12 @@ class TestGeminiParsing:
         """Parse多 Gemini 块"""
         parser = UnifiedResponseParser("gemini")
 
-        parser.parse_chunk({"choices": [{"delta": {"parts": [{"thought": "Thinking "}]}}]})
-        parser.parse_chunk({"choices": [{"delta": {"parts": [{"thought": "more..."}]}}]})
+        parser.parse_chunk(
+            {"choices": [{"delta": {"parts": [{"thought": "Thinking "}]}}]}
+        )
+        parser.parse_chunk(
+            {"choices": [{"delta": {"parts": [{"thought": "more..."}]}}]}
+        )
         parser.parse_chunk({"choices": [{"delta": {"parts": [{"text": "Answer"}]}}]})
 
         response = parser.get_result()

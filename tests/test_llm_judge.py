@@ -16,7 +16,9 @@ class TestJudgeRequest:
 
     def test_create_minimal_request(self):
         """Test creating a minimal judge request."""
-        request = JudgeRequest(question="What is AI?", answer="AI is artificial intelligence.")
+        request = JudgeRequest(
+            question="What is AI?", answer="AI is artificial intelligence."
+        )
 
         assert request.question == "What is AI?"
         assert request.answer == "AI is artificial intelligence."
@@ -127,9 +129,7 @@ class TestLLMJudge:
 
     def test_parse_response_without_code_block(self, judge):
         """Test parsing JSON without code block markers."""
-        response_text = (
-            """{"total_score": 7.0, "reasoning": "OK", "category_scores": {}, "confidence": 0.8}"""
-        )
+        response_text = """{"total_score": 7.0, "reasoning": "OK", "category_scores": {}, "confidence": 0.8}"""
 
         result = judge._parse_judge_response(response_text, max_score=10)
 
@@ -179,7 +179,9 @@ Some text after..."""
                 "error": None,
             }
 
-        with patch.object(judge.provider, "get_completion", side_effect=mock_get_completion):
+        with patch.object(
+            judge.provider, "get_completion", side_effect=mock_get_completion
+        ):
             result = await judge.evaluate(request)
 
         assert result.score == 8.0
@@ -193,7 +195,9 @@ Some text after..."""
         async def mock_get_completion(*args, **kwargs):
             return {"error": "API Error"}
 
-        with patch.object(judge.provider, "get_completion", side_effect=mock_get_completion):
+        with patch.object(
+            judge.provider, "get_completion", side_effect=mock_get_completion
+        ):
             result = await judge.evaluate(request)
 
         assert result.score == 0.0
@@ -236,7 +240,9 @@ class TestOpenEndedEvaluator:
             return mock_result
 
         with patch.object(evaluator.judge, "evaluate", side_effect=mock_evaluate):
-            result = await evaluator.evaluate_answer(question="What is AI?", answer="AI is...")
+            result = await evaluator.evaluate_answer(
+                question="What is AI?", answer="AI is..."
+            )
 
         assert result.score == 7.5
         assert result.reasoning == "Good quality answer"
@@ -255,7 +261,9 @@ class TestOpenEndedEvaluator:
         async def mock_evaluate_batch(*args, **kwargs):
             return mock_results
 
-        with patch.object(evaluator.judge, "evaluate_batch", side_effect=mock_evaluate_batch):
+        with patch.object(
+            evaluator.judge, "evaluate_batch", side_effect=mock_evaluate_batch
+        ):
             results = await evaluator.evaluate_batch(questions, answers)
 
         assert len(results) == 2
@@ -265,11 +273,15 @@ class TestOpenEndedEvaluator:
     def test_evaluate_batch_mismatch_length(self, evaluator):
         """Test that batch evaluation raises error on length mismatch."""
         with pytest.raises(ValueError, match="数量not匹配"):
-            asyncio.run(evaluator.evaluate_batch(questions=["Q1", "Q2"], answers=["A1"]))
+            asyncio.run(
+                evaluator.evaluate_batch(questions=["Q1", "Q2"], answers=["A1"])
+            )
 
     def test_compare_models_empty(self, evaluator):
         """Test comparing models with no responses."""
-        df = asyncio.run(evaluator.compare_models(questions=["Q1", "Q2"], model_responses={}))
+        df = asyncio.run(
+            evaluator.compare_models(questions=["Q1", "Q2"], model_responses={})
+        )
 
         assert df.empty
 
@@ -311,7 +323,9 @@ class TestConvenienceFunctions:
             mock_instance = MockClass.return_value
             mock_instance.evaluate = AsyncMock(return_value=mock_result)
 
-            result = await judge_answer(question="Test?", answer="Answer", api_key="test-key")
+            result = await judge_answer(
+                question="Test?", answer="Answer", api_key="test-key"
+            )
 
         assert result.score == 8.0
 
@@ -363,7 +377,9 @@ class TestIntegration:
         evaluator = OpenEndedEvaluator(config)
 
         # Evaluate a simple answer
-        result = await evaluator.evaluate_answer(question="What is 2+2?", answer="2+2 equals 4.")
+        result = await evaluator.evaluate_answer(
+            question="What is 2+2?", answer="2+2 equals 4."
+        )
 
         # Basic assertions
         assert isinstance(result.score, float)

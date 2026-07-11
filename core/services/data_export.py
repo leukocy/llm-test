@@ -67,7 +67,8 @@ class DataExportService:
 
         if output_path is None:
             final_path: Path = (
-                self.export_dir / f"run_{run_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                self.export_dir
+                / f"run_{run_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             )
         else:
             final_path = Path(output_path)
@@ -83,7 +84,9 @@ class DataExportService:
             logger.error(f"Export failed: {e}")
             return None
 
-    def export_run_to_csv(self, run_id: int, output_path: str | None = None) -> str | None:
+    def export_run_to_csv(
+        self, run_id: int, output_path: str | None = None
+    ) -> str | None:
         """
         ExportTest Results到 CSV 文件
 
@@ -101,7 +104,8 @@ class DataExportService:
 
         if output_path is None:
             final_path: Path = (
-                self.export_dir / f"results_{run_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                self.export_dir
+                / f"results_{run_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
             )
         else:
             final_path = Path(output_path)
@@ -131,7 +135,9 @@ class DataExportService:
             logger.error(f"Export failed: {e}")
             return None
 
-    def export_run_to_excel(self, run_id: int, output_path: str | None = None) -> str | None:
+    def export_run_to_excel(
+        self, run_id: int, output_path: str | None = None
+    ) -> str | None:
         """
         ExportTest Results到 Excel 文件
 
@@ -157,7 +163,8 @@ class DataExportService:
 
         if output_path is None:
             final_path: Path = (
-                self.export_dir / f"report_{run_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                self.export_dir
+                / f"report_{run_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
             )
         else:
             final_path = Path(output_path)

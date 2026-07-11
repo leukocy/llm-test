@@ -25,7 +25,9 @@ class TestStatusDetail(str, Enum):
     ABNORMAL = "abnormal"  # 异常（关键指标缺失/失败率高）
     PASSED = "passed"  # 已通过
     NEEDS_RETEST = "needs_retest"  # 需复测（成功率边界/可疑）
-    EXTERNAL_READY = "external_ready"  # 可对外（需 publish_gate 复核，见 core.publish_gate）
+    EXTERNAL_READY = (
+        "external_ready"  # 可对外（需 publish_gate 复核，见 core.publish_gate）
+    )
 
 
 # insight 关键词 → 瓶颈标签（按优先级从前到后匹配）
@@ -109,7 +111,9 @@ def _has_critical(
             sev == "critical" and "analysis skipped" not in txt.lower()
             for sev, txt in zip(severities, insights or [], strict=False)
         )
-    return any("❌" in i and "analysis skipped" not in i.lower() for i in insights or [])
+    return any(
+        "❌" in i and "analysis skipped" not in i.lower() for i in insights or []
+    )
 
 
 def derive_status_detail(
@@ -146,7 +150,8 @@ def derive_error_attribution(
         return {"error_type": None, "error_detail": None, "count": 0}
 
     type_counts = Counter(
-        (r.get("error_type") or _classify_error(r.get("error")) or "unknown") for r in failed
+        (r.get("error_type") or _classify_error(r.get("error")) or "unknown")
+        for r in failed
     )
     top_type, top_count = type_counts.most_common(1)[0]
     # 取该类型的一个代表 error 文本
@@ -154,7 +159,8 @@ def derive_error_attribution(
         (
             r.get("error")
             for r in failed
-            if (r.get("error_type") or _classify_error(r.get("error")) or "unknown") == top_type
+            if (r.get("error_type") or _classify_error(r.get("error")) or "unknown")
+            == top_type
         ),
         None,
     )

@@ -248,7 +248,7 @@ def render_preset_management():
 
     preset_manager = _get_preset_manager()
 
-    with st.sidebar.expander("⚙️ Config Presets", expanded=False):
+    with st.sidebar.expander("Config Presets", expanded=False):
         preset_names = ["<New Config>"] + preset_manager.list_presets()
         selected_preset_name = st.selectbox(
             "Select Preset", options=preset_names, key="preset_selector"
@@ -257,7 +257,7 @@ def render_preset_management():
         col1, col2 = st.columns(2)
         with col1:
             if st.button(
-                "📥 Load",
+                "Load",
                 disabled=(selected_preset_name == "<New Config>"),
                 width="stretch",
             ):
@@ -269,7 +269,7 @@ def render_preset_management():
 
         with col2:
             if st.button(
-                "🗑️ Delete",
+                "Delete",
                 disabled=(selected_preset_name == "<New Config>"),
                 width="stretch",
             ):
@@ -294,7 +294,7 @@ def render_custom_config():
 
     custom_config = _get_custom_config()
 
-    with st.sidebar.expander("⚙️ Custom Config Management"):
+    with st.sidebar.expander("Custom Config Management"):
         tab1, tab2 = st.tabs(["Providers", "Models"])
 
         with tab1:
@@ -306,7 +306,7 @@ def render_custom_config():
                 "API Base URL", key="custom_provider_url"
             )
 
-            if st.button("➕ Add Provider", key="add_provider"):
+            if st.button("Add Provider", key="add_provider"):
                 if custom_provider_name and custom_provider_url:
                     if custom_config.add_custom_provider(
                         custom_provider_name, custom_provider_url
@@ -319,7 +319,7 @@ def render_custom_config():
             st.markdown("**Add Custom Model**")
             custom_model_name = st.text_input("Model Name", key="custom_model_name")
 
-            if st.button("➕ Add Model", key="add_model"):
+            if st.button("Add Model", key="add_model"):
                 if custom_model_name and custom_model_name.strip():
                     if custom_config.add_custom_model(custom_model_name.strip()):
                         st.success(f"Added: {custom_model_name}")
