@@ -95,19 +95,19 @@ def verify_provider_and_model(at: AppTest) -> None:
         (provider for provider in providers if provider != "Custom (OpenAI Compatible)"),
         providers[0],
     )
-    provider_select.set_value(target_provider).run()
+    provider_select.set_value(target_provider).run(timeout=30)
     assert not at.exception, f"Provider change crashed the app:\n{at.exception}"
 
     model_select = at.sidebar.selectbox[1]
     models = list(model_select.options)
     assert models, "Model selector has no options"
-    model_select.set_value(models[0]).run()
+    model_select.set_value(models[0]).run(timeout=30)
     assert not at.exception, f"Model change crashed the app:\n{at.exception}"
     print("PASS: Provider and model selection verified")
 
 
 def verify_custom_prompt_flow(at: AppTest) -> None:
-    find_test_type_select(at).set_value("custom").run()
+    find_test_type_select(at).set_value("custom").run(timeout=30)
     assert not at.exception, f"Custom test panel crashed:\n{at.exception}"
 
     source_mode = next(
@@ -115,7 +115,7 @@ def verify_custom_prompt_flow(at: AppTest) -> None:
         None,
     )
     assert source_mode is not None, "Prompt Source control is missing"
-    source_mode.set_value("Manual Input").run()
+    source_mode.set_value("Manual Input").run(timeout=30)
 
     prompt_area = next(
         (
@@ -126,7 +126,7 @@ def verify_custom_prompt_flow(at: AppTest) -> None:
         None,
     )
     assert prompt_area is not None, "Custom prompt input is missing"
-    prompt_area.set_value("Hello, benchmark test!").run()
+    prompt_area.set_value("Hello, benchmark test!").run(timeout=30)
     assert not at.exception, f"Entering a custom prompt crashed the app:\n{at.exception}"
     print("PASS: Custom prompt flow verified")
 
@@ -134,7 +134,7 @@ def verify_custom_prompt_flow(at: AppTest) -> None:
 def verify_advanced_panels() -> None:
     for test_type in ("quality", "comparison", "advanced", "batch", "data_warehouse"):
         at = load_app()
-        find_test_type_select(at).set_value(test_type).run()
+        find_test_type_select(at).set_value(test_type).run(timeout=30)
         assert not at.exception, f"{test_type} panel crashed:\n{at.exception}"
     print("PASS: Advanced panels verified")
 
