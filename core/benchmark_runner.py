@@ -3994,7 +3994,7 @@ class BenchmarkRunner:
 
             status_msg = f"currentlyTest (目标: {tokens_target})..."
             if q_summary:
-                status_msg += f"\n📋 {q_summary}"
+                status_msg += f"\n{q_summary}"
             self.status_text.info(status_msg)
             for i in range(req_per_level_p):
                 res = await self._run_prefill_request(
@@ -4051,7 +4051,7 @@ class BenchmarkRunner:
 
                 status_msg = f"currentlyTest (目标: {length_target}, 轮数: {r + 1}/{rounds_per_level_l})..."
                 if q_summary:
-                    status_msg += f"\n📋 {q_summary}"
+                    status_msg += f"\n{q_summary}"
                 self.status_text.info(status_msg)
 
                 res = await self._run_long_context_request(

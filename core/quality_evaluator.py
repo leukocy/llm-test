@@ -668,13 +668,15 @@ class QualityEvaluator:
                 if live_sample_results:
                     correct_count = sum(1 for r in live_sample_results if r.is_correct)
                     current_accuracy = correct_count / len(live_sample_results) * 100
-                    status_emoji = "✅" if live_sample_results[-1].is_correct else "❌"
+                    status_text = (
+                        "Pass" if live_sample_results[-1].is_correct else "Fail"
+                    )
 
                     # 输出Verbose Logging
                     last_result = live_sample_results[-1]
                     short_answer = (last_result.predicted_answer or "")[:50]
                     self._log(
-                        f"{status_emoji} 样本 {current}/{total} | "
+                        f"{status_text} 样本 {current}/{total} | "
                         f"正确率: {current_accuracy:.1f}% | "
                         f"Answer: {short_answer}..."
                     )
@@ -891,7 +893,7 @@ class QualityEvaluator:
                 misses = cache_stats.get("session_misses", 0)
                 hit_rate = cache_stats.get("session_hit_rate", 0)
                 self._log(
-                    f"📦 缓存Statistics: 命in {hits}, 未命in {misses}, 命in率 {hit_rate * 100:.1f}%"
+                    f"缓存Statistics: 命in {hits}, 未命in {misses}, 命in率 {hit_rate * 100:.1f}%"
                 )
 
             return self.results
@@ -1084,10 +1086,10 @@ class QualityEvaluator:
 
             # BuildThinking mode描述
             if thinking_enabled:
-                thinking_mode = f"✅ {reasoning_effort.upper()}"
+                thinking_mode = reasoning_effort.upper()
                 budget_display = f"{thinking_budget} tokens"
             else:
-                thinking_mode = "❌ Close"
+                thinking_mode = "Closed"
                 budget_display = "N/A"
 
             data.append(

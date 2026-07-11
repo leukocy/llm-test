@@ -22,16 +22,16 @@ def test_mimo_loading():
         try:
             tokenizer = get_cached_tokenizer(inferred_path)
             if tokenizer:
-                print("✅ Successfully loaded MiMo tokenizer!")
+                print("Successfully loaded MiMo tokenizer!")
                 test_text = "Hello, MiMo-V2-Flash!"
                 tokens = tokenizer.encode(test_text, add_special_tokens=False)
                 print(f"Encoded '{test_text}' into {len(tokens)} tokens.")
             else:
-                print("❌ Failed to load tokenizer (returned None)")
+                print("Failed to load tokenizer (returned None)")
         except Exception as e:
-            print(f"❌ Error loading tokenizer: {e}")
+            print(f"Error loading tokenizer: {e}")
     else:
-        print(f"❌ Inferred path does not exist or not found: {inferred_path}")
+        print(f"Inferred path does not exist or not found: {inferred_path}")
 
 
 if __name__ == "__main__":

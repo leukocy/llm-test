@@ -297,7 +297,7 @@ class ErrorMessages:
         bullet = "• " if language == "en" else "• "
 
         msg_parts = [
-            f"❌ {error_data['title']}",
+            f"{error_data['title']}",
             f"\n{error_data['details']}",
         ]
 

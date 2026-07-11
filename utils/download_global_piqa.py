@@ -102,7 +102,7 @@ def download_from_huggingface():
         lang = s.get("language", "Unknown")
         languages[lang] = languages.get(lang, 0) + 1
 
-    print(f"\n✅ Global PIQA DatasetSaved到 {output_file}")
+    print(f"\nGlobal PIQA DatasetSaved到 {output_file}")
     print(f"总计: {len(all_samples)}  samples")
     print(f"覆盖 {len(languages)} 种语言:")
     for lang, count in sorted(languages.items(), key=lambda x: -x[1])[:10]:
@@ -122,7 +122,7 @@ def main():
     if download_from_huggingface():
         return
 
-    print("\n⚠️  自动Download failed，willuse内置示例Data")
+    print("\n  自动Download failed，willuse内置示例Data")
 
 
 if __name__ == "__main__":

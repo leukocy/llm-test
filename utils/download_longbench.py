@@ -13,7 +13,7 @@ DATASETS_DIR = "datasets/longbench"
 
 
 def download_and_extract():
-    print("🚀 开始under载 LongBench data.zip...")
+    print("开始under载 LongBench data.zip...")
     os.makedirs(DATASETS_DIR, exist_ok=True)
 
     try:
@@ -24,10 +24,10 @@ def download_and_extract():
             repo_type="dataset",
             local_dir=DATASETS_DIR,
         )
-        print(f"✅ Download complete: {zip_path}")
+        print(f"Download complete: {zip_path}")
 
         # 解压
-        print("📦 currently解压...")
+        print("正在解压...")
         with zipfile.ZipFile(os.path.join(DATASETS_DIR, "data.zip"), "r") as zip_ref:
             zip_ref.extractall(DATASETS_DIR)
 
@@ -35,7 +35,7 @@ def download_and_extract():
         # 解压后通常willhas data/ 目录
         extracted_data_dir = os.path.join(DATASETS_DIR, "data")
         if os.path.exists(extracted_data_dir):
-            print("🗂️ 整理文件...")
+            print("整理文件...")
             for filename in os.listdir(extracted_data_dir):
                 src = os.path.join(extracted_data_dir, filename)
                 dst = os.path.join(DATASETS_DIR, filename)
@@ -51,12 +51,12 @@ def download_and_extract():
         # Delete zip 文件 (optional)
         # os.remove(os.path.join(DATASETS_DIR, "data.zip"))
 
-        print("\n✨ LongBench Dataset准备完成！")
+        print("\nLongBench Dataset准备完成！")
         print(f"   位置: {DATASETS_DIR}")
         return True
 
     except Exception as e:
-        print(f"❌ under载or解压失败: {e}")
+        print(f"under载or解压失败: {e}")
         return False
 
 
