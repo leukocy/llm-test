@@ -41,11 +41,7 @@ def tps_matrix():
     因窗口横跨多轮 prefill 而稀释,不可靠;用 conc×tps 替代)。"""
     _tmp = ok.copy()
     _tmp["agg_decode"] = _tmp["concurrency"] * _tmp["tps"]
-    piv = (
-        _tmp.groupby(["concurrency", "context_length_target"])["agg_decode"]
-        .median()
-        .round(0)
-    )
+    piv = _tmp.groupby(["concurrency", "context_length_target"])["agg_decode"].median().round(0)
     out = {}
     for (c, ctx), v in piv.items():
         out.setdefault(c, {})[ctx] = v

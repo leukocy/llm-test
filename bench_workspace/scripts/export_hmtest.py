@@ -146,33 +146,23 @@ for (conc, ctx), sub in df.groupby(["concurrency", "context_length_target"]):
         "usecase_set_version": "",
         "prompt_tokens": int(ok["prefill_tokens"].median()) if len(ok) else "",
         "output_tokens": (
-            int(ok["decode_tokens"].median())
-            if len(ok) and ok["decode_tokens"].median()
-            else 512
+            int(ok["decode_tokens"].median()) if len(ok) and ok["decode_tokens"].median() else 512
         ),
         "load_time_s": LOAD_TIME_S,
         "ttft_s": round(statistics.mean(ttfts), 3) if ttfts else "",
-        "prefill_tps": (
-            round(statistics.mean(prefill_tps_list)) if prefill_tps_list else ""
-        ),
+        "prefill_tps": (round(statistics.mean(prefill_tps_list)) if prefill_tps_list else ""),
         "decode_tps": round(decode_tps_mean, 1) if decode_tps_mean else "",
-        "long_context_tps": (
-            round(statistics.mean(sys_out)) if (ctx >= 32768 and sys_out) else ""
-        ),
+        "long_context_tps": (round(statistics.mean(sys_out)) if (ctx >= 32768 and sys_out) else ""),
         "p50_latency_s": pct(ttfts, 50),
         "p95_latency_s": pct(ttfts, 95),
         "p99_latency_s": pct(ttfts, 99),
         "gpu_vram_peak_gb": round(735.0, 1),  # 8×~92GB(run 244 实测峰值)
         "system_memory_peak_gb": "",
         "effective_bandwidth_gbps": (
-            round(bw["effective_bandwidth_gbps"], 1)
-            if bw.get("effective_bandwidth_gbps")
-            else ""
+            round(bw["effective_bandwidth_gbps"], 1) if bw.get("effective_bandwidth_gbps") else ""
         ),
         "bandwidth_utilization_pct": (
-            round(bw["bandwidth_utilization_pct"])
-            if bw.get("bandwidth_utilization_pct")
-            else ""
+            round(bw["bandwidth_utilization_pct"]) if bw.get("bandwidth_utilization_pct") else ""
         ),
         "cpu_threads_used": "",
         "cpu_util_pct": "",
@@ -205,10 +195,7 @@ with open(csv_path, "w", encoding="utf-8", newline="") as f:
     writer.writerow(HM_TEST_FIELDS)
     for r in rows:
         writer.writerow(
-            [
-                "" if r.get(fld, "") in (None, "") else r.get(fld)
-                for fld in HM_TEST_FIELDS
-            ]
+            ["" if r.get(fld, "") in (None, "") else r.get(fld) for fld in HM_TEST_FIELDS]
         )
 
 # JSON: 每行一个对象 + 元信息
@@ -257,8 +244,6 @@ print(f"\n样例行(conc=4/ctx=4096):")
 sample = next(
     r
     for r in rows
-    if r["concurrency"] == 4
-    and r["prompt_tokens"]
-    and 3000 < (r["prompt_tokens"] or 0) < 6000
+    if r["concurrency"] == 4 and r["prompt_tokens"] and 3000 < (r["prompt_tokens"] or 0) < 6000
 )
 print(json.dumps(sample, ensure_ascii=False, indent=2))

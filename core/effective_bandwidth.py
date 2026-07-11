@@ -60,7 +60,12 @@ def compute_effective_bandwidth(
 
 
 def summarize_gap(bw: dict[str, float | None]) -> str:
-    """生成一行人话归因：实测等效带宽 vs 标称带宽的 gap 解释。"""
+    """生成一行人话归因：实测等效带宽 vs 标称带宽的 gap 解释。
+
+    注意：roofline 利用率假设 batch 足够大以饱和显存带宽。低并发(batch=1/2)时
+    利用率天然偏低是正常的——GPU 单序列无法打满带宽,且 TP all-reduce 开销占比高。
+    此处对低利用率不再简单判"显著偏低",而是提示 batch 影响。
+    """
     eff = bw.get("effective_bandwidth_gbps")
     nom = bw.get("nominal_bandwidth_gbps")
     util = bw.get("bandwidth_utilization_pct")
@@ -81,6 +86,7 @@ def summarize_gap(bw: dict[str, float | None]) -> str:
             f"中等利用，损耗可能来自调度 / KV 访问 / 通信 / 引擎实现。"
         )
     return (
-        f"实测等效带宽 {eff:.0f} GB/s，仅标称带宽 {nom:.0f} GB/s 的 {util:.0f}%，"
-        f"显著偏低，重点排查：通信(TP/EP)、CPU 侧调度/权重搬运、batch 不足、降频。"
+        f"实测等效带宽 {eff:.0f} GB/s，为标称带宽 {nom:.0f} GB/s 的 {util:.0f}%。"
+        f"低并发时属正常（batch=1 难饱和带宽 + TP 通信开销占比高）；"
+        f"高并发仍偏低则排查：通信(TP/EP)、batch 不足、降频。"
     )

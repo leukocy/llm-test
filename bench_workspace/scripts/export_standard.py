@@ -90,11 +90,7 @@ def main():
                 why = None
                 if row["ttft"] > 2 * med_ttft:
                     why = "ttft>2×中位"
-                elif (
-                    med_ps
-                    and row.get("prefill_speed")
-                    and row["prefill_speed"] < 0.5 * med_ps
-                ):
+                elif med_ps and row.get("prefill_speed") and row["prefill_speed"] < 0.5 * med_ps:
                     why = "prefill<0.5×中位"
                 if why:
                     n_anom += 1
@@ -137,9 +133,7 @@ def main():
                     round(ok["ttft"].median() * 1000) if len(ok) else ""
                 ),  # 矩阵在 warmup 后,近似热启动
                 "Prefill速度_tokens/s": (
-                    round(ok["prefill_speed"].median())
-                    if len(ok) and "prefill_speed" in ok
-                    else ""
+                    round(ok["prefill_speed"].median()) if len(ok) and "prefill_speed" in ok else ""
                 ),
                 "Decode速度_tokens/s": round(ok["tps"].median(), 1) if len(ok) else "",
                 "端到端耗时_s": round(ok["total_time"].median(), 2) if len(ok) else "",
@@ -149,19 +143,13 @@ def main():
                     else ""
                 ),
                 "峰值显存_GB": (
-                    round(ok["vram_peak_gb"].max(), 1)
-                    if len(ok) and "vram_peak_gb" in ok
-                    else ""
+                    round(ok["vram_peak_gb"].max(), 1) if len(ok) and "vram_peak_gb" in ok else ""
                 ),
                 "峰值系统内存_GB": (
-                    round(ok["mem_peak_gb"].max(), 1)
-                    if len(ok) and "mem_peak_gb" in ok
-                    else ""
+                    round(ok["mem_peak_gb"].max(), 1) if len(ok) and "mem_peak_gb" in ok else ""
                 ),
                 "CPU平均利用率_%": (
-                    round(ok["cpu_peak_pct"].mean(), 1)
-                    if len(ok) and "cpu_peak_pct" in ok
-                    else ""
+                    round(ok["cpu_peak_pct"].mean(), 1) if len(ok) and "cpu_peak_pct" in ok else ""
                 ),
                 "GPU平均利用率_%": (
                     round(ok["gpu_util_peak"].mean(), 1)
@@ -190,9 +178,7 @@ def main():
     result = pd.DataFrame(out, columns=COLS)
     out_path = "raw_data/export/standard_perf.csv"
     os.makedirs("raw_data/export", exist_ok=True)
-    result.to_csv(
-        out_path, index=False, encoding="utf-8-sig"
-    )  # utf-8-sig 便于 Excel 直接开
+    result.to_csv(out_path, index=False, encoding="utf-8-sig")  # utf-8-sig 便于 Excel 直接开
 
     # 异常请求单独成表(不消灭,留痕供排查)
     if anomaly_rows:

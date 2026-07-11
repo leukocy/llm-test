@@ -1,32 +1,30 @@
+# 离线/生产部署专用 compose 文件
+# 最小依赖：只需本文件 + 已加载的 llm-benchmark:latest 镜像。
+# data/cache/api_logs/presets/results/datasets 若不存在，Docker 会自动创建空目录。
+# .streamlit 配置已烤进镜像，无需挂载。
+#
+# 用法（镜像已通过 docker load 加载后）：
+#   docker compose -f docker-compose.prod.yml up -d
+
 services:
   llm-benchmark:
-    build:
-      context: .
-      dockerfile: Dockerfile
     image: llm-benchmark:latest
     container_name: llm-benchmark
 
-    # ── Command ──
     command: >
       streamlit run app.py
       --server.port=8501
       --server.address=0.0.0.0
       --browser.gatherUsageStats=false
 
-    # ── Ports ──
     ports:
     - ${PORT:-8501}:8501
 
-    # ── Environment ──
     environment:
     - TZ=Asia/Shanghai
     - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
     - MODELSCOPE_CACHE=/app/cache/modelscope
-    env_file:
-    - path: .env
-      required: false
 
-    # ── Resource Limits ──
     deploy:
       resources:
         limits:
@@ -37,25 +35,18 @@ services:
             count: all
             capabilities: [gpu]
 
-    # ── Volumes ──
     volumes:
       # Docker socket + CLI:让容器内 engine_capture 能 docker inspect/logs 引擎容器
     - /var/run/docker.sock:/var/run/docker.sock
     - /usr/bin/docker:/usr/bin/docker:ro
-      # 持久化数据
+      # 运行时持久化（自动创建，无需预置文件）
     - ./data:/app/data
     - ./cache:/app/cache
     - ./api_logs:/app/api_logs
     - ./presets:/app/presets
     - ./results:/app/results
     - ./datasets:/app/datasets
-      # Tokenizer: 符号链接指向 /DATA/Model
-    - ./tokenizers:/app/tokenizers
-    - /DATA/Model:/DATA/Model:ro
-      # Streamlit 配置
-    - ./.streamlit:/app/.streamlit:ro
 
-    # ── Health Check ──
     healthcheck:
       test: [CMD, python, -c, import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')]
       interval: 30s
@@ -63,17 +54,10 @@ services:
       retries: 3
       start_period: 15s
 
-    # ── Logging ──
     logging:
       driver: json-file
       options:
         max-size: 50m
         max-file: '3'
 
-    # ── Restart Policy ──
     restart: unless-stopped
-
-    # ── Labels ──
-    labels:
-      com.llm-test.description: LLM Benchmark Platform
-      com.llm-test.version: 2.0.0

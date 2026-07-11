@@ -18,9 +18,7 @@ os.makedirs("raw_data", exist_ok=True)
 
 def gpu_count():
     try:
-        out = subprocess.check_output(
-            ["nvidia-smi", "-L"], text=True, stderr=subprocess.DEVNULL
-        )
+        out = subprocess.check_output(["nvidia-smi", "-L"], text=True, stderr=subprocess.DEVNULL)
         return len([l for l in out.splitlines() if l.startswith("GPU ")])
     except Exception:
         return -1

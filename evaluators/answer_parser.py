@@ -80,9 +80,7 @@ class MultiChoiceParser:
             # --- Chinese verbose ---
             (
                 "explicit_cn",
-                re.compile(
-                    rf"(?:答案是|选择|选项|正确答案为|答案为)\s*[（(]?\s*([{C}])\s*[）)]?"
-                ),
+                re.compile(rf"(?:答案是|选择|选项|正确答案为|答案为)\s*[（(]?\s*([{C}])\s*[）)]?"),
             ),
             # --- Structured formats ---
             ("paren_cn", re.compile(r"[（(]\s*([{C}])\s*[）)]")),
@@ -201,9 +199,7 @@ class MathAnswerParser:
     # -- comparison (ref: EvalScope math_equal) ------------------------------
 
     @staticmethod
-    def check_answer(
-        predicted: str, correct: str, tolerance: float = 1e-6
-    ) -> bool:  # noqa: ARG004
+    def check_answer(predicted: str, correct: str, tolerance: float = 1e-6) -> bool:  # noqa: ARG004
         """Compare predicted and correct math answers.
 
         Strategy: exact string → float tolerance (+ percentage) → SymPy symbolic.
@@ -378,9 +374,7 @@ class TextAnswerParser:
         return text
 
     @staticmethod
-    def check_answer(
-        predicted: str, correct: str, fuzzy_threshold: float = 0.8
-    ) -> bool:
+    def check_answer(predicted: str, correct: str, fuzzy_threshold: float = 0.8) -> bool:
         if not predicted or not correct:
             return False
         pred_norm = TextAnswerParser.normalize(predicted)
@@ -411,7 +405,7 @@ CHOICE_DATASETS = {
     "ceval",
     "cmmlu",
 }
-MATH_DATASETS = {"gsm8k", "math500", "aime2025", "aime"}
+MATH_DATASETS = {"gsm8k", "math500", "aime2025", "aime2026", "aime"}
 CODE_DATASETS = {"humaneval", "mbpp"}
 TEXT_DATASETS = {
     "longbench",

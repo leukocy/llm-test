@@ -12,9 +12,13 @@ from pathlib import Path
 from typing import Any
 
 
-def capture_system_info() -> dict[str, Any]:
+def capture_system_info(sudo_password: str | None = None) -> dict[str, Any]:
     """
     自动捕获系统信息
+
+    Args:
+        sudo_password: 可选 sudo 密码，仅透传给 hardware_fingerprint 的 dmidecode
+            sudo -S 通道（采内存 DIMM 细节）。不写入返回值、不落持久化。
 
     Returns:
         包含系统信息字典
@@ -55,12 +59,10 @@ def capture_system_info() -> dict[str, Any]:
     from core.hardware_fingerprint import capture_hardware_fingerprint
 
     try:
-        fingerprint = capture_hardware_fingerprint()
+        fingerprint = capture_hardware_fingerprint(sudo_password)
         info["hardware_fingerprint"] = fingerprint
         info["machine_id"] = fingerprint.get("machine_id")
-        gpu_names = [
-            g.get("name") for g in fingerprint.get("gpus", []) if g.get("name")
-        ]
+        gpu_names = [g.get("name") for g in fingerprint.get("gpus", []) if g.get("name")]
         info["gpu"] = "; ".join(gpu_names) if gpu_names else _get_gpu_info()
     except Exception:
         info["hardware_fingerprint"] = {}
@@ -73,6 +75,9 @@ def capture_system_info() -> dict[str, Any]:
 
     #  items目Version
     info["project_version"] = get_project_version()
+
+    # 关键库版本(torch/transformers/datasets/tiktoken/psutil/numpy/pandas/streamlit/...)
+    info["library_versions"] = get_library_versions()
 
     # 时间戳
     info["captured_at"] = datetime.now().isoformat()
@@ -298,9 +303,7 @@ def format_system_info(info: dict[str, Any]) -> str:
     # 基础信息
     lines.append(f"Python: {info.get('python_version', 'N/A')}")
     lines.append(f"OS: {info.get('os_name', 'N/A')} {info.get('os_version', '')}")
-    lines.append(
-        f"CPU: {info.get('cpu_model', 'N/A')} ({info.get('cpu_count', 'N/A')} cores)"
-    )
+    lines.append(f"CPU: {info.get('cpu_model', 'N/A')} ({info.get('cpu_count', 'N/A')} cores)")
 
     # 内存
     mem = info.get("memory_total_mb")

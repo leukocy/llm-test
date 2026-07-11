@@ -40,9 +40,7 @@ PLATFORM_FEATURES = {
         "supports_effort": False,  # is否支持 reasoning_effort
         "reasoning_output_field": "reasoning_content",  # 响应in推理内容字段名
         "content_output_field": "content",  # 响应in正文内容字段名
-        "special_headers": {
-            "api-key": True
-        },  # 特殊请求头 (MiMo 用 api-key 而非 Authorization)
+        "special_headers": {"api-key": True},  # 特殊请求头 (MiMo 用 api-key 而非 Authorization)
         "special_params": {"max_completion_tokens": True},  # 特殊参数名
         "notes": "thinking mustis顶级参数，not能放 extra_body",
     },
@@ -309,9 +307,7 @@ def detect_platform(api_base_url: str, model_id: str = "") -> str:
 
     # Pass 2: Local IP/Host Detection
     # ifis本地部署，typicallyuse standard OpenAI/vLLM 格式，returunknown以避免注入平台特定参数
-    is_local = any(
-        p in url_lower for p in ["127.0.0.1", "localhost", "10.", "192.168.", "::1"]
-    )
+    is_local = any(p in url_lower for p in ["127.0.0.1", "localhost", "10.", "192.168.", "::1"])
     if is_local:
         return "unknown"
 
@@ -462,9 +458,7 @@ def get_default_thinking_config(platform: str) -> dict[str, Any]:
     defaults: dict[str, dict[str, Any]] = {
         "mimo": {"thinking": {"type": "enabled"}},  # MiMo use thinking 对象，顶级参数
         "siliconflow": {"enable_thinking": True, "thinking_budget": 32768},  # 最大值
-        "deepseek": {
-            "thinking": {"type": "enabled"}
-        },  # DeepSeek 官方API，与 MiMo 格式相同
+        "deepseek": {"thinking": {"type": "enabled"}},  # DeepSeek 官方API，与 MiMo 格式相同
         "zhipu": {"thinking": {"type": "enabled"}},  # 智谱 AI 格式
         "volcano": {
             # 火山引擎via extra_body 传递
@@ -477,14 +471,10 @@ def get_default_thinking_config(platform: str) -> dict[str, Any]:
             "thinking_budget": 32768,  # 最大值（范围 128-32768）
         },
         "minimax": {"reasoning_split": True},  # MiniMax via extra_body 传递
-        "gemini": {
-            "thinkingConfig": {"thinkingLevel": "HIGH"}
-        },  # Gemini via generationConfig 传递
+        "gemini": {"thinkingConfig": {"thinkingLevel": "HIGH"}},  # Gemini via generationConfig 传递
         "openrouter": {"reasoning": {"effort": "high"}},  # 与 OpenAI 相同格式
         "openai": {
-            "reasoning": {
-                "effort": "high"
-            }  # Highest档位 (none/minimal/low/medium/high/xhigh)
+            "reasoning": {"effort": "high"}  # Highest档位 (none/minimal/low/medium/high/xhigh)
         },
     }
 
@@ -498,6 +488,7 @@ THINKING_MODELS = {
         "zai-org/GLM-4.6",
         "Qwen/Qwen3-",
         "tencent/Hunyuan-A13B-Instruct",
+        "tencent/Hy3",
         "deepseek-ai/DeepSeek-V3.1",
         "Pro/deepseek-ai/DeepSeek-V3.1",
     ],

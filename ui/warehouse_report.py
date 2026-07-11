@@ -102,17 +102,13 @@ def render_resource_timeline() -> None:
         )
     if "gpu_util_percent" in df:
         fig.add_trace(
-            go.Scatter(
-                x=df["t"], y=df["gpu_util_percent"], name="GPU%", line={"width": 1}
-            ),
+            go.Scatter(x=df["t"], y=df["gpu_util_percent"], name="GPU%", line={"width": 1}),
             secondary_y=False,
         )
     # 容量（右轴）
     if "gpu_vram_gb" in df:
         fig.add_trace(
-            go.Scatter(
-                x=df["t"], y=df["gpu_vram_gb"], name="显存(GB)", line={"dash": "dot"}
-            ),
+            go.Scatter(x=df["t"], y=df["gpu_vram_gb"], name="显存(GB)", line={"dash": "dot"}),
             secondary_y=True,
         )
     if "system_memory_gb" in df:
@@ -227,9 +223,7 @@ def render_engine_runtime() -> None:
         margin={"l": 10, "r": 10, "t": 40, "b": 10},
     )
     fig.update_xaxes(title_text="时间 (s)")
-    fig.update_yaxes(
-        title_text="KV cache 占用 (0~1)", secondary_y=False, range=[0, 1.05]
-    )
+    fig.update_yaxes(title_text="KV cache 占用 (0~1)", secondary_y=False, range=[0, 1.05])
     fig.update_yaxes(title_text="请求数", secondary_y=True)
 
     peaks = eng.get("peaks") or {}
@@ -242,9 +236,7 @@ def render_engine_runtime() -> None:
         c3.metric("运行队列峰值", peaks.get("num_requests_running") or "—")
         c4.metric(
             "KV 容量(tokens)",
-            cc.get("kv_capacity_tokens")
-            or st.session_state.get("kv_cache_capacity_tokens")
-            or "—",
+            cc.get("kv_capacity_tokens") or st.session_state.get("kv_cache_capacity_tokens") or "—",
         )
         if cc.get("num_gpu_blocks"):
             st.caption(
@@ -263,9 +255,7 @@ def render_client_vs_engine_analysis() -> None:
 
     df = st.session_state.get("results_df")
     eng = st.session_state.get("engine_metrics")
-    if (df is None or getattr(df, "empty", True)) and not (eng or {}).get(
-        "engine_means"
-    ):
+    if (df is None or getattr(df, "empty", True)) and not (eng or {}).get("engine_means"):
         return
 
     r = compute_client_vs_engine_latency(df, eng)
@@ -299,11 +289,7 @@ def render_client_vs_engine_analysis() -> None:
         )
         c6.metric(
             "TPOT 开销",
-            (
-                f"{r['tpot_overhead_ms']:.1f} ms"
-                if r["tpot_overhead_ms"] is not None
-                else "—"
-            ),
+            (f"{r['tpot_overhead_ms']:.1f} ms" if r["tpot_overhead_ms"] is not None else "—"),
         )
         st.caption(r["verdict"])
 
@@ -386,24 +372,97 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
     mem = fp.get("memory") or {}
     gpus = fp.get("gpus") or []
     lines.append(
-        f"- CPU: {cpu.get('model_name') or '—'} ({cpu.get('sockets', 1)}×{cpu.get('cores_per_socket') or '?'}核)"
+        f"- CPU: {cpu.get('model_name') or '—'} "
+        f"({cpu.get('sockets', 1)}×{cpu.get('cores_per_socket') or '?'}核/"
+        f"{cpu.get('threads_per_core') or '?'}线程)"
     )
-    lines.append(
-        f"- 内存: {mem.get('total_gb') or '?'} GB / {mem.get('type') or '?'} / {mem.get('channels') or '?'}通道"
+    if cpu.get("numa_nodes"):
+        lines.append(f"- NUMA 节点: {cpu.get('numa_nodes')}")
+    mem_line = (
+        f"- 内存: {mem.get('total_gb') or '?'} GB / {mem.get('type') or '?'} / "
+        f"{mem.get('channels') or '?'}通道"
     )
+    if mem.get("speed_mt_s"):
+        mem_line += f" / {mem.get('speed_mt_s')} MT/s"
+    if mem.get("ecc"):
+        mem_line += f" / ECC={mem.get('ecc')}"
+    lines.append(mem_line)
     for g in gpus:
         lines.append(
-            f"- GPU: {g.get('name')} {g.get('vram_gb')}GB / 带宽 {g.get('nominal_bandwidth_gbps')}GB/s / PCIe Gen{g.get('pcie_gen')}×{g.get('pcie_width')}"
+            f"- GPU: {g.get('name')} {g.get('vram_gb')}GB / "
+            f"带宽 {g.get('nominal_bandwidth_gbps')}GB/s / "
+            f"PCIe Gen{g.get('pcie_gen')}×{g.get('pcie_width')}"
+        )
+    topo = fp.get("gpu_topology") or {}
+    if topo:
+        nvlink = "有" if topo.get("has_nvlink") else "无"
+        lines.append(f"- GPU 互联: NVLink {nvlink}（{len(topo.get('matrix') or [])} 节点拓扑）")
+    for d in fp.get("disks") or []:
+        disk_type = "SSD/NVMe" if d.get("is_ssd") else "HDD"
+        lines.append(
+            f"- 磁盘: {d.get('model') or d.get('name')} {d.get('size_tb')}TB ({disk_type})"
         )
     cuda = fp.get("cuda") or {}
-    lines.append(
-        f"- CUDA/驱动: {cuda.get('cuda_version') or '—'} / {cuda.get('driver') or '—'}"
-    )
+    lines.append(f"- CUDA/驱动: {cuda.get('cuda_version') or '—'} / {cuda.get('driver') or '—'}")
     lines.append("")
 
     lines.append("## 配置快照\n")
     for k, v in (ctx.get("test_config") or {}).items():
         lines.append(f"- {k}: {v}")
+    lines.append("")
+
+    lines.append("## 服务配置（复现必需）\n")
+    sc = ctx.get("serving_config") or {}
+    if sc:
+        lines.append(f"- 引擎: {sc.get('engine') or '—'} {sc.get('engine_version') or ''}")
+        lines.append(
+            f"- 并行: TP={sc.get('tp_size') or '—'} DP={sc.get('dp_size') or '—'} EP={sc.get('ep_size') or '—'} PP={sc.get('pp_size') or '—'}"
+        )
+        lines.append(
+            f"- 后端: attention={sc.get('attention_backend') or '—'} moe={sc.get('moe_backend') or '—'}"
+        )
+        lines.append(
+            f"- 量化: {sc.get('serving_quant') or '—'} / KV dtype={sc.get('kv_cache_dtype') or '—'}"
+        )
+        lines.append(
+            f"- 调度: max_num_seqs={sc.get('max_num_seqs') or '—'} gpu_mem_util={sc.get('gpu_memory_utilization') or '—'}"
+        )
+        lines.append(
+            f"- prefill={sc.get('enable_chunked_prefill')} prefix_cache={sc.get('enable_prefix_caching')}"
+        )
+        if sc.get("mtp_enabled"):
+            lines.append(
+                f"- MTP: method={sc.get('speculative_method') or '—'} num_spec={sc.get('num_speculative_tokens') or '—'}"
+            )
+    else:
+        lines.append("- 未记录服务配置。")
+    lines.append("")
+
+    lines.append("## 模型规格\n")
+    ms = ctx.get("model_spec") or {}
+    if ms:
+        lines.append(f"- 架构: {ms.get('architecture') or '—'} {ms.get('name') or ''}")
+        lines.append(
+            f"- 参数: 总 {ms.get('total_params_b') or '?'}B / 激活 {ms.get('active_params_b') or '?'}B"
+        )
+        if ms.get("num_experts"):
+            lines.append(
+                f"- MoE: {ms.get('num_experts')} 专家 / top-k={ms.get('num_experts_per_tok')} / 共享={ms.get('num_shared_experts') or 0}"
+            )
+        lines.append(
+            f"- 精度: 权重 {ms.get('weight_dtype') or '—'} / KV {ms.get('kv_dtype') or '—'}"
+        )
+        if ms.get("quant_method"):
+            lines.append(
+                f"- 量化: {ms.get('quant_method')} (group_size={ms.get('group_size') or '—'})"
+            )
+        lines.append(f"- 上下文上限: {ms.get('max_position_embeddings') or '—'} tokens")
+        if ms.get("supports_mtp"):
+            lines.append(
+                f"- MTP: {ms.get('mtp_method') or '—'} (depth={ms.get('mtp_depth') or '—'})"
+            )
+    else:
+        lines.append("- 未记录模型规格。")
     lines.append("")
 
     lines.append("## 性能摘要\n")
@@ -415,6 +474,7 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
     peaks = mon.get("peaks") or {}
     lines.append(f"- GPU 利用率峰值: {peaks.get('gpu_util_percent') or '—'}%")
     lines.append(f"- 显存峰值: {peaks.get('gpu_vram_gb') or '—'} GB")
+    lines.append(f"- CPU 峰值: {peaks.get('cpu_percent') or '—'}%")
     lines.append(f"- 内存峰值: {peaks.get('system_memory_gb') or '—'} GB")
     lines.append(
         f"- 功耗/温度: {peaks.get('gpu_power_w') or '—'}W / {peaks.get('gpu_temp_c') or '—'}℃"
@@ -426,19 +486,22 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
     if eng and eng.get("sample_count", 0) > 0:
         ep = eng.get("peaks") or {}
         cc = eng.get("cache_config") or {}
+        em_means = eng.get("engine_means") or {}
+        lines.append(f"- 引擎: {eng.get('engine_family', '?')} @ {eng.get('metrics_url', '?')}")
+        lines.append(f"- KV cache 占用峰值: {(ep.get('gpu_cache_usage_perc') or 0) * 100:.0f}%")
         lines.append(
-            f"- 引擎: {eng.get('engine_family', '?')} @ {eng.get('metrics_url', '?')}"
-        )
-        lines.append(
-            f"- KV cache 占用峰值: {(ep.get('gpu_cache_usage_perc') or 0)*100:.0f}%"
-        )
-        lines.append(
-            f"- 运行队列峰值: {ep.get('num_requests_running') or '—'} / 等待峰值: {ep.get('num_requests_waiting') or '—'}"
+            f"- 运行队列峰值: {ep.get('num_requests_running') or '—'} / "
+            f"等待峰值: {ep.get('num_requests_waiting') or '—'}"
         )
         lines.append(f"- 抢救数(窗口): {eng.get('preemption_total') or 0}")
         lines.append(
-            f"- KV 容量: {cc.get('kv_capacity_tokens') or '—'} tokens (block_size={cc.get('block_size') or '?'})"
+            f"- KV 容量: {cc.get('kv_capacity_tokens') or '—'} tokens "
+            f"(block_size={cc.get('block_size') or '?'})"
         )
+        if em_means.get("spec_token_acceptance_rate") is not None:
+            lines.append(f"- MTP 接受率: {em_means['spec_token_acceptance_rate'] * 100:.1f}%")
+        if em_means.get("gpu_prefix_cache_hit_rate") is not None:
+            lines.append(f"- 前缀缓存命中率: {em_means['gpu_prefix_cache_hit_rate'] * 100:.1f}%")
     else:
         lines.append("- 未采集到引擎运行时（未配置 /metrics 端点或端点不可达）。")
     lines.append("")
@@ -522,9 +585,7 @@ def render_warehouse_panel(test_type: str, model_id: str) -> None:
 def _client_vs_engine_for_report(ss) -> dict[str, Any]:
     from core.latency_analysis import compute_client_vs_engine_latency
 
-    return compute_client_vs_engine_latency(
-        ss.get("results_df"), ss.get("engine_metrics")
-    )
+    return compute_client_vs_engine_latency(ss.get("results_df"), ss.get("engine_metrics"))
 
 
 def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
@@ -533,13 +594,59 @@ def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
     mon = st.session_state.get("resource_monitor") or {}
     tm = st.session_state.get("test_metadata") or {}
     bw = st.session_state.get("effective_bandwidth") or {}
+    sc = dict(st.session_state.get("serving_config") or {})
+
+    # 服务配置:侧边栏手填值可能空 → 实时 capture_engine_config 补采自动值
+    # (runner 入库时也做了同样的事,但结果只进 DB 不回填 session_state,报告导出需自行补)
+    if not sc.get("engine"):
+        try:
+            from core.engine_capture import capture_engine_config
+            from core.serving_config import from_engine_capture, merge_serving_configs
+
+            api_base = (
+                (st.session_state.get("test_config") or {}).get("api_base_url")
+                or st.session_state.get("current_api_base")
+                or ""
+            )
+            if api_base:
+                auto = capture_engine_config(api_base)
+                if auto and auto.get("engine"):
+                    auto_sc = from_engine_capture(auto)
+                    if not auto_sc.engine_version and auto.get("engine_version"):
+                        auto_sc.engine_version = auto["engine_version"]
+                    from core.serving_config import ServingConfig
+
+                    base_sc = (
+                        ServingConfig(
+                            **{k: v for k, v in sc.items() if k in ServingConfig.model_fields and v}
+                        )
+                        if sc
+                        else None
+                    )
+                    sc = (merge_serving_configs(base_sc, auto_sc) if base_sc else auto_sc).to_dict()
+                    sc["engine_capture"] = auto
+                    if auto.get("launch_cmd"):
+                        sc["launch_cmd"] = auto["launch_cmd"]
+        except Exception:  # noqa: BLE001
+            pass
+
+    # 模型规格：注册表默认 + UI override 合并（与 runner 入库同口径）
+    ms: dict[str, Any] = {}
+    try:
+        from core.model_spec import resolve_spec
+
+        base = resolve_spec(model_id)
+        if base:
+            ms = base.to_dict()
+        ms.update(st.session_state.get("model_spec_override") or {})
+    except Exception:  # noqa: BLE001
+        pass
 
     result = evaluate_publish_gate(
         tester=tm.get("tester"),
         machine_id=fp.get("machine_id") or sys_info.get("machine_id"),
         has_hardware_fingerprint=bool(fp),
-        seed_recorded=(st.session_state.get("test_config") or {}).get("random_seed")
-        is not None,
+        seed_recorded=(st.session_state.get("test_config") or {}).get("random_seed") is not None,
         insights=st.session_state.get("insights"),
         success_rate=_success_rate(),
         has_monitor=bool(mon and mon.get("timeline")),
@@ -550,8 +657,7 @@ def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
         "model_id": model_id,
         "tester": tm.get("tester"),
         "machine_id": fp.get("machine_id"),
-        "status_detail": st.session_state.get("status_detail")
-        or tm.get("status_detail"),
+        "status_detail": st.session_state.get("status_detail") or tm.get("status_detail"),
         "bottleneck": st.session_state.get("bottleneck"),
         "hardware_fingerprint": fp,
         "test_config": st.session_state.get("test_config") or {},
@@ -559,6 +665,8 @@ def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
         "engine_metrics": st.session_state.get("engine_metrics") or {},
         "client_vs_engine": _client_vs_engine_for_report(st.session_state),
         "effective_bandwidth": bw,
+        "serving_config": sc,
+        "model_spec": ms,
         "gate": {
             "level": result.level,
             "gates": result.gates,
