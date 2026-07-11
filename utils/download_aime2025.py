@@ -95,7 +95,7 @@ def download_from_huggingface():
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(all_samples, f, ensure_ascii=False, indent=2)
 
-    print(f"\n✅ DatasetSaved到 {output_file}")
+    print(f"\nDatasetSaved到 {output_file}")
     print(f"   - AIME I: {len([s for s in all_samples if '2025-I' in s.get('source', '') and 'II' not in s.get('source', '')])} 道题")
     print(f"   - AIME II: {len([s for s in all_samples if '2025-II' in s.get('source', '')])} 道题")
     print(f"   - 总计: {len(all_samples)} 道题")
@@ -149,7 +149,7 @@ def download_from_url():
         output_file = os.path.join(output_dir, "aime2025.json")
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(all_samples, f, ensure_ascii=False, indent=2)
-        print(f"\n✅ DatasetSaved到 {output_file}")
+        print(f"\nDatasetSaved到 {output_file}")
         return True
 
     return False
@@ -170,7 +170,7 @@ def main():
     if download_from_url():
         return
 
-    print("\n⚠️  no法自动under载Dataset")
+    print("\n  no法自动under载Dataset")
     print("请手动under载Data并放置到 datasets/aime2025/ 目录")
     print("Data源:")
     print("  - https://huggingface.co/datasets/opencompass/AIME2025")

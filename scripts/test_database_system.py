@@ -4,8 +4,8 @@ Database系统Test脚本
 Validate新Database系统各组件is否正常工作。
 """
 
-import sys
 import os
+import sys
 from pathlib import Path
 
 # Set控制台编码
@@ -25,7 +25,7 @@ def test_database_connection():
     print("Test 1: DatabaseConnect")
     print("="*50)
 
-    from core.database import db, SCHEMA_VERSION
+    from core.database import SCHEMA_VERSION, db
 
     print(f"Database路径: {db.path}")
     print(f"Schema Version: {SCHEMA_VERSION}")
@@ -35,7 +35,7 @@ def test_database_connection():
     tables = ['test_runs', 'test_results', 'api_logs', 'execution_logs', 'reports', 'db_meta']
     for table in tables:
         exists = db.table_exists(table)
-        print(f"  表 {table}: {'✓' if exists else '✗'}")
+        print(f"  表 {table}: {'[OK]' if exists else '[ERROR]'}")
 
     print("DatabaseConnectTest: via")
     return True
@@ -47,8 +47,8 @@ def test_test_run_crud():
     print("Test 2: TestRun CRUD")
     print("="*50)
 
-    from core.repositories import TestRunRepository
     from core.models import TestRun
+    from core.repositories import TestRunRepository
 
     repo = TestRunRepository()
 
@@ -96,8 +96,8 @@ def test_test_result_crud():
     print("Test 3: TestResult CRUD")
     print("="*50)
 
-    from core.repositories import TestRunRepository, TestResultRepository
-    from core.models import TestRun, TestResult
+    from core.models import TestResult, TestRun
+    from core.repositories import TestResultRepository, TestRunRepository
 
     run_repo = TestRunRepository()
     result_repo = TestResultRepository()
@@ -161,8 +161,8 @@ def test_api_log():
     print("Test 4: ApiLog")
     print("="*50)
 
-    from core.repositories import ApiLogRepository
     from core.models import ApiLog
+    from core.repositories import ApiLogRepository
 
     repo = ApiLogRepository()
 
@@ -200,8 +200,8 @@ def test_exec_log():
     print("Test 5: ExecLog")
     print("="*50)
 
-    from core.repositories import ExecLogRepository
     from core.models import ExecLog
+    from core.repositories import ExecLogRepository
 
     repo = ExecLogRepository()
 
@@ -241,8 +241,8 @@ def test_report():
     print("Test 6: Report")
     print("="*50)
 
-    from core.repositories import ReportRepository
     from core.models import Report
+    from core.repositories import ReportRepository
 
     repo = ReportRepository()
 
@@ -311,9 +311,9 @@ def test_data_export():
     print("Test 8: Data export")
     print("="*50)
 
+    from core.models import TestResult, TestRun
+    from core.repositories import TestResultRepository, TestRunRepository
     from core.services import DataExportService
-    from core.repositories import TestRunRepository, TestResultRepository
-    from core.models import TestRun, TestResult
 
     # Createtest data
     run_repo = TestRunRepository()
@@ -373,7 +373,7 @@ def run_all_tests():
             test_func()
             passed += 1
         except Exception as e:
-            print(f"\n❌ Test失败: {name}")
+            print(f"\n[ERROR] Test失败: {name}")
             print(f"   Error: {e}")
             import traceback
             traceback.print_exc()

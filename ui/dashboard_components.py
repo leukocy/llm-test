@@ -3,8 +3,11 @@ Streamlit UI components for realtime dashboard.
 
 Provides ready-to-use UI elements that can be embedded in the main app.
 """
+from html import escape
+
 import streamlit as st
 
+from ui.design_system import status_badge_html
 from ui.realtime_dashboard import RealtimeDashboard
 
 
@@ -16,21 +19,21 @@ def render_dashboard_ui(dashboard: RealtimeDashboard):
         dashboard: RealtimeDashboard instance
     """
     # Metrics cards section
-    st.subheader("📊 Real-time Test Metrics")
+    st.subheader("Real-time Test Metrics")
     metrics = dashboard.get_metrics()
 
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.metric(
-            label="🟢 Active Requests",
+            label="Active Requests",
             value=metrics['active'],
             help="Number of requests currently being processed"
         )
 
     with col2:
         st.metric(
-            label="✅ Completed",
+            label="Completed",
             value=metrics['completed'],
             delta=f"+{metrics['completed']}" if metrics['completed'] > 0 else None,
             help="Total successfully completed requests"
@@ -38,7 +41,7 @@ def render_dashboard_ui(dashboard: RealtimeDashboard):
 
     with col3:
         st.metric(
-            label="❌ Failed",
+            label="Failed",
             value=metrics['failed'],
             delta=f"+{metrics['failed']}" if metrics['failed'] > 0 else None,
             delta_color="inverse",
@@ -47,7 +50,7 @@ def render_dashboard_ui(dashboard: RealtimeDashboard):
 
     with col4:
         st.metric(
-            label="⚡ Success Rate",
+            label="Success Rate",
             value=f"{metrics['success_rate']:.1f}%",
             help="Request success rate percentage"
         )
@@ -57,14 +60,14 @@ def render_dashboard_ui(dashboard: RealtimeDashboard):
 
     with col5:
         st.metric(
-            label="⏱️ Average TTFT",
+            label="Average TTFT",
             value=f"{metrics['avg_ttft']:.3f}seconds",
             help="Average time to first token"
         )
 
     with col6:
         st.metric(
-            label="🚀 Average TPS",
+            label="Average TPS",
             value=f"{metrics['avg_tps']:.2f} tokens/s",
             help="Average tokens generated per second"
         )
@@ -107,21 +110,13 @@ def render_request_grid(dashboard: RealtimeDashboard, max_display=64):
         dashboard: RealtimeDashboard instance
         max_display: Maximum number of requests to display
     """
-    st.subheader("🔲 Request Status Grid")
+    st.subheader("Request Status Grid")
 
     grid_data = dashboard.get_request_grid_data(max_display=max_display)
 
     if not grid_data['ids']:
         st.info("No requests yet")
         return
-
-    # Status icons mapping
-    status_icons = {
-        'waiting': '⏸️',
-        'running': '🟢',
-        'completed': '✅',
-        'failed': '❌'
-    }
 
     # Create grid layout (8 columns)
     cols_per_row = 8
@@ -135,8 +130,10 @@ def render_request_grid(dashboard: RealtimeDashboard, max_display=64):
         for i, col in enumerate(cols[:end_idx - start_idx]):
             idx = start_idx + i
             with col:
-                icon = status_icons.get(states[idx], '⚪')
-                st.markdown(f"{icon} {ids[idx]}", unsafe_allow_html=False)
+                st.markdown(
+                    f"{escape(str(ids[idx]))}<br>{status_badge_html(states[idx])}",
+                    unsafe_allow_html=True,
+                )
 
 
 def create_dashboard_placeholders():

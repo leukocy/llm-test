@@ -8,6 +8,7 @@ import plotly.express as px
 import streamlit as st
 
 from ui.charts import apply_theme
+from ui.design_system import material_icon
 from utils.logger import BenchmarkLogger, LogLevel
 
 
@@ -42,7 +43,7 @@ def _render_compact_log(logger: BenchmarkLogger, max_display=50):
     entries = logger.get_recent(max_display)
 
     if not entries:
-        st.info("ℹ️ Log window initialized... waiting for test to start")
+        st.info("Log window initialized... waiting for test to start")
         return
 
     # Showing colored text log
@@ -57,16 +58,16 @@ def _render_full_log_viewer(logger: BenchmarkLogger, max_display=100, enable_fil
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.metric("📊 Total Logs", stats['total'])
+        st.metric("Total Logs", stats['total'])
     with col2:
         error_delta = f"-{stats['errors']}" if stats['errors'] > 0 else None
-        st.metric("❌ Error", stats['errors'], delta=error_delta, delta_color="inverse")
+        st.metric("Errors", stats['errors'], delta=error_delta, delta_color="inverse")
     with col3:
         warning_delta = f"-{stats['warnings']}" if stats['warnings'] > 0 else None
-        st.metric("⚠️ Warning", stats['warnings'], delta=warning_delta, delta_color="inverse")
+        st.metric("Warnings", stats['warnings'], delta=warning_delta, delta_color="inverse")
     with col4:
         success_delta = f"+{stats['success']}" if stats['success'] > 0 else None
-        st.metric("✅ succeeded", stats['success'], delta=success_delta, delta_color="normal")
+        st.metric("Succeeded", stats['success'], delta=success_delta, delta_color="normal")
 
     # Filter controls
     filtered_entries = logger.get_recent(max_display)
@@ -77,7 +78,7 @@ def _render_full_log_viewer(logger: BenchmarkLogger, max_display=100, enable_fil
 
         with filter_col1:
             level_filter = st.multiselect(
-                "🔍 Log Level",
+                "Log Level",
                 options=[level.name for level in LogLevel],
                 default=None,
                 key="log_level_filter",
@@ -86,7 +87,7 @@ def _render_full_log_viewer(logger: BenchmarkLogger, max_display=100, enable_fil
 
         with filter_col2:
             search_text = st.text_input(
-                "🔎 Search",
+                "Search",
                 placeholder="Enter keywords to search...",
                 key="log_search",
                 help="Search within log messages"
@@ -114,15 +115,15 @@ def _render_full_log_viewer(logger: BenchmarkLogger, max_display=100, enable_fil
 
     # Showing logs
     if not filtered_entries:
-        st.info("📭 No matching logs")
+        st.info("No matching logs")
         return
 
     # Tab views
-    tab1, tab2, tab3 = st.tabs(["📝 Text View", "📊 Table View", "📈 Statistical Analysis"])
+    tab1, tab2, tab3 = st.tabs(["Text View", "Table View", "Statistical Analysis"])
 
     with tab1:
         # Text view - with colors and formatting
-        with st.expander("📜 Log Content", expanded=True):
+        with st.expander("Log Content", expanded=True):
             log_html = _render_log_text(filtered_entries, compact=False, show_metrics=show_metrics)
             st.markdown(log_html, unsafe_allow_html=True)
 
@@ -217,7 +218,7 @@ def _render_log_analytics(logger: BenchmarkLogger, filtered_entries=None):
     stats = logger.get_stats()
 
     # Log Level Distribution
-    st.subheader("📊 Log Level Distribution")
+    st.subheader("Log Level Distribution")
     level_data = pd.DataFrame([
         {'Level': level_name, 'Count': count}
         for level_name, count in stats['by_level'].items()
@@ -251,7 +252,7 @@ def _render_log_analytics(logger: BenchmarkLogger, filtered_entries=None):
 
     # Timeline analysis
     if len(logger.entries) > 1:
-        st.subheader("⏱️ Log Timeline")
+        st.subheader("Log Timeline")
 
         # Count logs per minute
         timeline_data = []
@@ -276,14 +277,14 @@ def _render_log_analytics(logger: BenchmarkLogger, filtered_entries=None):
 
     # Error and warning details
     if stats['errors'] > 0 or stats['warnings'] > 0:
-        st.subheader("⚠️ Issue Details")
+        st.subheader("Issue Details")
 
         col1, col2 = st.columns(2)
 
         with col1:
             if stats['errors'] > 0:
                 errors = logger.filter(level=LogLevel.ERROR)
-                with st.expander(f"❌ Error ({len(errors)})", expanded=True):
+                with st.expander(f"Errors ({len(errors)})", expanded=True):
                     for e in errors[-5:]:  # last 5
                         # Use st.code to avoid Markdown/HTML parsing errors with raw log text
                         st.code(e.to_text(include_metrics=False), language=None, wrap_lines=True)
@@ -291,7 +292,7 @@ def _render_log_analytics(logger: BenchmarkLogger, filtered_entries=None):
         with col2:
             if stats['warnings'] > 0:
                 warnings = logger.filter(level=LogLevel.WARNING)
-                with st.expander(f"⚠️ Warning ({len(warnings)})", expanded=False):
+                with st.expander(f"Warnings ({len(warnings)})", expanded=False):
                     for w in warnings[-5:]:
                         # Use st.code to avoid Markdown/HTML parsing errors with raw log text
                         st.code(w.to_text(include_metrics=False), language=None, wrap_lines=True)
@@ -299,7 +300,7 @@ def _render_log_analytics(logger: BenchmarkLogger, filtered_entries=None):
     # Performance Metrics Summary
     entries_with_metrics = [e for e in logger.entries if e.metrics]
     if entries_with_metrics:
-        st.subheader("📈 Performance Metrics Summary")
+        st.subheader("Performance Metrics Summary")
 
         ttfts = [e.metrics.get('ttft') for e in entries_with_metrics if e.metrics.get('ttft')]
         tpss = [e.metrics.get('tps') for e in entries_with_metrics if e.metrics.get('tps')]
@@ -319,7 +320,7 @@ def _render_log_analytics(logger: BenchmarkLogger, filtered_entries=None):
 
 def create_log_download_buttons(logger: BenchmarkLogger):
     """Create log download buttons"""
-    st.markdown("### 📥 Export Logs")
+    st.markdown("### Export Logs")
 
     col1, col2, col3 = st.columns(3)
 
@@ -327,7 +328,8 @@ def create_log_download_buttons(logger: BenchmarkLogger):
         # JSON export
         json_data = logger.export_json()
         st.download_button(
-            label="📦 Download JSON",
+            label="Download JSON",
+            icon=material_icon("download"),
             data=json_data,
             file_name="benchmark_log.json",
             mime="application/json",
@@ -338,7 +340,8 @@ def create_log_download_buttons(logger: BenchmarkLogger):
         # Text export
         text_data = logger.export_text(include_metrics=True)
         st.download_button(
-            label="📄 Download TXT",
+            label="Download TXT",
+            icon=material_icon("download"),
             data=text_data,
             file_name="benchmark_log.txt",
             mime="text/plain",
@@ -349,7 +352,8 @@ def create_log_download_buttons(logger: BenchmarkLogger):
         # CSV export
         csv_data = logger.export_csv()
         st.download_button(
-            label="📊 Download CSV",
+            label="Download CSV",
+            icon=material_icon("download"),
             data=csv_data,
             file_name="benchmark_log.csv",
             mime="text/csv",

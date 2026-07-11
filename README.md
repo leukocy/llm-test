@@ -60,7 +60,7 @@ pools** (the builder-class tests draw questions from these pools).
 ### Self-contained (shipped)
 - **AIME** (2024/2025/2026) — 90 math problems, pre-measured and bucketed in
   `aime_stable_pools.json` by stable decode-fill window. The **Math** prompt-suffix
-  type and **Custom Text → Test Pool Problems** work immediately after clone. ✅
+  type and **Custom Text → Test Pool Problems** work immediately after clone. [OK]
 
 ### Not shipped (in `.gitignore`, optional)
 

@@ -541,7 +541,7 @@ class BaseEvaluator(ABC):
 
             # --- AI Judge Verification (Only for missed cases with non-empty responses) ---
             if not is_correct and judge_enabled and response.strip():
-                print(f"⚡ [Judge Triggered] Sample {sample_id} | Model Answer Preview: {response[:30]}...")
+                print(f"[Judge Triggered] Sample {sample_id} | Model Answer Preview: {response[:30]}...")
                 evaluation_method = "llm_judge_attempted"
                 try:
                     judge_q = sample.get('question', '')

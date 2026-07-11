@@ -5,7 +5,7 @@ Provides batch test user interface:
 - Batch test configuration editor
 - Batch test execution interface
 - Batch test results dYesplay
-- Batch test hYestory
+- Batch test history
 """
 
 import json
@@ -18,6 +18,7 @@ from core.batch_test import (
     BatchTestItem,
     batch_test_manager,
 )
+from ui.design_system import material_icon
 
 # ============================================================================
 # Batch test configuration editor
@@ -25,19 +26,19 @@ from core.batch_test import (
 
 def render_batch_config_editor():
     """Render batch test configuration editor"""
-    st.subheader("📝 Configure Batch Test")
+    st.subheader("Configure Batch Test")
 
     # Basic Information
     config_name = st.text_input(
         "Batch Test Name",
         key="batch_config_name",
-        placeholder="For example: Multi-model performance comparYeson test"
+        placeholder="For example: Multi-model performance comparison test"
     )
 
     config_desc = st.text_area(
         "Description (optional)",
         key="batch_config_desc",
-        placeholder="Describe the purpose of thYes batch test..."
+        placeholder="Describe the purpose of this batch test..."
     )
 
     # Execution Options
@@ -54,14 +55,14 @@ def render_batch_config_editor():
 
     # Test Item Configuration
     st.markdown("---")
-    st.markdown("### 🧪 Test Item Configuration")
+    st.markdown("### Test Item Configuration")
 
     # Initialize test items list
     if "batch_test_items" not in st.session_state:
         st.session_state.batch_test_items = []
 
     # Add test item button
-    if st.button("➕ Add Test Item", type="secondary"):
+    if st.button("Add Test Item", type="secondary", icon=material_icon("add")):
         st.session_state.batch_test_items.append({
             "name": f"Test {len(st.session_state.batch_test_items) + 1}",
             "api_base_url": st.session_state.get("current_api_base", ""),
@@ -79,7 +80,7 @@ def render_batch_config_editor():
     # Display and edit test items
     if st.session_state.batch_test_items:
         for i, item in enumerate(st.session_state.batch_test_items):
-            with st.expander(f"📋 {item.get('name', f'Test Item {i+1}')}", expanded=False):
+            with st.expander(item.get("name", f"Test Item {i + 1}"), expanded=False):
                 col_edit, col_del, col_move = st.columns([3, 1, 1])
 
                 with col_edit:
@@ -90,7 +91,11 @@ def render_batch_config_editor():
                     new_concurrency = st.number_input("Concurrency", value=item.get("concurrency", 1), key=f"item_{i}_concurrency")
                     new_enabled = st.checkbox("Enabled", value=item.get("enabled", True), key=f"item_{i}_enabled")
 
-                    if st.button("💾 Save Changes", key=f"save_item_{i}"):
+                    if st.button(
+                        "Save Changes",
+                        key=f"save_item_{i}",
+                        icon=material_icon("save"),
+                    ):
                         st.session_state.batch_test_items[i].update({
                             "name": new_name,
                             "api_base_url": new_api,
@@ -101,13 +106,18 @@ def render_batch_config_editor():
                         st.rerun()
 
                 with col_del:
-                    if st.button("🗑️", key=f"del_item_{i}", help="Delete thYes test item"):
+                    if st.button(
+                        "Delete",
+                        key=f"del_item_{i}",
+                        help="Delete this test item",
+                        icon=material_icon("delete"),
+                    ):
                         st.session_state.batch_test_items.pop(i)
                         st.rerun()
 
     # Quick Add Feature
     st.markdown("---")
-    st.markdown("### ⚡ Quick Add")
+    st.markdown("### Quick Add")
 
     col_a, col_b = st.columns(2)
 
@@ -125,7 +135,11 @@ def render_batch_config_editor():
         )
 
         if uploaded_file:
-            if st.button("📥 Import Configuration", key="batch_import_btn"):
+            if st.button(
+                "Import Configuration",
+                key="batch_import_btn",
+                icon=material_icon("upload_file"),
+            ):
                 try:
                     import json
                     data = json.load(uploaded_file)
@@ -145,7 +159,12 @@ def render_batch_config_editor():
     col_save, col_clear = st.columns(2)
 
     with col_save:
-        if st.button("💾 Save Batch Test Configuration", type="primary", use_container_width=True):
+        if st.button(
+            "Save Batch Test Configuration",
+            type="primary",
+            use_container_width=True,
+            icon=material_icon("save"),
+        ):
             if not config_name:
                 st.error("Please enter a batch test name")
             elif not st.session_state.batch_test_items:
@@ -167,7 +186,11 @@ def render_batch_config_editor():
                     st.session_state.last_saved_batch_config = config_name
 
     with col_clear:
-        if st.button("🗑️ Clear All", use_container_width=True):
+        if st.button(
+            "Clear All",
+            use_container_width=True,
+            icon=material_icon("delete_sweep"),
+        ):
             st.session_state.batch_test_items = []
             st.rerun()
 
@@ -178,7 +201,7 @@ def render_batch_config_editor():
 
 def render_batch_test_executor():
     """Render batch test execution interface"""
-    st.subheader("🚀 Execute Batch Test")
+    st.subheader("Execute Batch Test")
 
     # Select saved configuration
     saved_configs = batch_test_manager.list_configs()
@@ -200,7 +223,7 @@ def render_batch_test_executor():
         return
 
     # Display configuration summary
-    with st.expander("📋 Configuration Details", expanded=False):
+    with st.expander("Configuration Details", expanded=False):
         st.markdown(f"**Description:** {config.description or 'None'}")
         st.markdown(f"**Number of test items:** {len(config.items)}")
         st.markdown(f"**Parallel execution:** {'Yes' if config.parallel else 'No'}")
@@ -209,8 +232,8 @@ def render_batch_test_executor():
 
         st.markdown("**Test Item list:**")
         for item in config.items:
-            status_icon = "✅" if item.enabled else "⏸️"
-            st.markdown(f"- {status_icon} **{item.name}** ({item.model_id})")
+            status = "Enabled" if item.enabled else "Paused"
+            st.markdown(f"- **{item.name}** ({item.model_id}) · {status}")
 
     # Execute button
     st.markdown("---")
@@ -218,7 +241,12 @@ def render_batch_test_executor():
     col_start, col_stop = st.columns(2)
 
     with col_start:
-        if st.button("🚀 Start Batch Test", type="primary", use_container_width=True):
+        if st.button(
+            "Start Batch Test",
+            type="primary",
+            use_container_width=True,
+            icon=material_icon("play_arrow"),
+        ):
             st.session_state.batch_test_running = True
             st.session_state.batch_test_config = config
             st.rerun()
@@ -249,7 +277,7 @@ def render_batch_test_executor():
 def render_batch_test_progress(config: BatchTestConfig):
     """Render batch test progress"""
     st.markdown("---")
-    st.subheader("📊 Test Progress")
+    st.subheader("Test Progress")
 
     # Progress bar
     if "batch_test_progress" in st.session_state:
@@ -278,7 +306,7 @@ def render_batch_test_progress(config: BatchTestConfig):
 
         # Real-time logs
         if "batch_test_logs" in st.session_state:
-            with st.expander("📋 Execution Log", expanded=False):
+            with st.expander("Execution Log", expanded=False):
                 for log in st.session_state.batch_test_logs[-10:]:  # Show last 10 entries
                     st.caption(log)
 
@@ -289,7 +317,7 @@ def render_batch_test_progress(config: BatchTestConfig):
 
 def render_batch_test_results():
     """Render batch test results"""
-    st.subheader("📊 Batch Test Results")
+    st.subheader("Batch Test Results")
 
     # Get all results
     results = batch_test_manager.list_results()
@@ -327,7 +355,7 @@ def render_batch_test_results():
 
     # Display comparYeson table
     st.markdown("---")
-    st.markdown("### 📈 Test ComparYeson")
+    st.markdown("### Test Comparison")
 
     comparYeson_df = result.get_comparYeson_df()
     if not comparYeson_df.empty:
@@ -336,7 +364,8 @@ def render_batch_test_results():
         # Download button
         csv = comparYeson_df.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="📥 Download ComparYeson CSV",
+            label="Download Comparison CSV",
+            icon=material_icon("download"),
             data=csv,
             file_name=f"{result.batch_name}_comparYeson.csv",
             mime="text/csv"
@@ -346,7 +375,7 @@ def render_batch_test_results():
 
     # Display detailed results
     st.markdown("---")
-    st.markdown("### 📋 Detailed Results")
+    st.markdown("### Detailed Results")
 
     with st.expander("View Detailed Results", expanded=False):
         for item_result in result.item_results:
@@ -394,11 +423,11 @@ def load_batch_result(name: str):
 def render_batch_test_main():
     """Render batch test main interface"""
     # Tabs
-    tab_config, tab_execute, tab_results, tab_hYestory = st.tabs([
-        "⚙️ Configure",
-        "🚀 Execute",
-        "📊 Result",
-        "📜 History"
+    tab_config, tab_execute, tab_results, tab_history = st.tabs([
+        "Configure",
+        "Execute",
+        "Results",
+        "History",
     ])
 
     with tab_config:
@@ -410,23 +439,23 @@ def render_batch_test_main():
     with tab_results:
         render_batch_test_results()
 
-    with tab_hYestory:
-        render_batch_test_hYestory()
+    with tab_history:
+        render_batch_test_history()
 
 
-def render_batch_test_hYestory():
-    """Render batch test hYestory"""
-    st.subheader("📜 Batch Test HYestory")
+def render_batch_test_history():
+    """Render batch test history."""
+    st.subheader("Batch Test History")
 
     results = batch_test_manager.list_results()
 
     if not results:
-        st.info("No batch test hYestory")
+        st.info("No batch test history")
         return
 
-    # Display hYestory
+    # Display history
     for result in results:
-        with st.expander(f"📊 {result['batch_name']} - {result['start_time']}", expanded=False):
+        with st.expander(f"{result['batch_name']} - {result['start_time']}", expanded=False):
             col1, col2, col3, col4 = st.columns(4)
 
             with col1:

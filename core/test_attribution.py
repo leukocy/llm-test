@@ -59,16 +59,16 @@ def derive_bottleneck(
         return "memory_bandwidth"
 
     # 有“ blazing fast / strong ”正向洞察 → 无瓶颈
-    if any("🚀" in i or "🏆" in i for i in (insights or [])):
+    if any("Good:" in i or "Excellent:" in i for i in (insights or [])):
         return None
 
     return None
 
 
 def _has_critical(insights: list[str]) -> bool:
-    """是否存在 ❌ 关键问题（非“数据不足”类）。"""
+    """是否存在 Error: 关键问题（非“数据不足”类）。"""
     return any(
-        "❌" in i and "analysis skipped" not in i.lower()
+        ("Error:" in i or "\u274c" in i) and "analysis skipped" not in i.lower()
         for i in insights or []
     )
 

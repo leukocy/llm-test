@@ -154,7 +154,7 @@ class DatasetDownloader:
             with open(full_path, 'w', encoding='utf-8') as f:
                 json.dump(all_samples, f, ensure_ascii=False, indent=2)
 
-            print(f"✅ succeededunder载 {len(all_samples)} 条Data到 {full_path}")
+            print(f"succeededunder载 {len(all_samples)} 条Data到 {full_path}")
             return True
 
         except requests.exceptions.RequestException as e:
@@ -205,7 +205,7 @@ class DatasetDownloader:
                     with open(full_path, encoding='utf-8') as f:
                         data = json.load(f)
                     info["samples"] = len(data) if isinstance(data, list) else 0
-                except:
+                except (OSError, json.JSONDecodeError, TypeError):
                     pass
 
             status[name] = info
@@ -217,11 +217,11 @@ class DatasetDownloader:
         status = self.check_datasets()
 
         print("\n" + "=" * 60)
-        print("📊 DatasetStatus")
+        print("DatasetStatus")
         print("=" * 60)
 
         for name, info in status.items():
-            status_icon = "✅" if info["exists"] else "❌"
+            status_icon = "Available" if info["exists"] else "Missing"
             samples_str = f"({info['samples']} 样本)" if info["samples"] > 0 else ""
 
             print(f"{status_icon} {name:15} | {info['hf_id']:30} | {samples_str}")

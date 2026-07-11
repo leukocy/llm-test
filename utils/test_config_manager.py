@@ -16,6 +16,7 @@ from typing import Any
 import streamlit as st
 
 from config.session_state import normalize_test_type, set_current_test_type
+from ui.design_system import material_icon
 
 # ============================================================================
 # Config预设类
@@ -99,7 +100,7 @@ class TestConfigManager:
 
             return True
         except Exception as e:
-            st.error(f"Save预设失败: {e}")
+            st.error(f"Failed to save preset: {e}")
             return False
 
     def load_preset(self, name: str) -> ConfigPreset | None:
@@ -127,7 +128,7 @@ class TestConfigManager:
 
             return ConfigPreset.from_dict(data)
         except Exception as e:
-            st.error(f"Load预设失败: {e}")
+            st.error(f"Failed to load preset: {e}")
             return None
 
     def list_presets(self) -> list[dict[str, Any]]:
@@ -175,7 +176,7 @@ class TestConfigManager:
 
             return True
         except Exception as e:
-            st.error(f"Delete预设失败: {e}")
+            st.error(f"Failed to delete preset: {e}")
             return False
 
     def export_preset(self, name: str, export_path: str) -> bool:
@@ -192,7 +193,7 @@ class TestConfigManager:
         try:
             preset = self.load_preset(name)
             if not preset:
-                st.error(f"Not found预设: {name}")
+                st.error(f"Preset not found: {name}")
                 return False
 
             export_file = Path(export_path)
@@ -203,7 +204,7 @@ class TestConfigManager:
 
             return True
         except Exception as e:
-            st.error(f"Export预设失败: {e}")
+            st.error(f"Failed to export preset: {e}")
             return False
 
     def import_preset(self, import_path: str) -> ConfigPreset | None:
@@ -219,7 +220,7 @@ class TestConfigManager:
         try:
             import_file = Path(import_path)
             if not import_file.exists():
-                st.error(f"文件not存in: {import_path}")
+                st.error(f"File not found: {import_path}")
                 return None
 
             with open(import_file, encoding='utf-8') as f:
@@ -232,7 +233,7 @@ class TestConfigManager:
 
             return preset
         except Exception as e:
-            st.error(f"Import预设失败: {e}")
+            st.error(f"Failed to import preset: {e}")
             return None
 
 
@@ -248,8 +249,8 @@ def get_builtin_presets() -> list[ConfigPreset]:
     """GetBuilt-in PresetsConfigure"""
     return [
         ConfigPreset(
-            name="快速Test",
-            description="低Concurrency、少样本快速Test Configuration",
+            name="Quick Test",
+            description="Low-concurrency configuration for a fast baseline check.",
             config={
                 "test_type": "concurrency",
                 "concurrency": 1,
@@ -257,11 +258,11 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "temperature": 0.0,
                 "thinking_enabled": False
             },
-            tags=["快速", "基准"]
+            tags=["quick", "baseline"]
         ),
         ConfigPreset(
-            name="标准Test",
-            description="inetc.Concurrency标准Test Configuration",
+            name="Standard Test",
+            description="Balanced concurrency configuration for routine benchmarks.",
             config={
                 "test_type": "concurrency",
                 "concurrency": 4,
@@ -269,11 +270,11 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "temperature": 0.0,
                 "thinking_enabled": False
             },
-            tags=["标准", "推荐"]
+            tags=["standard", "recommended"]
         ),
         ConfigPreset(
-            name="压力Test",
-            description="高Concurrency压力Test Configuration",
+            name="Stress Test",
+            description="High-concurrency configuration for load testing.",
             config={
                 "test_type": "concurrency",
                 "concurrency": 16,
@@ -281,11 +282,11 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "temperature": 0.0,
                 "thinking_enabled": False
             },
-            tags=["压力", "性能"]
+            tags=["stress", "performance"]
         ),
         ConfigPreset(
-            name="Thinking modeTest",
-            description="启用Thinking modeTest Configuration",
+            name="Reasoning Test",
+            description="Reasoning-enabled configuration with a high thinking budget.",
             config={
                 "test_type": "concurrency",
                 "concurrency": 2,
@@ -295,11 +296,11 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "thinking_budget": 10000,
                 "reasoning_effort": "high"
             },
-            tags=["思考", "推理"]
+            tags=["reasoning", "quality"]
         ),
         ConfigPreset(
             name="Long Context Test",
-            description="长onunder文性能Test Configuration",
+            description="Long-context performance configuration.",
             config={
                 "test_type": "long_context",
                 "concurrency": 1,
@@ -308,11 +309,11 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "temperature": 0.0,
                 "thinking_enabled": False
             },
-            tags=["长onunder文", "性能"]
+            tags=["long-context", "performance"]
         ),
         ConfigPreset(
             name="Prefill Stress Test",
-            description="Prefill 阶段压力Test Configuration",
+            description="Prefill-stage stress configuration.",
             config={
                 "test_type": "prefill",
                 "concurrency": 4,
@@ -320,11 +321,11 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "temperature": 0.0,
                 "thinking_enabled": False
             },
-            tags=["Prefill", "压力"]
+            tags=["prefill", "stress"]
         ),
         ConfigPreset(
-            name="综合Test",
-            description="多维度综合Test Configuration",
+            name="Comprehensive Test",
+            description="Multi-dimensional concurrency and context configuration.",
             config={
                 "test_type": "matrix",
                 "concurrency": 4,
@@ -332,11 +333,11 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "temperature": 0.0,
                 "thinking_enabled": False
             },
-            tags=["综合", "全面"]
+            tags=["matrix", "comprehensive"]
         ),
         ConfigPreset(
-            name="创造性Test",
-            description="高温创造性Test Configuration",
+            name="Creative Test",
+            description="High-temperature configuration for creative generation.",
             config={
                 "test_type": "concurrency",
                 "concurrency": 2,
@@ -344,7 +345,7 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "temperature": 0.8,
                 "thinking_enabled": False
             },
-            tags=["创造性", "高温"]
+            tags=["creative", "high-temperature"]
         )
     ]
 
@@ -365,7 +366,7 @@ def init_builtin_presets():
 
 def render_preset_manager():
     """Render预设管理界面"""
-    st.subheader("📁 Test Configuration预设")
+    st.subheader("Test Configuration Presets")
 
     # Get所has预设
     all_presets = config_manager.list_presets()
@@ -380,19 +381,19 @@ def render_preset_manager():
 
     # Display预设
     if not all_presets:
-        st.info("暂noSaveConfig Presets")
+        st.info("No saved configuration presets")
         return
 
     # Label页
-    tab_all, tab_by_tag = st.tabs(["全部预设", "按Label浏览"])
+    tab_all, tab_by_tag = st.tabs(["All Presets", "Browse by Tag"])
 
     with tab_all:
         for preset in all_presets:
-            with st.expander(f"📋 {preset['name']}", expanded=False):
+            with st.expander(preset["name"], expanded=False):
                 col1, col2, col3 = st.columns(3)
 
                 with col1:
-                    st.write(preset.get("description", "no描述"))
+                    st.write(preset.get("description", "No description"))
 
                 with col2:
                     # LabelDisplay
@@ -405,13 +406,22 @@ def render_preset_manager():
                     col_load, col_del = st.columns(2)
 
                     with col_load:
-                        if st.button("📥 Apply", key=f"load_{preset['name']}"):
+                        if st.button(
+                            "Apply",
+                            key=f"load_{preset['name']}",
+                            icon=material_icon("check"),
+                        ):
                             if apply_preset(preset['name']):
-                                st.success(f"已Apply预设: {preset['name']}")
+                                st.success(f"Applied preset: {preset['name']}")
                                 st.rerun()
 
                     with col_del:
-                        if st.button("🗑️", key=f"del_{preset['name']}", help="Delete预设"):
+                        if st.button(
+                            "Delete",
+                            key=f"del_{preset['name']}",
+                            help="Delete preset",
+                            icon=material_icon("delete"),
+                        ):
                             if config_manager.delete_preset(preset['name']):
                                 st.rerun()
 
@@ -421,24 +431,37 @@ def render_preset_manager():
             for preset in presets:
                 if st.button(preset['name'], key=f"tag_{tag}_{preset['name']}", use_container_width=True):
                     if apply_preset(preset['name']):
-                        st.success(f"已Apply预设: {preset['name']}")
+                        st.success(f"Applied preset: {preset['name']}")
                         st.rerun()
             st.markdown("---")
 
 
 def render_save_preset_form():
     """RenderSave预设表单"""
-    with st.expander("💾 Save Current Configis预设", expanded=False):
-        name = st.text_input("Preset name", key="preset_name", placeholder="For example: 我CustomTest")
-        description = st.text_area("描述（optional）", key="preset_desc", placeholder="描述此Configure用途...")
-        tags_input = st.text_input("Label（optional，用逗号分隔）", key="preset_tags", placeholder="For example: 快速, 基准")
+    with st.expander("Save Current Configuration as Preset", expanded=False):
+        name = st.text_input("Preset name", key="preset_name", placeholder="For example: Custom Test")
+        description = st.text_area(
+            "Description (optional)",
+            key="preset_desc",
+            placeholder="Describe when this configuration should be used.",
+        )
+        tags_input = st.text_input(
+            "Tags (optional, comma-separated)",
+            key="preset_tags",
+            placeholder="For example: quick, baseline",
+        )
 
         col_save, col_cancel = st.columns(2)
 
         with col_save:
-            if st.button("💾 Save预设", type="primary", use_container_width=True):
+            if st.button(
+                "Save Preset",
+                type="primary",
+                use_container_width=True,
+                icon=material_icon("save"),
+            ):
                 if not name:
-                    st.error("Please enterPreset name")
+                    st.error("Please enter a preset name")
                 else:
                     # Get当前Configure
                     current_config = get_current_config()
@@ -455,7 +478,7 @@ def render_save_preset_form():
                     )
 
                     if config_manager.save_preset(preset):
-                        st.success(f"预设 '{name}' Saved")
+                        st.success(f"Preset '{name}' saved")
 
 
 def apply_preset(name: str) -> bool:
@@ -470,7 +493,7 @@ def apply_preset(name: str) -> bool:
     """
     preset = config_manager.load_preset(name)
     if not preset:
-        st.error(f"Not found预设: {name}")
+        st.error(f"Preset not found: {name}")
         return False
 
     # ApplyConfigure到 session_state
@@ -524,25 +547,25 @@ def _apply_preset_to_widget_state(config: dict[str, Any], selected_test_type: st
         except (TypeError, ValueError):
             st.session_state.template_tokens_input = 0
 
-    if test_type == "Concurrency Test":
+    if test_type == "concurrency":
         if concurrency:
             st.session_state.con_concurrencies_select = [concurrency]
         if max_tokens:
             st.session_state.con_max_tokens = max_tokens
 
-    elif test_type == "Prefill Stress Test":
+    elif test_type == "prefill":
         if max_tokens:
             st.session_state.prefill_isolation_mode = max_tokens == 1
             if max_tokens != 1:
                 st.session_state.prefill_max_tokens = max_tokens
 
-    elif test_type == "Long Context Test":
+    elif test_type == "long_context":
         if context_length:
             st.session_state.long_context_lengths_select = [context_length]
         if max_tokens:
             st.session_state.long_max_tokens = max_tokens
 
-    elif test_type == "Concurrency-Context Matrix Test":
+    elif test_type == "matrix":
         if concurrency:
             st.session_state.matrix_concurrencies_select = [concurrency]
         if context_length:
@@ -550,7 +573,7 @@ def _apply_preset_to_widget_state(config: dict[str, Any], selected_test_type: st
         if max_tokens:
             st.session_state.matrix_max_tokens = max_tokens
 
-    elif test_type == "Stability Test":
+    elif test_type == "stability":
         if concurrency:
             st.session_state.stability_concurrency = concurrency
         if max_tokens:
@@ -578,20 +601,24 @@ def get_current_config() -> dict[str, Any]:
 
 def render_config_import_export():
     """RenderConfigureImport/Export界面"""
-    with st.expander("📦 Import/ExportConfigure", expanded=False):
+    with st.expander("Import or Export Configuration", expanded=False):
         col_import, col_export = st.columns(2)
 
         with col_import:
-            st.markdown("**ImportConfigure**")
+            st.markdown("**Import Configuration**")
             uploaded_file = st.file_uploader(
-                "选择Configure文件 (JSON)",
+                "Select configuration file (JSON)",
                 type=["json"],
                 key="import_config",
-                help="on传之前ExportConfigure文件"
+                help="Upload a previously exported configuration file"
             )
 
             if uploaded_file:
-                if st.button("📥 Import", use_container_width=True):
+                if st.button(
+                    "Import",
+                    use_container_width=True,
+                    icon=material_icon("upload_file"),
+                ):
                     # Save临时文件
                     temp_path = Path(f"temp_import_{uploaded_file.name}")
                     with open(temp_path, 'wb') as f:
@@ -600,18 +627,26 @@ def render_config_import_export():
                     # Import预设
                     preset = config_manager.import_preset(str(temp_path))
                     if preset:
-                        st.success(f"succeededImport预设: {preset.name}")
+                        st.success(f"Imported preset: {preset.name}")
                         temp_path.unlink()
 
         with col_export:
-            st.markdown("**ExportConfigure**")
+            st.markdown("**Export Configuration**")
             all_presets = config_manager.list_presets()
             preset_names = [p["name"] for p in all_presets]
 
             if preset_names:
-                selected_preset = st.selectbox("选择要Export预设", preset_names, key="export_preset")
+                selected_preset = st.selectbox(
+                    "Select preset to export",
+                    preset_names,
+                    key="export_preset",
+                )
 
-                if st.button("📤 Export", use_container_width=True):
+                if st.button(
+                    "Export",
+                    use_container_width=True,
+                    icon=material_icon("download"),
+                ):
                     # ExportConfigure
                     export_filename = f"{selected_preset}_config.json"
                     preset_data = config_manager.load_preset(selected_preset)
@@ -619,7 +654,8 @@ def render_config_import_export():
                     if preset_data:
                         json_data = json.dumps(preset_data.to_dict(), ensure_ascii=False, indent=2)
                         st.download_button(
-                            label="⬇️ under载Configure文件",
+                            label="Download Configuration File",
+                            icon=material_icon("download"),
                             data=json_data,
                             file_name=export_filename,
                             mime="application/json",

@@ -102,7 +102,7 @@ class ComparisonEntry:
     metric_name: str
     values: dict[str, float | int | str] = field(default_factory=dict)  # label -> value
     unit: str = ""
-    higher_is_better: bool = True
+    higher_is_better: bool | None = True
     description: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -223,31 +223,31 @@ class ResultComparator:
             "key": "accuracy",
             "unit": "%",
             "higher_is_better": True,
-            "description": "Model answer正确比例",
+            "description": "Share of model answers evaluated as correct.",
             "format": lambda x: f"{x * 100:.2f}%",
         },
         {
-            "name": "正确Sample count",
+            "name": "Correct Samples",
             "key": "correct_samples",
             "unit": "",
             "higher_is_better": True,
-            "description": "回答正确Sample count量",
+            "description": "Number of samples answered correctly.",
             "format": lambda x: f"{int(x)}",
         },
         {
-            "name": "总Sample count",
+            "name": "Total Samples",
             "key": "total_samples",
             "unit": "",
             "higher_is_better": True,
-            "description": "总TestSample count量",
+            "description": "Total number of evaluated samples.",
             "format": lambda x: f"{int(x)}",
         },
         {
-            "name": "评估耗时",
+            "name": "Evaluation Duration",
             "key": "duration_seconds",
             "unit": "seconds",
             "higher_is_better": False,
-            "description": "完成评估所花费总时间",
+            "description": "Total time required to complete the evaluation.",
             "format": lambda x: f"{x:.2f}s",
         },
         {
@@ -255,7 +255,7 @@ class ResultComparator:
             "key": "avg_ttft_ms",
             "unit": "ms",
             "higher_is_better": False,
-            "description": "Time To First Token - Average首 token Latency",
+            "description": "Average time to first token.",
             "format": lambda x: f"{x:.1f}ms" if x > 0 else "N/A",
         },
         {
@@ -263,31 +263,31 @@ class ResultComparator:
             "key": "avg_tps",
             "unit": "tokens/s",
             "higher_is_better": True,
-            "description": "Tokens Per Second - AverageGeneration speed",
+            "description": "Average generated tokens per second.",
             "format": lambda x: f"{x:.1f}" if x > 0 else "N/A",
         },
         {
-            "name": "输入 Token 总数",
+            "name": "Total Input Tokens",
             "key": "total_input_tokens",
             "unit": "tokens",
             "higher_is_better": False,
-            "description": "所has请求输入 token 总数",
+            "description": "Total input tokens across all requests.",
             "format": lambda x: f"{int(x)}",
         },
         {
-            "name": "输出 Token 总数",
+            "name": "Total Output Tokens",
             "key": "total_output_tokens",
             "unit": "tokens",
             "higher_is_better": False,
-            "description": "所has响应输出 token 总数",
+            "description": "Total output tokens across all responses.",
             "format": lambda x: f"{int(x)}",
         },
         {
-            "name": "Average Token use",
+            "name": "Average Tokens per Sample",
             "key": "avg_tokens_per_sample",
             "unit": "tokens",
             "higher_is_better": False,
-            "description": "每 samplesAverage token use量",
+            "description": "Average combined token usage per sample.",
             "format": lambda x: f"{x:.0f}" if x > 0 else "N/A",
             "compute": lambda r: (
                 (r.total_input_tokens + r.total_output_tokens) / r.total_samples
@@ -296,27 +296,27 @@ class ResultComparator:
             ),
         },
         {
-            "name": "Thinking mode",
+            "name": "Thinking Mode",
             "key": "thinking_enabled",
             "unit": "",
             "higher_is_better": None,
-            "description": "is否启用Thinking mode",
-            "format": lambda x: "启用" if x else "Close",
+            "description": "Whether model reasoning mode was enabled.",
+            "format": lambda x: "Enabled" if x else "Disabled",
         },
         {
-            "name": "Thinking budget",
+            "name": "Thinking Budget",
             "key": "thinking_budget",
             "unit": "tokens",
             "higher_is_better": None,
-            "description": "思考 token 预算",
+            "description": "Configured reasoning-token budget.",
             "format": lambda x: f"{int(x)}" if x else "N/A",
         },
         {
-            "name": "推理努力",
+            "name": "Reasoning Effort",
             "key": "reasoning_effort",
             "unit": "",
             "higher_is_better": None,
-            "description": "推理努力级别",
+            "description": "Configured reasoning-effort level.",
             "format": lambda x: str(x) if x else "N/A",
         },
     ]
@@ -352,7 +352,7 @@ class ResultComparator:
             is否succeededLoad
         """
         if not os.path.exists(filepath):
-            self._log(f"文件not存in: {filepath}")
+            self._log(f"File not found: {filepath}")
             return False
 
         try:
@@ -373,11 +373,11 @@ class ResultComparator:
             metadata = ResultMetadata.from_result(result, filepath, label)
             self.metadatas[filepath] = metadata
 
-            self._log(f"已Load: {label} (Accuracy: {result.accuracy:.2%})")
+            self._log(f"Loaded: {label} (accuracy: {result.accuracy:.2%})")
             return True
 
         except Exception as e:
-            self._log(f"Load failed {filepath}: {e}")
+            self._log(f"Failed to load {filepath}: {e}")
             return False
 
     def add_results_from_dir(
@@ -407,7 +407,7 @@ class ResultComparator:
             if self.add_result(str(filepath), label):
                 count += 1
 
-        self._log(f"从目录 {directory} Load {count} Result文件")
+        self._log(f"Loaded {count} result files from {directory}")
         return count
 
     def compare_results(self) -> ComparisonReport:
@@ -418,7 +418,7 @@ class ResultComparator:
             ComparisonReport 对象
         """
         if len(self.results) < 2:
-            self._log("Warning: 至少need 2 Result进行对比")
+            self._log("Warning: at least two results are required for a comparison")
             # but仍然Generate报告
 
         # Create报告
@@ -430,7 +430,7 @@ class ResultComparator:
         # Checkis否can对比（确保Dataset相同）
         datasets = {m.dataset_name for m in self.metadatas.values()}
         if len(datasets) > 1:
-            self._log(f"Warning: 检测到not同Dataset: {datasets}")
+            self._log(f"Warning: results contain different datasets: {datasets}")
 
         # Generate对比条目
         self._generate_comparisons()
@@ -508,45 +508,38 @@ class ResultComparator:
             self.compare_results()
 
         if not self.report:
-            return "no对比Data"
+            return "No comparison data"
 
         lines = [
             "=" * 80,
-            "Test Results对比报告",
+            "Test Results Comparison Report",
             "=" * 80,
-            f"对比 ID: {self.report.comparison_id}",
-            f"Generate时间: {self.report.created_at}",
-            f"Comparison Results数: {self.report.summary.get('total_results', 0)}",
+            f"Comparison ID: {self.report.comparison_id}",
+            f"Generated at: {self.report.created_at}",
+            f"Results compared: {self.report.summary.get('total_results', 0)}",
             "",
             "=" * 80,
-            "关键指标对比",
+            "Key Metric Comparison",
             "=" * 80,
             "",
         ]
 
         # Generate表格
         for comparison in self.report.comparisons:
-            lines.append(f"【{comparison.metric_name}】")
-            lines.append(f"  描述: {comparison.description}")
+            lines.append(f"[{comparison.metric_name}]")
+            lines.append(f"  Description: {comparison.description}")
 
             # 按值Sort
             sorted_values = sorted(
                 comparison.values.items(),
                 key=lambda x: x[1] if isinstance(x[1], (int, float)) else 0,
-                reverse=comparison.higher_is_better,
+                reverse=comparison.higher_is_better is True,
             )
 
             for i, (label, value) in enumerate(sorted_values):
                 # Checkis否is数值类型
                 if isinstance(value, (int, float)):
-                    if comparison.higher_is_better:
-                        rank_emoji = (
-                            "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "  "
-                        )
-                    else:
-                        rank_emoji = (
-                            "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "  "
-                        )
+                    rank_label = f"{i + 1}."
 
                     # Format值
                     format_fn = None
@@ -560,14 +553,14 @@ class ResultComparator:
                     else:
                         display_value = f"{value}{comparison.unit}"
 
-                    lines.append(f"  {rank_emoji} {label}: {display_value}")
+                    lines.append(f"  {rank_label} {label}: {display_value}")
                 else:
                     lines.append(f"    {label}: {value}")
 
             # Display获胜者
             winner = comparison.get_winner()
             if winner:
-                lines.append(f"  → 获胜者: {winner}")
+                lines.append(f"  Winner: {winner}")
 
             lines.append("")
 
@@ -575,28 +568,28 @@ class ResultComparator:
         lines.extend(
             [
                 "=" * 80,
-                "汇总信息",
+                "Summary",
                 "=" * 80,
-                f"BestAccuracy: {self.report.summary.get('best_accuracy', 0):.2%}",
+                f"Best accuracy: {self.report.summary.get('best_accuracy', 0):.2%}",
                 f"  - {self.report.summary.get('best_accuracy_label', 'N/A')}",
-                f"最快评估速度: {self.report.summary.get('fastest_duration', 0):.2f}s",
+                f"Fastest evaluation: {self.report.summary.get('fastest_duration', 0):.2f}s",
                 f"  - {self.report.summary.get('fastest_duration_label', 'N/A')}",
                 "",
             ]
         )
 
         # Result文件详情
-        lines.extend(["=" * 80, "Result文件详情", "=" * 80, ""])
+        lines.extend(["=" * 80, "Result Files", "=" * 80, ""])
 
         for metadata in self.report.results:
             lines.extend(
                 [
-                    f"文件: {metadata.label}",
-                    f"  路径: {metadata.filepath}",
+                    f"File: {metadata.label}",
+                    f"  Path: {metadata.filepath}",
                     f"  Model: {metadata.model_id}",
                     f"  Dataset: {metadata.dataset_name}",
-                    f"  时间: {metadata.timestamp}",
-                    f"  大小: {metadata.file_size / 1024:.1f} KB",
+                    f"  Timestamp: {metadata.timestamp}",
+                    f"  Size: {metadata.file_size / 1024:.1f} KB",
                     "",
                 ]
             )
@@ -620,7 +613,7 @@ class ResultComparator:
 
         data = []
         for comparison in self.report.comparisons:
-            row = {"指标": comparison.metric_name}
+            row = {"Metric": comparison.metric_name}
             row.update(comparison.values)
             data.append(row)
 
@@ -649,7 +642,7 @@ class ResultComparator:
             self.compare_results()
 
         if not self.report or not self.report.comparisons:
-            self._log("No data可绘制")
+            self._log("No comparison data available to plot")
             return None
 
         try:
@@ -663,7 +656,7 @@ class ResultComparator:
             plt.rcParams["axes.unicode_minus"] = False
 
         except ImportError:
-            self._log("matplotlib 未安装，no法Generate图表")
+            self._log("Matplotlib is not installed; charts cannot be generated")
             return None
 
         # 自动选择要绘制指标
@@ -685,7 +678,7 @@ class ResultComparator:
         ]
 
         if not valid_comparisons:
-            self._log("No valid数值型指标可绘制")
+            self._log("No valid numeric metrics are available to plot")
             return None
 
         # Calculate子图布局
@@ -753,7 +746,7 @@ class ResultComparator:
                 os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True
             )
             plt.savefig(output_path, dpi=dpi, bbox_inches="tight")
-            self._log(f"图表Saved: {output_path}")
+            self._log(f"Chart saved: {output_path}")
             plt.close()
             return output_path
         else:
@@ -801,9 +794,9 @@ class ResultComparator:
             df.to_csv(output_path, index=False, encoding="utf-8")
 
         else:
-            raise ValueError(f"Not supported格式: {format}")
+            raise ValueError(f"Unsupported report format: {format}")
 
-        self._log(f"报告Saved: {output_path}")
+        self._log(f"Report saved: {output_path}")
         return output_path
 
     def clear(self):

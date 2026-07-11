@@ -227,6 +227,15 @@ class TestResultComparator(unittest.TestCase):
         result = self.comparator.add_result("nonexistent.json")
         self.assertFalse(result)
 
+    def test_missing_file_log_is_clear_english(self):
+        messages = []
+        comparator = ResultComparator(log_callback=messages.append)
+
+        result = comparator.add_result("nonexistent.json")
+
+        self.assertFalse(result)
+        self.assertEqual(messages, ["File not found: nonexistent.json"])
+
     def test_add_results_from_dir(self):
         """Test从目录批量AddResult"""
         count = self.comparator.add_results_from_dir(self.temp_dir)
@@ -274,7 +283,7 @@ class TestResultComparator(unittest.TestCase):
         report_text = self.comparator.generate_comparison_report()
 
         # Validate报告内容
-        self.assertIn("Test Results对比报告", report_text)
+        self.assertIn("Test Results Comparison Report", report_text)
         self.assertIn("Accuracy", report_text)
         self.assertIn("model_a_mmlu", report_text)
         self.assertIn("model_b_mmlu", report_text)
@@ -291,7 +300,7 @@ class TestResultComparator(unittest.TestCase):
 
         # Validate DataFrame
         self.assertIsInstance(df, pd.DataFrame)
-        self.assertIn("指标", df.columns)
+        self.assertIn("Metric", df.columns)
         self.assertGreater(len(df), 0)
         self.assertIn("model_a_mmlu", df.columns)
         self.assertIn("model_b_mmlu", df.columns)
@@ -339,7 +348,7 @@ class TestResultComparator(unittest.TestCase):
         # Validate内容
         with open(output_path, encoding='utf-8') as f:
             content = f.read()
-        self.assertIn("Test Results对比报告", content)
+        self.assertIn("Test Results Comparison Report", content)
 
     def test_save_report_csv(self):
         """TestSave CSV 报告"""
@@ -359,7 +368,7 @@ class TestResultComparator(unittest.TestCase):
 
         # ValidatecanLoad
         df = pd.read_csv(output_path)
-        self.assertIn("指标", df.columns)
+        self.assertIn("Metric", df.columns)
 
     def test_plot_comparison(self):
         """TestGenerate对比图表"""
