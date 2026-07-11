@@ -313,7 +313,10 @@ def render_report_section(test_type):
                 test_config=test_config,
                 system_info=system_info,
             )
-        elif internal_type in ("并发-onunder文 综合Test", "Concurrency-Context Matrix Test"):
+        elif internal_type in (
+            "并发-onunder文 综合Test",
+            "Concurrency-Context Matrix Test",
+        ):
             st.session_state.report = reports.generate_matrix_report(
                 st.session_state.results_df,
                 model_id=model_id,

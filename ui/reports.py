@@ -135,7 +135,9 @@ def _render_test_summary_card(
                     m1, m2, m3, m4 = st.columns(4)
                     with m1:
                         st.metric(
-                            "Total Requests", f"{total_requests}", delta=f"{successful} succeeded"
+                            "Total Requests",
+                            f"{total_requests}",
+                            delta=f"{successful} succeeded",
                         )
                     with m2:
                         st.metric(
@@ -146,7 +148,10 @@ def _render_test_summary_card(
                     with m3:
                         d = f"↑ {ttft_ratio:.1f}x" if ttft_ratio > 1.2 else "Stable"
                         st.metric(
-                            f"TTFT @ C{int(hi)}", f"{ttft_hi:.3f}s", delta=d, delta_color="inverse"
+                            f"TTFT @ C{int(hi)}",
+                            f"{ttft_hi:.3f}s",
+                            delta=d,
+                            delta_color="inverse",
                         )
                     with m4:
                         st.metric(
@@ -160,7 +165,7 @@ def _render_test_summary_card(
                         st.metric(f"Single TPS @ C{int(lo)}", f"{tps_lo:.1f} t/s")
                     with m6:
                         d2 = (
-                            f"↓ {((1 - tps_hi/tps_lo)*100):.0f}%"
+                            f"↓ {((1 - tps_hi / tps_lo) * 100):.0f}%"
                             if tps_lo > 0 and tps_hi < tps_lo
                             else "Stable"
                         )
@@ -229,10 +234,16 @@ def _render_test_summary_card(
                     st.markdown("##### 📈 Peak & Trend Analysis")
                     m9, m10, m11, m12 = st.columns(4)
                     with m9:
-                        st.metric("Best TTFT", f"{best_ttft_val:.3f}s", delta=f"@ C{best_ttft_c}")
+                        st.metric(
+                            "Best TTFT",
+                            f"{best_ttft_val:.3f}s",
+                            delta=f"@ C{best_ttft_c}",
+                        )
                     with m10:
                         st.metric(
-                            "Peak Single TPS", f"{peak_tps_val:.1f} t/s", delta=f"@ C{peak_tps_c}"
+                            "Peak Single TPS",
+                            f"{peak_tps_val:.1f} t/s",
+                            delta=f"@ C{peak_tps_c}",
                         )
                     with m11:
                         st.metric(
@@ -248,7 +259,13 @@ def _render_test_summary_card(
                         )
                 else:
                     _render_generic_summary(
-                        st, df_ok, total_requests, successful, total_input, total_output, duration
+                        st,
+                        df_ok,
+                        total_requests,
+                        successful,
+                        total_input,
+                        total_output,
+                        duration,
                     )
 
             # ===== PREFILL =====
@@ -270,12 +287,14 @@ def _render_test_summary_card(
                     m1, m2, m3, m4 = st.columns(4)
                     with m1:
                         st.metric(
-                            "Total Requests", f"{total_requests}", delta=f"{successful} succeeded"
+                            "Total Requests",
+                            f"{total_requests}",
+                            delta=f"{successful} succeeded",
                         )
                     with m2:
                         st.metric(f"Prefill @ {_fmt(sm)}t", f"{ps_sm:.0f} t/s")
                     with m3:
-                        d = f"↓ {((1 - ratio)*100):.0f}%" if ratio < 0.95 else "Stable"
+                        d = f"↓ {((1 - ratio) * 100):.0f}%" if ratio < 0.95 else "Stable"
                         st.metric(
                             f"Prefill @ {_fmt(lg)}t",
                             f"{ps_lg:.0f} t/s",
@@ -283,7 +302,7 @@ def _render_test_summary_card(
                             delta_color="inverse",
                         )
                     with m4:
-                        st.metric("Speed Retention", f"{ratio*100:.1f}%")
+                        st.metric("Speed Retention", f"{ratio * 100:.1f}%")
 
                     m5, m6, m7, m8 = st.columns(4)
                     with m5:
@@ -330,7 +349,7 @@ def _render_test_summary_card(
                             else "Gradual decline"
                         )
                     else:
-                        speed_trend = f"↓ {((1 - ratio)*100):.0f}%" if ratio < 0.95 else "Stable"
+                        speed_trend = f"↓ {((1 - ratio) * 100):.0f}%" if ratio < 0.95 else "Stable"
 
                     # Detect TTFT scaling pattern (linear vs super-linear)
                     if len(levels) >= 3:
@@ -378,7 +397,13 @@ def _render_test_summary_card(
                         )
                 else:
                     _render_generic_summary(
-                        st, df_ok, total_requests, successful, total_input, total_output, duration
+                        st,
+                        df_ok,
+                        total_requests,
+                        successful,
+                        total_input,
+                        total_output,
+                        duration,
                     )
 
             # ===== LONG CONTEXT =====
@@ -407,7 +432,9 @@ def _render_test_summary_card(
                     m1, m2, m3, m4 = st.columns(4)
                     with m1:
                         st.metric(
-                            "Total Requests", f"{total_requests}", delta=f"{successful} succeeded"
+                            "Total Requests",
+                            f"{total_requests}",
+                            delta=f"{successful} succeeded",
                         )
                     with m2:
                         st.metric(f"TTFT @ {_fmt(sh)}", f"{ttft_sh:.3f}s")
@@ -427,10 +454,10 @@ def _render_test_summary_card(
                     with m6:
                         st.metric(f"Prefill @ {_fmt(lo)}", f"{ps_lo2:.0f} t/s")
                     with m7:
-                        d = f"↓ {((1 - tps_r)*100):.0f}%" if tps_r < 0.9 else "Stable"
+                        d = f"↓ {((1 - tps_r) * 100):.0f}%" if tps_r < 0.9 else "Stable"
                         st.metric(
                             "TPS Stability",
-                            f"{tps_r*100:.1f}%",
+                            f"{tps_r * 100:.1f}%",
                             delta=d,
                             delta_color="inverse" if tps_r < 0.9 else "normal",
                         )
@@ -507,7 +534,13 @@ def _render_test_summary_card(
                         )
                 else:
                     _render_generic_summary(
-                        st, df_ok, total_requests, successful, total_input, total_output, duration
+                        st,
+                        df_ok,
+                        total_requests,
+                        successful,
+                        total_input,
+                        total_output,
+                        duration,
                     )
 
             # ===== SEGMENTED (Prefix Caching) =====
@@ -554,7 +587,9 @@ def _render_test_summary_card(
                     m1, m2, m3, m4 = st.columns(4)
                     with m1:
                         st.metric(
-                            "Total Requests", f"{total_requests}", delta=f"{successful} succeeded"
+                            "Total Requests",
+                            f"{total_requests}",
+                            delta=f"{successful} succeeded",
                         )
                     with m2:
                         st.metric(
@@ -652,7 +687,13 @@ def _render_test_summary_card(
                         )
                 else:
                     _render_generic_summary(
-                        st, df_ok, total_requests, successful, total_input, total_output, duration
+                        st,
+                        df_ok,
+                        total_requests,
+                        successful,
+                        total_input,
+                        total_output,
+                        duration,
                     )
 
             # ===== MATRIX =====
@@ -673,7 +714,9 @@ def _render_test_summary_card(
                 m1, m2, m3, m4 = st.columns(4)
                 with m1:
                     st.metric(
-                        "Total Requests", f"{total_requests}", delta=f"{successful} succeeded"
+                        "Total Requests",
+                        f"{total_requests}",
+                        delta=f"{successful} succeeded",
                     )
                 with m2:
                     st.metric(
@@ -713,11 +756,13 @@ def _render_test_summary_card(
                 m5, m6, m7, m8 = st.columns(4)
                 with m5:
                     st.metric(
-                        "Best TTFT", f"{ttft_all.min():.3f}s" if not ttft_all.empty else "N/A"
+                        "Best TTFT",
+                        f"{ttft_all.min():.3f}s" if not ttft_all.empty else "N/A",
                     )
                 with m6:
                     st.metric(
-                        "Worst TTFT", f"{ttft_all.max():.3f}s" if not ttft_all.empty else "N/A"
+                        "Worst TTFT",
+                        f"{ttft_all.max():.3f}s" if not ttft_all.empty else "N/A",
                     )
                 with m7:
                     st.metric("Total Input Tokens", _fmt(total_input))
@@ -727,7 +772,13 @@ def _render_test_summary_card(
             # ===== GENERIC FALLBACK =====
             else:
                 _render_generic_summary(
-                    st, df_ok, total_requests, successful, total_input, total_output, duration
+                    st,
+                    df_ok,
+                    total_requests,
+                    successful,
+                    total_input,
+                    total_output,
+                    duration,
                 )
 
         # --- Row 3: Test Configuration (filtered) ---
@@ -826,13 +877,24 @@ def _render_generic_summary(
 
 
 def generate_concurrency_report(
-    df_group, model_id, provider="Unknown", duration=0, test_config=None, system_info=None
+    df_group,
+    model_id,
+    provider="Unknown",
+    duration=0,
+    test_config=None,
+    system_info=None,
 ):
     st.subheader("Concurrency Test Charts")
 
     # Use standard summary card
     _render_test_summary_card(
-        model_id, provider, duration, test_config, system_info, df=df_group, test_type="concurrency"
+        model_id,
+        provider,
+        duration,
+        test_config,
+        system_info,
+        df=df_group,
+        test_type="concurrency",
     )
 
     # Add Test Summary Section for Markdown Report
@@ -939,10 +1001,10 @@ def generate_concurrency_report(
     report_md += safe_to_markdown(summary[display_columns].round(4), index=False) + "\n\n"
 
     # === Enhanced: Performance insights ===
-    insights = generate_performance_insights(summary, "concurrency", model_id)
+    insights, severities = generate_performance_insights(summary, "concurrency", model_id)
     if insights:
         with st.expander("📊 Performance Insights & Analysis", expanded=True):
-            grade, color, description = get_performance_grade(insights)
+            grade, color, description = get_performance_grade(insights, severities)
             st.markdown(
                 f"**Overall Grade**: <span style='color:{color};font-size:20px;font-weight:bold'>{grade}</span> - {description}",
                 unsafe_allow_html=True,
@@ -975,7 +1037,9 @@ def generate_concurrency_report(
             if static_fig_bytes:
                 st.markdown(
                     create_static_chart_download_link(
-                        static_fig_bytes, f"concurrency_{model_id}.png", "📷 Download Static Chart"
+                        static_fig_bytes,
+                        f"concurrency_{model_id}.png",
+                        "📷 Download Static Chart",
                     ),
                     unsafe_allow_html=True,
                 )
@@ -1116,13 +1180,24 @@ def generate_concurrency_report(
 
 
 def generate_prefill_report(
-    df_group, model_id, provider="Unknown", duration=0, test_config=None, system_info=None
+    df_group,
+    model_id,
+    provider="Unknown",
+    duration=0,
+    test_config=None,
+    system_info=None,
 ):
     st.subheader("Prefill Stress Test Charts")
 
     # Use standard summary card
     _render_test_summary_card(
-        model_id, provider, duration, test_config, system_info, df=df_group, test_type="prefill"
+        model_id,
+        provider,
+        duration,
+        test_config,
+        system_info,
+        df=df_group,
+        test_type="prefill",
     )
 
     # Add Test Summary Section
@@ -1215,7 +1290,7 @@ def generate_prefill_report(
     report_md += safe_to_markdown(summary[display_columns].round(4), index=False) + "\n\n"
 
     # === Enhanced: Performance insights ===
-    insights = generate_performance_insights(summary, "prefill", model_id)
+    insights, _sev = generate_performance_insights(summary, "prefill", model_id)
     if insights:
         with st.expander("📊 Performance Insights", expanded=True):
             for insight in insights:
@@ -1245,7 +1320,9 @@ def generate_prefill_report(
             if static_fig_bytes:
                 st.markdown(
                     create_static_chart_download_link(
-                        static_fig_bytes, f"prefill_{model_id}.png", "📷 Download Static Chart"
+                        static_fig_bytes,
+                        f"prefill_{model_id}.png",
+                        "📷 Download Static Chart",
                     ),
                     unsafe_allow_html=True,
                 )
@@ -1318,7 +1395,12 @@ def generate_prefill_report(
 
 
 def generate_long_context_report(
-    df_group, model_id, provider="Unknown", duration=0, test_config=None, system_info=None
+    df_group,
+    model_id,
+    provider="Unknown",
+    duration=0,
+    test_config=None,
+    system_info=None,
 ):
     st.subheader("Long Context Test Charts")
 
@@ -1450,7 +1532,7 @@ def generate_long_context_report(
     report_md += safe_to_markdown(summary[display_columns].round(4), index=False) + "\n\n"
 
     # === Enhanced: Performance insights ===
-    insights = generate_performance_insights(summary, "long_context", model_id)
+    insights, _sev = generate_performance_insights(summary, "long_context", model_id)
     if insights:
         with st.expander("📊 Performance Insights", expanded=True):
             for insight in insights:
@@ -1476,7 +1558,9 @@ def generate_long_context_report(
         if static_fig_bytes:
             st.markdown(
                 create_static_chart_download_link(
-                    static_fig_bytes, f"long_context_{model_id}.png", "📷 Download Static Chart"
+                    static_fig_bytes,
+                    f"long_context_{model_id}.png",
+                    "📷 Download Static Chart",
                 ),
                 unsafe_allow_html=True,
             )
@@ -1614,13 +1698,24 @@ def generate_long_context_report(
 
 
 def generate_matrix_report(
-    df_group, model_id, provider="Unknown", duration=0, test_config=None, system_info=None
+    df_group,
+    model_id,
+    provider="Unknown",
+    duration=0,
+    test_config=None,
+    system_info=None,
 ):
     st.subheader("Concurrency-Context Matrix Test Charts")
 
     # Use standard summary card
     _render_test_summary_card(
-        model_id, provider, duration, test_config, system_info, df=df_group, test_type="matrix"
+        model_id,
+        provider,
+        duration,
+        test_config,
+        system_info,
+        df=df_group,
+        test_type="matrix",
     )
 
     # Add Test Summary Section
@@ -1712,7 +1807,10 @@ def generate_matrix_report(
 
     # Each throughput metric independently selects its max
     summary_output = summarize_metric_extreme(
-        group_copy, group_cols, "system_output_throughput", "Max_System_Output_Throughput"
+        group_copy,
+        group_cols,
+        "system_output_throughput",
+        "Max_System_Output_Throughput",
     )
     summary_input = summarize_metric_extreme(
         group_copy, group_cols, "system_input_throughput", "Max_System_Input_Throughput"
@@ -1723,13 +1821,22 @@ def generate_matrix_report(
     )
 
     summary_sys_tps = pd.merge(
-        summary_output, summary_input, on=["context_length_target", "concurrency"], how="left"
+        summary_output,
+        summary_input,
+        on=["context_length_target", "concurrency"],
+        how="left",
     )
     summary_sys_tps = pd.merge(
-        summary_sys_tps, summary_rps, on=["context_length_target", "concurrency"], how="left"
+        summary_sys_tps,
+        summary_rps,
+        on=["context_length_target", "concurrency"],
+        how="left",
     )
     summary_sys_tps = pd.merge(
-        summary_sys_tps, summary_total, on=["context_length_target", "concurrency"], how="left"
+        summary_sys_tps,
+        summary_total,
+        on=["context_length_target", "concurrency"],
+        how="left",
     )
 
     summary_tps = summarize_metric_extreme(group_copy, group_cols, "tps", "Max_Single_TPS")
@@ -1739,10 +1846,16 @@ def generate_matrix_report(
         summary, summary_tpot, on=["context_length_target", "concurrency"], how="left"
     )
     summary = pd.merge(
-        summary, summary_prefill, on=["context_length_target", "concurrency"], how="left"
+        summary,
+        summary_prefill,
+        on=["context_length_target", "concurrency"],
+        how="left",
     )
     summary = pd.merge(
-        summary, summary_sys_tps, on=["context_length_target", "concurrency"], how="left"
+        summary,
+        summary_sys_tps,
+        on=["context_length_target", "concurrency"],
+        how="left",
     )
     summary = pd.merge(
         summary, summary_tps, on=["context_length_target", "concurrency"], how="left"
@@ -1756,7 +1869,7 @@ def generate_matrix_report(
     summary = summary.sort_values(by=["context_length_target", "concurrency"])
 
     # === Enhanced: Performance insights (Generate before renaming) ===
-    insights = generate_performance_insights(summary, "matrix", model_id)
+    insights, severities = generate_performance_insights(summary, "matrix", model_id)
 
     # Rename columns to include units for DISPLAY ONLY
     # We keep 'summary' with raw column names for Plotly charts below
@@ -1806,7 +1919,9 @@ def generate_matrix_report(
                 min_value=0,
                 max_value=(
                     safe_positive_max(
-                        summary_display["Max_System_Output_Throughput (tokens/s)"], 1.1, 100
+                        summary_display["Max_System_Output_Throughput (tokens/s)"],
+                        1.1,
+                        100,
                     )
                     if "Max_System_Output_Throughput (tokens/s)" in summary_display
                     else 100
@@ -1826,7 +1941,7 @@ def generate_matrix_report(
     # Insights generated above before renaming
     if insights:
         with st.expander("📊 Comprehensive Performance Insights", expanded=True):
-            grade, color, description = get_performance_grade(insights)
+            grade, color, description = get_performance_grade(insights, severities)
             st.markdown(f"**Grade**: {grade} ({description})")
             st.markdown("---")
             for insight in insights:
@@ -1850,7 +1965,9 @@ def generate_matrix_report(
         if static_fig_bytes:
             st.markdown(
                 create_static_chart_download_link(
-                    static_fig_bytes, f"matrix_{model_id}.png", "📷 Download Static Chart"
+                    static_fig_bytes,
+                    f"matrix_{model_id}.png",
+                    "📷 Download Static Chart",
                 ),
                 unsafe_allow_html=True,
             )
@@ -2030,14 +2147,25 @@ def generate_matrix_report(
 
 
 def generate_segmented_report(
-    df_group, model_id, provider="Unknown", duration=0, test_config=None, system_info=None
+    df_group,
+    model_id,
+    provider="Unknown",
+    duration=0,
+    test_config=None,
+    system_info=None,
 ):
     """Segmented Context Test (Prefix Caching) Report"""
     st.subheader("Segmented Context Test Charts (Prefix Caching)")
 
     # Use standard summary card
     _render_test_summary_card(
-        model_id, provider, duration, test_config, system_info, df=df_group, test_type="segmented"
+        model_id,
+        provider,
+        duration,
+        test_config,
+        system_info,
+        df=df_group,
+        test_type="segmented",
     )
 
     # Add Test Summary Section
@@ -2219,7 +2347,9 @@ def generate_segmented_report(
                 ),
             ),
             "Cached_TTFT (s)": st.column_config.NumberColumn(
-                "Cached_TTFT (s)", help="Cached TTFT - Time after cache-hit", format="%.4f s"
+                "Cached_TTFT (s)",
+                help="Cached TTFT - Time after cache-hit",
+                format="%.4f s",
             ),
             "Max_Prefill_Speed (tokens/s)": st.column_config.ProgressColumn(
                 "Prefill Speed",
@@ -2250,7 +2380,7 @@ def generate_segmented_report(
     report_md += safe_to_markdown(stats[display_columns].round(4), index=False) + "\n\n"
 
     # === Performance insights ===
-    insights = generate_performance_insights(stats, "segmented", model_id)
+    insights, _sev = generate_performance_insights(stats, "segmented", model_id)
     if (
         not stats.empty
         and stats["Uncached_TTFT (s)"].notna().any()
@@ -2317,7 +2447,9 @@ def generate_segmented_report(
         if static_fig_bytes:
             st.markdown(
                 create_static_chart_download_link(
-                    static_fig_bytes, f"segmented_{model_id}.png", "📷 Download Static Chart"
+                    static_fig_bytes,
+                    f"segmented_{model_id}.png",
+                    "📷 Download Static Chart",
                 ),
                 unsafe_allow_html=True,
             )

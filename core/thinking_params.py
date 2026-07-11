@@ -22,7 +22,7 @@ PLATFORM_PATTERNS = {
     "zhipu": ["zhipuai", "bigmodel.cn"],  # 智谱AI
     "gemini": ["gemini", "generativelanguage.googleapis.com", "google"],
     "openrouter": ["openrouter"],
-    "openai": ["openai", "api.openai.com"]
+    "openai": ["openai", "api.openai.com"],
 }
 
 
@@ -42,7 +42,7 @@ PLATFORM_FEATURES = {
         "content_output_field": "content",  # 响应in正文内容字段名
         "special_headers": {"api-key": True},  # 特殊请求头 (MiMo 用 api-key 而非 Authorization)
         "special_params": {"max_completion_tokens": True},  # 特殊参数名
-        "notes": "thinking mustis顶级参数，not能放 extra_body"
+        "notes": "thinking mustis顶级参数，not能放 extra_body",
     },
     "deepseek": {
         "name": "DeepSeek",
@@ -55,7 +55,7 @@ PLATFORM_FEATURES = {
         "content_output_field": "content",
         "special_headers": {},
         "special_params": {},
-        "notes": "thinking 需放in extra_body 内"
+        "notes": "thinking 需放in extra_body 内",
     },
     "zhipu": {
         "name": "智谱 AI",
@@ -68,20 +68,24 @@ PLATFORM_FEATURES = {
         "content_output_field": "content",
         "special_headers": {},
         "special_params": {},
-        "notes": "thinking is顶级参数，与 MiMo 类似"
+        "notes": "thinking is顶级参数，与 MiMo 类似",
     },
     "gemini": {
         "name": "Google Gemini",
         "thinking_param_location": "generationConfig.thinkingConfig",
         "thinking_field": "thinkingConfig",
-        "thinking_format": {"includeThoughts": True, "thinkingLevel": "HIGH", "thinkingBudget": -1},
+        "thinking_format": {
+            "includeThoughts": True,
+            "thinkingLevel": "HIGH",
+            "thinkingBudget": -1,
+        },
         "supports_budget": True,  # thinkingBudget: -1 表示自动
         "supports_effort": True,  # thinkingLevel: MINIMAL/LOW/MEDIUM/HIGH
         "reasoning_output_field": "thought",  # Gemini 用 thought 而非 reasoning_content
         "content_output_field": "text",  # Gemini 用 text 而非 content
         "special_headers": {},
         "special_params": {},
-        "notes": "REST API v1beta Not supported thinkingConfig，需用 SDK or特定Model隐式Trigger"
+        "notes": "REST API v1beta Not supported thinkingConfig，需用 SDK or特定Model隐式Trigger",
     },
     "volcano": {
         "name": "火山引擎 (豆包)",
@@ -95,7 +99,7 @@ PLATFORM_FEATURES = {
         "content_output_field": "content",
         "special_headers": {},
         "special_params": {},
-        "notes": "支持 reasoning.effort 控制思考深度，仅部分Model支持"
+        "notes": "支持 reasoning.effort 控制思考深度，仅部分Model支持",
     },
     "aliyun": {
         "name": "阿里云百炼",
@@ -110,7 +114,7 @@ PLATFORM_FEATURES = {
         "content_output_field": "content",
         "special_headers": {},
         "special_params": {},
-        "notes": "use enable_thinking (bool) + thinking_budget (int)"
+        "notes": "use enable_thinking (bool) + thinking_budget (int)",
     },
     "siliconflow": {
         "name": "硅基流动",
@@ -125,7 +129,7 @@ PLATFORM_FEATURES = {
         "content_output_field": "content",
         "special_headers": {},
         "special_params": {},
-        "notes": "use enable_thinking + thinking_budget 作is顶级参数"
+        "notes": "use enable_thinking + thinking_budget 作is顶级参数",
     },
     "minimax": {
         "name": "MiniMax",
@@ -138,7 +142,7 @@ PLATFORM_FEATURES = {
         "content_output_field": "content",
         "special_headers": {},
         "special_params": {},
-        "notes": "use Interleaved Thinking（交错思维）"
+        "notes": "use Interleaved Thinking（交错思维）",
     },
     "openrouter": {
         "name": "OpenRouter",
@@ -152,7 +156,7 @@ PLATFORM_FEATURES = {
         "content_output_field": "content",
         "special_headers": {"HTTP-Referer": True, "X-Title": True},
         "special_params": {},
-        "notes": "与 OpenAI 格式兼容"
+        "notes": "与 OpenAI 格式兼容",
     },
     "openai": {
         "name": "OpenAI",
@@ -166,8 +170,8 @@ PLATFORM_FEATURES = {
         "content_output_field": "content",
         "special_headers": {},
         "special_params": {},
-        "notes": "o1/o3 系列use reasoning.effort"
-    }
+        "notes": "o1/o3 系列use reasoning.effort",
+    },
 }
 
 
@@ -181,19 +185,22 @@ def get_platform_features(platform: str) -> dict[str, Any]:
     Returns:
         平台特性字典，if平台未知则ReturndefaultConfigure
     """
-    return PLATFORM_FEATURES.get(platform, {
-        "name": "未知平台",
-        "thinking_param_location": "top_level",
-        "thinking_field": "enable_thinking",
-        "thinking_format": True,
-        "supports_budget": True,
-        "supports_effort": False,
-        "reasoning_output_field": "reasoning_content",
-        "content_output_field": "content",
-        "special_headers": {},
-        "special_params": {},
-        "notes": "通用Configure"
-    })
+    return PLATFORM_FEATURES.get(
+        platform,
+        {
+            "name": "未知平台",
+            "thinking_param_location": "top_level",
+            "thinking_field": "enable_thinking",
+            "thinking_format": True,
+            "supports_budget": True,
+            "supports_effort": False,
+            "reasoning_output_field": "reasoning_content",
+            "content_output_field": "content",
+            "special_headers": {},
+            "special_params": {},
+            "notes": "通用Configure",
+        },
+    )
 
 
 def get_reasoning_field(platform: str) -> str:
@@ -207,7 +214,7 @@ def get_reasoning_field(platform: str) -> str:
         推理内容字段名 (如 reasoning_content, thought, reasoning_details)
     """
     features = get_platform_features(platform)
-    return features.get("reasoning_output_field", "reasoning_content")
+    return str(features.get("reasoning_output_field", "reasoning_content"))
 
 
 def get_content_field(platform: str) -> str:
@@ -221,7 +228,7 @@ def get_content_field(platform: str) -> str:
         正文内容字段名 (如 content, text)
     """
     features = get_platform_features(platform)
-    return features.get("content_output_field", "content")
+    return str(features.get("content_output_field", "content"))
 
 
 def supports_thinking_budget(platform: str) -> bool:
@@ -235,7 +242,7 @@ def supports_thinking_budget(platform: str) -> bool:
         is否支持
     """
     features = get_platform_features(platform)
-    return features.get("supports_budget", False)
+    return bool(features.get("supports_budget", False))
 
 
 def supports_reasoning_effort(platform: str) -> bool:
@@ -249,7 +256,7 @@ def supports_reasoning_effort(platform: str) -> bool:
         is否支持
     """
     features = get_platform_features(platform)
-    return features.get("supports_effort", False)
+    return bool(features.get("supports_effort", False))
 
 
 def get_effort_levels(platform: str) -> list:
@@ -263,8 +270,7 @@ def get_effort_levels(platform: str) -> list:
         支持etc.级列表，如 ["low", "medium", "high"]
     """
     features = get_platform_features(platform)
-    return features.get("effort_levels", ["low", "medium", "high"])
-
+    return list(features.get("effort_levels", ["low", "medium", "high"]))
 
 
 def detect_platform(api_base_url: str, model_id: str = "") -> str:
@@ -292,7 +298,7 @@ def detect_platform(api_base_url: str, model_id: str = "") -> str:
         "minimax": ["api.minimax.chat"],
         "gemini": ["generativelanguage.googleapis.com"],
         "openrouter": ["openrouter.ai"],
-        "openai": ["api.openai.com"]
+        "openai": ["api.openai.com"],
     }
 
     for platform, patterns in URL_PATTERNS.items():
@@ -315,10 +321,7 @@ def detect_platform(api_base_url: str, model_id: str = "") -> str:
 
 
 def build_thinking_params(
-    thinking_enabled: bool,
-    thinking_budget: int,
-    reasoning_effort: str,
-    platform: str
+    thinking_enabled: bool, thinking_budget: int, reasoning_effort: str, platform: str
 ) -> dict[str, Any]:
     """
     based on平台Build推理参数
@@ -332,7 +335,7 @@ def build_thinking_params(
     Returns:
         适合该平台参数字典（可能包含 extra_body）
     """
-    params = {}
+    params: dict[str, Any] = {}
 
     if platform == "openai" or platform == "openrouter":
         # OpenAI and OpenRouter use reasoning 对象: {"effort": "low" | "medium" | "high" | "xhigh"}
@@ -340,11 +343,7 @@ def build_thinking_params(
             effort_value = "high"  # default高档
             if reasoning_effort:
                 # 支持: none, minimal, low, medium, high, xhigh
-                effort_map = {
-                    "low": "low",
-                    "medium": "medium",
-                    "high": "high"
-                }
+                effort_map = {"low": "low", "medium": "medium", "high": "high"}
                 effort_value = effort_map.get(reasoning_effort, "high")
 
             params["reasoning"] = {"effort": effort_value}
@@ -355,14 +354,10 @@ def build_thinking_params(
         if thinking_enabled is not None or reasoning_effort or thinking_budget:
             thinking_level = "HIGH"  # default高档
             if reasoning_effort:
-                level_map = {
-                    "low": "LOW",
-                    "medium": "MEDIUM",
-                    "high": "HIGH"
-                }
+                level_map = {"low": "LOW", "medium": "MEDIUM", "high": "HIGH"}
                 thinking_level = level_map.get(reasoning_effort, "HIGH")
 
-            t_config = {
+            t_config: dict[str, Any] = {
                 "includeThoughts": True if thinking_enabled is not None else True,
             }
 
@@ -373,9 +368,7 @@ def build_thinking_params(
             elif thinking_enabled:
                 t_config["thinkingLevel"] = thinking_level
 
-            params["_generation_config_gemini"] = {
-                "thinkingConfig": t_config
-            }
+            params["_generation_config_gemini"] = {"thinkingConfig": t_config}
 
     elif platform == "minimax":
         # MiniMax use reasoning_split (bool)
@@ -386,7 +379,7 @@ def build_thinking_params(
 
     elif platform == "aliyun":
         # 阿里云百炼use extra_body 传递 enable_thinking and thinking_budget
-        extra_body_params = {}
+        extra_body_params: dict[str, Any] = {}
         if thinking_enabled is not None:
             extra_body_params["enable_thinking"] = thinking_enabled
         if thinking_budget and thinking_budget > 0:
@@ -409,9 +402,7 @@ def build_thinking_params(
         # needvia extra_body 传递
         if thinking_enabled is not None:
             thinking_type = "enabled" if thinking_enabled else "disabled"
-            params["_extra_body_deepseek"] = {
-                "thinking": {"type": thinking_type}
-            }
+            params["_extra_body_deepseek"] = {"thinking": {"type": thinking_type}}
         # DeepSeek notuse thinking_budget，而isuse max_tokens (default32K，最大64K)
 
     elif platform == "zhipu":
@@ -432,11 +423,7 @@ def build_thinking_params(
 
         # reasoning.effort: minimal/low/medium/high
         if reasoning_effort:
-            effort_map = {
-                "low": "low",
-                "medium": "medium",
-                "high": "high"
-            }
+            effort_map = {"low": "low", "medium": "medium", "high": "high"}
             effort_value = effort_map.get(reasoning_effort, "high")
             extra_body_params["reasoning"] = {"effort": effort_value}
 
@@ -468,42 +455,27 @@ def get_default_thinking_config(platform: str) -> dict[str, Any]:
     Returns:
         defaultConfigure字典
     """
-    defaults = {
-        "mimo": {
-            "thinking": {"type": "enabled"}  # MiMo use thinking 对象，顶级参数
-        },
-        "siliconflow": {
-            "enable_thinking": True,
-            "thinking_budget": 32768  # 最大值
-        },
-        "deepseek": {
-            "thinking": {"type": "enabled"}  # DeepSeek 官方API，与 MiMo 格式相同
-        },
-        "zhipu": {
-            "thinking": {"type": "enabled"}  # 智谱 AI 格式
-        },
+    defaults: dict[str, dict[str, Any]] = {
+        "mimo": {"thinking": {"type": "enabled"}},  # MiMo use thinking 对象，顶级参数
+        "siliconflow": {"enable_thinking": True, "thinking_budget": 32768},  # 最大值
+        "deepseek": {"thinking": {"type": "enabled"}},  # DeepSeek 官方API，与 MiMo 格式相同
+        "zhipu": {"thinking": {"type": "enabled"}},  # 智谱 AI 格式
         "volcano": {
             # 火山引擎via extra_body 传递
             "thinking": {"type": "enabled"},
-            "reasoning": {"effort": "high"}  # Highest档位
+            "reasoning": {"effort": "high"},  # Highest档位
         },
         "aliyun": {
             # 阿里云via extra_body 传递
             "enable_thinking": True,
-            "thinking_budget": 32768 # 最大值（范围 128-32768）
+            "thinking_budget": 32768,  # 最大值（范围 128-32768）
         },
-        "minimax": {
-            "reasoning_split": True  # MiniMax via extra_body 传递
-        },
-        "gemini": {
-            "thinkingConfig": {"thinkingLevel": "HIGH"}  # Gemini via generationConfig 传递
-        },
-        "openrouter": {
-            "reasoning": {"effort": "high"}  # 与 OpenAI 相同格式
-        },
+        "minimax": {"reasoning_split": True},  # MiniMax via extra_body 传递
+        "gemini": {"thinkingConfig": {"thinkingLevel": "HIGH"}},  # Gemini via generationConfig 传递
+        "openrouter": {"reasoning": {"effort": "high"}},  # 与 OpenAI 相同格式
         "openai": {
             "reasoning": {"effort": "high"}  # Highest档位 (none/minimal/low/medium/high/xhigh)
-        }
+        },
     }
 
     return defaults.get(platform, {})
@@ -517,19 +489,29 @@ THINKING_MODELS = {
         "Qwen/Qwen3-",
         "tencent/Hunyuan-A13B-Instruct",
         "deepseek-ai/DeepSeek-V3.1",
-        "Pro/deepseek-ai/DeepSeek-V3.1"
+        "Pro/deepseek-ai/DeepSeek-V3.1",
     ],
     "deepseek": ["deepseek-chat", "deepseek-reasoner"],  # DeepSeek官方API
     "zhipu": ["glm-4.7", "glm-4-plus"],  # 智谱AI
     "volcano": ["doubao-pro", "doubao-thinking", "doubao-seed-"],
     "aliyun": [
-        "qwen3-", "qwq-", "deepseek-v3", "deepseek-r1",
-        "glm-4.6", "glm-4.5", "kimi-k2-thinking"
+        "qwen3-",
+        "qwq-",
+        "deepseek-v3",
+        "deepseek-r1",
+        "glm-4.6",
+        "glm-4.5",
+        "kimi-k2-thinking",
     ],
     "minimax": ["minimax-m2"],
-    "gemini": ["gemini-3-flash-preview", "gemini-2.0-flash-thinking-exp", "gemini-flash-latest", "gemini-2.5-flash-preview"],
+    "gemini": [
+        "gemini-3-flash-preview",
+        "gemini-2.0-flash-thinking-exp",
+        "gemini-flash-latest",
+        "gemini-2.5-flash-preview",
+    ],
     "openrouter": ["*"],  # OpenRouter 支持多种推理Model
-    "openai": ["o1-", "o3-", "gpt-5"]
+    "openai": ["o1-", "o3-", "gpt-5"],
 }
 
 
@@ -571,7 +553,7 @@ def get_intelligent_preset(api_base_url: str, model_id: str) -> dict[str, Any]:
             "thinking_budget": 0,
             "reasoning_effort": "medium",
             "platform": platform,
-            "is_thinking_model": False
+            "is_thinking_model": False,
         }
 
     # 3. based on平台ReturnBestConfigure
@@ -580,71 +562,74 @@ def get_intelligent_preset(api_base_url: str, model_id: str) -> dict[str, Any]:
             "thinking_enabled": True,
             "thinking_budget": 0,  # MiMoNot supportedbudget
             "reasoning_effort": "medium",  # 仅用于记录，MiMonotuse
-            "description": "小米MiMo - 官方推理模式"
+            "description": "小米MiMo - 官方推理模式",
         },
         "siliconflow": {
             "thinking_enabled": True,
             "thinking_budget": 32768,  # 最大值
             "reasoning_effort": "medium",
-            "description": "硅基流动 - 最大Thinking budget"
+            "description": "硅基流动 - 最大Thinking budget",
         },
         "deepseek": {
             "thinking_enabled": True,
             "thinking_budget": 0,  # DeepSeekusemax_tokens而非thinking_budget
             "reasoning_effort": "medium",
-            "description": "DeepSeek官方 - 深度Thinking mode"
+            "description": "DeepSeek官方 - 深度Thinking mode",
         },
         "zhipu": {
             "thinking_enabled": True,
             "thinking_budget": 0,
             "reasoning_effort": "medium",
-            "description": "智谱AI - GLM-4.7 Thinking mode"
+            "description": "智谱AI - GLM-4.7 Thinking mode",
         },
         "volcano": {
             "thinking_enabled": True,
             "thinking_budget": 0,  # 火山引擎notusebudget，用effort
             "reasoning_effort": "high",
-            "description": "火山引擎 - 高强度推理"
+            "description": "火山引擎 - 高强度推理",
         },
         "aliyun": {
             "thinking_enabled": True,
             "thinking_budget": 32768,  # 最大值
             "reasoning_effort": "medium",
-            "description": "阿里百炼 - 最大Thinking budget"
+            "description": "阿里百炼 - 最大Thinking budget",
         },
         "minimax": {
             "thinking_enabled": True,
             "thinking_budget": 0,  # MiniMaxNot supportedbudget
             "reasoning_effort": "medium",
-            "description": "MiniMax - 交错思维模式"
+            "description": "MiniMax - 交错思维模式",
         },
         "gemini": {
             "thinking_enabled": True,
             "thinking_budget": -1,  # use -1 表示让Model自动平衡
             "reasoning_effort": "high",  # 映射到 thinkingLevel: HIGH
-            "description": "Google Gemini - 混合推理模式"
+            "description": "Google Gemini - 混合推理模式",
         },
         "openrouter": {
             "thinking_enabled": True,
             "thinking_budget": 0,
             "reasoning_effort": "high",
-            "description": "OpenRouter - 高强度推理"
+            "description": "OpenRouter - 高强度推理",
         },
         "openai": {
             "thinking_enabled": True,
             "thinking_budget": 0,
             "reasoning_effort": "high",  # o1/o3系列推荐high
-            "description": "OpenAI - 高强度推理"
-        }
+            "description": "OpenAI - 高强度推理",
+        },
     }
 
     # Get预设Configure
-    config = preset_configs.get(platform, {
-        "thinking_enabled": True,
-        "thinking_budget": 4096,
-        "reasoning_effort": "medium",
-        "description": "未知平台 - 通用Configure"
-    })
+    config = preset_configs.get(
+        platform,
+        {
+            "thinking_enabled": True,
+            "thinking_budget": 4096,
+            "reasoning_effort": "medium",
+            "description": "未知平台 - 通用Configure",
+        },
+    )
 
     # Add元信息
     config["platform"] = platform

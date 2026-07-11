@@ -4,22 +4,48 @@ Performance insights generation for benchmark results.
 Automatically analyzes test results and generates actionable insights with statistical depth.
 Includes data quality validation to avoid misleading conclusions from invalid/zero metrics.
 
-Insight emoji convention:
-  ✅ 🚀 🏆 📈 ⚡  → Strong positive (no action needed)
-  📊 ⚖️ 🎯        → Neutral / informational (facts, moderate results)
-  ⚠️ 🐢 📉 🎢     → Warning (optimization recommended)
-  ❌ 🛑            → Critical (requires immediate attention)
+Insight severity convention (tagged in parallel severities list):
+  positive  → Strong results (no action needed)
+  neutral   → Informational / moderate
+  warning   → Optimization recommended
+  critical  → Requires immediate attention
 """
 
 import pandas as pd
 
 from ui.reporting.columns import COLUMN_RENAME_MAP
 
+# Severity tags for insights (replaces emoji prefixes)
+SEVERITY_POSITIVE = "positive"
+SEVERITY_NEUTRAL = "neutral"
+SEVERITY_WARNING = "warning"
+SEVERITY_CRITICAL = "critical"
+
+# Emoji → severity mapping (used for backward-compat in get_performance_grade)
+_EMOJI_SEVERITY = {
+    "✅": "positive",
+    "🚀": "positive",
+    "🏆": "positive",
+    "📈": "positive",
+    "⚡": "positive",
+    "📊": "neutral",
+    "⚖️": "neutral",
+    "⚖": "neutral",
+    "🎯": "neutral",
+    "⚠️": "warning",
+    "⚠": "warning",
+    "🐢": "warning",
+    "📉": "warning",
+    "🎢": "warning",
+    "❌": "critical",
+    "🛑": "critical",
+}
+
 
 def _check_data_quality(df, test_type):
     """
     Check if the test data has meaningful metrics before analysis.
-    Returns a list of warning insights if data is poor, or empty list if OK.
+    Returns a list of (severity, text) warning tuples if data is poor, or empty list if OK.
     """
     warnings = []
 
@@ -38,7 +64,10 @@ def _check_data_quality(df, test_type):
 
     if total_input == 0 and total_output == 0:
         warnings.append(
-            "❌ **Data Anomaly**: Input/output token counts are both 0. The test may not have correctly collected token statistics. Please check if the API returns usage info."
+            (
+                "critical",
+                "**Data Anomaly**: Input/output token counts are both 0. The test may not have correctly collected token statistics. Please check if the API returns usage info.",
+            )
         )
 
     # Check if TTFT data is available
@@ -46,7 +75,10 @@ def _check_data_quality(df, test_type):
         valid_ttft = df[df["ttft"] > 0]["ttft"]
         if valid_ttft.empty or len(valid_ttft) == 0:
             warnings.append(
-                "❌ **TTFT Missing**: All requests have TTFT of 0 or missing. Cannot perform latency analysis."
+                (
+                    "critical",
+                    "**TTFT Missing**: All requests have TTFT of 0 or missing. Cannot perform latency analysis.",
+                )
             )
 
     # Check if TPS data is available
@@ -54,7 +86,10 @@ def _check_data_quality(df, test_type):
         valid_tps = df[df["tps"] > 0]["tps"]
         if valid_tps.empty or len(valid_tps) == 0:
             warnings.append(
-                "❌ **TPS Missing**: All requests have TPS of 0 or missing. Cannot perform throughput analysis."
+                (
+                    "critical",
+                    "**TPS Missing**: All requests have TPS of 0 or missing. Cannot perform throughput analysis.",
+                )
             )
 
     return warnings
@@ -70,38 +105,53 @@ def generate_performance_insights(df, test_type, model_id=""):
         model_id: Model identifier
 
     Returns:
-        List of insight strings (markdown formatted)
+        Tuple of (insights_texts, insights_severities) — parallel lists of
+        markdown-formatted insight strings and their severity tags.
     """
     insights: list[str] = []
+    severities: list[str] = []
 
     # Common check
     if df is None or df.empty:
-        return ["⚠️ **Insufficient Data**: Cannot generate valid insights."]
+        return ["**Insufficient Data**: Cannot generate valid insights."], ["warning"]
 
     # === Data Quality Gate ===
     quality_warnings = _check_data_quality(df, test_type)
     if quality_warnings:
-        insights.extend(quality_warnings)
-        # If there are critical data issues (❌), skip further analysis to avoid misleading insights
-        has_critical = any("❌" in w for w in quality_warnings)
+        for sev, txt in quality_warnings:
+            insights.append(txt)
+            severities.append(sev)
+        # If there are critical data issues, skip further analysis to avoid misleading insights
+        has_critical = any(sev == "critical" for sev, _ in quality_warnings)
         if has_critical:
             insights.append(
-                "⚠️ **Analysis Skipped**: Due to missing core metrics, further analysis may be misleading and has been skipped. Please investigate data collection issues and re-test."
+                "**Analysis Skipped**: Due to missing core metrics, further analysis may be misleading and has been skipped. Please investigate data collection issues and re-test."
             )
-            return insights
+            severities.append("warning")
+            return insights, severities
 
     if test_type == "concurrency":
-        insights.extend(_analyze_concurrency(df, model_id))
+        texts, sevs = _analyze_concurrency(df, model_id)
+        insights.extend(texts)
+        severities.extend(sevs)
     elif test_type == "prefill":
-        insights.extend(_analyze_prefill(df, model_id))
+        texts, sevs = _analyze_prefill(df, model_id)
+        insights.extend(texts)
+        severities.extend(sevs)
     elif test_type == "long_context":
-        insights.extend(_analyze_long_context(df, model_id))
+        texts, sevs = _analyze_long_context(df, model_id)
+        insights.extend(texts)
+        severities.extend(sevs)
     elif test_type == "matrix":
-        insights.extend(_analyze_matrix(df, model_id))
+        texts, sevs = _analyze_matrix(df, model_id)
+        insights.extend(texts)
+        severities.extend(sevs)
     elif test_type == "segmented":
-        insights.extend(_analyze_segmented(df, model_id))
+        texts, sevs = _analyze_segmented(df, model_id)
+        insights.extend(texts)
+        severities.extend(sevs)
 
-    return insights
+    return insights, severities
 
 
 def _get_col(df, base_col):
@@ -144,9 +194,10 @@ def _success_rate_fraction(series):
 def _analyze_concurrency(df, model_id):
     """Analyze concurrency test results with comprehensive multi-dimensional assessment."""
     insights: list[str] = []
+    severities: list[str] = []
 
     if "concurrency" not in df.columns:
-        return insights
+        return insights, severities
 
     df = df.sort_values("concurrency")
     n_levels = len(df)
@@ -162,8 +213,9 @@ def _analyze_concurrency(df, model_id):
         if peak_tp > 0:
             # 1a. Report peak (always informational)
             insights.append(
-                f"🎯 **Peak Throughput**: Reached **{peak_tp:.1f} tokens/s** at **{int(peak_conc)} concurrency**."
+                f"**Peak Throughput**: Reached **{peak_tp:.1f} tokens/s** at **{int(peak_conc)} concurrency**."
             )
+            severities.append(SEVERITY_NEUTRAL)
 
             # 1b. Throughput level assessment - contextualize with concurrency
             # At single concurrency, throughput = single-stream decode speed, a model characteristic
@@ -174,12 +226,14 @@ def _analyze_concurrency(df, model_id):
                 tp_per_conc = peak_tp / peak_conc
                 if tp_per_conc < 5:
                     insights.append(
-                        f"⚠️ **Low Concurrency Throughput Efficiency**: Peak throughput {peak_tp:.1f} t/s at {int(peak_conc)} concurrency, only {tp_per_conc:.1f} t/s per concurrent request. System concurrency utilization is insufficient."
+                        f"**Low Concurrency Throughput Efficiency**: Peak throughput {peak_tp:.1f} t/s at {int(peak_conc)} concurrency, only {tp_per_conc:.1f} t/s per concurrent request. System concurrency utilization is insufficient."
                     )
+                    severities.append(SEVERITY_WARNING)
                 elif peak_tp >= 300:
                     insights.append(
-                        f"✅ **Ample Throughput**: Peak {peak_tp:.1f} t/s, capable of sustaining high concurrent loads."
+                        f"**Ample Throughput**: Peak {peak_tp:.1f} t/s, capable of sustaining high concurrent loads."
                     )
+                    severities.append(SEVERITY_POSITIVE)
 
             # 1c. Saturation / Degradation detection
             max_conc = df["concurrency"].max()
@@ -188,8 +242,9 @@ def _analyze_concurrency(df, model_id):
                 drop = (peak_tp - last_tp) / peak_tp * 100
                 if drop > 10:
                     insights.append(
-                        f"⚠️ **Overload Degradation**: Beyond {int(peak_conc)} concurrency, system throughput dropped {drop:.1f}% due to increasing resource contention."
+                        f"**Overload Degradation**: Beyond {int(peak_conc)} concurrency, system throughput dropped {drop:.1f}% due to increasing resource contention."
                     )
+                    severities.append(SEVERITY_WARNING)
 
             # 1d. Throughput scaling efficiency (need at least 2 levels)
             if n_levels >= 2:
@@ -205,20 +260,24 @@ def _analyze_concurrency(df, model_id):
 
                     if efficiency > 85:
                         insights.append(
-                            f"📈 **Excellent Scaling Efficiency**: Concurrency {int(first_conc)}→{int(last_conc)} (×{conc_ratio:.0f}), throughput scales near-linearly (efficiency {efficiency:.0f}%)."
+                            f"**Excellent Scaling Efficiency**: Concurrency {int(first_conc)}→{int(last_conc)} (×{conc_ratio:.0f}), throughput scales near-linearly (efficiency {efficiency:.0f}%)."
                         )
+                        severities.append(SEVERITY_POSITIVE)
                     elif efficiency > 50:
                         insights.append(
-                            f"📊 **Average Scaling Efficiency**: Concurrency increased {conc_ratio:.1f}×, but throughput only grew {tp_ratio:.1f}× (efficiency {efficiency:.0f}%), resource contention present."
+                            f"**Average Scaling Efficiency**: Concurrency increased {conc_ratio:.1f}×, but throughput only grew {tp_ratio:.1f}× (efficiency {efficiency:.0f}%), resource contention present."
                         )
+                        severities.append(SEVERITY_NEUTRAL)
                     elif efficiency > 0:
                         insights.append(
-                            f"📉 **Poor Scaling Efficiency**: Concurrency increased {conc_ratio:.1f}×, but throughput only grew {tp_ratio:.1f}× (efficiency {efficiency:.0f}%), system near bottleneck."
+                            f"**Poor Scaling Efficiency**: Concurrency increased {conc_ratio:.1f}×, but throughput only grew {tp_ratio:.1f}× (efficiency {efficiency:.0f}%), system near bottleneck."
                         )
+                        severities.append(SEVERITY_WARNING)
         else:
             insights.append(
-                "❌ **Throughput Anomaly**: System throughput is 0. Please check test configuration and API response data."
+                "**Throughput Anomaly**: System throughput is 0. Please check test configuration and API response data."
             )
+            severities.append(SEVERITY_CRITICAL)
 
     # --- 2. TPOT Trend Analysis (Mean) ---
     tpot_col = _get_col(df, "TPOT_Mean")
@@ -235,20 +294,24 @@ def _analyze_concurrency(df, model_id):
 
                 if tpot_increase_pct > 100:
                     insights.append(
-                        f"📉 **TPOT Severe Degradation**: From concurrency {int(first_conc)}→{int(last_conc)}, avg TPOT increased from {first_tpot:.1f}ms to {last_tpot:.1f}ms (↑{tpot_increase_pct:.0f}%), significant user experience decline."
+                        f"**TPOT Severe Degradation**: From concurrency {int(first_conc)}→{int(last_conc)}, avg TPOT increased from {first_tpot:.1f}ms to {last_tpot:.1f}ms (↑{tpot_increase_pct:.0f}%), significant user experience decline."
                     )
+                    severities.append(SEVERITY_WARNING)
                 elif tpot_increase_pct > 30:
                     insights.append(
-                        f"⚠️ **TPOT Notable Increase**: Avg TPOT from {first_tpot:.1f}ms to {last_tpot:.1f}ms (↑{tpot_increase_pct:.0f}%), users may notice slower generation speed."
+                        f"**TPOT Notable Increase**: Avg TPOT from {first_tpot:.1f}ms to {last_tpot:.1f}ms (↑{tpot_increase_pct:.0f}%), users may notice slower generation speed."
                     )
+                    severities.append(SEVERITY_WARNING)
                 elif tpot_increase_pct > 5:
                     insights.append(
-                        f"📊 **TPOT Slight Increase**: Avg TPOT from {first_tpot:.1f}ms to {last_tpot:.1f}ms (↑{tpot_increase_pct:.0f}%), minimal impact from concurrency."
+                        f"**TPOT Slight Increase**: Avg TPOT from {first_tpot:.1f}ms to {last_tpot:.1f}ms (↑{tpot_increase_pct:.0f}%), minimal impact from concurrency."
                     )
+                    severities.append(SEVERITY_NEUTRAL)
                 else:
                     insights.append(
-                        f"✅ **TPOT Highly Stable**: Avg TPOT stays between {first_tpot:.1f}ms~{last_tpot:.1f}ms, virtually unaffected by concurrency."
+                        f"**TPOT Highly Stable**: Avg TPOT stays between {first_tpot:.1f}ms~{last_tpot:.1f}ms, virtually unaffected by concurrency."
                     )
+                    severities.append(SEVERITY_POSITIVE)
 
     # --- 3. Latency SLA (P99 TPOT stream chunk) ---
     tpot_p99_col = _get_col(df, "TPOT_P99")
@@ -262,27 +325,32 @@ def _analyze_concurrency(df, model_id):
                 safe_conc = valid_tpot[valid_tpot[tpot_p99_col] <= sla_limit]["concurrency"].max()
                 if pd.isna(safe_conc):
                     insights.append(
-                        f"❌ **High Latency**: Even at lowest concurrency, P99 TPOT exceeds {sla_limit}ms, poor real-time interaction experience."
+                        f"**High Latency**: Even at lowest concurrency, P99 TPOT exceeds {sla_limit}ms, poor real-time interaction experience."
                     )
+                    severities.append(SEVERITY_CRITICAL)
                 else:
                     insights.append(
-                        f"⚖️ **Latency SLA Suggestion**: To maintain P99 TPOT < {sla_limit}ms, recommend keeping concurrency at **{int(safe_conc)}** or below."
+                        f"**Latency SLA Suggestion**: To maintain P99 TPOT < {sla_limit}ms, recommend keeping concurrency at **{int(safe_conc)}** or below."
                     )
+                    severities.append(SEVERITY_NEUTRAL)
             # Don't blindly say "excellent" - check if values are close to threshold
             else:
                 max_p99 = valid_tpot[tpot_p99_col].max()
                 if max_p99 > sla_limit * 0.8:
                     insights.append(
-                        f"📊 **P99 Latency Near Threshold**: Max P99 TPOT is {max_p99:.0f}ms, approaching {sla_limit}ms threshold. May breach with higher concurrency."
+                        f"**P99 Latency Near Threshold**: Max P99 TPOT is {max_p99:.0f}ms, approaching {sla_limit}ms threshold. May breach with higher concurrency."
                     )
+                    severities.append(SEVERITY_NEUTRAL)
                 elif max_p99 < sla_limit * 0.3:
                     insights.append(
-                        f"✅ **Excellent Tail Latency**: P99 TPOT max only {max_p99:.0f}ms, well below {sla_limit}ms threshold."
+                        f"**Excellent Tail Latency**: P99 TPOT max only {max_p99:.0f}ms, well below {sla_limit}ms threshold."
                     )
+                    severities.append(SEVERITY_POSITIVE)
                 else:
                     insights.append(
-                        f"📊 **P99 Latency Within Limits**: Max P99 TPOT is {max_p99:.0f}ms, within {sla_limit}ms threshold."
+                        f"**P99 Latency Within Limits**: Max P99 TPOT is {max_p99:.0f}ms, within {sla_limit}ms threshold."
                     )
+                    severities.append(SEVERITY_NEUTRAL)
 
     # --- 4. TTFT & Prefill Speed Analysis ---
     # TTFT alone is misleading - must be evaluated against input length via Prefill Speed
@@ -308,44 +376,53 @@ def _analyze_concurrency(df, model_id):
                     if prefill_speed > 0:
                         if prefill_speed < 50:
                             insights.append(
-                                f"⚠️ **Low Prefill Speed**: ~{prefill_speed:.0f} t/s (input ~{int(best_input)} tokens, TTFT {best_ttft:.2f}s). Prefill phase may be a latency bottleneck."
+                                f"**Low Prefill Speed**: ~{prefill_speed:.0f} t/s (input ~{int(best_input)} tokens, TTFT {best_ttft:.2f}s). Prefill phase may be a latency bottleneck."
                             )
+                            severities.append(SEVERITY_WARNING)
                         elif prefill_speed < 500:
                             insights.append(
-                                f"📊 **Average Prefill Speed**: ~{prefill_speed:.0f} t/s (input ~{int(best_input)} tokens, TTFT {best_ttft:.2f}s)."
+                                f"**Average Prefill Speed**: ~{prefill_speed:.0f} t/s (input ~{int(best_input)} tokens, TTFT {best_ttft:.2f}s)."
                             )
+                            severities.append(SEVERITY_NEUTRAL)
                         elif prefill_speed < 5000:
                             insights.append(
-                                f"✅ **Good Prefill Speed**: ~{prefill_speed:.0f} t/s (input ~{int(best_input)} tokens, TTFT {best_ttft:.2f}s)."
+                                f"**Good Prefill Speed**: ~{prefill_speed:.0f} t/s (input ~{int(best_input)} tokens, TTFT {best_ttft:.2f}s)."
                             )
+                            severities.append(SEVERITY_POSITIVE)
                         else:
                             insights.append(
-                                f"🚀 **Blazing Fast Prefill**: ~{prefill_speed:.0f} t/s (input ~{int(best_input)} tokens, TTFT {best_ttft:.3f}s)."
+                                f"**Blazing Fast Prefill**: ~{prefill_speed:.0f} t/s (input ~{int(best_input)} tokens, TTFT {best_ttft:.3f}s)."
                             )
+                            severities.append(SEVERITY_POSITIVE)
             else:
                 # No input token info available - fall back to raw TTFT reporting
                 if min_ttft > 3.0:
                     insights.append(
-                        f"⚠️ **High TTFT**: Best TTFT is {min_ttft:.2f}s (no input token data available to calculate Prefill Speed)."
+                        f"**High TTFT**: Best TTFT is {min_ttft:.2f}s (no input token data available to calculate Prefill Speed)."
                     )
+                    severities.append(SEVERITY_WARNING)
                 elif min_ttft <= 0.3:
-                    insights.append(f"✅ **Fast First Token**: Best TTFT only {min_ttft:.3f}s.")
+                    insights.append(f"**Fast First Token**: Best TTFT only {min_ttft:.3f}s.")
+                    severities.append(SEVERITY_POSITIVE)
                 else:
                     insights.append(
-                        f"📊 **TTFT**: Best TTFT is {min_ttft:.2f}s (needs to be evaluated in context of input length)."
+                        f"**TTFT**: Best TTFT is {min_ttft:.2f}s (needs to be evaluated in context of input length)."
                     )
+                    severities.append(SEVERITY_NEUTRAL)
 
             # 4b. TTFT stability across concurrency
             if n_levels >= 2 and min_ttft > 0:
                 if max_ttft > min_ttft * 3:
                     insights.append(
-                        f"📉 **Severe Queuing Effect**: TTFT surges to {max_ttft/min_ttft:.1f}× of baseline at high concurrency. System scheduling has a severe bottleneck."
+                        f"**Severe Queuing Effect**: TTFT surges to {max_ttft / min_ttft:.1f}× of baseline at high concurrency. System scheduling has a severe bottleneck."
                     )
+                    severities.append(SEVERITY_WARNING)
                 elif max_ttft > min_ttft * 1.5:
                     ttft_growth = (max_ttft - min_ttft) / min_ttft * 100
                     insights.append(
-                        f"📊 **TTFT Grows with Concurrency**: From {min_ttft:.2f}s to {max_ttft:.2f}s (↑{ttft_growth:.0f}%), mild queuing observed."
+                        f"**TTFT Grows with Concurrency**: From {min_ttft:.2f}s to {max_ttft:.2f}s (↑{ttft_growth:.0f}%), mild queuing observed."
                     )
+                    severities.append(SEVERITY_NEUTRAL)
 
     # --- 5. Success Rate ---
     sr_col = _get_col(df, "Success_Rate")
@@ -355,10 +432,11 @@ def _analyze_concurrency(df, model_id):
         if min_sr < 0.95:
             fail_conc = df[success_rates < 0.95]["concurrency"].min()
             insights.append(
-                f"🛑 **Stability Risk**: At {int(fail_conc)} concurrency, success rate dropped to {min_sr*100:.1f}%, some requests failed."
+                f"**Stability Risk**: At {int(fail_conc)} concurrency, success rate dropped to {min_sr * 100:.1f}%, some requests failed."
             )
+            severities.append(SEVERITY_CRITICAL)
 
-    return insights
+    return insights, severities
 
 
 # ============================================
@@ -369,12 +447,13 @@ def _analyze_concurrency(df, model_id):
 def _analyze_prefill(df, model_id):
     """Analyze prefill scaling and compute density."""
     insights: list[str] = []
+    severities: list[str] = []
 
     target_col = "input_tokens_target"
     speed_col = _get_col(df, "Max_Prefill_Speed")
 
     if target_col not in df.columns or not speed_col:
-        return insights
+        return insights, severities
 
     df = df.sort_values(target_col)
 
@@ -385,23 +464,27 @@ def _analyze_prefill(df, model_id):
 
     if max_speed > 0:
         insights.append(
-            f"🎯 **Peak Prefill Speed**: **{max_speed:.0f} tokens/s** (at input length {int(optimal_len)})."
+            f"**Peak Prefill Speed**: **{max_speed:.0f} tokens/s** (at input length {int(optimal_len)})."
         )
+        severities.append(SEVERITY_NEUTRAL)
 
         # Absolute level
         if max_speed < 500:
             insights.append(
-                f"⚠️ **Low Prefill Speed**: Peak only {max_speed:.0f} t/s, may impact TTFT in long-text scenarios."
+                f"**Low Prefill Speed**: Peak only {max_speed:.0f} t/s, may impact TTFT in long-text scenarios."
             )
+            severities.append(SEVERITY_WARNING)
         elif max_speed >= 5000:
             insights.append(
-                f"✅ **Blazing Fast Prefill**: Peak {max_speed:.0f} t/s, can efficiently process long input text."
+                f"**Blazing Fast Prefill**: Peak {max_speed:.0f} t/s, can efficiently process long input text."
             )
+            severities.append(SEVERITY_POSITIVE)
     else:
         insights.append(
-            "❌ **Prefill Speed Anomaly**: Prefill speed is 0 at all levels. Please check token counting and TTFT data."
+            "**Prefill Speed Anomaly**: Prefill speed is 0 at all levels. Please check token counting and TTFT data."
         )
-        return insights
+        severities.append(SEVERITY_CRITICAL)
+        return insights, severities
 
     # 2. Compute Density / Speed Scaling
     if len(df) >= 2:
@@ -414,20 +497,24 @@ def _analyze_prefill(df, model_id):
             ratio = last_speed / first_speed
             if ratio < 0.5:
                 insights.append(
-                    f"📉 **Severe Long-Text Compute Bottleneck**: Prefill speed dropped {(1 - ratio)*100:.0f}% from input {int(first_len)}→{int(last_len)}, quadratic attention complexity impact is significant."
+                    f"**Severe Long-Text Compute Bottleneck**: Prefill speed dropped {(1 - ratio) * 100:.0f}% from input {int(first_len)}→{int(last_len)}, quadratic attention complexity impact is significant."
                 )
+                severities.append(SEVERITY_WARNING)
             elif ratio < 0.7:
                 insights.append(
-                    f"⚠️ **Long-Text Compute Bottleneck**: Prefill speed dropped {(1 - ratio)*100:.0f}% at longest input, typically caused by quadratic attention complexity."
+                    f"**Long-Text Compute Bottleneck**: Prefill speed dropped {(1 - ratio) * 100:.0f}% at longest input, typically caused by quadratic attention complexity."
                 )
+                severities.append(SEVERITY_WARNING)
             elif ratio > 1.2:
                 insights.append(
-                    f"📈 **Compute-Dense Advantage**: As input grows, GPU utilization improves, Prefill efficiency up {(ratio - 1)*100:.0f}%."
+                    f"**Compute-Dense Advantage**: As input grows, GPU utilization improves, Prefill efficiency up {(ratio - 1) * 100:.0f}%."
                 )
+                severities.append(SEVERITY_POSITIVE)
             else:
                 insights.append(
-                    f"✅ **Stable Prefill Speed**: Speed variation stays within ±{abs(ratio - 1)*100:.0f}% across different input lengths."
+                    f"**Stable Prefill Speed**: Speed variation stays within ±{abs(ratio - 1) * 100:.0f}% across different input lengths."
                 )
+                severities.append(SEVERITY_POSITIVE)
 
     # 3. TTFT at various input lengths
     ttft_col = _get_col(df, "Best_TTFT")
@@ -436,12 +523,14 @@ def _analyze_prefill(df, model_id):
         max_ttft_len = df.loc[df[ttft_col].idxmax(), target_col]
         if max_ttft > 5.0:
             insights.append(
-                f"🐢 **Very High TTFT for Long Input**: At {int(max_ttft_len)} tokens input, TTFT reaches {max_ttft:.2f}s, severely impacting interaction experience."
+                f"**Very High TTFT for Long Input**: At {int(max_ttft_len)} tokens input, TTFT reaches {max_ttft:.2f}s, severely impacting interaction experience."
             )
+            severities.append(SEVERITY_WARNING)
         elif max_ttft > 2.0:
             insights.append(
-                f"⚠️ **High TTFT for Long Input**: At {int(max_ttft_len)} tokens input, TTFT is {max_ttft:.2f}s."
+                f"**High TTFT for Long Input**: At {int(max_ttft_len)} tokens input, TTFT is {max_ttft:.2f}s."
             )
+            severities.append(SEVERITY_WARNING)
 
     # 4. Success Rate
     success_col = _get_col(df, "Success_Rate")
@@ -450,8 +539,9 @@ def _analyze_prefill(df, model_id):
         if not failures.empty:
             fail_len = failures[target_col].min()
             insights.append(
-                f"🛑 **Stability Risk**: Request failures starting at input length **{int(fail_len)}**, possibly triggered VRAM OOM or context limit."
+                f"**Stability Risk**: Request failures starting at input length **{int(fail_len)}**, possibly triggered VRAM OOM or context limit."
             )
+            severities.append(SEVERITY_CRITICAL)
 
     return insights
 
@@ -464,10 +554,11 @@ def _analyze_prefill(df, model_id):
 def _analyze_long_context(df, model_id):
     """Analyze long context retention and decoding stability."""
     insights: list[str] = []
+    severities: list[str] = []
 
     target_col = "context_length_target"
     if target_col not in df.columns:
-        return insights
+        return insights, severities
 
     df = df.sort_values(target_col)
 
@@ -486,28 +577,33 @@ def _analyze_long_context(df, model_id):
 
                 if retention > 90:
                     insights.append(
-                        f"✅ **Highly Stable Long-Text Generation**: Context from {int(base_ctx)}→{int(final_ctx)} tokens, generation speed retains {retention:.1f}% of baseline."
+                        f"**Highly Stable Long-Text Generation**: Context from {int(base_ctx)}→{int(final_ctx)} tokens, generation speed retains {retention:.1f}% of baseline."
                     )
+                    severities.append(SEVERITY_POSITIVE)
                 elif retention > 70:
                     insights.append(
-                        f"📊 **Generally Stable Long-Text Generation**: Speed retains {retention:.1f}% of baseline, TPS from {base_tps:.1f}→{final_tps:.1f}, acceptable decline."
+                        f"**Generally Stable Long-Text Generation**: Speed retains {retention:.1f}% of baseline, TPS from {base_tps:.1f}→{final_tps:.1f}, acceptable decline."
                     )
+                    severities.append(SEVERITY_NEUTRAL)
                 elif retention > 50:
                     insights.append(
-                        f"⚠️ **KV Cache Pressure Increasing**: Long context reduces generation speed to {retention:.1f}% of baseline, memory bandwidth under pressure."
+                        f"**KV Cache Pressure Increasing**: Long context reduces generation speed to {retention:.1f}% of baseline, memory bandwidth under pressure."
                     )
+                    severities.append(SEVERITY_WARNING)
                 else:
                     insights.append(
-                        f"📉 **Severe KV Cache Bottleneck**: Long context reduces generation speed to only {retention:.1f}% of baseline, memory bandwidth may be insufficient."
+                        f"**Severe KV Cache Bottleneck**: Long context reduces generation speed to only {retention:.1f}% of baseline, memory bandwidth may be insufficient."
                     )
+                    severities.append(SEVERITY_WARNING)
 
         # Absolute TPS assessment
         if not valid_rows.empty:
             min_tps = valid_rows[tps_col].min()
             if min_tps < 10:
                 insights.append(
-                    f"⚠️ **Low Minimum TPS**: TPS drops to only {min_tps:.1f} t/s at longest context, user experience may suffer."
+                    f"**Low Minimum TPS**: TPS drops to only {min_tps:.1f} t/s at longest context, user experience may suffer."
                 )
+                severities.append(SEVERITY_WARNING)
 
     # 2. TTFT Scaling
     ttft_col = _get_col(df, "Best_TTFT")
@@ -519,32 +615,38 @@ def _analyze_long_context(df, model_id):
 
             if long_ttft > 10.0:
                 insights.append(
-                    f"❌ **Extremely High TTFT**: TTFT reaches {long_ttft:.2f}s at longest context, completely unsuitable for interactive applications."
+                    f"**Extremely High TTFT**: TTFT reaches {long_ttft:.2f}s at longest context, completely unsuitable for interactive applications."
                 )
+                severities.append(SEVERITY_CRITICAL)
             elif long_ttft > 5.0:
                 insights.append(
-                    f"🐢 **Very High TTFT**: TTFT reaches {long_ttft:.2f}s at longest context, impacting interaction experience. Consider checking attention operator optimization."
+                    f"**Very High TTFT**: TTFT reaches {long_ttft:.2f}s at longest context, impacting interaction experience. Consider checking attention operator optimization."
                 )
+                severities.append(SEVERITY_WARNING)
             elif long_ttft > 2.0:
                 insights.append(
-                    f"⚠️ **High TTFT**: TTFT is {long_ttft:.2f}s at longest context, noticeable waiting time."
+                    f"**High TTFT**: TTFT is {long_ttft:.2f}s at longest context, noticeable waiting time."
                 )
+                severities.append(SEVERITY_WARNING)
             elif long_ttft <= 1.0:
                 insights.append(
-                    f"✅ **Fast First Token at Long Context**: Even at longest context, TTFT is only {long_ttft:.3f}s."
+                    f"**Fast First Token at Long Context**: Even at longest context, TTFT is only {long_ttft:.3f}s."
                 )
+                severities.append(SEVERITY_POSITIVE)
 
             # TTFT growth pattern
             if len(valid_ttft) >= 2 and min_ttft > 0:
                 growth = long_ttft / min_ttft
                 if growth > 10:
                     insights.append(
-                        f"📉 **Dramatic TTFT Growth**: TTFT surges {growth:.1f}× with context growth, prefill phase is a clear bottleneck."
+                        f"**Dramatic TTFT Growth**: TTFT surges {growth:.1f}× with context growth, prefill phase is a clear bottleneck."
                     )
+                    severities.append(SEVERITY_WARNING)
                 elif growth > 3:
                     insights.append(
-                        f"📊 **Significant TTFT Growth**: TTFT increases {growth:.1f}× with context growth, monitor response times for long-text scenarios."
+                        f"**Significant TTFT Growth**: TTFT increases {growth:.1f}× with context growth, monitor response times for long-text scenarios."
                     )
+                    severities.append(SEVERITY_NEUTRAL)
 
     # 3. Prefill Speed Trend
     ps_col = _get_col(df, "Max_Prefill_Speed")
@@ -557,12 +659,14 @@ def _analyze_long_context(df, model_id):
                 ratio = last_ps / first_ps
                 if ratio > 1.2:
                     insights.append(
-                        f"📈 **Prefill Efficiency Improves**: Prefill speed actually increases {(ratio-1)*100:.0f}% at longer context, higher GPU compute utilization."
+                        f"**Prefill Efficiency Improves**: Prefill speed actually increases {(ratio - 1) * 100:.0f}% at longer context, higher GPU compute utilization."
                     )
+                    severities.append(SEVERITY_POSITIVE)
                 elif ratio < 0.5:
                     insights.append(
-                        f"⚠️ **Significant Prefill Speed Drop**: Prefill speed drops {(1-ratio)*100:.0f}% at longer context."
+                        f"**Significant Prefill Speed Drop**: Prefill speed drops {(1 - ratio) * 100:.0f}% at longer context."
                     )
+                    severities.append(SEVERITY_WARNING)
 
     # 4. Success Rate
     sr_col = _get_col(df, "Success_Rate")
@@ -571,8 +675,9 @@ def _analyze_long_context(df, model_id):
         if not failures.empty:
             fail_ctx = failures[target_col].min()
             insights.append(
-                f"🛑 **Context Limit**: Request failures at context length **{int(fail_ctx)}**, possibly triggered context window or VRAM limit."
+                f"**Context Limit**: Request failures at context length **{int(fail_ctx)}**, possibly triggered context window or VRAM limit."
             )
+            severities.append(SEVERITY_CRITICAL)
 
     return insights
 
@@ -585,18 +690,20 @@ def _analyze_long_context(df, model_id):
 def _analyze_matrix(df, model_id):
     """Analyze multi-dimensional configuration sweet spots."""
     insights: list[str] = []
+    severities: list[str] = []
 
     tp_col = _get_col(df, "Max_System_Output_Throughput")
     if not tp_col:
-        return insights
+        return insights, severities
 
     # Guard: check for meaningful throughput data
     valid_tp = df[df[tp_col] > 0]
     if valid_tp.empty:
         insights.append(
-            "❌ **Throughput Data Anomaly**: Throughput is 0 for all configurations, cannot perform optimization analysis."
+            "**Throughput Data Anomaly**: Throughput is 0 for all configurations, cannot perform optimization analysis."
         )
-        return insights
+        severities.append(SEVERITY_CRITICAL)
+        return insights, severities
 
     # 1. Global Optimum
     best_idx = valid_tp[tp_col].idxmax()
@@ -605,20 +712,23 @@ def _analyze_matrix(df, model_id):
     worst_row = valid_tp.loc[worst_idx]
 
     insights.append(
-        f"🏆 **Global Best Configuration**: **{int(best_row['concurrency'])} concurrency + {int(best_row['context_length_target'])} context**, throughput reaches {best_row[tp_col]:.1f} t/s."
+        f"**Global Best Configuration**: **{int(best_row['concurrency'])} concurrency + {int(best_row['context_length_target'])} context**, throughput reaches {best_row[tp_col]:.1f} t/s."
     )
+    severities.append(SEVERITY_POSITIVE)
 
     # Performance gap
     if worst_row[tp_col] > 0:
         gap = best_row[tp_col] / worst_row[tp_col]
         if gap > 3:
             insights.append(
-                f"⚠️ **Configuration Sensitive**: Best vs worst configuration throughput gap is {gap:.1f}×, wrong configuration is costly."
+                f"**Configuration Sensitive**: Best vs worst configuration throughput gap is {gap:.1f}×, wrong configuration is costly."
             )
+            severities.append(SEVERITY_WARNING)
         elif gap > 1.5:
             insights.append(
-                f"📊 **Configuration Matters**: Best vs worst throughput gap is {gap:.1f}×, proper tuning has noticeable benefits."
+                f"**Configuration Matters**: Best vs worst throughput gap is {gap:.1f}×, proper tuning has noticeable benefits."
             )
+            severities.append(SEVERITY_NEUTRAL)
 
     # 2. Concurrency Resilience
     try:
@@ -631,20 +741,23 @@ def _analyze_matrix(df, model_id):
 
             if cv < 0.15:
                 insights.append(
-                    f"✅ **Load Balanced**: Model performs consistently across different concurrency and context combinations (CV={cv*100:.0f}%)."
+                    f"**Load Balanced**: Model performs consistently across different concurrency and context combinations (CV={cv * 100:.0f}%)."
                 )
+                severities.append(SEVERITY_POSITIVE)
             elif cv < 0.3:
                 insights.append(
-                    f"📊 **Some Variation**: Throughput varies somewhat across configurations (CV={cv*100:.0f}%)."
+                    f"**Some Variation**: Throughput varies somewhat across configurations (CV={cv * 100:.0f}%)."
                 )
+                severities.append(SEVERITY_NEUTRAL)
             else:
                 insights.append(
-                    f"🎢 **Load Sensitive**: Model performance is very sensitive to configuration (CV={cv*100:.0f}%), consider fine-grained auto-scaling strategies."
+                    f"**Load Sensitive**: Model performance is very sensitive to configuration (CV={cv * 100:.0f}%), consider fine-grained auto-scaling strategies."
                 )
+                severities.append(SEVERITY_WARNING)
     except Exception:
         pass
 
-    return insights
+    return insights, severities
 
 
 # ============================================
@@ -655,10 +768,11 @@ def _analyze_matrix(df, model_id):
 def _analyze_segmented(df, model_id):
     """Analyze prefix caching effectiveness."""
     insights: list[str] = []
+    severities: list[str] = []
 
     target_col = "context_length_target"
     if target_col not in df.columns:
-        return insights
+        return insights, severities
 
     df = df.sort_values(target_col)
 
@@ -682,16 +796,19 @@ def _analyze_segmented(df, model_id):
                 if save > 0.05:
                     pct = (save / t_uncached) * 100
                     insights.append(
-                        f"⚡ **Cache Hit Acceleration**: At longest context ({int(last[target_col])}), TTFT reduced by {save:.3f}s from caching (improvement {pct:.1f}%)."
+                        f"**Cache Hit Acceleration**: At longest context ({int(last[target_col])}), TTFT reduced by {save:.3f}s from caching (improvement {pct:.1f}%)."
                     )
+                    severities.append(SEVERITY_POSITIVE)
                 elif save > 0:
                     insights.append(
-                        f"📊 **Weak Cache Effect**: At longest context, TTFT reduced by only {save:.3f}s from caching."
+                        f"**Weak Cache Effect**: At longest context, TTFT reduced by only {save:.3f}s from caching."
                     )
+                    severities.append(SEVERITY_NEUTRAL)
                 elif save < -0.05:
                     insights.append(
-                        f"⚠️ **Cache Negative Impact**: At longest context, TTFT actually increased by {abs(save):.3f}s after cache hit?!"
+                        f"**Cache Negative Impact**: At longest context, TTFT actually increased by {abs(save):.3f}s after cache hit?!"
                     )
+                    severities.append(SEVERITY_WARNING)
 
         # Check Prefill Throughput
         pf_col = _get_col(df, "Max_Prefill_Speed")
@@ -699,18 +816,21 @@ def _analyze_segmented(df, model_id):
             speedup = last[pf_col] / first[pf_col]
             if speedup > 2.0:
                 insights.append(
-                    f"🚀 **Throughput Multiplied**: Caching mechanism boosts effective Prefill speed by {speedup:.1f}× (from {first[pf_col]:.0f} to {last[pf_col]:.0f} t/s)."
+                    f"**Throughput Multiplied**: Caching mechanism boosts effective Prefill speed by {speedup:.1f}× (from {first[pf_col]:.0f} to {last[pf_col]:.0f} t/s)."
                 )
+                severities.append(SEVERITY_POSITIVE)
             elif speedup > 1.2:
                 insights.append(
-                    f"📈 **Throughput Improved**: Caching boosts effective Prefill speed by {(speedup-1)*100:.0f}%."
+                    f"**Throughput Improved**: Caching boosts effective Prefill speed by {(speedup - 1) * 100:.0f}%."
                 )
+                severities.append(SEVERITY_POSITIVE)
             elif speedup < 0.8:
                 insights.append(
-                    f"⚠️ **Prefill Speed Drop**: Evaluated prefix caching did not improve speed; dropped {(1-speedup)*100:.0f}%."
+                    f"**Prefill Speed Drop**: Evaluated prefix caching did not improve speed; dropped {(1 - speedup) * 100:.0f}%."
                 )
+                severities.append(SEVERITY_WARNING)
 
-    return insights
+    return insights, severities
 
 
 # ============================================
@@ -718,7 +838,7 @@ def _analyze_segmented(df, model_id):
 # ============================================
 
 
-def get_performance_grade(insights):
+def get_performance_grade(insights, severities=None):
     """
     Calculate overall performance grade based on insight distribution.
 
@@ -736,20 +856,27 @@ def get_performance_grade(insights):
         return "N/A", "#6c757d", "Insufficient data for grading"
 
     # Categorize each insight
-    positive_emojis = ["✅", "🚀", "🏆", "📈", "⚡"]
-    neutral_emojis = ["📊", "⚖️", "🎯"]
-    warning_emojis = ["⚠️", "🐢", "📉", "🎢"]
-    critical_emojis = ["❌", "🛑"]
+    if severities is not None:
+        positive_count = severities.count("positive")
+        neutral_count = severities.count("neutral")
+        warning_count = severities.count("warning")
+        critical_count = severities.count("critical")
+    else:
+        # backward-compat: fall back to emoji detection
+        positive_emojis = ["✅", "🚀", "🏆", "📈", "⚡"]
+        neutral_emojis = ["📊", "⚖️", "🎯"]
+        warning_emojis = ["⚠️", "🐢", "📉", "🎢"]
+        critical_emojis = ["❌", "🛑"]
 
-    positive_count = sum(1 for i in insights if any(e in i for e in positive_emojis))
-    neutral_count = sum(
-        1
-        for i in insights
-        if any(e in i for e in neutral_emojis)
-        and not any(e in i for e in positive_emojis + warning_emojis + critical_emojis)
-    )
-    warning_count = sum(1 for i in insights if any(e in i for e in warning_emojis))
-    critical_count = sum(1 for i in insights if any(e in i for e in critical_emojis))
+        positive_count = sum(1 for i in insights if any(e in i for e in positive_emojis))
+        neutral_count = sum(
+            1
+            for i in insights
+            if any(e in i for e in neutral_emojis)
+            and not any(e in i for e in positive_emojis + warning_emojis + critical_emojis)
+        )
+        warning_count = sum(1 for i in insights if any(e in i for e in warning_emojis))
+        critical_count = sum(1 for i in insights if any(e in i for e in critical_emojis))
 
     total_scored = positive_count + neutral_count + warning_count + critical_count
     if total_scored == 0:

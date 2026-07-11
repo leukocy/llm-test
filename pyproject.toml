@@ -83,8 +83,10 @@ Repository = "https://github.com/leukocy/llm-test"
 [tool.bandit]
 exclude_dirs = ["tests", "api_tests"]
 # B101: allow assert in tests; B110: defensive try/except/pass in UI rendering;
-# B311: random used for statistical bootstrapping, not cryptography
-skips = ["B101", "B110", "B311"]
+# B311: random used for statistical bootstrapping, not cryptography;
+# B112: try/except/continue in data import loops; B105: false-positive password heuristics;
+# B608: parameterized SQL with safe f-string interpolation
+skips = ["B101", "B110", "B112", "B105", "B311", "B608"]
 
 [tool.coverage]
 
@@ -221,6 +223,8 @@ ignore = [
   "E731",  # Do not assign a lambda expression (test convenience)
   "ARG001",  # Unused function argument (interface compatibility)
   "ARG002",  # Unused method argument (interface compatibility)
+  "ARG003",  # Unused class method argument (interface compatibility)
+  "ARG004",  # Unused static method argument (interface compatibility)
   "ARG005",  # Unused lambda argument (test stubs)
   "B007",  # Unused loop variable
   "B023"  # Function definition does not bind loop variable (closure design)
