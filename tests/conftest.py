@@ -33,12 +33,12 @@ class DictLikeSessionState:
         self._data = {}
 
     def __getattr__(self, name):
-        if name.startswith('_'):
+        if name.startswith("_"):
             return object.__getattribute__(self, name)
         return self._data.get(name)
 
     def __setattr__(self, name, value):
-        if name.startswith('_'):
+        if name.startswith("_"):
             object.__setattr__(self, name, value)
         else:
             self._data[name] = value
@@ -74,9 +74,9 @@ def setup_streamlit_mock():
     st_mock.runtime = runtime_mock
 
     # Register到 sys.modules
-    sys.modules['streamlit'] = st_mock
-    sys.modules['streamlit.runtime'] = runtime_mock
-    sys.modules['streamlit.runtime.scriptrunner'] = runtime_mock.scriptrunner
+    sys.modules["streamlit"] = st_mock
+    sys.modules["streamlit.runtime"] = runtime_mock
+    sys.modules["streamlit.runtime.scriptrunner"] = runtime_mock.scriptrunner
 
     return st_mock
 
@@ -111,15 +111,8 @@ def sample_text_pairs():
 def mock_api_response():
     """模拟 API 响应"""
     return {
-        "choices": [{
-            "delta": {"content": "Hello"},
-            "finish_reason": None
-        }],
-        "usage": {
-            "prompt_tokens": 10,
-            "completion_tokens": 5,
-            "total_tokens": 15
-        }
+        "choices": [{"delta": {"content": "Hello"}, "finish_reason": None}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
     }
 
 

@@ -40,7 +40,9 @@ NON_PERFORMANCE_KEYWORDS = (
 
 def success_mask_from_error(error_values: pd.Series | Iterable[object]) -> pd.Series:
     """Return True for rows whose error value represents a successful request."""
-    series = error_values if isinstance(error_values, pd.Series) else pd.Series(error_values)
+    series = (
+        error_values if isinstance(error_values, pd.Series) else pd.Series(error_values)
+    )
     text_values = series.astype("string").str.strip().str.lower()
     return series.isna() | text_values.isin(_EMPTY_ERROR_STRINGS)
 
@@ -50,7 +52,9 @@ def count_successful_requests(error_values: pd.Series | Iterable[object]) -> int
     return int(success_mask_from_error(error_values).sum())
 
 
-def calculate_success_rate(error_values: pd.Series | Iterable[object], *, percent: bool = False) -> float:
+def calculate_success_rate(
+    error_values: pd.Series | Iterable[object], *, percent: bool = False
+) -> float:
     """Calculate request success rate from an error column."""
     mask = success_mask_from_error(error_values)
     if mask.empty:
@@ -77,9 +81,15 @@ def is_performance_metric_column(column: object) -> bool:
     return any(keyword.replace("_", " ") in name for keyword in PERFORMANCE_KEYWORDS)
 
 
-def _resolve_columns(df: pd.DataFrame, columns: Iterable[object] | None) -> list[object]:
+def _resolve_columns(
+    df: pd.DataFrame, columns: Iterable[object] | None
+) -> list[object]:
     candidates = df.columns if columns is None else columns
-    return [column for column in candidates if column in df.columns and is_performance_metric_column(column)]
+    return [
+        column
+        for column in candidates
+        if column in df.columns and is_performance_metric_column(column)
+    ]
 
 
 def valid_performance_series(series: pd.Series) -> pd.Series:
@@ -102,20 +112,20 @@ def sanitize_performance_metrics(
 
 
 def positive_mean(series: pd.Series) -> float:
-    return valid_performance_series(series).mean()
+    return float(valid_performance_series(series).mean())
 
 
 def positive_min(series: pd.Series) -> float:
-    return valid_performance_series(series).min()
+    return float(valid_performance_series(series).min())
 
 
 def positive_max(series: pd.Series) -> float:
-    return valid_performance_series(series).max()
+    return float(valid_performance_series(series).max())
 
 
 def positive_quantile(series: pd.Series, q: float) -> float:
     valid = valid_performance_series(series).dropna()
-    return valid.quantile(q) if not valid.empty else np.nan
+    return float(valid.quantile(q)) if not valid.empty else float(np.nan)
 
 
 def summarize_metric_extreme(
@@ -166,7 +176,9 @@ def summarize_metric_row(
     if metric_col not in df.columns or missing:
         return groups.assign(**dict.fromkeys(output_cols.values(), np.nan))
 
-    keep_cols = list(dict.fromkeys(group_cols + [metric_col] + list(output_cols.keys())))
+    keep_cols = list(
+        dict.fromkeys(group_cols + [metric_col] + list(output_cols.keys()))
+    )
     work = df[keep_cols].copy()
     work[metric_col] = valid_performance_series(work[metric_col])
     work = work.dropna(subset=[metric_col])
@@ -176,11 +188,15 @@ def summarize_metric_row(
 
     ascending = how == "min"
     selected = (
-        work.sort_values(group_cols + [metric_col], ascending=[True] * len(group_cols) + [ascending])
+        work.sort_values(
+            group_cols + [metric_col], ascending=[True] * len(group_cols) + [ascending]
+        )
         .groupby(group_cols, as_index=False, dropna=False)
         .first()
     )
-    selected = selected[group_cols + list(output_cols.keys())].rename(columns=output_cols)
+    selected = selected[group_cols + list(output_cols.keys())].rename(
+        columns=output_cols
+    )
     return groups.merge(selected, on=group_cols, how="left")
 
 
@@ -193,7 +209,9 @@ def fill_non_performance_na(df: pd.DataFrame, value: object = 0) -> pd.DataFrame
     return result
 
 
-def safe_positive_max(values: pd.Series, multiplier: float = 1.0, fallback: float = 1.0) -> float:
+def safe_positive_max(
+    values: pd.Series, multiplier: float = 1.0, fallback: float = 1.0
+) -> float:
     """Return a positive max for UI progress bounds."""
     max_value = valid_performance_series(values).max()
     if pd.isna(max_value) or max_value <= 0:

@@ -9,8 +9,8 @@ from core.test_attribution import (
     derive_status_detail,
 )
 
-
 # ---------- derive_bottleneck ----------
+
 
 def test_bottleneck_data_quality_priority():
     insights = ["❌ **Throughput Anomaly**: System throughput is 0."]
@@ -34,7 +34,9 @@ def test_bottleneck_latency():
 
 def test_bottleneck_memory_bandwidth_from_util():
     insights = ["🚀 **Good**: steady."]
-    assert derive_bottleneck(insights, bandwidth_utilization_pct=88) == "memory_bandwidth"
+    assert (
+        derive_bottleneck(insights, bandwidth_utilization_pct=88) == "memory_bandwidth"
+    )
 
 
 def test_bottleneck_none_when_positive():
@@ -48,12 +50,16 @@ def test_bottleneck_empty():
 
 # ---------- derive_status_detail ----------
 
+
 def test_status_abnormal_on_failure():
     assert derive_status_detail(False, []) == TestStatusDetail.ABNORMAL
 
 
 def test_status_abnormal_on_critical():
-    assert derive_status_detail(True, ["❌ **High Latency**: bad"]) == TestStatusDetail.ABNORMAL
+    assert (
+        derive_status_detail(True, ["❌ **High Latency**: bad"])
+        == TestStatusDetail.ABNORMAL
+    )
 
 
 def test_status_needs_retest_on_borderline_success_rate():
@@ -70,6 +76,7 @@ def test_status_passed_when_clean():
 
 
 # ---------- derive_error_attribution ----------
+
 
 def test_error_attribution_counts_and_classifies():
     results = [

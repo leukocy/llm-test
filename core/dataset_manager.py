@@ -34,9 +34,11 @@ from typing import Any
 # Config
 # ============================================
 
+
 @dataclass
 class DatasetConfig:
     """DatasetConfigure"""
+
     name: str
     hf_path: str | None = None  # HuggingFace Dataset路径
     url: str | None = None  # 直接under载 URL
@@ -54,142 +56,127 @@ DATASET_CONFIGS = {
         hf_path="openai/gsm8k",
         local_path="datasets/gsm8k",
         split_mapping={"test": "test", "train": "train"},
-        description="Grade School Math 8K - 小学数学Apply题"
+        description="Grade School Math 8K - 小学数学Apply题",
     ),
-
     # 多任务语言理解
     "mmlu": DatasetConfig(
         name="mmlu",
         hf_path="cais/mmlu",
         local_path="datasets/mmlu",
         split_mapping={"test": "test", "dev": "validation", "train": "dev"},
-        description="Massive Multitask Language Understanding"
+        description="Massive Multitask Language Understanding",
     ),
-
     # 高级数学
     "math500": DatasetConfig(
         name="math500",
         hf_path="hendrycks/competition_math",
         local_path="datasets/math500",
         split_mapping={"test": "test"},
-        description="Competition Math - 竞赛数学"
+        description="Competition Math - 竞赛数学",
     ),
-
     # 代码Generate
     "humaneval": DatasetConfig(
         name="humaneval",
         hf_path="openai/openai_humaneval",
         local_path="datasets/humaneval",
         split_mapping={"test": "test"},
-        description="HumanEval - Python 代码Generate"
+        description="HumanEval - Python 代码Generate",
     ),
-
     # 研究生问答
     "gpqa": DatasetConfig(
         name="gpqa",
         hf_path="Idavidrein/gpqa",
         local_path="datasets/gpqa",
         split_mapping={"test": "train"},  # GPQA 只has train split
-        description="Graduate-Level Google-Proof Q&A"
+        description="Graduate-Level Google-Proof Q&A",
     ),
-
     # 科学问答
     "arc": DatasetConfig(
         name="arc",
         hf_path="allenai/ai2_arc",
         local_path="datasets/arc",
         split_mapping={"test": "test", "train": "train"},
-        description="AI2 Reasoning Challenge"
+        description="AI2 Reasoning Challenge",
     ),
-
     # 真实性问答
     "truthfulqa": DatasetConfig(
         name="truthfulqa",
         hf_path="truthfulqa/truthful_qa",
         local_path="datasets/truthfulqa",
         split_mapping={"test": "validation"},
-        description="TruthfulQA - 真实性问答"
+        description="TruthfulQA - 真实性问答",
     ),
-
     # 常识推理
     "hellaswag": DatasetConfig(
         name="hellaswag",
         hf_path="Rowan/hellaswag",
         local_path="datasets/hellaswag",
         split_mapping={"test": "validation", "train": "train"},
-        description="HellaSwag - 常识推理"
+        description="HellaSwag - 常识推理",
     ),
-
     # Winogrande
     "winogrande": DatasetConfig(
         name="winogrande",
         hf_path="allenai/winogrande",
         local_path="datasets/winogrande",
         split_mapping={"test": "validation", "train": "train"},
-        description="Winogrande - 代词消解"
+        description="Winogrande - 代词消解",
     ),
-
     # Python 代码
     "mbpp": DatasetConfig(
         name="mbpp",
         hf_path="google-research-datasets/mbpp",
         local_path="datasets/mbpp",
         split_mapping={"test": "test", "train": "train"},
-        description="Mostly Basic Python Problems"
+        description="Mostly Basic Python Problems",
     ),
-
     # AIME 2025 竞赛数学
     "aime2025": DatasetConfig(
         name="aime2025",
         hf_path="opencompass/AIME2025",
         local_path="datasets/aime2025",
         split_mapping={"test": "train"},
-        description="AIME 2025 - Competition math"
+        description="AIME 2025 - Competition math",
     ),
-
     # LongBench 长上下文理解
     "longbench": DatasetConfig(
         name="longbench",
         hf_path="yuchenlin/LongBench",
         local_path="datasets/longbench",
         split_mapping={"test": "test"},
-        description="LongBench - Long context understanding"
+        description="LongBench - Long context understanding",
     ),
-
     # Arena Hard 高难度提示评估
     "arena_hard": DatasetConfig(
         name="arena_hard",
         hf_path="lmarena-ai/arena-hard-auto",
         local_path="datasets/arena_hard",
         split_mapping={"test": "train"},
-        description="Arena Hard - Hard prompts evaluation"
+        description="Arena Hard - Hard prompts evaluation",
     ),
-
     # Global PIQA 多语言物理常识推理
     "global_piqa": DatasetConfig(
         name="global_piqa",
         hf_path="mrlbenchmarks/global-piqa-nonparallel",
         local_path="datasets/global_piqa",
         split_mapping={"test": "test"},
-        description="Global PIQA - Physical reasoning"
+        description="Global PIQA - Physical reasoning",
     ),
-
     # SWE-Bench Lite 软件工程
     "swebench_lite": DatasetConfig(
         name="swebench_lite",
         hf_path="swe-bench/swe-bench-lite",
         local_path="datasets/swebench_lite",
         split_mapping={"test": "test"},
-        description="SWE-Bench Lite - Software engineering"
+        description="SWE-Bench Lite - Software engineering",
     ),
-
     # C-Eval 中文知识评估
     "ceval": DatasetConfig(
         name="ceval",
         hf_path="ceval/CEval",
         local_path="datasets/ceval",
         split_mapping={"test": "test", "dev": "dev"},
-        description="C-Eval - Chinese knowledge evaluation"
+        description="C-Eval - Chinese knowledge evaluation",
     ),
 }
 
@@ -197,6 +184,7 @@ DATASET_CONFIGS = {
 # ============================================
 # Data集管理器
 # ============================================
+
 
 class DatasetManager:
     """
@@ -209,7 +197,7 @@ class DatasetManager:
         self,
         cache_dir: str = "datasets",
         auto_download: bool = True,
-        log_callback: Callable[[str], None] | None = None
+        log_callback: Callable[[str], None] | None = None,
     ):
         """
         InitializeDataset Manager
@@ -269,7 +257,7 @@ class DatasetManager:
         self,
         name: str,
         force: bool = False,
-        progress_callback: Callable[[float, str], None] | None = None
+        progress_callback: Callable[[float, str], None] | None = None,
     ) -> bool:
         """
         under载Dataset
@@ -319,11 +307,11 @@ class DatasetManager:
         self,
         name: str,
         config: DatasetConfig,
-        progress_callback: Callable[[float, str], None] | None = None
+        progress_callback: Callable[[float, str], None] | None = None,
     ) -> bool:
         """从 HuggingFace under载Dataset"""
         try:
-            from datasets import load_dataset
+            from datasets import load_dataset  # type: ignore[attr-defined]
         except ImportError:
             self._log("请安装 datasets: pip install datasets")
             return False
@@ -333,7 +321,9 @@ class DatasetManager:
 
         try:
             if progress_callback:
-                progress_callback(0.1, f"currently从 HuggingFace Load {config.hf_path}...")
+                progress_callback(
+                    0.1, f"currently从 HuggingFace Load {config.hf_path}..."
+                )
 
             # LoadDataset
             # Process特殊情况
@@ -345,12 +335,12 @@ class DatasetManager:
                 dataset = load_dataset(config.hf_path, "winogrande_xl")
             elif name == "truthfulqa":
                 dataset = load_dataset(config.hf_path, "generation")
-            elif name == "aime2025":
-                dataset = load_dataset(config.hf_path, split="train")
-            elif name == "arena_hard":
+            elif name == "aime2025" or name == "arena_hard":
                 dataset = load_dataset(config.hf_path, split="train")
             elif name == "swebench_lite":
-                dataset = load_dataset(config.hf_path, split="test", trust_remote_code=True)
+                dataset = load_dataset(
+                    config.hf_path, split="test", trust_remote_code=True
+                )
             elif name == "ceval":
                 dataset = load_dataset(config.hf_path, "all")
             elif name == "longbench":
@@ -375,13 +365,15 @@ class DatasetManager:
                 # Convertis JSON
                 samples = [dict(row) for row in split_data]
 
-                with open(output_file, 'w', encoding='utf-8') as f:
+                with open(output_file, "w", encoding="utf-8") as f:
                     json.dump(samples, f, ensure_ascii=False, indent=2)
 
                 splits_saved += 1
                 if progress_callback:
                     progress = 0.5 + 0.5 * (splits_saved / total_splits)
-                    progress_callback(progress, f"Saved {split_name} ({len(samples)} 样本)")
+                    progress_callback(
+                        progress, f"Saved {split_name} ({len(samples)} 样本)"
+                    )
 
                 self._log(f"Saved {split_name}: {len(samples)} 样本")
 
@@ -391,9 +383,9 @@ class DatasetManager:
                 "hf_path": config.hf_path,
                 "downloaded_at": datetime.now().isoformat(),
                 "splits": list(dataset.keys()),
-                "total_samples": sum(len(dataset[s]) for s in dataset)
+                "total_samples": sum(len(dataset[s]) for s in dataset),
             }
-            with open(local_path / "metadata.json", 'w', encoding='utf-8') as f:
+            with open(local_path / "metadata.json", "w", encoding="utf-8") as f:
                 json.dump(meta, f, ensure_ascii=False, indent=2)
 
             if progress_callback:
@@ -410,23 +402,35 @@ class DatasetManager:
         self,
         config: DatasetConfig,
         local_path: Path,
-        progress_callback: Callable[[float, str], None] | None = None
+        progress_callback: Callable[[float, str], None] | None = None,
     ) -> bool:
         """Download LongBench dataset with all sub-tasks."""
         try:
-            from datasets import load_dataset
+            from datasets import load_dataset  # type: ignore[attr-defined]
         except ImportError:
             self._log("请安装 datasets: pip install datasets")
             return False
 
         try:
             sub_tasks = [
-                'narrativeqa', 'qasper', 'multifieldqa_en', 'multifieldqa_zh',
-                'hotpotqa', '2wikimqa', 'musique',
-                'gov_report', 'qmsum', 'multi_news',
-                'trec', 'triviaqa', 'samsum',
-                'lcc', 'repobench-p',
-                'passage_count', 'passage_retrieval_en', 'passage_retrieval_zh'
+                "narrativeqa",
+                "qasper",
+                "multifieldqa_en",
+                "multifieldqa_zh",
+                "hotpotqa",
+                "2wikimqa",
+                "musique",
+                "gov_report",
+                "qmsum",
+                "multi_news",
+                "trec",
+                "triviaqa",
+                "samsum",
+                "lcc",
+                "repobench-p",
+                "passage_count",
+                "passage_retrieval_en",
+                "passage_retrieval_zh",
             ]
 
             all_samples = []
@@ -434,13 +438,15 @@ class DatasetManager:
 
             for i, task_name in enumerate(sub_tasks):
                 if progress_callback:
-                    progress_callback(i / total_tasks, f"Loading LongBench sub-task: {task_name}...")
+                    progress_callback(
+                        i / total_tasks, f"Loading LongBench sub-task: {task_name}..."
+                    )
 
                 try:
                     ds = load_dataset(config.hf_path, task_name, split="test")
                     task_samples = [dict(row) for row in ds]
                     for s in task_samples:
-                        s['_task'] = task_name
+                        s["_task"] = task_name
                     all_samples.extend(task_samples)
                     self._log(f"Loaded {task_name}: {len(task_samples)} samples")
                 except Exception as e:
@@ -452,7 +458,7 @@ class DatasetManager:
 
             # Save merged file
             output_file = local_path / "test.json"
-            with open(output_file, 'w', encoding='utf-8') as f:
+            with open(output_file, "w", encoding="utf-8") as f:
                 json.dump(all_samples, f, ensure_ascii=False, indent=2)
 
             # Save metadata
@@ -463,7 +469,7 @@ class DatasetManager:
                 "total_samples": len(all_samples),
                 "sub_tasks": sub_tasks,
             }
-            with open(local_path / "metadata.json", 'w', encoding='utf-8') as f:
+            with open(local_path / "metadata.json", "w", encoding="utf-8") as f:
                 json.dump(meta, f, ensure_ascii=False, indent=2)
 
             if progress_callback:
@@ -480,7 +486,7 @@ class DatasetManager:
         self,
         name: str,
         config: DatasetConfig,
-        progress_callback: Callable[[float, str], None] | None = None
+        progress_callback: Callable[[float, str], None] | None = None,
     ) -> bool:
         """从 URL under载Dataset"""
         local_path = self.get_local_path(name)
@@ -488,6 +494,9 @@ class DatasetManager:
 
         try:
             url = config.url
+            if not url:
+                self._log(f"Dataset {name} 未配置 URL")
+                return False
             filename = url.split("/")[-1]
             download_path = local_path / filename
 
@@ -502,14 +511,14 @@ class DatasetManager:
 
             # 解压
             if filename.endswith(".zip"):
-                with zipfile.ZipFile(download_path, 'r') as zf:
+                with zipfile.ZipFile(download_path, "r") as zf:
                     zf.extractall(local_path)
                 download_path.unlink()
             elif filename.endswith(".gz"):
-                with gzip.open(download_path, 'rt', encoding='utf-8') as f:
+                with gzip.open(download_path, "rt", encoding="utf-8") as f:
                     content = f.read()
                 output_file = local_path / filename.replace(".gz", "")
-                with open(output_file, 'w', encoding='utf-8') as f:
+                with open(output_file, "w", encoding="utf-8") as f:
                     f.write(content)
                 download_path.unlink()
 
@@ -528,7 +537,7 @@ class DatasetManager:
         split: str = "test",
         max_samples: int | None = None,
         shuffle: bool = False,
-        seed: int = 42
+        seed: int = 42,
     ) -> list[dict[str, Any]]:
         """
         LoadDataset
@@ -575,12 +584,14 @@ class DatasetManager:
             if filepath.exists():
                 try:
                     if filepath.suffix == ".jsonl":
-                        with open(filepath, encoding='utf-8') as f:
+                        with open(filepath, encoding="utf-8") as f:
                             samples = [json.loads(line) for line in f if line.strip()]
                     else:
-                        with open(filepath, encoding='utf-8') as f:
+                        with open(filepath, encoding="utf-8") as f:
                             data = json.load(f)
-                            samples = data if isinstance(data, list) else data.get("data", [])
+                            samples = (
+                                data if isinstance(data, list) else data.get("data", [])
+                            )
 
                     self._log(f"从 {filepath.name} Load {len(samples)}  samples")
                     break
@@ -594,6 +605,7 @@ class DatasetManager:
         # 打乱
         if shuffle:
             import random
+
             random.seed(seed)
             random.shuffle(samples)
 
@@ -619,7 +631,7 @@ class DatasetManager:
         # 读取元信息
         meta_file = local_path / "metadata.json"
         if meta_file.exists():
-            with open(meta_file, encoding='utf-8') as f:
+            with open(meta_file, encoding="utf-8") as f:
                 info["metadata"] = json.load(f)
 
         # Statistics文件
@@ -657,10 +669,7 @@ def get_manager(cache_dir: str = "datasets", **kwargs) -> DatasetManager:
 
 
 def get_dataset(
-    name: str,
-    split: str = "test",
-    max_samples: int | None = None,
-    **kwargs
+    name: str, split: str = "test", max_samples: int | None = None, **kwargs
 ) -> list[dict[str, Any]]:
     """
     快速GetDataset
@@ -696,10 +705,12 @@ def list_available_datasets() -> list[dict[str, Any]]:
     result = []
     for name in manager.list_datasets():
         info = manager.get_info(name)
-        result.append({
-            "name": name,
-            "available": info["available"],
-            "description": info["description"],
-            "size_mb": info.get("total_size_mb", 0)
-        })
+        result.append(
+            {
+                "name": name,
+                "available": info["available"],
+                "description": info["description"],
+                "size_mb": info.get("total_size_mb", 0),
+            }
+        )
     return result

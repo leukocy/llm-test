@@ -14,7 +14,7 @@ from .base_evaluator import BaseEvaluator, extract_numeric_answer
 class GSM8KEvaluator(BaseEvaluator):
     """
     GSM8K Dataset Evaluator.
-    
+
     Data Format:
     {
         "question": "Janet has 10 apples. She gives 3 to her sister...",
@@ -29,14 +29,14 @@ class GSM8KEvaluator(BaseEvaluator):
         num_shots: int = 4,
         max_samples: int | None = None,
         seed: int = 42,
-        use_llm_judge: bool = False
+        use_llm_judge: bool = False,
     ):
         super().__init__(
             dataset_name=dataset_name,
             dataset_path=dataset_path,
             num_shots=num_shots,
             max_samples=max_samples,
-            seed=seed
+            seed=seed,
         )
         self.use_llm_judge = use_llm_judge
 
@@ -44,11 +44,12 @@ class GSM8KEvaluator(BaseEvaluator):
         """Load GSM8K dataset using DatasetManager."""
         try:
             from core.dataset_manager import get_dataset
+
             samples = get_dataset(
                 name=self.dataset_name,
                 split="test",
                 max_samples=self.max_samples,
-                seed=self.seed
+                seed=self.seed,
             )
             self.samples = samples
             return samples
@@ -56,34 +57,36 @@ class GSM8KEvaluator(BaseEvaluator):
             print(f"[WARNING] GSM8K load failed: {e}")
             return []
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """Format GSM8K sample into a prompt."""
-        question = sample.get('question', '')
+        question = sample.get("question", "")
         prompt = f"Question: {question}\nAnswer:"
-        
+
         if include_answer:
-            answer = sample.get('answer', '')
+            answer = sample.get("answer", "")
             prompt += f" {answer}"
-            
+
         return prompt
 
     def build_full_prompt(self, sample: dict[str, Any]) -> str:
         """Build full GSM8K prompt with CoT (Chain of Thought) instruction."""
         instruction = "Solve the following math word problem step by step. End your response with '#### [result]'.\n\n"
-        
+
         # Add few-shot examples
         examples = []
-        for example in self.few_shot_examples[:self.num_shots]:
+        for example in self.few_shot_examples[: self.num_shots]:
             examples.append(self.format_prompt(example, include_answer=True))
-            
+
         # Add current sample
         current = self.format_prompt(sample, include_answer=False)
-        
+
         full_prompt = instruction + "\n\n".join(examples)
         if examples:
             full_prompt += "\n\n"
         full_prompt += current
-        
+
         return full_prompt
 
     def build_chat_messages(self, sample: dict[str, Any]) -> list[dict[str, str]]:
@@ -95,8 +98,13 @@ class GSM8KEvaluator(BaseEvaluator):
         )
         messages.append({"role": "system", "content": system_instruction})
 
-        for ex in self.few_shot_examples[:self.num_shots]:
-            messages.append({"role": "user", "content": self.format_prompt(ex, include_answer=False)})
+        for ex in self.few_shot_examples[: self.num_shots]:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": self.format_prompt(ex, include_answer=False),
+                }
+            )
             # Extract the answer portion for the assistant message
             full_example = self.format_prompt(ex, include_answer=True)
             answer_part = full_example.split("Answer:", 1)
@@ -106,7 +114,12 @@ class GSM8KEvaluator(BaseEvaluator):
                 assistant_content = full_example
             messages.append({"role": "assistant", "content": assistant_content})
 
-        messages.append({"role": "user", "content": self.format_prompt(sample, include_answer=False)})
+        messages.append(
+            {
+                "role": "user",
+                "content": self.format_prompt(sample, include_answer=False),
+            }
+        )
         return messages
 
     def parse_response(self, response: str) -> str:
@@ -122,7 +135,7 @@ class GSM8KEvaluator(BaseEvaluator):
             parts = response.split("####")
             if len(parts) > 1:
                 ans = parts[-1].strip().replace(",", "")
-                match = re.search(r'[-+]?\d*\.?\d+', ans)
+                match = re.search(r"[-+]?\d*\.?\d+", ans)
                 if match:
                     return match.group()
 
@@ -135,7 +148,10 @@ class GSM8KEvaluator(BaseEvaluator):
             return False
 
         # Delegate to MathAnswerParser first
-        if MathAnswerParser.check_answer(predicted, correct.split("####")[-1].strip() if "####" in correct else correct):
+        if MathAnswerParser.check_answer(
+            predicted,
+            correct.split("####")[-1].strip() if "####" in correct else correct,
+        ):
             return True
 
         # Fallback to existing logic
@@ -152,7 +168,7 @@ class GSM8KEvaluator(BaseEvaluator):
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
         """Extract ground truth answer for reporting."""
-        ans = sample.get('answer', '')
+        ans = sample.get("answer", "")
         if "####" in ans:
-            return ans.split("####")[-1].strip()
-        return ans
+            return str(ans).split("####")[-1].strip()
+        return str(ans)

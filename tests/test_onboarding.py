@@ -34,10 +34,16 @@ def test_skip_onboarding_updates_state_without_interrupting_render(monkeypatch):
         return False
 
     def rerun():
-        raise AssertionError("Skip onboarding must not interrupt the current render cycle")
+        raise AssertionError(
+            "Skip onboarding must not interrupt the current render cycle"
+        )
 
     monkeypatch.setattr(onboarding.st, "container", lambda *args, **kwargs: _Context())
-    monkeypatch.setattr(onboarding.st, "columns", lambda count, *args, **kwargs: [_Context() for _ in range(count)])
+    monkeypatch.setattr(
+        onboarding.st,
+        "columns",
+        lambda count, *args, **kwargs: [_Context() for _ in range(count)],
+    )
     monkeypatch.setattr(onboarding.st, "progress", lambda *args, **kwargs: None)
     monkeypatch.setattr(onboarding.st, "markdown", lambda *args, **kwargs: None)
     monkeypatch.setattr(onboarding.st, "info", lambda *args, **kwargs: None)

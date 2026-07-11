@@ -15,22 +15,23 @@ from typing import Any
 @dataclass
 class ThinkingMetricsResult:
     """推理Metric calculationResult"""
+
     # Latency指标
     ttft_ms: float | None = None  # Time To First Token (ms)
     ttut_ms: float | None = None  # Time To User Text (ms) - 首正文 Token
-    ttr_ms: float | None = None   # Time To Reasoning (ms) - 首推理 Token
+    ttr_ms: float | None = None  # Time To Reasoning (ms) - 首推理 Token
     total_time_ms: float | None = None  # 总耗时 (ms)
     reasoning_time_ms: float | None = None  # 推理阶段耗时 (ms)
 
     # Token 指标
     reasoning_tokens: int = 0  # 推理 Token 数
-    content_tokens: int = 0    # 正文 Token 数
-    total_tokens: int = 0      # 总 Token 数
+    content_tokens: int = 0  # 正文 Token 数
+    total_tokens: int = 0  # 总 Token 数
     reasoning_ratio: float = 0.0  # 推理 Token 占比
 
     # 字符指标
     reasoning_chars: int = 0  # 推理字符数
-    content_chars: int = 0    # 正文字符数
+    content_chars: int = 0  # 正文字符数
     reasoning_density: float = 0.0  # 推理密度 (推理字符/正文字符)
 
     # 成本指标
@@ -175,9 +176,9 @@ class ThinkingMetrics:
 
             # 推理 Token (not同平台字段名not同)
             self._reasoning_tokens = (
-                usage.get("reasoning_tokens", 0) or
-                usage.get("completion_tokens_details", {}).get("reasoning_tokens", 0) or
-                0
+                usage.get("reasoning_tokens", 0)
+                or usage.get("completion_tokens_details", {}).get("reasoning_tokens", 0)
+                or 0
             )
 
             # 正文 Token
@@ -188,7 +189,9 @@ class ThinkingMetrics:
             if self._reasoning_tokens == 0 and self._reasoning_chars > 0:
                 total_chars = self._reasoning_chars + self._content_chars
                 if total_chars > 0:
-                    self._reasoning_tokens = int(completion_tokens * (self._reasoning_chars / total_chars))
+                    self._reasoning_tokens = int(
+                        completion_tokens * (self._reasoning_chars / total_chars)
+                    )
                     self._content_tokens = completion_tokens - self._reasoning_tokens
 
     def calculate(self, quality_score: float | None = None) -> ThinkingMetricsResult:
@@ -201,10 +204,7 @@ class ThinkingMetrics:
         Returns:
             ThinkingMetricsResult: CalculateResult
         """
-        result = ThinkingMetricsResult(
-            platform=self.platform,
-            model_id=self.model_id
-        )
+        result = ThinkingMetricsResult(platform=self.platform, model_id=self.model_id)
 
         # Latency指标
         if self._request_start:
@@ -215,14 +215,18 @@ class ThinkingMetrics:
                 result.ttut_ms = (self._first_content_time - self._request_start) * 1000
 
             if self._first_reasoning_time:
-                result.ttr_ms = (self._first_reasoning_time - self._request_start) * 1000
+                result.ttr_ms = (
+                    self._first_reasoning_time - self._request_start
+                ) * 1000
 
             if self._request_end:
                 result.total_time_ms = (self._request_end - self._request_start) * 1000
 
         # 推理阶段耗时
         if self._first_reasoning_time and self._last_reasoning_time:
-            result.reasoning_time_ms = (self._last_reasoning_time - self._first_reasoning_time) * 1000
+            result.reasoning_time_ms = (
+                self._last_reasoning_time - self._first_reasoning_time
+            ) * 1000
 
         # Token 指标
         result.reasoning_tokens = self._reasoning_tokens
@@ -242,14 +246,20 @@ class ThinkingMetrics:
         # 成本估算
         pricing = self.PRICING.get(self.platform, {"input": 0.5, "output": 0.5})
         prompt_tokens = self._usage.get("prompt_tokens", 0) if self._usage else 0
-        completion_tokens = self._usage.get("completion_tokens", 0) if self._usage else 0
+        completion_tokens = (
+            self._usage.get("completion_tokens", 0) if self._usage else 0
+        )
 
         input_cost = (prompt_tokens / 1_000_000) * pricing["input"]
         output_cost = (completion_tokens / 1_000_000) * pricing["output"]
         result.estimated_cost_usd = input_cost + output_cost
 
         # 质量/成本比
-        if quality_score is not None and result.estimated_cost_usd and result.estimated_cost_usd > 0:
+        if (
+            quality_score is not None
+            and result.estimated_cost_usd
+            and result.estimated_cost_usd > 0
+        ):
             result.quality_per_dollar = quality_score / result.estimated_cost_usd
 
         return result
@@ -286,11 +296,27 @@ def format_metrics_report(metrics: ThinkingMetricsResult) -> str:
         f"Model: {metrics.model_id}",
         "",
         "【Latency指标】",
-        f"  TTFT (首Token): {metrics.ttft_ms:.0f}ms" if metrics.ttft_ms else "  TTFT: N/A",
+        (
+            f"  TTFT (首Token): {metrics.ttft_ms:.0f}ms"
+            if metrics.ttft_ms
+            else "  TTFT: N/A"
+        ),
         f"  TTR (首推理): {metrics.ttr_ms:.0f}ms" if metrics.ttr_ms else "  TTR: N/A",
-        f"  TTUT (首正文): {metrics.ttut_ms:.0f}ms" if metrics.ttut_ms else "  TTUT: N/A",
-        f"  总耗时: {metrics.total_time_ms:.0f}ms" if metrics.total_time_ms else "  总耗时: N/A",
-        f"  推理阶段: {metrics.reasoning_time_ms:.0f}ms" if metrics.reasoning_time_ms else "  推理阶段: N/A",
+        (
+            f"  TTUT (首正文): {metrics.ttut_ms:.0f}ms"
+            if metrics.ttut_ms
+            else "  TTUT: N/A"
+        ),
+        (
+            f"  总耗时: {metrics.total_time_ms:.0f}ms"
+            if metrics.total_time_ms
+            else "  总耗时: N/A"
+        ),
+        (
+            f"  推理阶段: {metrics.reasoning_time_ms:.0f}ms"
+            if metrics.reasoning_time_ms
+            else "  推理阶段: N/A"
+        ),
         "",
         "【Token 指标】",
         f"  推理 Token: {metrics.reasoning_tokens}",
@@ -304,8 +330,16 @@ def format_metrics_report(metrics: ThinkingMetricsResult) -> str:
         f"  推理密度: {metrics.reasoning_density:.2f}",
         "",
         "【成本指标】",
-        f"  预估成本: ${metrics.estimated_cost_usd:.6f}" if metrics.estimated_cost_usd else "  预估成本: N/A",
-        f"  质量/$ : {metrics.quality_per_dollar:.2f}" if metrics.quality_per_dollar else "  质量/$: N/A",
+        (
+            f"  预估成本: ${metrics.estimated_cost_usd:.6f}"
+            if metrics.estimated_cost_usd
+            else "  预估成本: N/A"
+        ),
+        (
+            f"  质量/$ : {metrics.quality_per_dollar:.2f}"
+            if metrics.quality_per_dollar
+            else "  质量/$: N/A"
+        ),
     ]
 
     return "\n".join(lines)
@@ -326,6 +360,7 @@ from collections.abc import Callable
 @dataclass
 class EvalMetricResult:
     """单评估指标CalculateResult"""
+
     name: str
     value: float
     count: int = 0
@@ -348,11 +383,16 @@ class EvalMetricResult:
 # 精确匹配指标
 # ============================================
 
+
 def exact_match(predictions: list[str], references: list[str]) -> float:
     """精确匹配率"""
     if not predictions or not references:
         return 0.0
-    correct = sum(1 for p, r in zip(predictions, references, strict=False) if str(p).strip() == str(r).strip())
+    correct = sum(
+        1
+        for p, r in zip(predictions, references, strict=False)
+        if str(p).strip() == str(r).strip()
+    )
     return correct / len(predictions)
 
 
@@ -379,7 +419,9 @@ def accuracy(predictions: list[Any], references: list[Any]) -> float:
     return correct / len(predictions)
 
 
-def normalized_accuracy(predictions: list[str], references: list[str], num_choices: int = 4) -> float:
+def normalized_accuracy(
+    predictions: list[str], references: list[str], num_choices: int = 4
+) -> float:
     """NormalizeAccuracy (考虑随机猜测基准)"""
     acc = accuracy(predictions, references)
     random_baseline = 1.0 / num_choices
@@ -392,11 +434,12 @@ def normalized_accuracy(predictions: list[str], references: list[str], num_choic
 # 文本相似度指标
 # ============================================
 
+
 def _tokenize(text: str) -> list[str]:
     """简单分词"""
     if not text:
         return []
-    return re.findall(r'\w+', text.lower())
+    return re.findall(r"\w+", text.lower())
 
 
 def f1_score(prediction: str, reference: str) -> float:
@@ -427,7 +470,7 @@ def f1_score_batch(predictions: list[str], references: list[str]) -> float:
 
 def _get_ngrams(tokens: list[str], n: int) -> Counter:
     """Get n-gram"""
-    ngrams = [tuple(tokens[i:i+n]) for i in range(len(tokens) - n + 1)]
+    ngrams = [tuple(tokens[i : i + n]) for i in range(len(tokens) - n + 1)]
     return Counter(ngrams)
 
 
@@ -477,10 +520,10 @@ def _lcs_length(a: list[str], b: list[str]) -> int:
 
     for i in range(1, m + 1):
         for j in range(1, n + 1):
-            if a[i-1] == b[j-1]:
-                dp[i][j] = dp[i-1][j-1] + 1
+            if a[i - 1] == b[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1] + 1
             else:
-                dp[i][j] = max(dp[i-1][j], dp[i][j-1])
+                dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])
 
     return dp[m][n]
 
@@ -497,20 +540,25 @@ def rouge_l(prediction: str, reference: str) -> dict[str, float]:
 
     precision = lcs_len / len(pred_tokens)
     recall = lcs_len / len(ref_tokens)
-    f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
+    f1 = (
+        2 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
+    )
 
     return {"precision": precision, "recall": recall, "f1": f1}
 
 
 def rouge_l_batch(predictions: list[str], references: list[str]) -> float:
     """批量 ROUGE-L F1 Average值"""
-    scores = [rouge_l(p, r)["f1"] for p, r in zip(predictions, references, strict=False)]
+    scores = [
+        rouge_l(p, r)["f1"] for p, r in zip(predictions, references, strict=False)
+    ]
     return sum(scores) / len(scores) if scores else 0.0
 
 
 # ============================================
 # 代码Generate指标
 # ============================================
+
 
 def pass_at_k(n: int, c: int, k: int) -> float:
     """
@@ -533,7 +581,11 @@ def pass_at_k(n: int, c: int, k: int) -> float:
 
 def estimate_pass_at_k(num_samples: list[int], num_correct: list[int], k: int) -> float:
     """估计整体 pass@k"""
-    total = sum(pass_at_k(n, c, k) for n, c in zip(num_samples, num_correct, strict=False) if n >= k)
+    total = sum(
+        pass_at_k(n, c, k)
+        for n, c in zip(num_samples, num_correct, strict=False)
+        if n >= k
+    )
     count = sum(1 for n in num_samples if n >= k)
     return total / count if count > 0 else 0.0
 
@@ -542,11 +594,14 @@ def estimate_pass_at_k(num_samples: list[int], num_correct: list[int], k: int) -
 # 数值比较指标
 # ============================================
 
+
 def mean_absolute_error(predictions: list[float], references: list[float]) -> float:
     """Average绝对误差 (MAE)"""
     if not predictions or not references:
         return 0.0
-    errors = [abs(float(p) - float(r)) for p, r in zip(predictions, references, strict=False)]
+    errors = [
+        abs(float(p) - float(r)) for p, r in zip(predictions, references, strict=False)
+    ]
     return sum(errors) / len(errors)
 
 
@@ -554,7 +609,10 @@ def root_mean_squared_error(predictions: list[float], references: list[float]) -
     """均方根误差 (RMSE)"""
     if not predictions or not references:
         return 0.0
-    squared_errors = [(float(p) - float(r)) ** 2 for p, r in zip(predictions, references, strict=False)]
+    squared_errors = [
+        (float(p) - float(r)) ** 2
+        for p, r in zip(predictions, references, strict=False)
+    ]
     return math.sqrt(sum(squared_errors) / len(squared_errors))
 
 
@@ -562,11 +620,12 @@ def root_mean_squared_error(predictions: list[float], references: list[float]) -
 # Statistical analysis函数
 # ============================================
 
+
 def bootstrap_confidence_interval(
     values: list[float],
     confidence: float = 0.95,
     n_bootstraps: int = 1000,
-    seed: int = 42
+    seed: int = 42,
 ) -> tuple[float, float]:
     """Bootstrap Confidence Interval"""
     if not values:
@@ -595,7 +654,9 @@ def standard_error(values: list[float]) -> float:
     return statistics.stdev(values) / math.sqrt(len(values))
 
 
-def wilson_score_interval(successes: int, total: int, confidence: float = 0.95) -> tuple[float, float]:
+def wilson_score_interval(
+    successes: int, total: int, confidence: float = 0.95
+) -> tuple[float, float]:
     """Wilson 分数区间 (适用于二 items分布)"""
     if total == 0:
         return (0.0, 1.0)
@@ -611,9 +672,7 @@ def wilson_score_interval(successes: int, total: int, confidence: float = 0.95) 
 
 
 def per_category_accuracy(
-    predictions: list[str],
-    references: list[str],
-    categories: list[str]
+    predictions: list[str], references: list[str], categories: list[str]
 ) -> dict[str, float]:
     """分类别Accuracy"""
     category_results: dict[str, dict[str, int]] = {}
@@ -635,6 +694,7 @@ def per_category_accuracy(
 # ============================================
 # Metric calculation器
 # ============================================
+
 
 class EvalMetricsCalculator:
     """
@@ -666,8 +726,8 @@ class EvalMetricsCalculator:
         self,
         predictions: list[Any],
         references: list[Any],
-        metrics: list[str] = None,
-        categories: list[str] | None = None
+        metrics: list[str] | None = None,
+        categories: list[str] | None = None,
     ) -> dict[str, EvalMetricResult]:
         """Calculate指定指标"""
         if metrics is None:
@@ -685,25 +745,35 @@ class EvalMetricsCalculator:
 
             try:
                 value = self.METRICS[metric_name](predictions, references)
-                result = EvalMetricResult(name=metric_name, value=value, count=len(predictions))
+                result = EvalMetricResult(
+                    name=metric_name, value=value, count=len(predictions)
+                )
 
                 if self.compute_ci and metric_name in ["accuracy", "exact_match"]:
                     result.stderr = standard_error(is_correct)
-                    result.confidence_interval = bootstrap_confidence_interval(is_correct, self.ci_confidence)
+                    result.confidence_interval = bootstrap_confidence_interval(
+                        is_correct, self.ci_confidence
+                    )
 
                     correct_count = int(sum(is_correct))
-                    result.details["wilson_ci"] = wilson_score_interval(correct_count, len(predictions), self.ci_confidence)
+                    result.details["wilson_ci"] = wilson_score_interval(
+                        correct_count, len(predictions), self.ci_confidence
+                    )
 
                 results[metric_name] = result
 
             except Exception as e:
                 results[metric_name] = EvalMetricResult(
-                    name=metric_name, value=0.0, count=len(predictions),
-                    details={"error": str(e)}
+                    name=metric_name,
+                    value=0.0,
+                    count=len(predictions),
+                    details={"error": str(e)},
                 )
 
         if categories and "accuracy" in results:
-            results["accuracy"].details["per_category"] = per_category_accuracy(predictions, references, categories)
+            results["accuracy"].details["per_category"] = per_category_accuracy(
+                predictions, references, categories
+            )
 
         return results
 
@@ -711,17 +781,21 @@ class EvalMetricsCalculator:
         self,
         num_samples: list[int],
         num_correct: list[int],
-        k_values: list[int] = None
+        k_values: list[int] | None = None,
     ) -> dict[str, float]:
         """Calculate pass@k 指标"""
         if k_values is None:
             k_values = [1, 5, 10]
-        return {f"pass@{k}": estimate_pass_at_k(num_samples, num_correct, k) for k in k_values}
+        return {
+            f"pass@{k}": estimate_pass_at_k(num_samples, num_correct, k)
+            for k in k_values
+        }
 
 
 # ============================================
 # 便捷函数
 # ============================================
+
 
 def get_metric(name: str) -> Callable:
     """Get指标函数"""
@@ -731,9 +805,7 @@ def get_metric(name: str) -> Callable:
 
 
 def compute_metrics(
-    predictions: list[Any],
-    references: list[Any],
-    metrics: list[str] = None
+    predictions: list[Any], references: list[Any], metrics: list[str] | None = None
 ) -> dict[str, float]:
     """快速Calculated metrics"""
     if metrics is None:
@@ -744,9 +816,7 @@ def compute_metrics(
 
 
 def compute_accuracy_with_ci(
-    predictions: list[Any],
-    references: list[Any],
-    confidence: float = 0.95
+    predictions: list[Any], references: list[Any], confidence: float = 0.95
 ) -> dict[str, Any]:
     """CalculateAccuracyand其Confidence Interval"""
     calculator = EvalMetricsCalculator(compute_ci=True, ci_confidence=confidence)
@@ -759,7 +829,10 @@ def compute_accuracy_with_ci(
     return {
         "accuracy": acc_result.value,
         "stderr": acc_result.stderr or 0.0,
-        "ci_lower": acc_result.confidence_interval[0] if acc_result.confidence_interval else 0.0,
-        "ci_upper": acc_result.confidence_interval[1] if acc_result.confidence_interval else 1.0
+        "ci_lower": (
+            acc_result.confidence_interval[0] if acc_result.confidence_interval else 0.0
+        ),
+        "ci_upper": (
+            acc_result.confidence_interval[1] if acc_result.confidence_interval else 1.0
+        ),
     }
-

@@ -59,7 +59,7 @@ class TestFailureCase:
             question="What is 2+2?",
             correct_answer="4",
             predicted_answer="5",
-            model_response="2+2=5"
+            model_response="2+2=5",
         )
         assert case.sample_id == "001"
         assert case.category == FailureCategory.UNKNOWN
@@ -80,7 +80,7 @@ class TestFailureCase:
             root_cause="乘法运算Error",
             suggestions=["CheckCalculate", "useCalculate器"],
             question_type="math",
-            difficulty="easy"
+            difficulty="easy",
         )
         assert case.category == FailureCategory.CALCULATION_ERROR
         assert case.confidence == 0.9
@@ -105,7 +105,7 @@ class TestFailureAnalyzer:
             correct_answer="4",
             predicted_answer="",
             model_response="",
-            error="Request timeout after 30s"
+            error="Request timeout after 30s",
         )
         assert case.category == FailureCategory.TIMEOUT
         assert case.confidence == 1.0
@@ -119,7 +119,7 @@ class TestFailureAnalyzer:
             correct_answer="42",
             predicted_answer="",
             model_response="",
-            error="HTTP 429: Rate limit exceeded"
+            error="HTTP 429: Rate limit exceeded",
         )
         assert case.category == FailureCategory.API_ERROR
         assert "重试" in case.suggestions[0] or "重试" in "".join(case.suggestions)
@@ -134,7 +134,7 @@ class TestFailureAnalyzer:
             correct_answer="A",
             predicted_answer="",
             model_response="",
-            reasoning_content=""
+            reasoning_content="",
         )
         assert case.category == FailureCategory.NO_RESPONSE
         assert case.confidence == 1.0
@@ -147,7 +147,7 @@ class TestFailureAnalyzer:
             correct_answer="B",
             predicted_answer="",
             model_response="   \n\t  ",
-            reasoning_content=""
+            reasoning_content="",
         )
         assert case.category == FailureCategory.NO_RESPONSE
 
@@ -160,7 +160,7 @@ class TestFailureAnalyzer:
             question="Calculate 100 / 10",
             correct_answer="10",
             predicted_answer="100",
-            model_response="100 / 10 = 100"
+            model_response="100 / 10 = 100",
         )
         assert case.category == FailureCategory.MAGNITUDE_ERROR
         assert case.confidence == 0.9
@@ -173,7 +173,7 @@ class TestFailureAnalyzer:
             question="What is 1000?",
             correct_answer="1000",
             predicted_answer="100",
-            model_response="The answer is 100"
+            model_response="The answer is 100",
         )
         assert case.category == FailureCategory.MAGNITUDE_ERROR
 
@@ -186,7 +186,7 @@ class TestFailureAnalyzer:
             question="What is 15 + 27?",
             correct_answer="42",
             predicted_answer="41",
-            model_response="15 + 27 = 41"
+            model_response="15 + 27 = 41",
         )
         # CalculateError模式匹配，置信度0.85
         assert case.category == FailureCategory.CALCULATION_ERROR
@@ -199,7 +199,7 @@ class TestFailureAnalyzer:
             question="Calculate 10 / 3",
             correct_answer="3.333",
             predicted_answer="3.33",
-            model_response="10 / 3 ≈ 3.33"
+            model_response="10 / 3 ≈ 3.33",
         )
         assert case.category == FailureCategory.CALCULATION_ERROR
         assert "接近" in case.analysis
@@ -213,7 +213,7 @@ class TestFailureAnalyzer:
             question="Choose the correct option",
             correct_answer="A",
             predicted_answer="(A)",
-            model_response="The answer is (A)"
+            model_response="The answer is (A)",
         )
         assert case.category == FailureCategory.FORMAT_MISMATCH
         assert case.confidence == 0.95
@@ -226,7 +226,7 @@ class TestFailureAnalyzer:
             question="What is 42?",
             correct_answer="42",
             predicted_answer="4 2",
-            model_response="Answer: 4 2"
+            model_response="Answer: 4 2",
         )
         assert case.category == FailureCategory.FORMAT_MISMATCH
 
@@ -239,7 +239,7 @@ class TestFailureAnalyzer:
             question="What is the capital of XYZ?",
             correct_answer="Unknown",
             predicted_answer="I don't know",
-            model_response="I'm not sure about this, I don't know the answer"
+            model_response="I'm not sure about this, I don't know the answer",
         )
         assert case.category == FailureCategory.KNOWLEDGE_GAP
         assert case.confidence == 0.8
@@ -251,7 +251,7 @@ class TestFailureAnalyzer:
             question="某冷知识问题",
             correct_answer="Answer",
             predicted_answer="not确定",
-            model_response="我not知道这问题Answer"
+            model_response="我not知道这问题Answer",
         )
         assert case.category == FailureCategory.KNOWLEDGE_GAP
 
@@ -264,7 +264,7 @@ class TestFailureAnalyzer:
             question="If x=10, y=20, z=30, what is x+y+z?",
             correct_answer="60",
             predicted_answer="30",
-            model_response="x + y = 30"
+            model_response="x + y = 30",
         )
         assert case.category == FailureCategory.ATTENTION_ERROR
         assert "遗漏" in case.analysis
@@ -279,7 +279,7 @@ class TestFailureAnalyzer:
             correct_answer="100",
             predicted_answer="50",
             model_response="The answer is 50",
-            reasoning_content="Answer: 50"
+            reasoning_content="Answer: 50",
         )
         # Reasoning process过于简略，step_count <= 1，且Answernot接近正确值
         assert case.category == FailureCategory.REASONING_GAP
@@ -295,7 +295,7 @@ class TestFailureAnalyzer:
             correct_answer="8",
             predicted_answer="20",
             model_response="Let's assume x=10 and y=5. Then we add 1, 2, 3, 4, 5.",
-            reasoning_content="Suppose we also include 15, 25, 35 in our calculation"
+            reasoning_content="Suppose we also include 15, 25, 35 in our calculation",
         )
         # 幻觉检测：Questionin只has 5, 3，but响应引入 10, 1, 2, 3, 4, 5, 15, 25, 35
         assert case.category == FailureCategory.HALLUCINATION
@@ -310,7 +310,7 @@ class TestFailureAnalyzer:
             question="Some question",
             correct_answer="Answer",
             predicted_answer="Wrong",
-            model_response="Some response that doesn't match any pattern"
+            model_response="Some response that doesn't match any pattern",
         )
         assert case.category == FailureCategory.CONCEPT_MISUNDERSTANDING
         assert case.confidence == 0.5
@@ -373,8 +373,7 @@ class TestFailureAnalyzer:
     def test_suggestions_for_calculation_error(self, analyzer):
         """TestCalculateErrorSuggestion"""
         suggestions = analyzer._generate_suggestions(
-            FailureCategory.CALCULATION_ERROR,
-            "CalculateError"
+            FailureCategory.CALCULATION_ERROR, "CalculateError"
         )
         assert len(suggestions) > 0
         assert any("few-shot" in s.lower() or "示例" in s for s in suggestions)
@@ -382,16 +381,14 @@ class TestFailureAnalyzer:
     def test_suggestions_for_hallucination(self, analyzer):
         """Test幻觉Suggestion"""
         suggestions = analyzer._generate_suggestions(
-            FailureCategory.HALLUCINATION,
-            "引入额外信息"
+            FailureCategory.HALLUCINATION, "引入额外信息"
         )
         assert len(suggestions) > 0
 
     def test_suggestions_for_unknown_category(self, analyzer):
         """Test未知类别defaultSuggestion"""
         suggestions = analyzer._generate_suggestions(
-            FailureCategory.UNKNOWN,
-            "未知Error"
+            FailureCategory.UNKNOWN, "未知Error"
         )
         assert len(suggestions) == 1
         assert "人工分析" in suggestions[0]
@@ -407,13 +404,15 @@ class TestFailureAnalyzer:
 
     def test_analyze_batch_single(self, analyzer):
         """Test单 samples批量分析"""
-        samples = [{
-            'sample_id': '001',
-            'question': 'What is 2+2?',
-            'correct_answer': '4',
-            'predicted_answer': '5',
-            'model_response': '2+2=5'
-        }]
+        samples = [
+            {
+                "sample_id": "001",
+                "question": "What is 2+2?",
+                "correct_answer": "4",
+                "predicted_answer": "5",
+                "model_response": "2+2=5",
+            }
+        ]
         report = analyzer.analyze_batch(samples, total_samples=10)
         assert report.total_samples == 10
         assert report.failed_samples == 1
@@ -424,27 +423,27 @@ class TestFailureAnalyzer:
         """Test多样本批量分析"""
         samples = [
             {
-                'sample_id': '001',
-                'question': '2+2=?',
-                'correct_answer': '4',
-                'predicted_answer': '5',
-                'model_response': '2+2=5'
+                "sample_id": "001",
+                "question": "2+2=?",
+                "correct_answer": "4",
+                "predicted_answer": "5",
+                "model_response": "2+2=5",
             },
             {
-                'sample_id': '002',
-                'question': '10*10=?',
-                'correct_answer': '100',
-                'predicted_answer': '10',
-                'model_response': '10*10=10'
+                "sample_id": "002",
+                "question": "10*10=?",
+                "correct_answer": "100",
+                "predicted_answer": "10",
+                "model_response": "10*10=10",
             },
             {
-                'sample_id': '003',
-                'question': 'Timeout test',
-                'correct_answer': '42',
-                'predicted_answer': '',
-                'model_response': '',
-                'error': 'timeout'
-            }
+                "sample_id": "003",
+                "question": "Timeout test",
+                "correct_answer": "42",
+                "predicted_answer": "",
+                "model_response": "",
+                "error": "timeout",
+            },
         ]
         report = analyzer.analyze_batch(samples)
         assert report.failed_samples == 3
@@ -455,45 +454,45 @@ class TestFailureAnalyzer:
         """Test批量分析类别分布"""
         samples = [
             {
-                'sample_id': f'{i:03d}',
-                'question': 'Question',
-                'correct_answer': '4',
-                'predicted_answer': '5',
-                'model_response': '2 + 2 = 5'
+                "sample_id": f"{i:03d}",
+                "question": "Question",
+                "correct_answer": "4",
+                "predicted_answer": "5",
+                "model_response": "2 + 2 = 5",
             }
             for i in range(5)
         ]
         report = analyzer.analyze_batch(samples)
         # 实际Calculate表达式匹配到 calculation_error
-        assert 'calculation_error' in report.category_distribution
-        assert report.category_distribution['calculation_error'] == 5
-        assert report.category_percentage['calculation_error'] == 100.0
+        assert "calculation_error" in report.category_distribution
+        assert report.category_distribution["calculation_error"] == 5
+        assert report.category_percentage["calculation_error"] == 100.0
 
     def test_analyze_batch_top_issues(self, analyzer):
         """Test批量分析顶级问题"""
         samples = [
             {
-                'sample_id': f'{i:03d}',
-                'question': 'Question',
-                'correct_answer': '4',
-                'predicted_answer': '5',
-                'model_response': '2+2=5'
+                "sample_id": f"{i:03d}",
+                "question": "Question",
+                "correct_answer": "4",
+                "predicted_answer": "5",
+                "model_response": "2+2=5",
             }
             for i in range(10)
         ]
         report = analyzer.analyze_batch(samples)
         assert len(report.top_issues) <= 3
-        assert any('calculation' in issue.lower() for issue in report.top_issues)
+        assert any("calculation" in issue.lower() for issue in report.top_issues)
 
     def test_analyze_batch_improvement_suggestions(self, analyzer):
         """Test批量分析改进Suggestion"""
         samples = [
             {
-                'sample_id': '001',
-                'question': 'Question',
-                'correct_answer': '4',
-                'predicted_answer': '5',
-                'model_response': '2+2=5'
+                "sample_id": "001",
+                "question": "Question",
+                "correct_answer": "4",
+                "predicted_answer": "5",
+                "model_response": "2+2=5",
             }
         ]
         report = analyzer.analyze_batch(samples)
@@ -507,9 +506,7 @@ class TestFailureAnalysisReport:
     def test_create_report_minimal(self):
         """TestCreate最小报告"""
         report = FailureAnalysisReport(
-            total_samples=100,
-            failed_samples=10,
-            failure_rate=10.0
+            total_samples=100, failed_samples=10, failure_rate=10.0
         )
         assert report.total_samples == 100
         assert report.failed_samples == 10
@@ -523,11 +520,11 @@ class TestFailureAnalysisReport:
             total_samples=100,
             failed_samples=10,
             failure_rate=10.0,
-            category_distribution={'calculation_error': 5, 'format_mismatch': 5},
-            category_percentage={'calculation_error': 50.0, 'format_mismatch': 50.0},
+            category_distribution={"calculation_error": 5, "format_mismatch": 5},
+            category_percentage={"calculation_error": 50.0, "format_mismatch": 50.0},
             cases=[],
-            top_issues=['calculation_error: 5 例 (50.0%)'],
-            improvement_suggestions=['Suggestion1', 'Suggestion2']
+            top_issues=["calculation_error: 5 例 (50.0%)"],
+            improvement_suggestions=["Suggestion1", "Suggestion2"],
         )
         assert len(report.category_distribution) == 2
         assert len(report.improvement_suggestions) == 2
@@ -538,13 +535,15 @@ class TestConvenienceFunctions:
 
     def test_analyze_failures_function(self):
         """Test analyze_failures 便捷函数"""
-        samples = [{
-            'sample_id': '001',
-            'question': '2+2=?',
-            'correct_answer': '4',
-            'predicted_answer': '5',
-            'model_response': '2+2=5'
-        }]
+        samples = [
+            {
+                "sample_id": "001",
+                "question": "2+2=?",
+                "correct_answer": "4",
+                "predicted_answer": "5",
+                "model_response": "2+2=5",
+            }
+        ]
         report = analyze_failures(samples, total=50)
         assert report.total_samples == 50
         assert report.failed_samples == 1

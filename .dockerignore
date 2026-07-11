@@ -22,3 +22,5 @@ api_tests/
 raw_data/
 quality_results/
 .claude/
+bench_workspace/
+.zcode/

@@ -21,6 +21,7 @@ from .response_parser import ParsedResponse
 @dataclass
 class ModelConfig:
     """Model Configuration"""
+
     platform: str = ""
     model_id: str = ""
     api_base_url: str = ""
@@ -34,6 +35,7 @@ class ModelConfig:
 @dataclass
 class LatencyMetrics:
     """Latency指标"""
+
     ttft_ms: float | None = None
     ttr_ms: float | None = None
     ttut_ms: float | None = None
@@ -44,6 +46,7 @@ class LatencyMetrics:
 @dataclass
 class TokenMetrics:
     """Token 指标"""
+
     prompt_tokens: int = 0
     reasoning_tokens: int = 0
     content_tokens: int = 0
@@ -54,6 +57,7 @@ class TokenMetrics:
 @dataclass
 class QualityMetrics:
     """质量指标"""
+
     accuracy_score: float | None = None
     reasoning_coherence: float | None = None
     response_completeness: float | None = None
@@ -63,6 +67,7 @@ class QualityMetrics:
 @dataclass
 class CostMetrics:
     """成本指标"""
+
     estimated_cost_usd: float | None = None
     quality_per_dollar: float | None = None
     cost_per_1k_tokens: float | None = None
@@ -71,6 +76,7 @@ class CostMetrics:
 @dataclass
 class RawData:
     """Raw data"""
+
     prompt: str = ""
     system_prompt: str = ""
     reasoning_content: str = ""
@@ -83,6 +89,7 @@ class RawData:
 @dataclass
 class EvaluationReport:
     """Evaluation报告"""
+
     # 元信息
     test_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
@@ -136,7 +143,7 @@ class ReportBuilder:
         thinking_budget: int | None = None,
         reasoning_effort: str = "medium",
         temperature: float = 0.7,
-        max_tokens: int = 2048
+        max_tokens: int = 2048,
     ) -> "ReportBuilder":
         """SetModel Configuration"""
         self._report.model_config = ModelConfig(
@@ -147,7 +154,7 @@ class ReportBuilder:
             thinking_budget=thinking_budget,
             reasoning_effort=reasoning_effort,
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
         )
         return self
 
@@ -172,7 +179,7 @@ class ReportBuilder:
             ttr_ms=metrics.ttr_ms,
             ttut_ms=metrics.ttut_ms,
             total_ms=metrics.total_time_ms,
-            reasoning_phase_ms=metrics.reasoning_time_ms
+            reasoning_phase_ms=metrics.reasoning_time_ms,
         )
 
         # Token 指标
@@ -180,13 +187,13 @@ class ReportBuilder:
             reasoning_tokens=metrics.reasoning_tokens,
             content_tokens=metrics.content_tokens,
             total_tokens=metrics.total_tokens,
-            reasoning_ratio=metrics.reasoning_ratio
+            reasoning_ratio=metrics.reasoning_ratio,
         )
 
         # 成本指标
         self._report.cost = CostMetrics(
             estimated_cost_usd=metrics.estimated_cost_usd,
-            quality_per_dollar=metrics.quality_per_dollar
+            quality_per_dollar=metrics.quality_per_dollar,
         )
 
         return self
@@ -205,17 +212,19 @@ class ReportBuilder:
         accuracy: float | None = None,
         coherence: float | None = None,
         completeness: float | None = None,
-        overall: float | None = None
+        overall: float | None = None,
     ) -> "ReportBuilder":
         """Set质量分数"""
         self._report.quality = QualityMetrics(
             accuracy_score=accuracy,
             reasoning_coherence=coherence,
             response_completeness=completeness,
-            overall_score=overall or (
+            overall_score=overall
+            or (
                 (accuracy or 0 + coherence or 0 + completeness or 0) / 3
-                if any([accuracy, coherence, completeness]) else None
-            )
+                if any([accuracy, coherence, completeness])
+                else None
+            ),
         )
         return self
 
@@ -256,7 +265,7 @@ class ReportBuilder:
         path = Path(filepath)
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(self.to_dict(), f, ensure_ascii=False, indent=indent)
 
         return str(path)
@@ -361,47 +370,63 @@ class ReportBuilder:
             "### 6.2 Reasoning process",
             "",
             "```",
-            raw.reasoning_content[:1000] + ("..." if len(raw.reasoning_content) > 1000 else "") if raw.reasoning_content else "(no)",
+            (
+                raw.reasoning_content[:1000]
+                + ("..." if len(raw.reasoning_content) > 1000 else "")
+                if raw.reasoning_content
+                else "(no)"
+            ),
             "```",
             "",
             "### 6.3 最终输出",
             "",
             "```",
-            raw.final_content[:1000] + ("..." if len(raw.final_content) > 1000 else "") if raw.final_content else "(no)",
+            (
+                raw.final_content[:1000]
+                + ("..." if len(raw.final_content) > 1000 else "")
+                if raw.final_content
+                else "(no)"
+            ),
             "```",
             "",
         ]
 
         if raw.error:
-            lines.extend([
-                "### 6.4 Error message",
-                "",
-                "```",
-                raw.error,
-                "```",
-                "",
-            ])
+            lines.extend(
+                [
+                    "### 6.4 Error message",
+                    "",
+                    "```",
+                    raw.error,
+                    "```",
+                    "",
+                ]
+            )
 
         if report.notes:
-            lines.extend([
-                "---",
-                "",
-                "## 7. 备注",
-                "",
-                report.notes,
-                "",
-            ])
+            lines.extend(
+                [
+                    "---",
+                    "",
+                    "## 7. 备注",
+                    "",
+                    report.notes,
+                    "",
+                ]
+            )
 
         if report.tags:
-            lines.extend([
-                "---",
-                "",
-                f"**Label**: {', '.join(report.tags)}",
-                "",
-            ])
+            lines.extend(
+                [
+                    "---",
+                    "",
+                    f"**Label**: {', '.join(report.tags)}",
+                    "",
+                ]
+            )
 
-        with open(path, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(lines))
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
 
         return str(path)
 
@@ -484,10 +509,10 @@ class ReportBuilder:
         <div class="grid">
             <div class="card">
                 <h2>Latency指标</h2>
-                <div class="metric"><span class="label">TTFT</span><span class="value">{f'{latency.ttft_ms:.0f}ms' if latency.ttft_ms else 'N/A'}</span></div>
-                <div class="metric"><span class="label">TTR</span><span class="value">{f'{latency.ttr_ms:.0f}ms' if latency.ttr_ms else 'N/A'}</span></div>
-                <div class="metric"><span class="label">TTUT</span><span class="value">{f'{latency.ttut_ms:.0f}ms' if latency.ttut_ms else 'N/A'}</span></div>
-                <div class="metric"><span class="label">总耗时</span><span class="value">{f'{latency.total_ms:.0f}ms' if latency.total_ms else 'N/A'}</span></div>
+                <div class="metric"><span class="label">TTFT</span><span class="value">{f"{latency.ttft_ms:.0f}ms" if latency.ttft_ms else "N/A"}</span></div>
+                <div class="metric"><span class="label">TTR</span><span class="value">{f"{latency.ttr_ms:.0f}ms" if latency.ttr_ms else "N/A"}</span></div>
+                <div class="metric"><span class="label">TTUT</span><span class="value">{f"{latency.ttut_ms:.0f}ms" if latency.ttut_ms else "N/A"}</span></div>
+                <div class="metric"><span class="label">总耗时</span><span class="value">{f"{latency.total_ms:.0f}ms" if latency.total_ms else "N/A"}</span></div>
             </div>
 
             <div class="card">
@@ -495,29 +520,29 @@ class ReportBuilder:
                 <div class="metric"><span class="label">输入</span><span class="value">{tokens.prompt_tokens}</span></div>
                 <div class="metric"><span class="label">推理</span><span class="value">{tokens.reasoning_tokens}</span></div>
                 <div class="metric"><span class="label">正文</span><span class="value">{tokens.content_tokens}</span></div>
-                <div class="metric"><span class="label">推理占比</span><span class="value">{f'{tokens.reasoning_ratio:.1%}' if tokens.reasoning_ratio else 'N/A'}</span></div>
+                <div class="metric"><span class="label">推理占比</span><span class="value">{f"{tokens.reasoning_ratio:.1%}" if tokens.reasoning_ratio else "N/A"}</span></div>
             </div>
 
             <div class="card">
                 <h2>质量Score</h2>
-                <div class="score">{f'{quality.overall_score:.1f}' if quality.overall_score else 'N/A'}</div>
-                <div class="metric"><span class="label">准确性</span><span class="value">{f'{quality.accuracy_score:.1f}' if quality.accuracy_score else 'N/A'}</span></div>
-                <div class="metric"><span class="label">连贯性</span><span class="value">{f'{quality.reasoning_coherence:.1f}' if quality.reasoning_coherence else 'N/A'}</span></div>
+                <div class="score">{f"{quality.overall_score:.1f}" if quality.overall_score else "N/A"}</div>
+                <div class="metric"><span class="label">准确性</span><span class="value">{f"{quality.accuracy_score:.1f}" if quality.accuracy_score else "N/A"}</span></div>
+                <div class="metric"><span class="label">连贯性</span><span class="value">{f"{quality.reasoning_coherence:.1f}" if quality.reasoning_coherence else "N/A"}</span></div>
             </div>
 
             <div class="card">
                 <h2>成本分析</h2>
-                <div class="metric"><span class="label">预估成本</span><span class="value">{f'${cost.estimated_cost_usd:.6f}' if cost.estimated_cost_usd else 'N/A'}</span></div>
-                <div class="metric"><span class="label">质量/美元</span><span class="value">{f'{cost.quality_per_dollar:.2f}' if cost.quality_per_dollar else 'N/A'}</span></div>
+                <div class="metric"><span class="label">预估成本</span><span class="value">{f"${cost.estimated_cost_usd:.6f}" if cost.estimated_cost_usd else "N/A"}</span></div>
+                <div class="metric"><span class="label">质量/美元</span><span class="value">{f"{cost.quality_per_dollar:.2f}" if cost.quality_per_dollar else "N/A"}</span></div>
             </div>
         </div>
 
-        {'<div class="tags">' + ''.join([f'<span class="tag">{t}</span>' for t in report.tags]) + '</div>' if report.tags else ''}
+        {'<div class="tags">' + "".join([f'<span class="tag">{t}</span>' for t in report.tags]) + "</div>" if report.tags else ""}
     </div>
 </body>
 </html>"""
 
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(html)
 
         return str(path)
@@ -530,7 +555,7 @@ def create_report_from_test(
     parsed_response: ParsedResponse,
     metrics: ThinkingMetricsResult,
     quality_scores: dict[str, float] | None = None,
-    **config_kwargs
+    **config_kwargs,
 ) -> EvaluationReport:
     """
     便捷函数：从Test ResultsCreate报告

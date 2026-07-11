@@ -21,11 +21,7 @@ from typing import Any
 
 from core.config_hash import compute_config_hash
 from core.models import TestRun
-from core.warehouse.templates import (
-    HARDWARE_INVENTORY_FIELDS,
-    HM_TEST_FIELDS,
-    MA_TEST_FIELDS,
-)
+from core.warehouse.templates import HARDWARE_INVENTORY_FIELDS, HM_TEST_FIELDS, MA_TEST_FIELDS
 
 # ---------------------------------------------------------------------------
 # WarehouseFilter
@@ -72,7 +68,14 @@ class WarehouseFilter:
         if self.search:
             haystack = " ".join(
                 str(row.get(k) or "")
-                for k in ("model_name", "tester", "machine_id", "engine", "next_action", "remark")
+                for k in (
+                    "model_name",
+                    "tester",
+                    "machine_id",
+                    "engine",
+                    "next_action",
+                    "remark",
+                )
             ).lower()
             if self.search.lower() not in haystack:
                 return False
@@ -97,7 +100,12 @@ def _num(value: Any) -> Any:
 
 def _parallel_strategy(serving: dict[str, Any]) -> str:
     parts = []
-    for key, label in (("tp_size", "tp"), ("dp_size", "dp"), ("ep_size", "ep"), ("pp_size", "pp")):
+    for key, label in (
+        ("tp_size", "tp"),
+        ("dp_size", "dp"),
+        ("ep_size", "ep"),
+        ("pp_size", "pp"),
+    ):
         v = serving.get(key)
         if v:
             parts.append(f"{label}{v}")
@@ -234,8 +242,9 @@ def project_run(run: TestRun) -> dict[str, Any]:
         "gpu_bandwidth_gbps": gpu0.get("nominal_bandwidth_gbps"),
         "pcie_gen": gpu0.get("pcie_gen"),
         "pcie_width": gpu0.get("pcie_width"),
-        "ssd_model": config.get("ssd_model") or "",
-        "ssd_capacity_tb": config.get("ssd_capacity_tb") or "",
+        "ssd_model": config.get("ssd_model") or _largest_ssd_model(fp.get("disks") or []),
+        "ssd_capacity_tb": config.get("ssd_capacity_tb")
+        or _largest_ssd_size(fp.get("disks") or []),
         "os": fp.get("os") or sysinfo.get("os") or "",
         "driver": cuda.get("driver") or "",
         "cuda_or_rocm": cuda.get("cuda_version") or "",
@@ -363,9 +372,33 @@ def _select_fields(row: dict[str, Any], fields: list[str]) -> dict[str, Any]:
     return {f: row.get(f) for f in fields}
 
 
+def _largest_ssd_model(disks: list[dict[str, Any]]) -> Any:
+    """从 fingerprint.disks[] 取最大 SSD 的型号；config 未给 ssd_model 时的兜底。"""
+    ssds = [d for d in disks if d.get("is_ssd") and d.get("size_tb")]
+    if not ssds:
+        return None
+    return max(ssds, key=lambda d: d.get("size_tb") or 0).get("model")
+
+
+def _largest_ssd_size(disks: list[dict[str, Any]]) -> Any:
+    """从 fingerprint.disks[] 取最大 SSD 的容量(TB)；config 未给 ssd_capacity_tb 时的兜底。"""
+    ssds = [d for d in disks if d.get("is_ssd") and d.get("size_tb")]
+    if not ssds:
+        return None
+    return max(ssds, key=lambda d: d.get("size_tb") or 0).get("size_tb")
+
+
 def build_hm_test_rows(runs: list[TestRun]) -> list[dict[str, Any]]:
-    """硬件×模型测试模板（#2）行：每次测试一行，字段顺序与手册一致。"""
-    return [_select_fields(project_run(r), HM_TEST_FIELDS) for r in runs]
+    """硬件×模型测试模板（#2）行：每次测试一行，字段顺序与手册一致。
+
+    跳过硬件盘点快照（status_detail='hardware_inventory'）——那是机器盘点而非
+    「硬件×模型测试」，混入会污染测试矩阵。盘点行由 build_hardware_inventory_rows 收纳。
+    """
+    return [
+        _select_fields(project_run(r), HM_TEST_FIELDS)
+        for r in runs
+        if r.status_detail != "hardware_inventory"
+    ]
 
 
 def build_hardware_inventory_rows(runs: list[TestRun]) -> list[dict[str, Any]]:
@@ -380,9 +413,14 @@ def build_hardware_inventory_rows(runs: list[TestRun]) -> list[dict[str, Any]]:
             continue
         prev = latest_per_machine.get(mid)
         # created_at 倒序传入时，首个即最新；否则取更晚的
-        if prev is None or (r.created_at and (not prev.created_at or r.created_at > prev.created_at)):
+        if prev is None or (
+            r.created_at and (not prev.created_at or r.created_at > prev.created_at)
+        ):
             latest_per_machine[mid] = r
-    return [_select_fields(project_run(r), HARDWARE_INVENTORY_FIELDS) for r in latest_per_machine.values()]
+    return [
+        _select_fields(project_run(r), HARDWARE_INVENTORY_FIELDS)
+        for r in latest_per_machine.values()
+    ]
 
 
 def build_ma_test_rows(runs: list[TestRun]) -> list[dict[str, Any]]:
@@ -483,9 +521,7 @@ def build_cross_matrix(
             chosen = max(numeric) if numeric else None
         else:
             # latest：按 created_at 取最新；None created_at 退化为列表最后一个
-            samples_sorted = sorted(
-                samples, key=lambda x: x[0] or datetime.min, reverse=True
-            )
+            samples_sorted = sorted(samples, key=lambda x: x[0] or datetime.min, reverse=True)
             chosen = samples_sorted[0][1] if samples_sorted else None
         cells.setdefault(rv, {})[cv] = chosen
 

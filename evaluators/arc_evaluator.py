@@ -21,14 +21,14 @@ class ARCEvaluator(BaseEvaluator):
         dataset_path: str = "datasets/arc",
         num_shots: int = 25,
         max_samples: int | None = None,
-        seed: int = 42
+        seed: int = 42,
     ):
         super().__init__(
             dataset_name=dataset_name,
             dataset_path=dataset_path,
             num_shots=num_shots,
             max_samples=max_samples,
-            seed=seed
+            seed=seed,
         )
         random.seed(seed)
 
@@ -36,12 +36,13 @@ class ARCEvaluator(BaseEvaluator):
         """Load ARC dataset (Easy or Challenge)."""
         try:
             from core.dataset_manager import get_dataset
+
             # split mapped to "challenge" or "easy" in some configs, here we use subset
             samples = get_dataset(
                 name=self.dataset_name,
                 split=subset or "challenge",
                 max_samples=self.max_samples,
-                seed=self.seed
+                seed=self.seed,
             )
             self.samples = samples
             return samples
@@ -58,32 +59,47 @@ class ARCEvaluator(BaseEvaluator):
         )
         messages.append({"role": "system", "content": system_instruction})
 
-        for ex in self.few_shot_examples[:self.num_shots]:
-            messages.append({"role": "user", "content": self.format_prompt(ex, include_answer=False)})
-            messages.append({"role": "assistant", "content": self.get_correct_answer(ex)})
+        for ex in self.few_shot_examples[: self.num_shots]:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": self.format_prompt(ex, include_answer=False),
+                }
+            )
+            messages.append(
+                {"role": "assistant", "content": self.get_correct_answer(ex)}
+            )
 
-        messages.append({"role": "user", "content": self.format_prompt(sample, include_answer=False)})
+        messages.append(
+            {
+                "role": "user",
+                "content": self.format_prompt(sample, include_answer=False),
+            }
+        )
         return messages
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
-        question = sample.get('question', '')
-        choices_data = sample.get('choices', {})
-        labels = choices_data.get('label', [])
-        texts = choices_data.get('text', [])
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
+        question = sample.get("question", "")
+        choices_data = sample.get("choices", {})
+        labels = choices_data.get("label", [])
+        texts = choices_data.get("text", [])
 
         prompt = f"Question: {question}\n"
-        for label, text in zip(labels, texts):
+        for label, text in zip(labels, texts, strict=False):
             prompt += f"{label}. {text}\n"
-        
+
         prompt += "Answer:"
         if include_answer:
             prompt += f" {sample.get('answer', '')}"
-        
+
         return prompt
 
     def parse_response(self, response: str) -> str:
-        return extract_choice_answer(response, ['A', 'B', 'C', 'D', '1', '2', '3', '4'])
+        return extract_choice_answer(response, ["A", "B", "C", "D", "1", "2", "3", "4"])
 
     def check_answer(self, predicted: str, correct: str) -> bool:
-        if not predicted: return False
+        if not predicted:
+            return False
         return predicted.upper() == correct.upper()

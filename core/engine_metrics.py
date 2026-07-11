@@ -32,6 +32,90 @@ logger = logging.getLogger(__name__)
 _MAX_TIMELINE_POINTS = 3600
 
 
+# ---------------------------------------------------------------------------
+# 测试前一次性 KV 容量探测（自适应测试用，不启动轮询线程）
+# ---------------------------------------------------------------------------
+
+
+def probe_kv_capacity(api_base_url: str | None, timeout: float = 5.0) -> dict[str, Any]:
+    """测试前一次性探测 KV 缓存容量（tokens），用于自适应跳过超预算 cell。
+
+    优先级：
+      1. 引擎 /metrics 的 cache_config_info（vLLM: block_size×num_gpu_blocks）——最准，
+         反映引擎实际分配的 KV 池。
+      2. /v1/models 的 max_model_len——模型上下文上限，作 KV 预算上界（保守，
+         实际 KV 池可能更小，但引擎不在跑 / /metrics 不可达时是唯一来源）。
+      3. 都拿不到 → kv_capacity_tokens=None（调用方回退到不跳过，全跑）。
+
+    纯函数、不启动线程、永不抛异常（探测失败比采集不到更糟，回退到全跑）。
+    返回 {kv_capacity_tokens, source, max_model_len, metrics_ok}。
+    """
+    result: dict[str, Any] = {
+        "kv_capacity_tokens": None,
+        "source": None,  # "metrics" / "models" / None
+        "max_model_len": None,
+        "metrics_ok": False,
+    }
+    metrics_url = default_metrics_url(api_base_url)
+
+    # 1. /metrics → cache_config
+    if metrics_url:
+        try:
+            import httpx  # 与 poller 同源；缺 httpx 则跳过本路径
+
+            with httpx.Client(timeout=timeout) as c:
+                resp = c.get(metrics_url)
+                if resp.status_code == 200:
+                    parsed = parse_prometheus(resp.text)
+                    family = detect_engine_family(parsed)
+                    rt = (
+                        extract_vllm_runtime(parsed)
+                        if family != "sglang"
+                        else extract_sglang_runtime(parsed)
+                    )
+                    cc = rt.get("cache_config") or {}
+                    blocks = cc.get("num_gpu_blocks")
+                    bsize = cc.get("block_size")
+                    if blocks and bsize:
+                        result["kv_capacity_tokens"] = int(blocks) * int(bsize)
+                        result["source"] = "metrics"
+                        result["metrics_ok"] = True
+        except Exception as e:  # noqa: BLE001  探测兜底，绝不抛
+            logger.debug(f"probe_kv_capacity /metrics 失败: {e}")
+
+    # 2. /v1/models → max_model_len 兜底
+    if result["kv_capacity_tokens"] is None and api_base_url:
+        try:
+            import httpx
+
+            with httpx.Client(timeout=timeout) as c:
+                resp = c.get(api_base_url.rstrip("/") + "/models")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    models = data.get("data") if isinstance(data, dict) else None
+                    if models:
+                        mml = models[0].get("max_model_len")
+                        if mml:
+                            result["max_model_len"] = int(mml)
+                            # max_model_len 是单请求上下文上限；KV 池通常 ≥ 它但
+                            # 多并发时总占用受限于池大小。作保守上界用。
+                            result["kv_capacity_tokens"] = int(mml)
+                            result["source"] = result["source"] or "models"
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"probe_kv_capacity /v1/models 失败: {e}")
+
+    return result
+
+
+def estimate_kv_need(concurrency: int, context_tokens: int, max_tokens: int) -> int:
+    """估算一个 cell 的 KV 占用（tokens）：并发 × (上下文 + 最大输出)。
+
+    与 live_bench.build_phases 同口径：conc*ctx + conc*max_tokens ≤ kv_budget。
+    context_tokens 是输入 prompt 长度，max_tokens 是生成上限。
+    """
+    return concurrency * (context_tokens + max_tokens)
+
+
 def default_metrics_url(api_base_url: str | None) -> str | None:
     """从 api_base_url 推导默认 /metrics 端点（同 host:port，路径换 /metrics）。"""
     if not api_base_url:
@@ -49,9 +133,15 @@ def default_metrics_url(api_base_url: str | None) -> str | None:
 
 
 class EngineMetricsPoller:
-    """轮询引擎 /metrics 的后台采样器。start()/stop() 成对，stop() 返回汇总 dict。"""
+    """轮询引擎 /metrics 的后台采样器。start()/stop() 成对，stop() 返回汇总 dict。
 
-    def __init__(self, metrics_url: str | None, interval: float = 1.0, timeout: float = 2.0):
+    若连续 _MAX_CONSECUTIVE_FAILURES 次请求均未返回 200，自动停止轮询并记录警告，
+    避免引擎日志被 404 刷屏。
+    """
+
+    _MAX_CONSECUTIVE_FAILURES = 3
+
+    def __init__(self, metrics_url: str | None, interval: float = 5.0, timeout: float = 2.0):
         self.metrics_url = metrics_url
         self.interval = max(0.2, float(interval))
         self.timeout = timeout
@@ -63,7 +153,8 @@ class EngineMetricsPoller:
         self._cache_config: dict[str, Any] = {}
         self._engine_family: str = "unknown"
         self._preemption_first: float | None = None
-        self._client = None  # httpx.Client，惰性创建
+        self._client: Any = None  # httpx.Client，惰性创建
+        self._consecutive_failures = 0
 
     # ------------------------------------------------------------------
     def start(self) -> None:
@@ -74,6 +165,7 @@ class EngineMetricsPoller:
             return
         try:
             import httpx
+
             self._client = httpx.Client(timeout=self.timeout)
         except Exception as e:  # noqa: BLE001
             logger.debug(f"httpx 不可用，引擎指标采集跳过: {e}")
@@ -104,8 +196,20 @@ class EngineMetricsPoller:
         while not self._stop_event.is_set():
             sample = self._sample_once()
             if sample is not None:
+                self._consecutive_failures = 0
                 self._samples.append(sample)
-            self._stop_event.wait(timeout=self.interval)
+            else:
+                self._consecutive_failures += 1
+                if self._consecutive_failures >= self._MAX_CONSECUTIVE_FAILURES:
+                    logger.warning(
+                        "引擎 metrics 端点 %s 连续 %d 次不可达，停止轮询（不影响测试）",
+                        self.metrics_url,
+                        self._consecutive_failures,
+                    )
+                    self._stop_event.set()
+                    break
+            if not self._stop_event.is_set():
+                self._stop_event.wait(timeout=self.interval)
 
     def _sample_once(self) -> dict[str, Any] | None:
         if self._client is None:
@@ -136,8 +240,11 @@ class EngineMetricsPoller:
             "num_requests_running": rt.get("num_requests_running"),
             "num_requests_waiting": rt.get("num_requests_waiting"),
             "num_preemption": rt.get("num_preemption"),
+            "num_requests_swapped": rt.get("num_requests_swapped"),
             "ttft_mean_s": rt.get("ttft_mean_s"),
             "tpot_mean_s": rt.get("tpot_mean_s"),
+            "gpu_prefix_cache_hit_rate": rt.get("gpu_prefix_cache_hit_rate"),
+            "spec_token_acceptance_rate": rt.get("spec_token_acceptance_rate"),
         }
 
     def _extract(self, parsed: dict[str, Any]) -> dict[str, Any]:
@@ -165,7 +272,9 @@ class EngineMetricsPoller:
             return None
 
         # num_preemption 是累加 counter：取窗口内增量（需 ≥2 个样本才能算）
-        preemption_vals = [s["num_preemption"] for s in self._samples if s.get("num_preemption") is not None]
+        preemption_vals = [
+            s["num_preemption"] for s in self._samples if s.get("num_preemption") is not None
+        ]
         preemption_total = None
         if len(preemption_vals) >= 2:
             preemption_total = preemption_vals[-1] - preemption_vals[0]
@@ -187,11 +296,15 @@ class EngineMetricsPoller:
                 "num_requests_waiting": _peak("num_requests_waiting"),
                 "ttft_mean_s": _peak("ttft_mean_s"),
                 "tpot_mean_s": _peak("tpot_mean_s"),
+                "num_requests_swapped": _peak("num_requests_swapped"),
             },
             "engine_means": {
                 # 末采样点的直方图均值（直方图累积，末点 = 引擎整段整体 TTFT/TPOT）
                 "ttft_s": _last("ttft_mean_s"),
                 "tpot_s": _last("tpot_mean_s"),
+                # prefix cache 命中率 / 推测解码接受率(末点 = 整体累积值)
+                "gpu_prefix_cache_hit_rate": _last("gpu_prefix_cache_hit_rate"),
+                "spec_token_acceptance_rate": _last("spec_token_acceptance_rate"),
             },
             "preemption_total": preemption_total,
             "cache_config": {

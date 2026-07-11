@@ -44,14 +44,14 @@ class SWEBenchLiteEvaluator(BaseEvaluator):
         dataset_path: str = "datasets/swebench_lite",
         num_shots: int = 0,  # SWE-Bench 通常use 0-shot
         max_samples: int | None = None,
-        seed: int = 42
+        seed: int = 42,
     ):
         super().__init__(
             dataset_name=dataset_name,
             dataset_path=dataset_path,
             num_shots=num_shots,
             max_samples=max_samples,
-            seed=seed
+            seed=seed,
         )
         random.seed(seed)
 
@@ -62,7 +62,10 @@ class SWEBenchLiteEvaluator(BaseEvaluator):
         # 1. Try DatasetManager (auto-download)
         try:
             from core.dataset_manager import get_dataset
-            samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
+
+            samples = get_dataset(
+                self.dataset_name, split="test", max_samples=None, seed=self.seed
+            )
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for SWE-Bench: {e}")
 
@@ -78,18 +81,18 @@ class SWEBenchLiteEvaluator(BaseEvaluator):
             for filepath in possible_files:
                 if os.path.exists(filepath):
                     try:
-                        if filepath.endswith('.jsonl'):
-                            with open(filepath, encoding='utf-8') as f:
+                        if filepath.endswith(".jsonl"):
+                            with open(filepath, encoding="utf-8") as f:
                                 for line in f:
                                     if line.strip():
                                         samples.append(json.loads(line))
                         else:
-                            with open(filepath, encoding='utf-8') as f:
+                            with open(filepath, encoding="utf-8") as f:
                                 data = json.load(f)
                             if isinstance(data, list):
                                 samples = data
-                            elif isinstance(data, dict) and 'data' in data:
-                                samples = data['data']
+                            elif isinstance(data, dict) and "data" in data:
+                                samples = data["data"]
                         break
                     except Exception as e:
                         print(f"Load {filepath} 失败: {e}")
@@ -100,16 +103,18 @@ class SWEBenchLiteEvaluator(BaseEvaluator):
         samples = self._normalize_samples(samples)
         random.shuffle(samples)
 
-        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
+        total_needed = self.num_shots + (
+            self.max_samples if self.max_samples else len(samples)
+        )
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
         if self.num_shots > 0:
-            self.few_shot_examples = samples[:self.num_shots]
-            samples = samples[self.num_shots:]
+            self.few_shot_examples = samples[: self.num_shots]
+            samples = samples[self.num_shots :]
 
         if self.max_samples and len(samples) > self.max_samples:
-            samples = samples[:self.max_samples]
+            samples = samples[: self.max_samples]
 
         self.samples = samples
         return samples
@@ -120,15 +125,17 @@ class SWEBenchLiteEvaluator(BaseEvaluator):
 
         for sample in samples:
             try:
-                normalized.append({
-                    'instance_id': sample.get('instance_id', ''),
-                    'repo': sample.get('repo', ''),
-                    'problem_statement': sample.get('problem_statement', ''),
-                    'hints': sample.get('hints_text', ''),
-                    'patch': sample.get('patch', ''),
-                    'fail_tests': sample.get('FAIL_TO_PASS', []),
-                    'pass_tests': sample.get('PASS_TO_PASS', [])
-                })
+                normalized.append(
+                    {
+                        "instance_id": sample.get("instance_id", ""),
+                        "repo": sample.get("repo", ""),
+                        "problem_statement": sample.get("problem_statement", ""),
+                        "hints": sample.get("hints_text", ""),
+                        "patch": sample.get("patch", ""),
+                        "fail_tests": sample.get("FAIL_TO_PASS", []),
+                        "pass_tests": sample.get("PASS_TO_PASS", []),
+                    }
+                )
             except Exception as e:
                 continue
 
@@ -166,7 +173,7 @@ Expected behavior: Return 0 for empty lists or raise ValueError.
      return sum(numbers) / len(numbers)
                 """,
                 "fail_tests": ["test_empty_list"],
-                "pass_tests": ["test_normal_average"]
+                "pass_tests": ["test_normal_average"],
             },
             {
                 "instance_id": "example__project-002",
@@ -199,21 +206,23 @@ def build_message(parts):
 +    return " ".join(parts)
                 """,
                 "fail_tests": ["test_performance"],
-                "pass_tests": ["test_build_message"]
-            }
+                "pass_tests": ["test_build_message"],
+            },
         ]
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """Format SWE-Bench 样本"""
-        problem = sample.get('problem_statement', '')
-        hints = sample.get('hints', '')
+        problem = sample.get("problem_statement", "")
+        hints = sample.get("hints", "")
 
         prompt = f"Issue:\n{problem}"
         if hints:
             prompt += f"\n\nHints:\n{hints}"
 
         if include_answer:
-            patch = sample.get('patch', '')
+            patch = sample.get("patch", "")
             prompt += f"\n\nPatch:\n```diff\n{patch}\n```"
         else:
             prompt += "\n\nGenerate a patch to fix this issue:"
@@ -232,22 +241,22 @@ def build_message(parts):
     def parse_response(self, response: str) -> str:
         """Parse响应，提取 diff 补丁"""
         # 尝试提取代码块in diff
-        diff_match = re.search(r'```(?:diff)?\s*(.*?)```', response, re.DOTALL)
+        diff_match = re.search(r"```(?:diff)?\s*(.*?)```", response, re.DOTALL)
         if diff_match:
             return diff_match.group(1).strip()
 
         # 查找 diff 格式内容
-        if '---' in response and '+++' in response:
-            lines = response.split('\n')
+        if "---" in response and "+++" in response:
+            lines = response.split("\n")
             diff_lines = []
             in_diff = False
             for line in lines:
-                if line.startswith('---') or line.startswith('+++'):
+                if line.startswith("---") or line.startswith("+++"):
                     in_diff = True
                 if in_diff:
                     diff_lines.append(line)
             if diff_lines:
-                return '\n'.join(diff_lines)
+                return "\n".join(diff_lines)
 
         return response.strip()
 
@@ -261,18 +270,22 @@ def build_message(parts):
             return False
 
         # 简单Check：is否包含 diff 格式
-        has_diff_format = ('---' in predicted or '+++' in predicted or
-                          '+' in predicted or '-' in predicted)
+        has_diff_format = (
+            "---" in predicted
+            or "+++" in predicted
+            or "+" in predicted
+            or "-" in predicted
+        )
 
         # Checkis否has代码修改
-        has_code_change = bool(re.search(r'[\+\-]\s*\w+', predicted))
+        has_code_change = bool(re.search(r"[\+\-]\s*\w+", predicted))
 
         return has_diff_format and has_code_change
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
         """Get正确补丁"""
-        return sample.get('patch', '')
+        return str(sample.get("patch", ""))
 
     def get_sample_category(self, sample: dict[str, Any]) -> str:
         """Get仓库名称作is类别"""
-        return sample.get('repo', 'unknown')
+        return str(sample.get("repo", "unknown"))

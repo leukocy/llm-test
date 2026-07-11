@@ -3,6 +3,7 @@ Quality Test Reports Module
 Quality test report module - generates quality assessment visualization reports
 """
 
+from typing import Any
 
 import pandas as pd
 import plotly.express as px
@@ -10,7 +11,6 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from evaluators.base_evaluator import EvaluationResult
-from ui.design_system import material_icon
 
 
 def generate_quality_summary(results: dict[str, EvaluationResult]) -> pd.DataFrame:
@@ -31,7 +31,9 @@ def generate_quality_summary(results: dict[str, EvaluationResult]) -> pd.DataFra
         stats = result.performance_stats or {}
 
         # Calculate AI judge correction count
-        judge_corrected = sum(1 for s in result.details if getattr(s, 'is_judge_corrected', False))
+        judge_corrected = sum(
+            1 for s in result.details if getattr(s, "is_judge_corrected", False)
+        )
 
         # Calculate evaluation method breakdown
         eval_methods = _compute_eval_method_breakdown(result.details)
@@ -49,10 +51,10 @@ def generate_quality_summary(results: dict[str, EvaluationResult]) -> pd.DataFra
 
         # Add performance metrics (if available)
         if stats:
-            row["Avg TTFT(ms)"] = round(stats.get('avg_ttft_ms', 0), 0)
-            row["Avg TPS"] = round(stats.get('avg_tps', 0), 1)
-            row["Input Tokens"] = stats.get('total_input_tokens', 0)
-            row["Output Tokens"] = stats.get('total_output_tokens', 0)
+            row["Avg TTFT(ms)"] = round(stats.get("avg_ttft_ms", 0), 0)
+            row["Avg TPS"] = round(stats.get("avg_tps", 0), 1)
+            row["Input Tokens"] = stats.get("total_input_tokens", 0)
+            row["Output Tokens"] = stats.get("total_output_tokens", 0)
 
         row["Eval Time"] = result.timestamp
         data.append(row)
@@ -66,12 +68,13 @@ def _compute_eval_method_breakdown(details: list) -> str:
     if not details:
         return ""
     from collections import Counter
-    methods = Counter()
-    parse_methods = Counter()
+
+    methods: Counter[str] = Counter()
+    parse_methods: Counter[str] = Counter()
     for s in details:
-        if getattr(s, 'evaluation_method', ''):
+        if getattr(s, "evaluation_method", ""):
             methods[s.evaluation_method] += 1
-        if getattr(s, 'answer_parse_method', ''):
+        if getattr(s, "answer_parse_method", ""):
             parse_methods[s.answer_parse_method] += 1
 
     # Combine into a single display string
@@ -84,7 +87,6 @@ def _compute_eval_method_breakdown(details: list) -> str:
     return ", ".join(all_labels) if all_labels else ""
 
 
-
 def render_accuracy_chart(results: dict[str, EvaluationResult]) -> go.Figure:
     """
     Render accuracy bar chart
@@ -95,26 +97,28 @@ def render_accuracy_chart(results: dict[str, EvaluationResult]) -> go.Figure:
     datasets = list(results.keys())
     accuracies = [results[d].accuracy * 100 for d in datasets]
 
-    fig = go.Figure(data=[
-        go.Bar(
-            x=datasets,
-            y=accuracies,
-            text=[f"{acc:.1f}%" for acc in accuracies],
-            textposition='outside',
-            marker_color='#4CAF50',
-            marker_line_color='#2E7D32',
-            marker_line_width=1
-        )
-    ])
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=datasets,
+                y=accuracies,
+                text=[f"{acc:.1f}%" for acc in accuracies],
+                textposition="outside",
+                marker_color="#4CAF50",
+                marker_line_color="#2E7D32",
+                marker_line_width=1,
+            )
+        ]
+    )
 
     fig.update_layout(
-        title="Accuracy by dataset",
+        title="Accuracy by Dataset",
         xaxis_title="Dataset",
         yaxis_title="Accuracy (%)",
         yaxis_range=[0, 105],
         template="plotly_white",
         showlegend=False,
-        height=400
+        height=400,
     )
 
     return fig
@@ -134,25 +138,22 @@ def render_radar_chart(results: dict[str, EvaluationResult]) -> go.Figure:
     categories = categories + [categories[0]]
     values = values + [values[0]]
 
-    fig = go.Figure(data=go.Scatterpolar(
-        r=values,
-        theta=categories,
-        fill='toself',
-        name='Model Capability',
-        line_color='#2196F3',
-        fillcolor='rgba(33, 150, 243, 0.3)'
-    ))
+    fig = go.Figure(
+        data=go.Scatterpolar(
+            r=values,
+            theta=categories,
+            fill="toself",
+            name="Model Capability",
+            line_color="#2196F3",
+            fillcolor="rgba(33, 150, 243, 0.3)",
+        )
+    )
 
     fig.update_layout(
-        polar={
-            'radialaxis': {
-                'visible': True,
-                'range': [0, 100]
-            }
-        },
-        title="Model capability radar",
+        polar={"radialaxis": {"visible": True, "range": [0, 100]}},
+        title="Model Capability Radar",
         showlegend=False,
-        height=450
+        height=450,
     )
 
     return fig
@@ -167,12 +168,20 @@ def render_category_heatmap(result: EvaluationResult) -> go.Figure:
 
     # Extract data
     categories = list(result.by_category.keys())
-    accuracies = [result.by_category[c].get('accuracy', 0) * 100 for c in categories]
-    counts = [result.by_category[c].get('count', 0) for c in categories]
+    accuracies = [result.by_category[c].get("accuracy", 0) * 100 for c in categories]
+    counts = [result.by_category[c].get("count", 0) for c in categories]
 
     # Sort by accuracy
-    sorted_data = sorted(zip(categories, accuracies, counts, strict=False), key=lambda x: x[1], reverse=True)
-    categories, accuracies, counts = zip(*sorted_data, strict=False) if sorted_data else ([], [], [])
+    sorted_data = sorted(
+        zip(categories, accuracies, counts, strict=False),
+        key=lambda x: x[1],
+        reverse=True,
+    )
+    if sorted_data:
+        cat_seq, acc_seq, cnt_seq = zip(*sorted_data, strict=False)
+        categories = list(cat_seq)
+        accuracies = list(acc_seq)
+        counts = list(cnt_seq)
 
     # Limit display count
     max_display = 20
@@ -181,28 +190,33 @@ def render_category_heatmap(result: EvaluationResult) -> go.Figure:
         accuracies = accuracies[:max_display]
         counts = counts[:max_display]
 
-    fig = go.Figure(data=[
-        go.Bar(
-            y=list(categories),
-            x=list(accuracies),
-            orientation='h',
-            text=[f"{acc:.1f}% (n={cnt})" for acc, cnt in zip(accuracies, counts, strict=False)],
-            textposition='outside',
-            marker_color=list(accuracies),
-            marker_colorscale='RdYlGn',
-            marker_cmin=0,
-            marker_cmax=100
-        )
-    ])
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                y=list(categories),
+                x=list(accuracies),
+                orientation="h",
+                text=[
+                    f"{acc:.1f}% (n={cnt})"
+                    for acc, cnt in zip(accuracies, counts, strict=False)
+                ],
+                textposition="outside",
+                marker_color=list(accuracies),
+                marker_colorscale="RdYlGn",
+                marker_cmin=0,
+                marker_cmax=100,
+            )
+        ]
+    )
 
     fig.update_layout(
-        title=f"{result.dataset_name} per-category accuracy (top {min(len(categories), max_display)})",
+        title=f"{result.dataset_name} Per-Category Accuracy (Top {min(len(categories), max_display)})",
         xaxis_title="Accuracy (%)",
         yaxis_title="Category",
         xaxis_range=[0, 110],
         template="plotly_white",
         height=max(400, len(categories) * 25),
-        showlegend=False
+        showlegend=False,
     )
 
     return fig
@@ -220,33 +234,37 @@ def render_error_analysis(result: EvaluationResult, max_errors: int = 20) -> Non
     errors = [d for d in result.details if not d.is_correct]
 
     if not errors:
-        st.success("No error samples were found in this dataset.")
+        st.success("Great! No error samples found in this dataset.")
         return
 
     # --- New: Showing automated failure analysis report ---
-    if hasattr(result, 'extended_metrics') and result.extended_metrics and 'failure_analysis' in result.extended_metrics:
-        fa = result.extended_metrics['failure_analysis']
-        with st.expander("Automated failure analysis", expanded=True):
+    if (
+        hasattr(result, "extended_metrics")
+        and result.extended_metrics
+        and "failure_analysis" in result.extended_metrics
+    ):
+        fa = result.extended_metrics["failure_analysis"]
+        with st.expander("Automated Failure Analysis Report", expanded=True):
             st.markdown(f"**Overall Failure Rate**: `{fa.get('failure_rate', 0):.1f}%`")
 
             c1, c2 = st.columns(2)
             with c1:
-                st.markdown("##### Top failure causes")
-                for issue in fa.get('top_issues', []):
+                st.markdown("##### Top Failure Causes")
+                for issue in fa.get("top_issues", []):
                     st.write(f"- {issue}")
 
             with c2:
-                st.markdown("##### Improvement suggestions")
-                for suggestion in fa.get('suggestions', []):
+                st.markdown("##### Improvement Suggestions")
+                for suggestion in fa.get("suggestions", []):
                     st.info(suggestion)
 
             # Distribution chart
-            if fa.get('category_distribution'):
-                dist = fa['category_distribution']
+            if fa.get("category_distribution"):
+                dist = fa["category_distribution"]
                 fig_dist = px.pie(
                     values=list(dist.values()),
                     names=list(dist.keys()),
-                    title="Failure Cause Distribution"
+                    title="Failure Cause Distribution",
                 )
                 fig_dist.update_layout(height=300)
                 st.plotly_chart(fig_dist, use_container_width=True)
@@ -261,16 +279,20 @@ def render_error_analysis(result: EvaluationResult, max_errors: int = 20) -> Non
         selected_category = st.selectbox(
             f"Filter Error Category (total {len(errors)} errors)",
             ["All"] + categories,
-            key=f"err_filter_{result.dataset_name}_{result.model_id}"
+            key=f"err_filter_{result.dataset_name}_{result.model_id}",
         )
 
     # Filter data
-    filtered_errors = errors if selected_category == "All" else [e for e in errors if e.category == selected_category]
+    filtered_errors = (
+        errors
+        if selected_category == "All"
+        else [e for e in errors if e.category == selected_category]
+    )
 
     with col_export:
         # Build complete CSV data for download
         export_data = []
-        for err in errors: # Export all errors, not just filtered ones
+        for err in errors:  # Export all errors, not just filtered ones
             row = {
                 "Sample ID": err.sample_id,
                 "Category": err.category,
@@ -278,12 +300,12 @@ def render_error_analysis(result: EvaluationResult, max_errors: int = 20) -> Non
                 "Correct Answer": err.correct_answer,
                 "Predicted Answer": err.predicted_answer,
                 "Full Prompt": err.prompt,
-                "Full Response": err.model_response
+                "Full Response": err.model_response,
             }
             # Include evaluation metadata if available
-            eval_method = getattr(err, 'evaluation_method', '')
-            parse_method = getattr(err, 'answer_parse_method', '')
-            confidence = getattr(err, 'answer_parse_confidence', 0)
+            eval_method = getattr(err, "evaluation_method", "")
+            parse_method = getattr(err, "answer_parse_method", "")
+            confidence = getattr(err, "answer_parse_confidence", 0)
             if eval_method:
                 row["Evaluation Method"] = eval_method
             if parse_method:
@@ -295,72 +317,95 @@ def render_error_analysis(result: EvaluationResult, max_errors: int = 20) -> Non
         if export_data:
             csv_df = pd.DataFrame(export_data)
             st.download_button(
-                label="Download error report",
+                label="Download Error Report",
                 data=csv_df.to_csv(index=False),
                 file_name=f"errors_{result.dataset_name}_{result.model_id}.csv",
                 mime="text/csv",
                 help="Download all error samples with prompts and full responses",
-                icon=material_icon("download"),
             )
 
     # 2. Error list overview (display section)
-    st.markdown("#### Error list")
+    st.markdown("#### Error List")
 
     display_data = []
     for err in filtered_errors[:max_errors]:
         row = {
             "ID": err.sample_id,
             "Category": err.category,
-            "Question Summary": (err.question[:60] + "...") if len(err.question) > 60 else err.question,
+            "Question Summary": (
+                (err.question[:60] + "...") if len(err.question) > 60 else err.question
+            ),
             "Correct Answer": err.correct_answer,
             "Model Prediction": err.predicted_answer,
         }
         # Add parse method and confidence if available
-        parse_method = getattr(err, 'answer_parse_method', '')
+        parse_method = getattr(err, "answer_parse_method", "")
         if parse_method:
             row["Parse Method"] = parse_method
-        confidence = getattr(err, 'answer_parse_confidence', 0)
+        confidence = getattr(err, "answer_parse_confidence", 0)
         if confidence > 0:
             row["Confidence"] = f"{confidence:.0%}"
         display_data.append(row)
 
     if display_data:
-        st.dataframe(pd.DataFrame(display_data), use_container_width=True, hide_index=True)
+        st.dataframe(
+            pd.DataFrame(display_data), use_container_width=True, hide_index=True
+        )
         if len(filtered_errors) > max_errors:
-            st.caption(f"*Showing only the first {max_errors} items. Use the button above to download the full report or the tool below for details.*")
+            st.caption(
+                f"*Showing only the first {max_errors} items. Use the button above to download the full report or the tool below for details.*"
+            )
 
     # 3. Deep diagnosis tool
-    st.markdown("#### Deep diagnosis")
-    st.caption("Select a sample ID to view the full prompt and model raw response for error analysis.")
+    st.markdown("#### Deep Diagnosis")
+    st.caption(
+        "Select a sample ID to view the full prompt and model raw response for error analysis."
+    )
 
     selected_error_id = st.selectbox(
         "Select Sample ID",
         options=[err.sample_id for err in filtered_errors],
         format_func=lambda x: f"ID: {x}",
-        key=f"err_select_{result.dataset_name}_{result.model_id}"
+        key=f"err_select_{result.dataset_name}_{result.model_id}",
     )
 
     # Find selected error details
-    target_error = next((e for e in filtered_errors if e.sample_id == selected_error_id), None)
+    target_error = next(
+        (e for e in filtered_errors if e.sample_id == selected_error_id), None
+    )
 
     if target_error:
         with st.container(border=True):
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown("**Question (Prompt)**")
-                st.text_area("Input", value=target_error.prompt, height=300, disabled=True, key=f"p_{selected_error_id}")
+                st.text_area(
+                    "Input",
+                    value=target_error.prompt,
+                    height=300,
+                    disabled=True,
+                    key=f"p_{selected_error_id}",
+                )
                 st.markdown(f"**Correct Answer**: `{target_error.correct_answer}`")
 
             with c2:
                 st.markdown("**Model Full Response**")
-                st.text_area("Output", value=target_error.model_response, height=300, disabled=True, key=f"r_{selected_error_id}")
+                st.text_area(
+                    "Output",
+                    value=target_error.model_response,
+                    height=300,
+                    disabled=True,
+                    key=f"r_{selected_error_id}",
+                )
 
                 # Parse details
-                parse_method = getattr(target_error, 'answer_parse_method', '')
-                confidence = getattr(target_error, 'answer_parse_confidence', 0)
-                eval_method = getattr(target_error, 'evaluation_method', '')
+                parse_method = getattr(target_error, "answer_parse_method", "")
+                confidence = getattr(target_error, "answer_parse_confidence", 0)
+                eval_method = getattr(target_error, "evaluation_method", "")
 
-                st.markdown(f"**Extracted Prediction**: `{target_error.predicted_answer}`")
+                st.markdown(
+                    f"**Extracted Prediction**: `{target_error.predicted_answer}`"
+                )
 
                 if parse_method or eval_method:
                     detail_parts = []
@@ -380,14 +425,14 @@ def render_eval_method_breakdown(result: EvaluationResult) -> None:
 
     from collections import Counter
 
-    eval_methods = Counter()
-    parse_methods = Counter()
-    confidences = []
+    eval_methods: Counter[str] = Counter()
+    parse_methods: Counter[str] = Counter()
+    confidences: list = []
 
     for s in result.details:
-        em = getattr(s, 'evaluation_method', '')
-        pm = getattr(s, 'answer_parse_method', '')
-        conf = getattr(s, 'answer_parse_confidence', 0)
+        em = getattr(s, "evaluation_method", "")
+        pm = getattr(s, "answer_parse_method", "")
+        conf = getattr(s, "answer_parse_confidence", 0)
         if em:
             eval_methods[em] += 1
         if pm:
@@ -398,21 +443,29 @@ def render_eval_method_breakdown(result: EvaluationResult) -> None:
     if not eval_methods and not parse_methods:
         return
 
-    st.markdown("##### Evaluation method breakdown")
+    st.markdown("##### Evaluation Method Breakdown")
 
     col1, col2 = st.columns(2)
 
     with col1:
         if eval_methods:
-            method_data = [{"Method": m, "Count": c} for m, c in eval_methods.most_common()]
-            st.dataframe(pd.DataFrame(method_data), hide_index=True, use_container_width=True)
+            method_data = [
+                {"Method": m, "Count": c} for m, c in eval_methods.most_common()
+            ]
+            st.dataframe(
+                pd.DataFrame(method_data), hide_index=True, use_container_width=True
+            )
         else:
             st.caption("No evaluation method data")
 
     with col2:
         if parse_methods:
-            parse_data = [{"Parse Method": m, "Count": c} for m, c in parse_methods.most_common()]
-            st.dataframe(pd.DataFrame(parse_data), hide_index=True, use_container_width=True)
+            parse_data = [
+                {"Parse Method": m, "Count": c} for m, c in parse_methods.most_common()
+            ]
+            st.dataframe(
+                pd.DataFrame(parse_data), hide_index=True, use_container_width=True
+            )
         else:
             st.caption("No parse method data")
 
@@ -431,23 +484,25 @@ def render_performance_stats(results: dict[str, EvaluationResult]) -> None:
     """
     Render performance metrics panel
     """
-    st.markdown("### Performance metrics")
+    st.markdown("### Performance Metrics")
 
     # Collect results with performance data
     perf_data = []
     for name, result in results.items():
         stats = result.performance_stats or {}
         if stats:
-            perf_data.append({
-                "Dataset": name,
-                "Avg TTFT (ms)": round(stats.get('avg_ttft_ms', 0), 1),
-                "Avg TPS": round(stats.get('avg_tps', 0), 1),
-                "Max TPS": round(stats.get('max_tps', 0), 1),
-                "Avg Latency (ms)": round(stats.get('avg_latency_ms', 0), 0),
-                "Input Tokens": stats.get('total_input_tokens', 0),
-                "Output Tokens": stats.get('total_output_tokens', 0),
-                "Success Rate": f"{stats.get('success_rate', 0):.1%}"
-            })
+            perf_data.append(
+                {
+                    "Dataset": name,
+                    "Avg TTFT (ms)": round(stats.get("avg_ttft_ms", 0), 1),
+                    "Avg TPS": round(stats.get("avg_tps", 0), 1),
+                    "Max TPS": round(stats.get("max_tps", 0), 1),
+                    "Avg Latency (ms)": round(stats.get("avg_latency_ms", 0), 0),
+                    "Input Tokens": stats.get("total_input_tokens", 0),
+                    "Output Tokens": stats.get("total_output_tokens", 0),
+                    "Success Rate": f"{stats.get('success_rate', 0):.1%}",
+                }
+            )
 
     if not perf_data:
         st.info("No performance metrics data yet")
@@ -465,21 +520,23 @@ def render_performance_stats(results: dict[str, EvaluationResult]) -> None:
         datasets = [d["Dataset"] for d in perf_data]
         ttfts = [d["Avg TTFT (ms)"] for d in perf_data]
 
-        fig_ttft = go.Figure(data=[
-            go.Bar(
-                x=datasets,
-                y=ttfts,
-                text=[f"{t:.0f}ms" for t in ttfts],
-                textposition='outside',
-                marker_color='#FF9800'
-            )
-        ])
+        fig_ttft = go.Figure(
+            data=[
+                go.Bar(
+                    x=datasets,
+                    y=ttfts,
+                    text=[f"{t:.0f}ms" for t in ttfts],
+                    textposition="outside",
+                    marker_color="#FF9800",
+                )
+            ]
+        )
         fig_ttft.update_layout(
             title="Average TTFT",
             xaxis_title="Dataset",
             yaxis_title="TTFT (ms)",
             template="plotly_white",
-            height=300
+            height=300,
         )
         st.plotly_chart(fig_ttft)
 
@@ -487,29 +544,29 @@ def render_performance_stats(results: dict[str, EvaluationResult]) -> None:
         # TPS chart
         tps_values = [d["Avg TPS"] for d in perf_data]
 
-        fig_tps = go.Figure(data=[
-            go.Bar(
-                x=datasets,
-                y=tps_values,
-                text=[f"{t:.1f}" for t in tps_values],
-                textposition='outside',
-                marker_color='#2196F3'
-            )
-        ])
+        fig_tps = go.Figure(
+            data=[
+                go.Bar(
+                    x=datasets,
+                    y=tps_values,
+                    text=[f"{t:.1f}" for t in tps_values],
+                    textposition="outside",
+                    marker_color="#2196F3",
+                )
+            ]
+        )
         fig_tps.update_layout(
             title="Average TPS",
             xaxis_title="Dataset",
             yaxis_title="Tokens/Second",
             template="plotly_white",
-            height=300
+            height=300,
         )
         st.plotly_chart(fig_tps)
 
 
 def render_quality_report(
-    results: dict[str, EvaluationResult],
-    model_id: str,
-    show_details: bool = True
+    results: dict[str, EvaluationResult], model_id: str, show_details: bool = True
 ):
     """
     Render full quality assessment report within Streamlit
@@ -524,11 +581,11 @@ def render_quality_report(
         return
 
     # Title
-    st.header("Model quality assessment report")
+    st.header("Model Quality Assessment Report")
     st.subheader(f"Model: `{model_id}`")
 
     # Summary table
-    st.markdown("### Evaluation summary")
+    st.markdown("### Evaluation Summary")
     summary_df = generate_quality_summary(results)
 
     # Format accuracy column
@@ -556,10 +613,10 @@ def render_quality_report(
 
     # Per-category details
     if show_details:
-        st.markdown("### Per-category analysis")
+        st.markdown("### Per-Category Analysis")
 
         for dataset_name, result in results.items():
-            with st.expander(f"{dataset_name} detailed analysis", expanded=True):
+            with st.expander(f"{dataset_name} Detailed Analysis", expanded=True):
                 # Per-category accuracy
                 if result.by_category:
                     heatmap = render_category_heatmap(result)
@@ -569,25 +626,35 @@ def render_quality_report(
                 render_eval_method_breakdown(result)
 
                 # AI Judge correction records
-                corrected_samples = [s for s in result.details if getattr(s, "is_judge_corrected", False)]
+                corrected_samples = [
+                    s for s in result.details if getattr(s, "is_judge_corrected", False)
+                ]
                 if corrected_samples:
                     st.info(
-                        f"AI Judge corrected {len(corrected_samples)} misjudged samples; "
-                        "they are included in the accuracy calculation."
+                        f"AI Judge successfully corrected {len(corrected_samples)} misjudged samples! (these are now included in the accuracy calculation)"
                     )
                     with st.expander("View Judge Correction Details", expanded=False):
                         for s in corrected_samples:
                             st.markdown(f"**Sample ID: {s.sample_id}**")
-                            st.text(f"Question: {s.question[:80]}..." if s.question else "Question: (Prompt only)")
-                            st.code(f"Model output: {s.model_response[:200]}...", language=None)
-                            st.caption(f"Correct Answer: {s.correct_answer} | Extracted prediction (wrong): {s.predicted_answer}")
+                            st.text(
+                                f"Question: {s.question[:80]}..."
+                                if s.question
+                                else "Question: (Prompt only)"
+                            )
+                            st.code(
+                                f"Model output: {s.model_response[:200]}...",
+                                language=None,
+                            )
+                            st.caption(
+                                f"Correct Answer: {s.correct_answer} | Extracted prediction (wrong): {s.predicted_answer}"
+                            )
                             st.divider()
 
                 # Error analysis
                 render_error_analysis(result)
 
     # Export options
-    st.markdown("### Export results")
+    st.markdown("### Export Results")
 
     col_export1, col_export2 = st.columns(2)
 
@@ -595,32 +662,26 @@ def render_quality_report(
         # CSV Export
         csv_data = summary_df.to_csv(index=False)
         st.download_button(
-            label="Download summary CSV",
+            label="Download Summary CSV",
             data=csv_data,
             file_name=f"quality_summary_{model_id}.csv",
             mime="text/csv",
-            icon=material_icon("download"),
         )
 
     with col_export2:
         # JSON Export
         import json
-        json_data = {
-            name: result.to_dict()
-            for name, result in results.items()
-        }
+
+        json_data = {name: result.to_dict() for name, result in results.items()}
         st.download_button(
-            label="Download detailed JSON",
+            label="Download Detailed JSON",
             data=json.dumps(json_data, ensure_ascii=False, indent=2),
             file_name=f"quality_details_{model_id}.json",
             mime="application/json",
-            icon=material_icon("download"),
         )
 
 
-def render_model_comparison(
-    all_results: dict[str, dict[str, EvaluationResult]]
-):
+def render_model_comparison(all_results: dict[str, dict[str, EvaluationResult]]):
     """
     Render multi-model comparison report
 
@@ -631,19 +692,19 @@ def render_model_comparison(
         st.warning("No comparison data yet")
         return
 
-    st.header("Model capability comparison")
+    st.header("Model Capability Comparison")
 
     # Collect all datasets
-    all_datasets = set()
+    all_datasets: set[str] = set()
     for model_results in all_results.values():
         all_datasets.update(model_results.keys())
-    all_datasets = sorted(all_datasets)
+    all_datasets_list = sorted(all_datasets)
 
     # Build comparison data
     comparison_data = []
     for model_id, model_results in all_results.items():
-        row = {"Model": model_id}
-        for dataset in all_datasets:
+        row: dict[str, Any] = {"Model": model_id}
+        for dataset in all_datasets_list:
             if dataset in model_results:
                 row[dataset] = model_results[dataset].accuracy
             else:
@@ -657,7 +718,7 @@ def render_model_comparison(
 
     # Format
     styled_df = df.copy()
-    for col in all_datasets:
+    for col in all_datasets_list:
         if col in styled_df.columns:
             styled_df[col] = styled_df[col].apply(
                 lambda x: f"{x:.2%}" if x is not None else "N/A"
@@ -676,21 +737,23 @@ def render_model_comparison(
         datasets = list(model_results.keys())
         accuracies = [model_results[d].accuracy * 100 for d in datasets]
 
-        fig.add_trace(go.Bar(
-            name=model_id,
-            x=datasets,
-            y=accuracies,
-            marker_color=colors[i % len(colors)]
-        ))
+        fig.add_trace(
+            go.Bar(
+                name=model_id,
+                x=datasets,
+                y=accuracies,
+                marker_color=colors[i % len(colors)],
+            )
+        )
 
     fig.update_layout(
-        barmode='group',
+        barmode="group",
         title="Accuracy Comparison Across Models and Datasets",
         xaxis_title="Dataset",
         yaxis_title="Accuracy (%)",
         yaxis_range=[0, 105],
         template="plotly_white",
-        height=500
+        height=500,
     )
 
     st.plotly_chart(fig)

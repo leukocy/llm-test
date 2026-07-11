@@ -8,7 +8,11 @@ from core.latency_analysis import compute_client_vs_engine_latency
 
 
 def test_overhead_computation():
-    results = [{"ttft": 0.6, "tpot": 30.0}, {"ttft": 0.8, "tpot": 35.0}, {"ttft": 0.7, "tpot": 32.0}]
+    results = [
+        {"ttft": 0.6, "tpot": 30.0},
+        {"ttft": 0.8, "tpot": 35.0},
+        {"ttft": 0.7, "tpot": 32.0},
+    ]
     engine = {"engine_means": {"ttft_s": 0.3, "tpot_s": 0.025}}  # engine TPOT 25ms
     r = compute_client_vs_engine_latency(results, engine)
     # 客户端 TTFT 中位数 = 0.7，引擎 0.3 → 开销 0.4

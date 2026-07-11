@@ -1,9 +1,9 @@
 """生成自包含 HTML 对外报告(内嵌 SVG 图,零依赖)+ 打包 export 目录。
 数据源:raw_data/baseline_kimi_consolidated.csv + 仓库导出 + 取证报告。
 """
+
 from __future__ import annotations
 
-import base64
 import io
 import os
 import os as _os
@@ -38,19 +38,34 @@ _spath = "raw_data/decode_steady_full.csv"
 if _os.path.exists(_spath):
     sfull = pd.read_csv(_spath)
     sfull = sfull.copy()
-    _ctx_map = {c: int(ok[ok.context_length_target == c]["prefill_tokens"].median()) for c in CTX_ALL if c != 260000}
+    _ctx_map = {
+        c: int(ok[ok.context_length_target == c]["prefill_tokens"].median())
+        for c in CTX_ALL
+        if c != 260000
+    }
     _ctx_map[258000] = _ctx_map.get(260000, 260008)
     _ctx_map[260000] = _ctx_map.get(260000, 260008)
     sfull["prefill_tokens"] = sfull["context_length_target"].map(_ctx_map)
-    sfull["prefill_speed"] = sfull.apply(lambda r: r["prefill_tokens"] / r["ttft"] if r.get("ttft") and r["ttft"] > 0 else None, axis=1)
+    sfull["prefill_speed"] = sfull.apply(
+        lambda r: (r["prefill_tokens"] / r["ttft"] if r.get("ttft") and r["ttft"] > 0 else None),
+        axis=1,
+    )
     sfull["agg_decode_steady"] = sfull["concurrency"] * sfull["steady_state_tps"]
-    sfull["squeeze_ratio"] = sfull.apply(lambda r: (r["tps_0_100"] / r["steady_state_tps"] * 100) if r.get("steady_state_tps") and r.get("tps_0_100") and r["steady_state_tps"] > 0 else None, axis=1)
+    sfull["squeeze_ratio"] = sfull.apply(
+        lambda r: (
+            (r["tps_0_100"] / r["steady_state_tps"] * 100)
+            if r.get("steady_state_tps") and r.get("tps_0_100") and r["steady_state_tps"] > 0
+            else None
+        ),
+        axis=1,
+    )
 else:
     sfull = pd.DataFrame()
 
 # 实际 prefill token 数(_calibrate_prompt 欠生成,~0.65 比例;用实际 token 作上下文轴,
 # TTFT 才与真实 prefill 对应)。ACT[target] = 该 cell 成功行的实际 token 中位数。
 ACT = {tgt: int(ok[ok.context_length_target == tgt]["prefill_tokens"].median()) for tgt in CTX_ALL}
+
 
 def lbl(tgt):
     """实际 token 数的显示标签(如 5291 → '5.3k')。"""
@@ -71,9 +86,12 @@ for ctx in [64, 4096, 32768, 131072]:
     sub = ok[ok["context_length_target"] == ctx].groupby("concurrency")["agg_decode"].median()
     if len(sub):
         ax.plot(sub.index, sub.values, marker="o", label=f"ctx={lbl(ctx)} tok")
-ax.set_xlabel("Concurrency"); ax.set_ylabel("System output throughput (tok/s)")
+ax.set_xlabel("Concurrency")
+ax.set_ylabel("System output throughput (tok/s)")
 ax.set_title("Throughput vs Concurrency (max_num_seqs=64, not saturated)")
-ax.set_xscale("log", base=2); ax.set_xticks(CONC); ax.set_xticklabels(CONC)
+ax.set_xscale("log", base=2)
+ax.set_xticks(CONC)
+ax.set_xticklabels(CONC)
 ax.legend(fontsize=8, loc="upper left")
 chart1 = svg(fig)
 
@@ -83,9 +101,11 @@ for conc in [1, 4, 8, 16, 32]:
     sub = ok[ok["concurrency"] == conc].groupby("context_length_target")["tps"].median()
     if len(sub):
         ax.plot(sub.index, sub.values, marker="o", label=f"conc={conc}")
-ax.set_xlabel("Context length (tokens)"); ax.set_ylabel("Per-stream decode TPS (tok/s)")
+ax.set_xlabel("Context length (tokens)")
+ax.set_ylabel("Per-stream decode TPS (tok/s)")
 ax.set_title("Per-stream decode TPS vs Context")
-ax.set_xscale("log", base=2); ax.set_xticks(CTX_ALL)
+ax.set_xscale("log", base=2)
+ax.set_xticks(CTX_ALL)
 ax.set_xticklabels([lbl(c) for c in CTX_ALL], rotation=30)
 ax.legend(fontsize=8)
 chart2 = svg(fig)
@@ -96,10 +116,13 @@ for conc in [1, 4, 8]:
     sub = ok[ok["concurrency"] == conc].groupby("context_length_target")["ttft"].median()
     if len(sub):
         ax.plot(sub.index, sub.values, marker="o", label=f"conc={conc}")
-ax.set_xlabel("Context length (tokens)"); ax.set_ylabel("TTFT (s)")
+ax.set_xlabel("Context length (tokens)")
+ax.set_ylabel("TTFT (s)")
 ax.set_title("TTFT vs Context")
-ax.set_xscale("log", base=2); ax.set_yscale("log")
-ax.set_xticks(CTX_ALL); ax.set_xticklabels([lbl(c) for c in CTX_ALL], rotation=30)
+ax.set_xscale("log", base=2)
+ax.set_yscale("log")
+ax.set_xticks(CTX_ALL)
+ax.set_xticklabels([lbl(c) for c in CTX_ALL], rotation=30)
 ax.legend(fontsize=8)
 chart3 = svg(fig)
 
@@ -107,13 +130,19 @@ chart3 = svg(fig)
 if "gpu_temp_peak_c" in ok.columns:
     fig, ax = plt.subplots(figsize=(7, 4.2))
     for conc in [1, 2, 4, 8, 16, 32]:
-        sub = ok[ok["concurrency"] == conc].groupby("context_length_target")["gpu_temp_peak_c"].median()
+        sub = (
+            ok[ok["concurrency"] == conc]
+            .groupby("context_length_target")["gpu_temp_peak_c"]
+            .median()
+        )
         if len(sub):
             ax.plot(sub.index, sub.values, marker="o", label=f"conc={conc}")
     ax.axhline(88, color="red", ls="--", alpha=0.4, label="Throttle zone (~88°C+)")
-    ax.set_xlabel("Context length (tokens)"); ax.set_ylabel("GPU Peak Temperature (°C)")
+    ax.set_xlabel("Context length (tokens)")
+    ax.set_ylabel("GPU Peak Temperature (°C)")
     ax.set_title("Per-cell GPU Temperature vs Context")
-    ax.set_xscale("log", base=2); ax.set_xticks(CTX_ALL)
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(CTX_ALL)
     ax.set_xticklabels([lbl(c) for c in CTX_ALL], rotation=30)
     ax.legend(fontsize=8)
     chart4 = svg(fig)
@@ -122,13 +151,21 @@ else:
 
 # ---------- 稳态测试图表(多张) ----------
 import json as _json
+
 chart5 = chart6 = chart7 = chart8 = ""
 steady_html = ""
 steady_path = "raw_data/decode_steady_full.csv"
 if _os.path.exists(steady_path):
     sdf = pd.read_csv(steady_path)
     sdf = sdf.copy()
-    sdf["squeeze_ratio"] = sdf.apply(lambda r: (r["tps_0_100"] / r["steady_state_tps"] * 100) if r.get("steady_state_tps") and r.get("tps_0_100") and r["steady_state_tps"] > 0 else None, axis=1)
+    sdf["squeeze_ratio"] = sdf.apply(
+        lambda r: (
+            (r["tps_0_100"] / r["steady_state_tps"] * 100)
+            if r.get("steady_state_tps") and r.get("tps_0_100") and r["steady_state_tps"] > 0
+            else None
+        ),
+        axis=1,
+    )
 
     # --- 图5: ITL 过渡(conc=1,2,4,8,16,32,ctx=4k,前 150 token)---
     fig, ax = plt.subplots(figsize=(7, 3.5))
@@ -144,45 +181,68 @@ if _os.path.exists(steady_path):
                     pass
             if all_itls:
                 min_len = min(len(a) for a in all_itls)
-                med_itl = [sorted([a[i] for a in all_itls if i < len(a)])[len([a for a in all_itls if i < len(a)])//2] * 1000
-                           for i in range(min_len)]
+                med_itl = [
+                    sorted([a[i] for a in all_itls if i < len(a)])[
+                        len([a for a in all_itls if i < len(a)]) // 2
+                    ]
+                    * 1000
+                    for i in range(min_len)
+                ]
                 smooth = pd.Series(med_itl).rolling(10, center=True, min_periods=1).mean().tolist()
                 ax.plot(range(min_len), smooth, label=f"conc={conc}", alpha=0.8)
-    ax.set_xlabel("Token index (first 150)"); ax.set_ylabel("Inter-token latency (ms)")
+    ax.set_xlabel("Token index (first 150)")
+    ax.set_ylabel("Inter-token latency (ms)")
     ax.set_title("ITL Transition @ ctx=4k: prefill squeeze -> steady state")
-    ax.legend(fontsize=8); ax.set_xlim(0, 150)
+    ax.legend(fontsize=8)
+    ax.set_xlim(0, 150)
     chart5 = svg(fig)
 
     # --- 图6: 稳态 decode TPS vs 并发(各上下文) ---
     fig, ax = plt.subplots(figsize=(7, 3.5))
     for ctx in [64, 4096, 32768, 131072]:
-        sub = sdf[sdf.context_length_target == ctx].groupby("concurrency")["steady_state_tps"].median()
+        sub = (
+            sdf[sdf.context_length_target == ctx]
+            .groupby("concurrency")["steady_state_tps"]
+            .median()
+        )
         if len(sub):
             ax.plot(sub.index, sub.values, marker="o", label=f"ctx={lbl(ctx)}", alpha=0.8)
-    ax.set_xlabel("Concurrency"); ax.set_ylabel("Steady-state decode TPS (tok/s)")
+    ax.set_xlabel("Concurrency")
+    ax.set_ylabel("Steady-state decode TPS (tok/s)")
     ax.set_title("Steady-state Decode TPS vs Concurrency")
     ax.set_xscale("log", base=2)
     concs_present = sorted(sdf.concurrency.unique())
-    ax.set_xticks(concs_present); ax.set_xticklabels([int(c) for c in concs_present])
+    ax.set_xticks(concs_present)
+    ax.set_xticklabels([int(c) for c in concs_present])
     ax.legend(fontsize=8)
     chart6 = svg(fig)
 
     # 图7/图8 已移除(挤压比/收敛 token 数:矩阵已有,图冗余)
 
     # 稳态矩阵函数(和性能矩阵同格式:ctx 行 × conc 列)
-    STEADY_CTX = sorted(sdf["context_length_target"].unique()) if "context_length_target" in sdf.columns else CTX_ALL
+    STEADY_CTX = (
+        sorted(sdf["context_length_target"].unique())
+        if "context_length_target" in sdf.columns
+        else CTX_ALL
+    )
     STEADY_CONC = sorted(sdf["concurrency"].unique()) if "concurrency" in sdf.columns else CONC
+
     def steady_matrix(metric, fmt="{:.1f}"):
         rows = ""
         for ctx in STEADY_CTX:
             cells = ""
             for conc in STEADY_CONC:
                 sub = sdf[(sdf.concurrency == conc) & (sdf.context_length_target == ctx)]
-                v = sub[metric].median() if len(sub) and metric in sub.columns and sub[metric].notna().any() else None
+                v = (
+                    sub[metric].median()
+                    if len(sub) and metric in sub.columns and sub[metric].notna().any()
+                    else None
+                )
                 cells += f"<td>{fmt.format(v) if v is not None and pd.notna(v) else '—'}</td>"
             rows += f"<tr><th>{lbl(int(ctx))}</th>{cells}</tr>"
         head = "".join(f"<th>conc={int(c)}</th>" for c in STEADY_CONC)
         return f'<table class="matrix"><thead><tr><th>ctx＼conc</th>{head}</tr></thead><tbody>{rows}</tbody></table>'
+
     # 挤压汇总表(全量,含收敛点 + 峰值 ITL)
     squeeze_rows = ""
     for (conc, ctx), sub in sdf.groupby(["concurrency", "context_length_target"]):
@@ -190,8 +250,16 @@ if _os.path.exists(steady_path):
             first100 = sub.tps_0_100.median()
             steady = sub.steady_state_tps.median()
             ratio = f"{(first100/steady)*100:.0f}%" if steady and steady > 0 else "?"
-            conv = int(sub.converge_token.median()) if 'converge_token' in sub.columns and sub.converge_token.notna().any() else 0
-            peak = f"{sub.peak_itl_ms.median():.0f}ms" if 'peak_itl_ms' in sub.columns and sub.peak_itl_ms.notna().any() else ""
+            conv = (
+                int(sub.converge_token.median())
+                if "converge_token" in sub.columns and sub.converge_token.notna().any()
+                else 0
+            )
+            peak = (
+                f"{sub.peak_itl_ms.median():.0f}ms"
+                if "peak_itl_ms" in sub.columns and sub.peak_itl_ms.notna().any()
+                else ""
+            )
             ctxlbl = f"{int(ctx)//1024}k" if ctx >= 1024 else str(int(ctx))
             squeeze_rows += f"<tr><td>{conc}</td><td>{ctxlbl}</td><td>{first100:.1f}</td><td>{steady:.1f}</td><td>{ratio}</td><td>{conv}</td><td>{peak}</td></tr>"
     steady_html = f"""
@@ -269,7 +337,11 @@ def steady_matrix(metric, fmt="{:.1f}"):
             # 258000≈260000
             lookup_ctx = 258000 if ctx == 260000 else ctx
             sub = sfull[(sfull.concurrency == conc) & (sfull.context_length_target == lookup_ctx)]
-            v = sub[metric].median() if len(sub) and metric in sub.columns and sub[metric].notna().any() else None
+            v = (
+                sub[metric].median()
+                if len(sub) and metric in sub.columns and sub[metric].notna().any()
+                else None
+            )
             cells += f"<td>{fmt.format(v) if v is not None and pd.notna(v) else '—'}</td>"
         rows += f"<tr><th>{lbl(ctx)}</th>{cells}</tr>"
     head = "".join(f"<th>conc={c}</th>" for c in CONC)
@@ -402,7 +474,7 @@ TTFT / Prefill 速度:稳态侧用原测试数据(prefill 阶段不受 max_token
 <p style="font-size:12px;color:#666">空白格 = KV 容量不可行(conc×ctx > 1.53M token,vLLM 排队/超时,非崩溃)。</p>
 
 <div class="risk">
-<h2 style="margin-top:0;border:0;padding:0;color:#991b1b">⚠ 边界与风险</h2>
+<h2 style="margin-top:0;border:0;padding:0;color:#991b1b">边界与风险</h2>
 <ul>
 <li><b>矩阵天然边界 = KV 容量 1.53M token</b>:<code>conc × ctx ≤ 1.53M</code> 可行(如 260K×conc≤6、128K×conc≤13)。超过的 cell(conc=32/128k=4M、260K×conc≥8=2-8M)vLLM 因 KV 不足大量排队/超时,<b>非崩溃、非缺陷</b>,是硬件 KV 容量的真实上限。</li>
 <li><b>散热问题已修复</b>(2026-06-16):此前 260K 高并发触发某槽位过热掉卡(per-cell 监控实测 97°C);更换散热部件后,本次完整矩阵 542 请求 0 崩溃,conc=4/260K 仅 94°C。完整取证见 <code>forensics/INCIDENT_REPORT_*.md</code>。</li>
@@ -432,12 +504,12 @@ TTFT / Prefill 速度:稳态侧用原测试数据(prefill 阶段不受 max_token
 <b>结论:符合预期,但非最优——瓶颈不在硬件算力,在 TP=8 通信开销。</b>
 </div>
 <table class="m"><thead><tr><th>维度</th><th>评分</th><th>关键数据</th><th>说明</th></tr></thead><tbody>
-<tr><td>Prefill</td><td>★★★★☆</td><td>5700 tok/s(4k-32k),跨并发恒定</td><td>计算密集,扩展健康。长 ctx(128k+)降速是 attention 变内存密集的正常行为。</td></tr>
-<tr><td>Decode 单流</td><td>★★☆☆☆</td><td>48 tok/s(conc=1)</td><td>理论 478 tok/s(纯带宽),实际 90% step 时间在 TP all-reduce(61层×8卡)+ MoE dispatch + kernel launch。<b>通信税吃掉绝大部分性能。</b></td></tr>
-<tr><td>Decode 聚合</td><td>★★★☆☆</td><td>448 tok/s(conc=32)</td><td>线性扩展(48→448 ≈ 9.3×),batch 摊薄固定开销。受 max_num_seqs=64 限,conc>64 不再涨。</td></tr>
-<tr><td>长上下文</td><td>★★★☆☆</td><td>260K 可跑,并发上限 5</td><td>KV 1.53M token 是硬约束(PRO 6000 96GB 已比 H100 80GB 多 20%)。</td></tr>
-<tr><td>稳定性</td><td>★★★★★</td><td>1482 请求 0 错误,最高 95°C 无降频</td><td>散热修复后稳定,温度可控。</td></tr>
-<tr><td>性价比</td><td>★★★★☆</td><td>工作站卡,比 H100 便宜得多</td><td>单流 decode ~54% of H100(与带宽比例一致),显存多 20%。</td></tr>
+<tr><td>Prefill</td><td>4/5</td><td>5700 tok/s(4k-32k),跨并发恒定</td><td>计算密集,扩展健康。长 ctx(128k+)降速是 attention 变内存密集的正常行为。</td></tr>
+<tr><td>Decode 单流</td><td>2/5</td><td>48 tok/s(conc=1)</td><td>理论 478 tok/s(纯带宽),实际 90% step 时间在 TP all-reduce(61层×8卡)+ MoE dispatch + kernel launch。<b>通信税吃掉绝大部分性能。</b></td></tr>
+<tr><td>Decode 聚合</td><td>3/5</td><td>448 tok/s(conc=32)</td><td>线性扩展(48→448 ≈ 9.3×),batch 摊薄固定开销。受 max_num_seqs=64 限,conc>64 不再涨。</td></tr>
+<tr><td>长上下文</td><td>3/5</td><td>260K 可跑,并发上限 5</td><td>KV 1.53M token 是硬约束(PRO 6000 96GB 已比 H100 80GB 多 20%)。</td></tr>
+<tr><td>稳定性</td><td>5/5</td><td>1482 请求 0 错误,最高 95°C 无降频</td><td>散热修复后稳定,温度可控。</td></tr>
+<tr><td>性价比</td><td>4/5</td><td>工作站卡,比 H100 便宜得多</td><td>单流 decode ~54% of H100(与带宽比例一致),显存多 20%。</td></tr>
 </tbody></table>
 
 <h3>Roofline:为什么单流只有 48 tok/s?</h3>
@@ -471,7 +543,7 @@ TTFT / Prefill 速度:稳态侧用原测试数据(prefill 阶段不受 max_token
 
 with open(OUT_HTML, "w", encoding="utf-8") as f:
     f.write(HTML)
-print(f"✅ HTML 报告: {OUT_HTML} ({os.path.getsize(OUT_HTML)//1024} KB)")
+print(f"[OK] HTML 报告: {OUT_HTML} ({os.path.getsize(OUT_HTML)//1024} KB)")
 
 # ---------- 打包 export 目录(+ 取证报告) ----------
 forensics = "raw_data/forensics"
@@ -487,7 +559,7 @@ with zipfile.ZipFile(OUT_ZIP, "w", zipfile.ZIP_DEFLATED) as z:
                 z.write(p, os.path.relpath(p, "raw_data"))
     # 附基线原始 + README
     z.write(BASELINE, "baseline_kimi_consolidated.csv")
-print(f"✅ 打包: {OUT_ZIP} ({os.path.getsize(OUT_ZIP)//1024} KB)")
+print(f"[OK] 打包: {OUT_ZIP} ({os.path.getsize(OUT_ZIP)//1024} KB)")
 print("\n包内容:")
 with zipfile.ZipFile(OUT_ZIP) as z:
     for n in z.namelist():

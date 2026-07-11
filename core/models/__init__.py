@@ -12,14 +12,14 @@ from .test_result import TestResult
 from .test_run import TestRun, TestRunStatus
 
 __all__ = [
-    'TestRun',
-    'TestRunStatus',
-    'TestResult',
-    'ApiLog',
-    'ApiLogStatus',
-    'ApplicationCase',
-    'ExecLog',
-    'LogLevel',
-    'Report',
-    'ReportType',
+    "TestRun",
+    "TestRunStatus",
+    "TestResult",
+    "ApiLog",
+    "ApiLogStatus",
+    "ApplicationCase",
+    "ExecLog",
+    "LogLevel",
+    "Report",
+    "ReportType",
 ]

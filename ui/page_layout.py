@@ -10,15 +10,114 @@ Provides page layout and navigation, including:
 
 import streamlit as st
 
-from config.test_types import normalize_test_type, test_type_label
 from ui import reports
-from ui.design_system import apply_design_system, material_icon
 
 
 def apply_custom_css():
-    """Apply the shared application design system for standalone renders."""
+    """Apply custom CSS styles"""
+    st.markdown(
+        """
+    <style>
+    /* Hide Streamlit default elements */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
 
-    apply_design_system()
+    /* Custom styles */
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #4a9eff;
+        text-align: center;
+        padding: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .metric-card {
+        background: #1e2129;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin: 0.5rem 0;
+        border: 1px solid #30363d;
+    }
+
+    .result-table {
+        background: #1e2129;
+        border-radius: 0.5rem;
+        padding: 1rem;
+    }
+
+    /* Scrollbar styles */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+        background: #0d1117;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #30363d;
+        border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: #484f58;
+    }
+
+    /* === Semantic design system (replaces emoji) === */
+    /* CSS custom properties — single source of truth for status colors */
+    :root {
+        --ui-success: #28a745;
+        --ui-info:    #17a2b8;
+        --ui-warning: #ffc107;
+        --ui-danger:  #dc3545;
+        --ui-muted:   #6c757d;
+        --ui-accent:  #4a9eff;
+    }
+
+    /* Inline SVG icons inherit text color by default */
+    .ui-icon {
+        display: inline-block;
+        vertical-align: middle;
+        flex-shrink: 0;
+    }
+
+    /* Semantic badges for status indicators (success/info/warning/danger/muted) */
+    .ui-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.85em;
+        font-weight: 600;
+        line-height: 1.4;
+        white-space: nowrap;
+        border: 1px solid transparent;
+    }
+    .ui-badge-success { background: rgba(40,167,69,.15);  color: var(--ui-success); border-color: rgba(40,167,69,.35); }
+    .ui-badge-info    { background: rgba(23,162,184,.15); color: var(--ui-info);    border-color: rgba(23,162,184,.35); }
+    .ui-badge-warning { background: rgba(255,193,7,.15);  color: var(--ui-warning); border-color: rgba(255,193,7,.35); }
+    .ui-badge-danger  { background: rgba(220,53,69,.15);  color: var(--ui-danger);  border-color: rgba(220,53,69,.35); }
+    .ui-badge-muted   { background: rgba(108,117,125,.15); color: var(--ui-muted);  border-color: rgba(108,117,125,.35); }
+
+    /* Section titles with a colored accent bar and optional leading icon */
+    .ui-section-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 700;
+        margin: 1rem 0 0.5rem;
+    }
+    .ui-section-title .ui-icon { color: var(--ui-accent); }
+    </style>
+    """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_page_header():
+    """Render page header"""
+    st.title("LLM Performance Benchmark Platform")
 
 
 # =====================================================================
@@ -26,11 +125,40 @@ def apply_custom_css():
 # =====================================================================
 from ui.formatters import format_results_for_display
 
+# Test type name mapping: English → Chinese (for backward compatibility with report generators)
+_TEST_TYPE_MAP = {
+    "Concurrency Test": "并发性能Test",
+    "Prefill Stress Test": "Prefill 压力Test",
+    "Long Context Test": "长onunder文Test",
+    "Concurrency-Context Matrix Test": "并发-onunder文 综合Test",
+    "Segmented Context Test": "分段onunder文Test",
+    "Custom Text Test": "Custom文本Test",
+    "All Tests": "全部Test",
+    "Stability Test": "稳定性Test",
+}
+
+# Internal raw test_type values (stored in results_df) → UI display names
+_INTERNAL_TO_DISPLAY = {
+    "concurrency": "Concurrency Test",
+    "prefill": "Prefill Stress Test",
+    "long_context": "Long Context Test",
+    "matrix": "Concurrency-Context Matrix Test",
+    "segmented": "Segmented Context Test",
+    "custom_text": "Custom Text Test",
+    "stability": "Stability Test",
+    "all": "All Tests",
+    "dataset": "Model Quality Test",
+}
+
+
+# Reverse mapping for quick lookup
+_DISPLAY_TO_INTERNAL = {v: k for k, v in _INTERNAL_TO_DISPLAY.items()}
+
 
 def _detect_test_type_from_df(df):
     """Infer the actual test type from a result DataFrame.
 
-    Returns the stable test-type ID or None if undetectable.
+    Returns the UI display name (e.g. 'Concurrency Test') or None if undetectable.
     """
     if df is None or df.empty:
         return None
@@ -41,24 +169,26 @@ def _detect_test_type_from_df(df):
     if "test_type" in cols:
         unique_types = df["test_type"].dropna().unique()
         if len(unique_types) == 1:
-            raw_type = str(unique_types[0]).strip().lower()
-            normalized = normalize_test_type(raw_type)
-            if normalized:
-                return normalized
+            internal = str(unique_types[0]).strip().lower()
+            display = _INTERNAL_TO_DISPLAY.get(internal)
+            if display:
+                return display
 
     # 2. Fallback: detect from column heuristics
-    if "cumulative_mode" in cols or ("effective_prefill_tokens" in cols and "cache_hit_source" in cols):
-        return "segmented"
+    if "cumulative_mode" in cols or (
+        "effective_prefill_tokens" in cols and "cache_hit_source" in cols
+    ):
+        return "Segmented Context Test"
     if "context_length_target" in cols and "concurrency" in cols:
-        return "matrix"
+        return "Concurrency-Context Matrix Test"
     if "input_tokens_target" in cols:
-        return "prefill"
+        return "Prefill Stress Test"
     if "context_length_target" in cols:
-        return "long_context"
+        return "Long Context Test"
     if "timestamp" in cols and "round" not in cols and "concurrency" in cols:
-        return "stability"
+        return "Stability Test"
     if "concurrency" in cols:
-        return "concurrency"
+        return "Concurrency Test"
 
     return None
 
@@ -71,7 +201,7 @@ def render_results_section(test_type=None):
     """
     if not st.session_state.results_df.empty:
         st.markdown("---")
-        st.header("Test results")
+        st.header("Test Results")
 
         raw_df = st.session_state.results_df
 
@@ -81,37 +211,31 @@ def render_results_section(test_type=None):
         display_type = inferred_type or test_type
 
         # Unified formatted display
-        display_df = format_results_for_display(raw_df, test_type_label(display_type))
+        display_df = format_results_for_display(raw_df, display_type)
 
         # Display formatted dataframe
-        st.dataframe(
-            display_df,
-            use_container_width=True,
-            height=400
-        )
+        st.dataframe(display_df, use_container_width=True, height=400)
 
         # Expand to view raw data
-        with st.expander("View full raw data", expanded=False):
-            st.dataframe(
-                raw_df,
-                use_container_width=True,
-                height=300
-            )
+        with st.expander("View Full Raw Data", expanded=False):
+            st.dataframe(raw_df, use_container_width=True, height=300)
 
         # Download button (always downloads full raw data)
-        csv = raw_df.to_csv(index=False).encode('utf-8')
+        csv = raw_df.to_csv(index=False).encode("utf-8")
         st.download_button(
-            label="Download results CSV",
+            label="Download Results CSV (Full Data)",
             data=csv,
             file_name=f"results_{st.session_state.get('current_csv_file', 'results')}",
-            mime='text/csv',
-            icon=material_icon("download"),
+            mime="text/csv",
         )
 
         # 数据仓库富信息：指纹卡 / 资源时序 / 等效带宽偏差 / 可对外闸门 / markdown 报告
         try:
             from ui.warehouse_report import render_warehouse_panel
-            render_warehouse_panel(display_type, st.session_state.get("current_model_id", ""))
+
+            render_warehouse_panel(
+                display_type, st.session_state.get("current_model_id", "")
+            )
         except Exception:
             pass
 
@@ -125,22 +249,32 @@ def render_report_section(test_type):
     """
     if not st.session_state.results_df.empty:
         st.markdown("---")
-        st.header("Test report")
+        st.header("Test Report")
 
         # Extract context. After a browser refresh, results can be restored from
         # disk while sidebar widgets return their defaults, so prefer restored
         # result metadata when available.
         restored_context = (
-            st.session_state.get('restored_result_context', {})
-            if st.session_state.get('restored_from_csv')
+            st.session_state.get("restored_result_context", {})
+            if st.session_state.get("restored_from_csv")
             else {}
         )
-        model_id = restored_context.get('model_id') or st.session_state.get('current_model_id', 'Unknown')
-        provider = restored_context.get('provider') or st.session_state.get('current_provider', 'Unknown')
-        duration = restored_context.get('duration', st.session_state.get('test_duration', 0))
-        test_config = restored_context.get('test_config') or st.session_state.get('test_config', {})
-        system_info = restored_context.get('system_info') or st.session_state.get('system_info', {})
-        test_type = normalize_test_type(restored_context.get('test_type') or test_type)
+        model_id = restored_context.get("model_id") or st.session_state.get(
+            "current_model_id", "Unknown"
+        )
+        provider = restored_context.get("provider") or st.session_state.get(
+            "current_provider", "Unknown"
+        )
+        duration = restored_context.get(
+            "duration", st.session_state.get("test_duration", 0)
+        )
+        test_config = restored_context.get("test_config") or st.session_state.get(
+            "test_config", {}
+        )
+        system_info = restored_context.get("system_info") or st.session_state.get(
+            "system_info", {}
+        )
+        test_type = restored_context.get("test_type") or test_type
 
         # Infer the *actual* test type from the data itself so that switching
         # the sidebar selector does not try to render e.g. a Prefill report
@@ -152,85 +286,86 @@ def render_report_section(test_type):
         # currently selected sidebar option.
         if inferred_type and inferred_type != test_type:
             st.info(
-                f"Displaying results from previous **{test_type_label(inferred_type)}**. "
+                f"Displaying results from previous **{inferred_type}**. "
                 f"Switch back to that test type to run a new test."
             )
 
-        internal_type = normalize_test_type(report_type)
+        # Map test type for backward compatibility
+        internal_type = _TEST_TYPE_MAP.get(report_type, report_type)
 
         # Auto-detect test type and generate corresponding report
-        if internal_type == "concurrency":
+        if internal_type in ("并发性能Test", "Concurrency Test"):
             st.session_state.report = reports.generate_concurrency_report(
                 st.session_state.results_df,
                 model_id=model_id,
                 provider=provider,
                 duration=duration,
                 test_config=test_config,
-                system_info=system_info
+                system_info=system_info,
             )
-        elif internal_type == "prefill":
+        elif internal_type in ("Prefill 压力Test", "Prefill Stress Test"):
             st.session_state.report = reports.generate_prefill_report(
                 st.session_state.results_df,
                 model_id=model_id,
                 provider=provider,
                 duration=duration,
                 test_config=test_config,
-                system_info=system_info
+                system_info=system_info,
             )
-        elif internal_type == "long_context":
+        elif internal_type in ("长onunder文Test", "Long Context Test"):
             st.session_state.report = reports.generate_long_context_report(
                 st.session_state.results_df,
                 model_id=model_id,
                 provider=provider,
                 duration=duration,
                 test_config=test_config,
-                system_info=system_info
+                system_info=system_info,
             )
-        elif internal_type == "matrix":
+        elif internal_type in (
+            "并发-onunder文 综合Test",
+            "Concurrency-Context Matrix Test",
+        ):
             st.session_state.report = reports.generate_matrix_report(
                 st.session_state.results_df,
                 model_id=model_id,
                 provider=provider,
                 duration=duration,
                 test_config=test_config,
-                system_info=system_info
+                system_info=system_info,
             )
-        elif internal_type == "segmented":
+        elif internal_type in ("分段onunder文Test", "Segmented Context Test"):
             st.session_state.report = reports.generate_segmented_report(
                 st.session_state.results_df,
                 model_id=model_id,
                 provider=provider,
                 duration=duration,
                 test_config=test_config,
-                system_info=system_info
+                system_info=system_info,
             )
         else:
-            st.session_state.report = (
-                f"# Test Completed ({test_type_label(report_type)})\n\n"
-                "Please refer to the data table above for results."
-            )
+            st.session_state.report = f"# Test Completed ({report_type})\n\nPlease refer to the data table above for results."
 
         # Display report
         st.markdown(st.session_state.report)
 
         # Download report
         st.download_button(
-            label="Download Markdown report",
+            label="Download Report (Markdown)",
             data=st.session_state.report,
             file_name=f"report_{st.session_state.get('current_csv_file', 'report')}.md",
-            mime='text/markdown',
-            icon=material_icon("download"),
+            mime="text/markdown",
         )
 
 
 def render_log_section():
     """Render log viewer area"""
-    if st.session_state.get('logger') and st.session_state.logger.entries:
+    if st.session_state.get("logger") and st.session_state.logger.entries:
         st.markdown("---")
-        st.header("Log viewer")
+        st.header("Log Viewer")
 
-        if st.button("Open log viewer", icon=material_icon("open_in_new")):
+        if st.button("Open Log Viewer"):
             from ui.log_viewer import render_log_viewer
+
             render_log_viewer(st.session_state.logger)
 
 
@@ -241,8 +376,25 @@ class PageLayout:
     def show_empty_state():
         """Render empty state prompt"""
         st.info(
-            "Choose a test type, configure its parameters, and run the benchmark. "
-            "Results, reports, and request logs will appear here when the run completes."
+            """
+        ### Welcome to LLM Performance Benchmark Platform V2
+
+        Please configure test parameters in the left sidebar, then select a test type to begin.
+
+        **Features:**
+        - **Concurrency Test**
+        - **Prefill Stress Test**
+        - **Long Context Test**
+        - **Matrix Test**
+        - **Custom Text Test**
+        - **All Tests**
+        - **Stability Test**
+
+        **V2 New Features:**
+        - **Modular Architecture**
+        - **Cleaner Code Organization**
+        - **Better Maintainability**
+        """
         )
 
     @staticmethod
@@ -255,6 +407,9 @@ class PageLayout:
         """
         # Apply styles
         apply_custom_css()
+
+        # Render header
+        render_page_header()
 
         # Render report section (statistical results) - render first
         render_report_section(test_type)

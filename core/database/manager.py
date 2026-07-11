@@ -5,7 +5,7 @@ Database管理器
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from core.database.backup import DatabaseBackup
 from core.database.connection import Database
@@ -117,9 +117,9 @@ class DatabaseManager:
         self,
         test_type: str,
         model_id: str,
-        provider: str = None,
-        config: dict = None,
-        system_info: dict = None,
+        provider: str | None = None,
+        config: dict | None = None,
+        system_info: dict | None = None,
     ) -> TestRun:
         """
         开始新Test运行
@@ -161,7 +161,7 @@ class DatabaseManager:
         Returns:
             TestResult 实例
         """
-        result = TestResult.from_api_result(run.id, result_data)
+        result = TestResult.from_api_result(cast(int, run.id), result_data)
         result.id = self._result_repo.insert(result)
         return result
 
@@ -176,7 +176,9 @@ class DatabaseManager:
         Returns:
             Insert记录数
         """
-        results = [TestResult.from_api_result(run.id, d) for d in results_data]
+        results = [
+            TestResult.from_api_result(cast(int, run.id), d) for d in results_data
+        ]
         return self._result_repo.insert_batch(results)
 
     def complete_test_run(
@@ -206,31 +208,48 @@ class DatabaseManager:
         if calculate_stats and run.id:
             stats = self._result_repo.get_aggregate_metrics(run.id)
             percentiles = self._result_repo.get_percentiles(run.id, "ttft")
-            stats.update({
-                "p50_ttft": percentiles.get("p50"),
-                "p95_ttft": percentiles.get("p95"),
-                "p99_ttft": percentiles.get("p99"),
-            })
+            stats.update(
+                {
+                    "p50_ttft": percentiles.get("p50"),
+                    "p95_ttft": percentiles.get("p95"),
+                    "p99_ttft": percentiles.get("p99"),
+                }
+            )
 
             # 只保留 test_runs 表实际存在的统计列，避免 UPDATE 报错
             valid_columns = {
-                'avg_ttft', 'avg_tps', 'avg_tpot',
-                'p50_ttft', 'p95_ttft', 'p99_ttft',
-                'total_tokens', 'total_requests',
-                'completed_requests', 'failed_requests', 'success_rate',
-                'duration_seconds',
+                "avg_ttft",
+                "avg_tps",
+                "avg_tpot",
+                "p50_ttft",
+                "p95_ttft",
+                "p99_ttft",
+                "total_tokens",
+                "total_requests",
+                "completed_requests",
+                "failed_requests",
+                "success_rate",
+                "duration_seconds",
                 # 1.2.0 扩展：允许统计路径写入这些头条指标
-                'effective_bandwidth_gbps', 'bandwidth_utilization_pct',
-                'gpu_vram_peak_gb', 'system_memory_peak_gb',
-                'bottleneck', 'machine_id', 'status_detail',
+                "effective_bandwidth_gbps",
+                "bandwidth_utilization_pct",
+                "gpu_vram_peak_gb",
+                "system_memory_peak_gb",
+                "bottleneck",
+                "machine_id",
+                "status_detail",
             }
             stats = {k: v for k, v in stats.items() if k in valid_columns}
 
         # 合并 extra_fields（信任输入，直接写入；列已由迁移保证）
         if extra_fields:
-            stats = {**stats, **{k: v for k, v in extra_fields.items() if v is not None}}
+            stats = {
+                **stats,
+                **{k: v for k, v in extra_fields.items() if v is not None},
+            }
 
-        return self._run_repo.complete(run.id, success, stats or None)
+        run_stats: dict[str, Any] | None = stats or None
+        return self._run_repo.complete(cast(int, run.id), success, run_stats)
 
     def update_publish_metadata(self, run_id: int, fields: dict[str, Any]) -> bool:
         """更新测试的可对外元数据（tester / external_level / next_action / notes /
@@ -239,9 +258,15 @@ class DatabaseManager:
         这些字段通常在测试完成后、人工复核时由 UI 写回。
         """
         allowed = {
-            'tester', 'external_level', 'next_action', 'notes',
-            'bottleneck', 'status_detail', 'comparison_group',
-            'supersedes_test_id', 'tags',
+            "tester",
+            "external_level",
+            "next_action",
+            "notes",
+            "bottleneck",
+            "status_detail",
+            "comparison_group",
+            "supersedes_test_id",
+            "tags",
         }
         data = {k: v for k, v in fields.items() if k in allowed and v is not None}
         if not data:
@@ -249,15 +274,11 @@ class DatabaseManager:
         return self._run_repo.update_by(data, "id = ?", (run_id,)) > 0
 
     def update_run_progress(
-        self,
-        run: TestRun,
-        completed: int,
-        total: int,
-        failed: int = 0
+        self, run: TestRun, completed: int, total: int, failed: int = 0
     ):
         """UpdateTest进度"""
-        run.update_progress(completed, total, failed)
-        self._run_repo.update_progress(run.id, completed, total, failed)
+        run.update_progress(completed, total)
+        self._run_repo.update_progress(cast(int, run.id), completed, total, failed)
 
     # ============================================
     # 便捷方法：Log
@@ -270,7 +291,7 @@ class DatabaseManager:
         provider: str,
         model_id: str,
         request: dict,
-        run_id: int = None
+        run_id: int | None = None,
     ) -> ApiLog:
         """记录 API 请求"""
         log = ApiLog.create(
@@ -288,9 +309,9 @@ class DatabaseManager:
         self,
         message: str,
         level: str = "INFO",
-        run_id: int = None,
-        session_id: str = None,
-        metrics: dict = None
+        run_id: int | None = None,
+        session_id: str | None = None,
+        metrics: dict | None = None,
     ) -> ExecLog:
         """记录执行Log"""
         log = ExecLog.create(
@@ -311,15 +332,12 @@ class DatabaseManager:
         self,
         model_id: str,
         report_type: str = "standard",
-        run_id: int = None,
-        **kwargs
+        run_id: int | None = None,
+        **kwargs,
     ) -> Report:
         """Create报告"""
         report = Report.create(
-            model_id=model_id,
-            report_type=report_type,
-            run_id=run_id,
-            **kwargs
+            model_id=model_id, report_type=report_type, run_id=run_id, **kwargs
         )
         report.id = self._report_repo.insert(report)
         return report
@@ -359,7 +377,7 @@ class DatabaseManager:
     # 便捷方法：Application Cases（模型×应用质量评估表）
     # ============================================
 
-    def save_application_case(self, case: ApplicationCase) -> int:
+    def save_application_case(self, case: ApplicationCase) -> int | None:
         """保存一条应用用例（按 case_id 去重 upsert）。返回记录 id。"""
         return self._case_repo.upsert(case)
 
@@ -437,19 +455,21 @@ class DatabaseManager:
     # 便捷方法：ImportExport
     # ============================================
 
-    def import_csv(self, csv_path: str, model_id: str = None, test_type: str = None):
+    def import_csv(
+        self, csv_path: str, model_id: str | None = None, test_type: str | None = None
+    ):
         """Import CSV 文件"""
         return self._import_service.import_csv_file(csv_path, model_id, test_type)
 
-    def export_run_json(self, run_id: int, output_path: str = None):
+    def export_run_json(self, run_id: int, output_path: str | None = None):
         """Export运行到 JSON"""
         return self._export_service.export_run_to_json(run_id, output_path)
 
-    def export_run_csv(self, run_id: int, output_path: str = None):
+    def export_run_csv(self, run_id: int, output_path: str | None = None):
         """Export运行到 CSV"""
         return self._export_service.export_run_to_csv(run_id, output_path)
 
-    def export_run_excel(self, run_id: int, output_path: str = None):
+    def export_run_excel(self, run_id: int, output_path: str | None = None):
         """Export运行到 Excel"""
         return self._export_service.export_run_to_excel(run_id, output_path)
 
@@ -479,7 +499,9 @@ class DatabaseManager:
         exec_deleted = self._exec_log_repo.cleanup_old_logs(days)
         reports_deleted = self._report_repo.delete_old_reports(days)
 
-        logger.info(f"Cleanup完成: api_logs={api_deleted}, exec_logs={exec_deleted}, reports={reports_deleted}")
+        logger.info(
+            f"Cleanup完成: api_logs={api_deleted}, exec_logs={exec_deleted}, reports={reports_deleted}"
+        )
         return {
             "api_logs": api_deleted,
             "exec_logs": exec_deleted,

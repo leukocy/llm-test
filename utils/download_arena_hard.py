@@ -36,16 +36,20 @@ def download_from_huggingface():
             ds = load_dataset("lmarena-ai/arena-hard-auto", split="train")
         except Exception:
             try:
-                ds = load_dataset("lmarena-ai/arena-hard-auto", "default", split="train")
+                ds = load_dataset(
+                    "lmarena-ai/arena-hard-auto", "default", split="train"
+                )
             except Exception:
-                ds = load_dataset("lmarena-ai/arena-hard-auto", trust_remote_code=True, split="train")
+                ds = load_dataset(
+                    "lmarena-ai/arena-hard-auto", trust_remote_code=True, split="train"
+                )
 
         for i, item in enumerate(ds):
             sample = {
                 "id": item.get("question_id", f"arena_{i}"),
                 "question": "",
                 "category": item.get("category", "general"),
-                "reference_answer": ""
+                "reference_answer": "",
             }
 
             # 提取问题
@@ -68,7 +72,7 @@ def download_from_huggingface():
 
     # SaveData
     output_file = os.path.join(output_dir, "arena_hard.json")
-    with open(output_file, 'w', encoding='utf-8') as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(all_samples, f, ensure_ascii=False, indent=2)
 
     # Statistics类别

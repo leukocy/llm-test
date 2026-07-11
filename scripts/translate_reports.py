@@ -1,324 +1,595 @@
 """Script to translate Chinese text in reports.py to English"""
+
 import re
 
 # Read the file
-with open('ui/reports.py', encoding='utf-8') as f:
+with open("ui/reports.py", encoding="utf-8") as f:
     content = f.read()
 
 # Define replacements - ordered from longer to shorter to avoid partial matches
 replacements = [
     # COLUMN_TOOLTIPS
-    ('\"系统输出吞吐量 (Decode Output Throughput)：仅计算 Decode 阶段的 Token 生成速率 (Total Output Tokens / Decode Duration)。排除 Prefill 阶段的影响。\"',
-     '"System Output Throughput (Decode Output Throughput): Token generation rate during the Decode phase only (Total Output Tokens / Decode Duration). Excludes Prefill phase."'),
-    ('\"系统输入吞吐量 (Prefill Input Throughput)：仅计算 Prefill 阶段的 Token 处理速率 (Total Input Tokens / Prefill Duration)。排除 Decode 阶段的影响。\"',
-     '"System Input Throughput (Prefill Input Throughput): Token processing rate during the Prefill phase only (Total Input Tokens / Prefill Duration). Excludes Decode phase."'),
-    ('\"系统总吞吐量 (Total System Throughput)：系统单位时间内处理的总 Token 数 (Input + Output) / Total Duration。\"',
-     '"Total System Throughput: Total tokens processed per unit time (Input + Output) / Total Duration."'),
-    ('\"每秒请求数 (Requests Per Second)：系统每秒能完成的请求数量 (Total Requests / Total Duration)。\"',
-     '"Requests Per Second: Number of requests system can complete per second (Total Requests / Total Duration)."'),
-    ('\"平均每 Token 生成时间 (Time Per Output Token)。衡量生成的流畅度。\"',
-     '"Average Time Per Output Token. Measures generation fluency."'),
-    ('\"最大 Prefill 速度：系统处理输入 Prompt Token 的速率 (Tokens/s)。\"',
-     '"Max Prefill Speed: Rate at which the system processes input prompt tokens (Tokens/s)."'),
-    ('\"最佳首字延迟 (Time To First Token)。衡量响应的敏捷度。\"',
-     '"Best Time To First Token (TTFT). Measures response agility."'),
-    ('\"请求成功率。\"', '"Request success rate."'),
-    ('\"P95 Token 延迟：95% 的 Token 生成时间快于此值。\"',
-     '"P95 Token Latency: 95% of tokens are generated faster than this value."'),
-    ('\"P99 Token 延迟：99% 的 Token 生成时间快于此值。\"',
-     '"P99 Token Latency: 99% of tokens are generated faster than this value."'),
-    ('\"最大单流吞吐量：单个请求的生成速率 (Decode Only)。\"',
-     '"Max Single-stream Throughput: Generation rate of a single request (Decode Only)."'),
-    ('\"平均实际生成的 Token 数量。\"', '"Average actual tokens generated."'),
-    ('\"最佳 Prefill 速度。\"', '"Best Prefill Speed."'),
-    ('\"目标输入 Token 数量。\"', '"Target input token count."'),
-    ('\"目标上下文长度。\"', '"Target context length."'),
-    ('\"并发请求数量。\"', '"Number of concurrent requests."'),
-
+    (
+        '"系统输出吞吐量 (Decode Output Throughput)：仅计算 Decode 阶段的 Token 生成速率 (Total Output Tokens / Decode Duration)。排除 Prefill 阶段的影响。"',
+        '"System Output Throughput (Decode Output Throughput): Token generation rate during the Decode phase only (Total Output Tokens / Decode Duration). Excludes Prefill phase."',
+    ),
+    (
+        '"系统输入吞吐量 (Prefill Input Throughput)：仅计算 Prefill 阶段的 Token 处理速率 (Total Input Tokens / Prefill Duration)。排除 Decode 阶段的影响。"',
+        '"System Input Throughput (Prefill Input Throughput): Token processing rate during the Prefill phase only (Total Input Tokens / Prefill Duration). Excludes Decode phase."',
+    ),
+    (
+        '"系统总吞吐量 (Total System Throughput)：系统单位时间内处理的总 Token 数 (Input + Output) / Total Duration。"',
+        '"Total System Throughput: Total tokens processed per unit time (Input + Output) / Total Duration."',
+    ),
+    (
+        '"每秒请求数 (Requests Per Second)：系统每秒能完成的请求数量 (Total Requests / Total Duration)。"',
+        '"Requests Per Second: Number of requests system can complete per second (Total Requests / Total Duration)."',
+    ),
+    (
+        '"平均每 Token 生成时间 (Time Per Output Token)。衡量生成的流畅度。"',
+        '"Average Time Per Output Token. Measures generation fluency."',
+    ),
+    (
+        '"最大 Prefill 速度：系统处理输入 Prompt Token 的速率 (Tokens/s)。"',
+        '"Max Prefill Speed: Rate at which the system processes input prompt tokens (Tokens/s)."',
+    ),
+    (
+        '"最佳首字延迟 (Time To First Token)。衡量响应的敏捷度。"',
+        '"Best Time To First Token (TTFT). Measures response agility."',
+    ),
+    ('"请求成功率。"', '"Request success rate."'),
+    (
+        '"P95 Token 延迟：95% 的 Token 生成时间快于此值。"',
+        '"P95 Token Latency: 95% of tokens are generated faster than this value."',
+    ),
+    (
+        '"P99 Token 延迟：99% 的 Token 生成时间快于此值。"',
+        '"P99 Token Latency: 99% of tokens are generated faster than this value."',
+    ),
+    (
+        '"最大单流吞吐量：单个请求的生成速率 (Decode Only)。"',
+        '"Max Single-stream Throughput: Generation rate of a single request (Decode Only)."',
+    ),
+    ('"平均实际生成的 Token 数量。"', '"Average actual tokens generated."'),
+    ('"最佳 Prefill 速度。"', '"Best Prefill Speed."'),
+    ('"目标输入 Token 数量。"', '"Target input token count."'),
+    ('"目标上下文长度。"', '"Target context length."'),
+    ('"并发请求数量。"', '"Number of concurrent requests."'),
     # Test summary card
-    ('\" 测试摘要 (Test Summary)\"', '" Test Summary"'),
-    ('f\"** 模型**: `{model_id}`\"', 'f"** Model**: `{model_id}`"'),
-    ('f\"** 供应商**: `{provider}`\"', 'f"** Provider**: `{provider}`"'),
-    ('f\"** 测试总时长**: `{mins}m {secs:.1f}s`\"', 'f"** Total Duration**: `{mins}m {secs:.1f}s`"'),
-    ('f\"** 测试总时长**: `{duration:.2f}s`\"', 'f"** Total Duration**: `{duration:.2f}s`"'),
-
+    ('"测试摘要 (Test Summary)"', '"Test Summary"'),
+    ('f"**模型**: `{model_id}`"', 'f"**Model**: `{model_id}`"'),
+    ('f"**供应商**: `{provider}`"', 'f"**Provider**: `{provider}`"'),
+    (
+        'f"**测试总时长**: `{mins}m {secs:.1f}s`"',
+        'f"**Total Duration**: `{mins}m {secs:.1f}s`"',
+    ),
+    (
+        'f"**测试总时长**: `{duration:.2f}s`"',
+        'f"**Total Duration**: `{duration:.2f}s`"',
+    ),
     # Concurrency analysis
-    ('f\"#####  并发扩展分析 (并发 {int(lo)} → {int(hi)})\"',
-     'f"#####  Concurrency Scaling Analysis (Concurrency {int(lo)} → {int(hi)})"'),
-    ('st.metric(\"总请求数\", f\"{total_requests}\", delta=f\"{successful} 成功\")',
-     'st.metric("Total Requests", f"{total_requests}", delta=f"{successful} succeeded")'),
-    ('st.metric(f\"TTFT @ 并发{int(lo)}\", f\"{ttft_lo:.3f}s\", help=\"低并发基线延迟\")',
-     'st.metric(f"TTFT @ C{int(lo)}", f"{ttft_lo:.3f}s", help="Low-concurrency baseline latency")'),
-    ('d = f\"↑ {ttft_ratio:.1f}x\" if ttft_ratio > 1.2 else \"稳定\"',
-     'd = f"↑ {ttft_ratio:.1f}x" if ttft_ratio > 1.2 else "Stable"'),
-    ('st.metric(f\"TTFT @ 并发{int(hi)}\", f\"{ttft_hi:.3f}s\", delta=d, delta_color=\"inverse\")',
-     'st.metric(f"TTFT @ C{int(hi)}", f"{ttft_hi:.3f}s", delta=d, delta_color="inverse")'),
-    ('st.metric(\"峰值系统吞吐量\", f\"{peak_tp:.1f} t/s\", delta=f\"@ 并发{peak_c}\" if peak_c != \"N/A\" else None)',
-     'st.metric("Peak System Throughput", f"{peak_tp:.1f} t/s", delta=f"@ C{peak_c}" if peak_c != "N/A" else None)'),
-    ('st.metric(f\"单流 TPS @ 并发{int(lo)}\", f\"{tps_lo:.1f} t/s\")',
-     'st.metric(f"Single TPS @ C{int(lo)}", f"{tps_lo:.1f} t/s")'),
-    ('d2 = f\"↓ {((1 - tps_hi/tps_lo)*100):.0f}%\" if tps_lo > 0 and tps_hi < tps_lo else \"稳定\"',
-     'd2 = f"↓ {((1 - tps_hi/tps_lo)*100):.0f}%" if tps_lo > 0 and tps_hi < tps_lo else "Stable"'),
-    ('st.metric(f\"单流 TPS @ 并发{int(hi)}\", f\"{tps_hi:.1f} t/s\", delta=d2, delta_color=\"inverse\")',
-     'st.metric(f"Single TPS @ C{int(hi)}", f"{tps_hi:.1f} t/s", delta=d2, delta_color="inverse")'),
-    ('st.metric(\"总输入 Tokens\", _fmt(total_input))', 'st.metric("Total Input Tokens", _fmt(total_input))'),
-    ('st.metric(\"总输出 Tokens\", _fmt(total_output))', 'st.metric("Total Output Tokens", _fmt(total_output))'),
-
+    (
+        'f"##### 并发扩展分析 (并发 {int(lo)} → {int(hi)})"',
+        'f"##### Concurrency Scaling Analysis (Concurrency {int(lo)} → {int(hi)})"',
+    ),
+    (
+        'st.metric("总请求数", f"{total_requests}", delta=f"{successful} 成功")',
+        'st.metric("Total Requests", f"{total_requests}", delta=f"{successful} succeeded")',
+    ),
+    (
+        'st.metric(f"TTFT @ 并发{int(lo)}", f"{ttft_lo:.3f}s", help="低并发基线延迟")',
+        'st.metric(f"TTFT @ C{int(lo)}", f"{ttft_lo:.3f}s", help="Low-concurrency baseline latency")',
+    ),
+    (
+        'd = f"↑ {ttft_ratio:.1f}x" if ttft_ratio > 1.2 else "稳定"',
+        'd = f"↑ {ttft_ratio:.1f}x" if ttft_ratio > 1.2 else "Stable"',
+    ),
+    (
+        'st.metric(f"TTFT @ 并发{int(hi)}", f"{ttft_hi:.3f}s", delta=d, delta_color="inverse")',
+        'st.metric(f"TTFT @ C{int(hi)}", f"{ttft_hi:.3f}s", delta=d, delta_color="inverse")',
+    ),
+    (
+        'st.metric("峰值系统吞吐量", f"{peak_tp:.1f} t/s", delta=f"@ 并发{peak_c}" if peak_c != "N/A" else None)',
+        'st.metric("Peak System Throughput", f"{peak_tp:.1f} t/s", delta=f"@ C{peak_c}" if peak_c != "N/A" else None)',
+    ),
+    (
+        'st.metric(f"单流 TPS @ 并发{int(lo)}", f"{tps_lo:.1f} t/s")',
+        'st.metric(f"Single TPS @ C{int(lo)}", f"{tps_lo:.1f} t/s")',
+    ),
+    (
+        'd2 = f"↓ {((1 - tps_hi/tps_lo)*100):.0f}%" if tps_lo > 0 and tps_hi < tps_lo else "稳定"',
+        'd2 = f"↓ {((1 - tps_hi/tps_lo)*100):.0f}%" if tps_lo > 0 and tps_hi < tps_lo else "Stable"',
+    ),
+    (
+        'st.metric(f"单流 TPS @ 并发{int(hi)}", f"{tps_hi:.1f} t/s", delta=d2, delta_color="inverse")',
+        'st.metric(f"Single TPS @ C{int(hi)}", f"{tps_hi:.1f} t/s", delta=d2, delta_color="inverse")',
+    ),
+    (
+        'st.metric("总输入 Tokens", _fmt(total_input))',
+        'st.metric("Total Input Tokens", _fmt(total_input))',
+    ),
+    (
+        'st.metric("总输出 Tokens", _fmt(total_output))',
+        'st.metric("Total Output Tokens", _fmt(total_output))',
+    ),
     # Peak & Trend
-    ('ttft_trend = f\"并发 {jump_from}→{jump_to} 跳增 {jump_pct:.0f}%\" if jump_pct > 10 else \"平稳上升\"',
-     'ttft_trend = f"C{jump_from}→C{jump_to} jumped {jump_pct:.0f}%" if jump_pct > 10 else "Gradual increase"'),
-    ('ttft_trend = f\"↑ {ttft_ratio:.1f}x\" if ttft_ratio > 1.2 else \"稳定\"',
-     'ttft_trend = f"↑ {ttft_ratio:.1f}x" if ttft_ratio > 1.2 else "Stable"'),
-    ('saturation_label = f\"@ 并发{saturation_c}\" if saturation_c else \"未饱和\"',
-     'saturation_label = f"@ C{saturation_c}" if saturation_c else "Not saturated"'),
-    ('saturation_label = \"数据不足\"', 'saturation_label = "Insufficient data"'),
-    ('\"#####  峰值与趋势分析\"', '"#####  Peak & Trend Analysis"'),
-    ('st.metric(\"最佳 TTFT\", f\"{best_ttft_val:.3f}s\", delta=f\"@ 并发{best_ttft_c}\")',
-     'st.metric("Best TTFT", f"{best_ttft_val:.3f}s", delta=f"@ C{best_ttft_c}")'),
-    ('st.metric(\"峰值单流 TPS\", f\"{peak_tps_val:.1f} t/s\", delta=f\"@ 并发{peak_tps_c}\")',
-     'st.metric("Peak Single TPS", f"{peak_tps_val:.1f} t/s", delta=f"@ C{peak_tps_c}")'),
-    ('st.metric(\"TTFT 趋势\", ttft_trend, help=\"TTFT 随并发增加的变化模式\")',
-     'st.metric("TTFT Trend", ttft_trend, help="TTFT change pattern as concurrency increases")'),
-    ('st.metric(\"吞吐量饱和点\", saturation_label, help=\"吞吐量增速低于5%的拐点\")',
-     'st.metric("Throughput Saturation", saturation_label, help="Inflection point where throughput growth drops below 5%")'),
-
+    (
+        'ttft_trend = f"并发 {jump_from}→{jump_to} 跳增 {jump_pct:.0f}%" if jump_pct > 10 else "平稳上升"',
+        'ttft_trend = f"C{jump_from}→C{jump_to} jumped {jump_pct:.0f}%" if jump_pct > 10 else "Gradual increase"',
+    ),
+    (
+        'ttft_trend = f"↑ {ttft_ratio:.1f}x" if ttft_ratio > 1.2 else "稳定"',
+        'ttft_trend = f"↑ {ttft_ratio:.1f}x" if ttft_ratio > 1.2 else "Stable"',
+    ),
+    (
+        'saturation_label = f"@ 并发{saturation_c}" if saturation_c else "未饱和"',
+        'saturation_label = f"@ C{saturation_c}" if saturation_c else "Not saturated"',
+    ),
+    ('saturation_label = "数据不足"', 'saturation_label = "Insufficient data"'),
+    ('"##### 峰值与趋势分析"', '"##### Peak & Trend Analysis"'),
+    (
+        'st.metric("最佳 TTFT", f"{best_ttft_val:.3f}s", delta=f"@ 并发{best_ttft_c}")',
+        'st.metric("Best TTFT", f"{best_ttft_val:.3f}s", delta=f"@ C{best_ttft_c}")',
+    ),
+    (
+        'st.metric("峰值单流 TPS", f"{peak_tps_val:.1f} t/s", delta=f"@ 并发{peak_tps_c}")',
+        'st.metric("Peak Single TPS", f"{peak_tps_val:.1f} t/s", delta=f"@ C{peak_tps_c}")',
+    ),
+    (
+        'st.metric("TTFT 趋势", ttft_trend, help="TTFT 随并发增加的变化模式")',
+        'st.metric("TTFT Trend", ttft_trend, help="TTFT change pattern as concurrency increases")',
+    ),
+    (
+        'st.metric("吞吐量饱和点", saturation_label, help="吞吐量增速低于5%的拐点")',
+        'st.metric("Throughput Saturation", saturation_label, help="Inflection point where throughput growth drops below 5%")',
+    ),
     # Prefill section
-    ('d = f\"↓ {((1 - ratio)*100):.0f}%\" if ratio < 0.95 else \"稳定\"',
-     'd = f"↓ {((1 - ratio)*100):.0f}%" if ratio < 0.95 else "Stable"'),
-    ('st.metric(\"速度保持率\", f\"{ratio*100:.1f}%\")', 'st.metric("Speed Retention", f"{ratio*100:.1f}%")'),
-    ('g = ttft_lg / ttft_sm if ttft_sm > 0 else 0\n                        st.metric(f\"TTFT @ {_fmt(lg)}t\", f\"{ttft_lg:.3f}s\", delta=f\"↑ {g:.1f}x\" if g > 1.5 else \"稳定\", delta_color=\"inverse\")',
-     'g = ttft_lg / ttft_sm if ttft_sm > 0 else 0\n                        st.metric(f"TTFT @ {_fmt(lg)}t", f"{ttft_lg:.3f}s", delta=f"↑ {g:.1f}x" if g > 1.5 else "Stable", delta_color="inverse")'),
-    ('speed_trend = f\"{_fmt(drop_from)}→{_fmt(drop_to)} 骤降 {drop_pct:.0f}%\" if drop_pct > 10 else \"平稳衰减\"',
-     'speed_trend = f"{_fmt(drop_from)}→{_fmt(drop_to)} dropped {drop_pct:.0f}%" if drop_pct > 10 else "Gradual decline"'),
-    ('speed_trend = f\"↓ {((1 - ratio)*100):.0f}%\" if ratio < 0.95 else \"稳定\"',
-     'speed_trend = f"↓ {((1 - ratio)*100):.0f}%" if ratio < 0.95 else "Stable"'),
-    ('ttft_scaling = \"超线性增长 [WARNING]\"', 'ttft_scaling = "Super-linear growth [WARNING]"'),
-    ('ttft_scaling = \"近似线性\"', 'ttft_scaling = "Near-linear"'),
-    ('ttft_scaling = \"亚线性 [OK]\"', 'ttft_scaling = "Sub-linear [OK]"'),
-    ('st.metric(\"峰值 Prefill 速度\", f\"{peak_ps_val:.0f} t/s\", delta=f\"@ {_fmt(peak_ps_level)}t\")',
-     'st.metric("Peak Prefill Speed", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_level)}t")'),
-    ('st.metric(\"最佳 TTFT\", f\"{best_ttft_val:.3f}s\", delta=f\"@ {_fmt(best_ttft_level)}t\")',
-     'st.metric("Best TTFT", f"{best_ttft_val:.3f}s", delta=f"@ {_fmt(best_ttft_level)}t")'),
-    ('st.metric(\"速度衰减拐点\", speed_trend, help=\"Prefill 速度出现最大单次降幅的位置\")',
-     'st.metric("Speed Decline Point", speed_trend, help="Location of the largest single drop in Prefill speed")'),
-    ('st.metric(\"TTFT 增长模式\", ttft_scaling, help=\"TTFT 相对输入长度的增长关系\")',
-     'st.metric("TTFT Growth Pattern", ttft_scaling, help="TTFT growth relationship relative to input length")'),
-
+    (
+        'd = f"↓ {((1 - ratio)*100):.0f}%" if ratio < 0.95 else "稳定"',
+        'd = f"↓ {((1 - ratio)*100):.0f}%" if ratio < 0.95 else "Stable"',
+    ),
+    (
+        'st.metric("速度保持率", f"{ratio*100:.1f}%")',
+        'st.metric("Speed Retention", f"{ratio*100:.1f}%")',
+    ),
+    (
+        'g = ttft_lg / ttft_sm if ttft_sm > 0 else 0\n                        st.metric(f"TTFT @ {_fmt(lg)}t", f"{ttft_lg:.3f}s", delta=f"↑ {g:.1f}x" if g > 1.5 else "稳定", delta_color="inverse")',
+        'g = ttft_lg / ttft_sm if ttft_sm > 0 else 0\n                        st.metric(f"TTFT @ {_fmt(lg)}t", f"{ttft_lg:.3f}s", delta=f"↑ {g:.1f}x" if g > 1.5 else "Stable", delta_color="inverse")',
+    ),
+    (
+        'speed_trend = f"{_fmt(drop_from)}→{_fmt(drop_to)} 骤降 {drop_pct:.0f}%" if drop_pct > 10 else "平稳衰减"',
+        'speed_trend = f"{_fmt(drop_from)}→{_fmt(drop_to)} dropped {drop_pct:.0f}%" if drop_pct > 10 else "Gradual decline"',
+    ),
+    (
+        'speed_trend = f"↓ {((1 - ratio)*100):.0f}%" if ratio < 0.95 else "稳定"',
+        'speed_trend = f"↓ {((1 - ratio)*100):.0f}%" if ratio < 0.95 else "Stable"',
+    ),
+    ('ttft_scaling = "超线性增长 "', 'ttft_scaling = "Super-linear growth "'),
+    ('ttft_scaling = "近似线性"', 'ttft_scaling = "Near-linear"'),
+    ('ttft_scaling = "亚线性 "', 'ttft_scaling = "Sub-linear "'),
+    (
+        'st.metric("峰值 Prefill 速度", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_level)}t")',
+        'st.metric("Peak Prefill Speed", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_level)}t")',
+    ),
+    (
+        'st.metric("最佳 TTFT", f"{best_ttft_val:.3f}s", delta=f"@ {_fmt(best_ttft_level)}t")',
+        'st.metric("Best TTFT", f"{best_ttft_val:.3f}s", delta=f"@ {_fmt(best_ttft_level)}t")',
+    ),
+    (
+        'st.metric("速度衰减拐点", speed_trend, help="Prefill 速度出现最大单次降幅的位置")',
+        'st.metric("Speed Decline Point", speed_trend, help="Location of the largest single drop in Prefill speed")',
+    ),
+    (
+        'st.metric("TTFT 增长模式", ttft_scaling, help="TTFT 相对输入长度的增长关系")',
+        'st.metric("TTFT Growth Pattern", ttft_scaling, help="TTFT growth relationship relative to input length")',
+    ),
     # Long context section
-    ('f\"#####  长上下文性能衰减 ({_fmt(sh)} → {_fmt(lo)} ctx)\"',
-     'f"#####  Long Context Performance Degradation ({_fmt(sh)} → {_fmt(lo)} ctx)"'),
-    ('st.metric(\"TTFT 增长倍数\", f\"{growth:.1f}x\")', 'st.metric("TTFT Growth Factor", f"{growth:.1f}x")'),
-    ('d = f\"↓ {((1 - tps_r)*100):.0f}%\" if tps_r < 0.9 else \"稳定\"',
-     'd = f"↓ {((1 - tps_r)*100):.0f}%" if tps_r < 0.9 else "Stable"'),
-    ('st.metric(\"TPS 稳定性\", f\"{tps_r*100:.1f}%\", delta=d, delta_color=\"inverse\" if tps_r < 0.9 else \"normal\")',
-     'st.metric("TPS Stability", f"{tps_r*100:.1f}%", delta=d, delta_color="inverse" if tps_r < 0.9 else "normal")'),
-    ('ttft_inflection = f\"{_fmt(jump_from)}→{_fmt(jump_to)} 跳增 {jump_pct:.0f}%\" if jump_pct > 20 else \"均匀增长\"',
-     'ttft_inflection = f"{_fmt(jump_from)}→{_fmt(jump_to)} jumped {jump_pct:.0f}%" if jump_pct > 20 else "Uniform growth"'),
-    ('tps_stability = f\"波动 {tps_cv:.0f}%\" if tps_cv > 10 else f\"稳定 (CV={tps_cv:.0f}%)\"',
-     'tps_stability = f"Volatile {tps_cv:.0f}%" if tps_cv > 10 else f"Stable (CV={tps_cv:.0f}%)"'),
-    ('st.metric(\"峰值 Prefill 速度\", f\"{peak_ps_val:.0f} t/s\", delta=f\"@ {_fmt(peak_ps_ctx)} ctx\")',
-     'st.metric("Peak Prefill Speed", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_ctx)} ctx")'),
-    ('st.metric(\"峰值 TPS\", f\"{peak_tps_val:.1f} t/s\", delta=f\"@ {_fmt(peak_tps_ctx)} ctx\")',
-     'st.metric("Peak TPS", f"{peak_tps_val:.1f} t/s", delta=f"@ {_fmt(peak_tps_ctx)} ctx")'),
-    ('st.metric(\"TTFT 拐点\", ttft_inflection, help=\"TTFT 出现最大单次增幅的上下文长度段\")',
-     'st.metric("TTFT Inflection", ttft_inflection, help="Context length segment with the largest single TTFT increase")'),
-    ('st.metric(\"TPS 全程波动\", tps_stability, help=\"各上下文长度下 TPS 的变异系数\")',
-     'st.metric("TPS Volatility", tps_stability, help="Coefficient of variation of TPS across context lengths")'),
-
+    (
+        'f"##### 长上下文性能衰减 ({_fmt(sh)} → {_fmt(lo)} ctx)"',
+        'f"##### Long Context Performance Degradation ({_fmt(sh)} → {_fmt(lo)} ctx)"',
+    ),
+    (
+        'st.metric("TTFT 增长倍数", f"{growth:.1f}x")',
+        'st.metric("TTFT Growth Factor", f"{growth:.1f}x")',
+    ),
+    (
+        'd = f"↓ {((1 - tps_r)*100):.0f}%" if tps_r < 0.9 else "稳定"',
+        'd = f"↓ {((1 - tps_r)*100):.0f}%" if tps_r < 0.9 else "Stable"',
+    ),
+    (
+        'st.metric("TPS 稳定性", f"{tps_r*100:.1f}%", delta=d, delta_color="inverse" if tps_r < 0.9 else "normal")',
+        'st.metric("TPS Stability", f"{tps_r*100:.1f}%", delta=d, delta_color="inverse" if tps_r < 0.9 else "normal")',
+    ),
+    (
+        'ttft_inflection = f"{_fmt(jump_from)}→{_fmt(jump_to)} 跳增 {jump_pct:.0f}%" if jump_pct > 20 else "均匀增长"',
+        'ttft_inflection = f"{_fmt(jump_from)}→{_fmt(jump_to)} jumped {jump_pct:.0f}%" if jump_pct > 20 else "Uniform growth"',
+    ),
+    (
+        'tps_stability = f"波动 {tps_cv:.0f}%" if tps_cv > 10 else f"稳定 (CV={tps_cv:.0f}%)"',
+        'tps_stability = f"Volatile {tps_cv:.0f}%" if tps_cv > 10 else f"Stable (CV={tps_cv:.0f}%)"',
+    ),
+    (
+        'st.metric("峰值 Prefill 速度", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_ctx)} ctx")',
+        'st.metric("Peak Prefill Speed", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_ctx)} ctx")',
+    ),
+    (
+        'st.metric("峰值 TPS", f"{peak_tps_val:.1f} t/s", delta=f"@ {_fmt(peak_tps_ctx)} ctx")',
+        'st.metric("Peak TPS", f"{peak_tps_val:.1f} t/s", delta=f"@ {_fmt(peak_tps_ctx)} ctx")',
+    ),
+    (
+        'st.metric("TTFT 拐点", ttft_inflection, help="TTFT 出现最大单次增幅的上下文长度段")',
+        'st.metric("TTFT Inflection", ttft_inflection, help="Context length segment with the largest single TTFT increase")',
+    ),
+    (
+        'st.metric("TPS 全程波动", tps_stability, help="各上下文长度下 TPS 的变异系数")',
+        'st.metric("TPS Volatility", tps_stability, help="Coefficient of variation of TPS across context lengths")',
+    ),
     # Segmented (Prefix Caching)
-    ('f\"#####  Prefix Caching 效果 ({len(levels)} 分段)\"',
-     'f"#####  Prefix Caching Effect ({len(levels)} segments)"'),
-    ('st.metric(\"总缓存命中率\", f\"{cache_rate:.1f}%\", help=f\"命中 {_fmt(cache_total)} / 总 {_fmt(total_input)}\")',
-     'st.metric("Total Cache Hit Rate", f"{cache_rate:.1f}%", help=f"Hit {_fmt(cache_total)} / Total {_fmt(total_input)}")'),
-    ('d = f\"↑ {r_l - r_f:.0f}pp\" if r_l > r_f + 5 else \"未增长\"',
-     'd = f"↑ {r_l - r_f:.0f}pp" if r_l > r_f + 5 else "No growth"'),
-    ('st.metric(\"缓存率变化\", f\"{r_f:.0f}% → {r_l:.0f}%\", delta=d)',
-     'st.metric("Cache Rate Change", f"{r_f:.0f}% → {r_l:.0f}%", delta=d)'),
-    ('st.metric(\"TTFT 首→末段\", f\"{ttft_f:.3f}s → {ttft_l:.3f}s\")',
-     'st.metric("TTFT First→Last", f"{ttft_f:.3f}s → {ttft_l:.3f}s")'),
-    ('st.metric(\"Prefill @ 首段\", f\"{ps_f:.0f} t/s\")', 'st.metric("Prefill @ First", f"{ps_f:.0f} t/s")'),
-    ('st.metric(\"Prefill @ 末段\", f\"{ps_l:.0f} t/s\")', 'st.metric("Prefill @ Last", f"{ps_l:.0f} t/s")'),
-    ('st.metric(\"峰值缓存率\", f\"{peak_cache_rate:.0f}%\", delta=f\"@ {_fmt(peak_cache_seg)} ctx\")',
-     'st.metric("Peak Cache Rate", f"{peak_cache_rate:.0f}%", delta=f"@ {_fmt(peak_cache_seg)} ctx")'),
-    ('st.metric(\"最佳 TTFT\", f\"{best_ttft_val:.3f}s\", delta=f\"@ {_fmt(best_ttft_seg)} ctx\")',
-     'st.metric("Best TTFT", f"{best_ttft_val:.3f}s", delta=f"@ {_fmt(best_ttft_seg)} ctx")'),
-    ('st.metric(\"峰值 Prefill 速度\", f\"{peak_ps_val:.0f} t/s\", delta=f\"@ {_fmt(peak_ps_seg)} ctx\")',
-     'st.metric("Peak Prefill Speed", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_seg)} ctx")'),
-    ('cache_trend = \"持续增长 [OK]\" if increasing and cache_vals[-1] > cache_vals[0] + 5 else (\"波动\" if not increasing else \"稳定\")',
-     'cache_trend = "Increasing [OK]" if increasing and cache_vals[-1] > cache_vals[0] + 5 else ("Volatile" if not increasing else "Stable")'),
-    ('st.metric(\"缓存率趋势\", cache_trend, help=\"各分段缓存命中率的整体变化趋势\")',
-     'st.metric("Cache Rate Trend", cache_trend, help="Overall trend of cache hit rates across segments")'),
-
+    (
+        'f"##### Prefix Caching 效果 ({len(levels)} 分段)"',
+        'f"##### Prefix Caching Effect ({len(levels)} segments)"',
+    ),
+    (
+        'st.metric("总缓存命中率", f"{cache_rate:.1f}%", help=f"命中 {_fmt(cache_total)} / 总 {_fmt(total_input)}")',
+        'st.metric("Total Cache Hit Rate", f"{cache_rate:.1f}%", help=f"Hit {_fmt(cache_total)} / Total {_fmt(total_input)}")',
+    ),
+    (
+        'd = f"↑ {r_l - r_f:.0f}pp" if r_l > r_f + 5 else "未增长"',
+        'd = f"↑ {r_l - r_f:.0f}pp" if r_l > r_f + 5 else "No growth"',
+    ),
+    (
+        'st.metric("缓存率变化", f"{r_f:.0f}% → {r_l:.0f}%", delta=d)',
+        'st.metric("Cache Rate Change", f"{r_f:.0f}% → {r_l:.0f}%", delta=d)',
+    ),
+    (
+        'st.metric("TTFT 首→末段", f"{ttft_f:.3f}s → {ttft_l:.3f}s")',
+        'st.metric("TTFT First→Last", f"{ttft_f:.3f}s → {ttft_l:.3f}s")',
+    ),
+    (
+        'st.metric("Prefill @ 首段", f"{ps_f:.0f} t/s")',
+        'st.metric("Prefill @ First", f"{ps_f:.0f} t/s")',
+    ),
+    (
+        'st.metric("Prefill @ 末段", f"{ps_l:.0f} t/s")',
+        'st.metric("Prefill @ Last", f"{ps_l:.0f} t/s")',
+    ),
+    (
+        'st.metric("峰值缓存率", f"{peak_cache_rate:.0f}%", delta=f"@ {_fmt(peak_cache_seg)} ctx")',
+        'st.metric("Peak Cache Rate", f"{peak_cache_rate:.0f}%", delta=f"@ {_fmt(peak_cache_seg)} ctx")',
+    ),
+    (
+        'st.metric("最佳 TTFT", f"{best_ttft_val:.3f}s", delta=f"@ {_fmt(best_ttft_seg)} ctx")',
+        'st.metric("Best TTFT", f"{best_ttft_val:.3f}s", delta=f"@ {_fmt(best_ttft_seg)} ctx")',
+    ),
+    (
+        'st.metric("峰值 Prefill 速度", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_seg)} ctx")',
+        'st.metric("Peak Prefill Speed", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_seg)} ctx")',
+    ),
+    (
+        'cache_trend = "持续增长 " if increasing and cache_vals[-1] > cache_vals[0] + 5 else ("波动" if not increasing else "稳定")',
+        'cache_trend = "Increasing " if increasing and cache_vals[-1] > cache_vals[0] + 5 else ("Volatile" if not increasing else "Stable")',
+    ),
+    (
+        'st.metric("缓存率趋势", cache_trend, help="各分段缓存命中率的整体变化趋势")',
+        'st.metric("Cache Rate Trend", cache_trend, help="Overall trend of cache hit rates across segments")',
+    ),
     # Matrix section
-    ('\"#####  矩阵组合最优/最差配置\"', '"#####  Matrix Best/Worst Configuration"'),
-    ('st.metric(\"测试矩阵\", f\"{len(conc_levels)}×{len(ctx_levels)}\", help=f\"并发: {conc_levels}\\n上下文: {ctx_levels}\")',
-     'st.metric("Test Matrix", f"{len(conc_levels)}×{len(ctx_levels)}", help=f"Concurrency: {conc_levels}\\nContext: {ctx_levels}")'),
-    ('st.metric(\"最高吞吐量\",', 'st.metric("Max Throughput",'),
-    ('st.metric(\"最低吞吐量\",', 'st.metric("Min Throughput",'),
-    ('st.metric(\"最佳 TTFT\",', 'st.metric("Best TTFT",'),
-    ('st.metric(\"最差 TTFT\",', 'st.metric("Worst TTFT",'),
-
+    ('"##### 矩阵组合最优/最差配置"', '"##### Matrix Best/Worst Configuration"'),
+    (
+        'st.metric("测试矩阵", f"{len(conc_levels)}×{len(ctx_levels)}", help=f"并发: {conc_levels}\\n上下文: {ctx_levels}")',
+        'st.metric("Test Matrix", f"{len(conc_levels)}×{len(ctx_levels)}", help=f"Concurrency: {conc_levels}\\nContext: {ctx_levels}")',
+    ),
+    ('st.metric("最高吞吐量",', 'st.metric("Max Throughput",'),
+    ('st.metric("最低吞吐量",', 'st.metric("Min Throughput",'),
+    ('st.metric("最佳 TTFT",', 'st.metric("Best TTFT",'),
+    ('st.metric("最差 TTFT",', 'st.metric("Worst TTFT",'),
     # Generic summary
-    ('st.warning(\"[WARNING] **数据质量告警**: TTFT、TPS、Token 数量均为 0 或缺失。测试可能未正确采集到性能指标数据，请检查 API 返回的 usage 信息和流式输出。\")',
-     'st.warning("[WARNING] **Data Quality Alert**: TTFT, TPS, and Token counts are all 0 or missing. The test may not have correctly captured performance metrics. Please check the API response usage info and streaming output.")'),
-    ('st_mod.metric(\"总请求数\", f\"{total_requests}\", delta=f\"{successful} 成功\")',
-     'st_mod.metric("Total Requests", f"{total_requests}", delta=f"{successful} succeeded")'),
-    ('st_mod.metric(\"请求完成率\", f\"{success_rate:.1f}%\")',
-     'st_mod.metric("Request Success Rate", f"{success_rate:.1f}%")'),
-    ('st_mod.metric(\"平均 TTFT\", f\"{avg_ttft:.3f}s\" if avg_ttft > 0 else \"N/A\")',
-     'st_mod.metric("Avg TTFT", f"{avg_ttft:.3f}s" if avg_ttft > 0 else "N/A")'),
-    ('st_mod.metric(\"平均 TPS\", f\"{avg_tps:.1f} t/s\" if avg_tps > 0 else \"N/A\")',
-     'st_mod.metric("Avg TPS", f"{avg_tps:.1f} t/s" if avg_tps > 0 else "N/A")'),
-    ('st_mod.metric(\"P95 TTFT\",', 'st_mod.metric("P95 TTFT",'),
-    ('st_mod.metric(\"平均 Prefill 速度\", f\"{pf:.1f} t/s\" if pf > 0 else \"N/A\")',
-     'st_mod.metric("Avg Prefill Speed", f"{pf:.1f} t/s" if pf > 0 else "N/A")'),
-    ('st_mod.metric(\"总输入 Tokens\", _fmt(total_input))', 'st_mod.metric("Total Input Tokens", _fmt(total_input))'),
-    ('st_mod.metric(\"总输出 Tokens\", _fmt(total_output))', 'st_mod.metric("Total Output Tokens", _fmt(total_output))'),
-
+    (
+        'st.warning("**数据质量告警**: TTFT、TPS、Token 数量均为 0 或缺失。测试可能未正确采集到性能指标数据，请检查 API 返回的 usage 信息和流式输出。")',
+        'st.warning("**Data Quality Alert**: TTFT, TPS, and Token counts are all 0 or missing. The test may not have correctly captured performance metrics. Please check the API response usage info and streaming output.")',
+    ),
+    (
+        'st_mod.metric("总请求数", f"{total_requests}", delta=f"{successful} 成功")',
+        'st_mod.metric("Total Requests", f"{total_requests}", delta=f"{successful} succeeded")',
+    ),
+    (
+        'st_mod.metric("请求完成率", f"{success_rate:.1f}%")',
+        'st_mod.metric("Request Success Rate", f"{success_rate:.1f}%")',
+    ),
+    (
+        'st_mod.metric("平均 TTFT", f"{avg_ttft:.3f}s" if avg_ttft > 0 else "N/A")',
+        'st_mod.metric("Avg TTFT", f"{avg_ttft:.3f}s" if avg_ttft > 0 else "N/A")',
+    ),
+    (
+        'st_mod.metric("平均 TPS", f"{avg_tps:.1f} t/s" if avg_tps > 0 else "N/A")',
+        'st_mod.metric("Avg TPS", f"{avg_tps:.1f} t/s" if avg_tps > 0 else "N/A")',
+    ),
+    ('st_mod.metric("P95 TTFT",', 'st_mod.metric("P95 TTFT",'),
+    (
+        'st_mod.metric("平均 Prefill 速度", f"{pf:.1f} t/s" if pf > 0 else "N/A")',
+        'st_mod.metric("Avg Prefill Speed", f"{pf:.1f} t/s" if pf > 0 else "N/A")',
+    ),
+    (
+        'st_mod.metric("总输入 Tokens", _fmt(total_input))',
+        'st_mod.metric("Total Input Tokens", _fmt(total_input))',
+    ),
+    (
+        'st_mod.metric("总输出 Tokens", _fmt(total_output))',
+        'st_mod.metric("Total Output Tokens", _fmt(total_output))',
+    ),
     # Reports and subheaders
-    ('st.subheader(\"并发性能测试图表\")', 'st.subheader("Concurrency Test Charts")'),
-    ('report_md = \"# 并发性能测试报告\\n\\n\"', 'report_md = "# Concurrency Performance Test Report\\n\\n"'),
-    ('report_md += \"### 测试配置\\n\"', 'report_md += "### Test Configuration\\n"'),
-    ('report_md += \"## 详细结果\\n\\n\"', 'report_md += "## Detailed Results\\n\\n"'),
-    ('st.error(\"并发测试报告失败：数据中缺少 \'concurrency\' 列。\")',
-     'st.error("Concurrency test report failed: missing \'concurrency\' column in data.")'),
-    ('st.warning(\"并发测试报告：没有有效的并发数据。\")',
-     'st.warning("Concurrency test report: no valid concurrency data.")'),
-    ('st.subheader(f\"最佳性能统计 (每级 {rounds_per_level} 轮测试中)\")',
-     'st.subheader(f"Best Performance Stats (across {rounds_per_level} rounds per level)")'),
-    ('help=\"首字延迟 (越短越好)\"', 'help="TTFT - Time To First Token (lower is better)"'),
-    ('help=\"系统输出吞吐量 (越高越好)\"', 'help="System Output Throughput (higher is better)"'),
-    ('help=\"每分钟最大请求处理量 (由 RPS * 60 估算)\"',
-     'help="Maximum requests per minute (estimated from RPS × 60)"'),
-    ('\" 性能洞察与分析\"', '" Performance Insights & Analysis"'),
-    ('\" 性能洞察\"', '" Performance Insights"'),
-    ('f\"**综合评级**: <span style=\'color:{color};font-size:20px;font-weight:bold\'>{grade}</span> - {description}\"',
-     'f"**Overall Grade**: <span style=\'color:{color};font-size:20px;font-weight:bold\'>{grade}</span> - {description}"'),
-    ('report_md += \"\\n### 性能洞察\\n\\n\"', 'report_md += "\\n### Performance Insights\\n\\n"'),
-    ('\"###  图表分析\"', '"###  Chart Analysis"'),
-    ('\" 下载静态分析图\"', '" Download Static Chart"'),
-
+    ('st.subheader("并发性能测试图表")', 'st.subheader("Concurrency Test Charts")'),
+    (
+        'report_md = "# 并发性能测试报告\\n\\n"',
+        'report_md = "# Concurrency Performance Test Report\\n\\n"',
+    ),
+    ('report_md += "### 测试配置\\n"', 'report_md += "### Test Configuration\\n"'),
+    ('report_md += "## 详细结果\\n\\n"', 'report_md += "## Detailed Results\\n\\n"'),
+    (
+        "st.error(\"并发测试报告失败：数据中缺少 'concurrency' 列。\")",
+        "st.error(\"Concurrency test report failed: missing 'concurrency' column in data.\")",
+    ),
+    (
+        'st.warning("并发测试报告：没有有效的并发数据。")',
+        'st.warning("Concurrency test report: no valid concurrency data.")',
+    ),
+    (
+        'st.subheader(f"最佳性能统计 (每级 {rounds_per_level} 轮测试中)")',
+        'st.subheader(f"Best Performance Stats (across {rounds_per_level} rounds per level)")',
+    ),
+    (
+        'help="首字延迟 (越短越好)"',
+        'help="TTFT - Time To First Token (lower is better)"',
+    ),
+    (
+        'help="系统输出吞吐量 (越高越好)"',
+        'help="System Output Throughput (higher is better)"',
+    ),
+    (
+        'help="每分钟最大请求处理量 (由 RPS * 60 估算)"',
+        'help="Maximum requests per minute (estimated from RPS × 60)"',
+    ),
+    ('"性能洞察与分析"', '"Performance Insights & Analysis"'),
+    ('"性能洞察"', '"Performance Insights"'),
+    (
+        "f\"**综合评级**: <span style='color:{color};font-size:20px;font-weight:bold'>{grade}</span> - {description}\"",
+        "f\"**Overall Grade**: <span style='color:{color};font-size:20px;font-weight:bold'>{grade}</span> - {description}\"",
+    ),
+    (
+        'report_md += "\\n### 性能洞察\\n\\n"',
+        'report_md += "\\n### Performance Insights\\n\\n"',
+    ),
+    ('"### 图表分析"', '"### Chart Analysis"'),
+    ('"下载静态分析图"', '"Download Static Chart"'),
     # Chart titles - Concurrency
-    ('f\"首字延迟 (TTFT) {io_label}\"', 'f"Time To First Token (TTFT) {io_label}"'),
-    ('\"Concurrency (并发数)\"', '"Concurrency"'),
-    ('f\"平均每Token生成时间 (TPOT) {io_label}\"', 'f"Avg Time Per Output Token (TPOT) {io_label}"'),
-    ('f\"系统输入吞吐量 (Prefill) {io_label}\"', 'f"System Input Throughput (Prefill) {io_label}"'),
-    ('f\"系统输出吞吐量 (Decode) {io_label}\"', 'f"System Output Throughput (Decode) {io_label}"'),
-    ('f\"系统处理能力 (QPM Trend) {io_label}\"', 'f"System Processing Capacity (QPM Trend) {io_label}"'),
-    ('f\"并发性能测试报告 - {model_id}\"', 'f"Concurrency Performance Test Report - {model_id}"'),
-    ('\" 下载完整 HTML 报告 (含所有图表)\"', '" Download Full HTML Report (All Charts)"'),
-    ('report_md += \"(图表请参见 Web 界面)\\n\"', 'report_md += "(See charts in Web UI)\\n"'),
-
+    ('f"首字延迟 (TTFT) {io_label}"', 'f"Time To First Token (TTFT) {io_label}"'),
+    ('"Concurrency (并发数)"', '"Concurrency"'),
+    (
+        'f"平均每Token生成时间 (TPOT) {io_label}"',
+        'f"Avg Time Per Output Token (TPOT) {io_label}"',
+    ),
+    (
+        'f"系统输入吞吐量 (Prefill) {io_label}"',
+        'f"System Input Throughput (Prefill) {io_label}"',
+    ),
+    (
+        'f"系统输出吞吐量 (Decode) {io_label}"',
+        'f"System Output Throughput (Decode) {io_label}"',
+    ),
+    (
+        'f"系统处理能力 (QPM Trend) {io_label}"',
+        'f"System Processing Capacity (QPM Trend) {io_label}"',
+    ),
+    (
+        'f"并发性能测试报告 - {model_id}"',
+        'f"Concurrency Performance Test Report - {model_id}"',
+    ),
+    (
+        '"下载完整 HTML 报告 (含所有图表)"',
+        '"Download Full HTML Report (All Charts)"',
+    ),
+    (
+        'report_md += "(图表请参见 Web 界面)\\n"',
+        'report_md += "(See charts in Web UI)\\n"',
+    ),
     # Prefill report
-    ('st.subheader(\"Prefill 压力测试图表\")', 'st.subheader("Prefill Stress Test Charts")'),
-    ('report_md = \"# Prefill 压力测试报告\\n\\n\"', 'report_md = "# Prefill Stress Test Report\\n\\n"'),
-    ('st.error(\"Prefill 测试报告失败：数据中缺少 \'input_tokens_target\' 列。\")',
-     'st.error("Prefill test report failed: missing \'input_tokens_target\' column in data.")'),
-    ('st.warning(\"Prefill 测试报告：没有有效的 Prefill 数据。\")',
-     'st.warning("Prefill test report: no valid Prefill data.")'),
-    ('st.subheader(f\"最佳性能统计 (每级 {requests_per_level} 个请求中)\")',
-     'st.subheader(f"Best Performance Stats ({requests_per_level} requests per level)")'),
-    ('help=\"Prefill 速度 (越高越好)\"', 'help="Prefill Speed (higher is better)"'),
-    ('\"首字延迟 (TTFT)\"', '"Time To First Token (TTFT)"'),
-    ('\"Input Tokens (输入Token数)\"', '"Input Tokens"'),
-    ('\"Prefill 速度 (Prefill Speed)\"', '"Prefill Speed"'),
-    ('f\"Prefill 性能测试报告 - {model_id}\"', 'f"Prefill Performance Test Report - {model_id}"'),
-
+    (
+        'st.subheader("Prefill 压力测试图表")',
+        'st.subheader("Prefill Stress Test Charts")',
+    ),
+    (
+        'report_md = "# Prefill 压力测试报告\\n\\n"',
+        'report_md = "# Prefill Stress Test Report\\n\\n"',
+    ),
+    (
+        "st.error(\"Prefill 测试报告失败：数据中缺少 'input_tokens_target' 列。\")",
+        "st.error(\"Prefill test report failed: missing 'input_tokens_target' column in data.\")",
+    ),
+    (
+        'st.warning("Prefill 测试报告：没有有效的 Prefill 数据。")',
+        'st.warning("Prefill test report: no valid Prefill data.")',
+    ),
+    (
+        'st.subheader(f"最佳性能统计 (每级 {requests_per_level} 个请求中)")',
+        'st.subheader(f"Best Performance Stats ({requests_per_level} requests per level)")',
+    ),
+    ('help="Prefill 速度 (越高越好)"', 'help="Prefill Speed (higher is better)"'),
+    ('"首字延迟 (TTFT)"', '"Time To First Token (TTFT)"'),
+    ('"Input Tokens (输入Token数)"', '"Input Tokens"'),
+    ('"Prefill 速度 (Prefill Speed)"', '"Prefill Speed"'),
+    (
+        'f"Prefill 性能测试报告 - {model_id}"',
+        'f"Prefill Performance Test Report - {model_id}"',
+    ),
     # Long context report
-    ('st.subheader(\"长上下文测试图表\")', 'st.subheader("Long Context Test Charts")'),
-    ('report_md = \"# 长上下文测试报告\\n\\n\"', 'report_md = "# Long Context Test Report\\n\\n"'),
-    ('st.error(\"长上下文测试报告失败：数据中缺少 \'context_length_target\' 列。\")',
-     'st.error("Long context test report failed: missing \'context_length_target\' column in data.")'),
-    ('st.warning(\"长上下文测试报告：没有有效的长上下文数据。\")',
-     'st.warning("Long context test report: no valid long context data.")'),
-    ('st.subheader(\"最佳性能统计 (峰值)\")', 'st.subheader("Best Performance Stats (Peak)")'),
-    ('\"Context Length (上下文长度)\"', '"Context Length"'),
-    ('f\"平均每Token生成时间 (TPOT) {out_label}\"', 'f"Avg Time Per Output Token (TPOT) {out_label}"'),
-    ('f\"长上下文性能测试报告 - {model_id}\"', 'f"Long Context Performance Test Report - {model_id}"'),
-
+    ('st.subheader("长上下文测试图表")', 'st.subheader("Long Context Test Charts")'),
+    (
+        'report_md = "# 长上下文测试报告\\n\\n"',
+        'report_md = "# Long Context Test Report\\n\\n"',
+    ),
+    (
+        "st.error(\"长上下文测试报告失败：数据中缺少 'context_length_target' 列。\")",
+        "st.error(\"Long context test report failed: missing 'context_length_target' column in data.\")",
+    ),
+    (
+        'st.warning("长上下文测试报告：没有有效的长上下文数据。")',
+        'st.warning("Long context test report: no valid long context data.")',
+    ),
+    (
+        'st.subheader("最佳性能统计 (峰值)")',
+        'st.subheader("Best Performance Stats (Peak)")',
+    ),
+    ('"Context Length (上下文长度)"', '"Context Length"'),
+    (
+        'f"平均每Token生成时间 (TPOT) {out_label}"',
+        'f"Avg Time Per Output Token (TPOT) {out_label}"',
+    ),
+    (
+        'f"长上下文性能测试报告 - {model_id}"',
+        'f"Long Context Performance Test Report - {model_id}"',
+    ),
     # Matrix report
-    ('st.subheader(\"并发-上下文 综合测试图表\")', 'st.subheader("Concurrency-Context Matrix Test Charts")'),
-    ('report_md = \"# 并发-上下文 综合测试报告\\n\\n\"', 'report_md = "# Concurrency-Context Matrix Test Report\\n\\n"'),
-    ('st.error(\"综合测试报告失败：数据中缺少 \'context_length_target\' 或 \'concurrency\' 列。\")',
-     'st.error("Matrix test report failed: missing \'context_length_target\' or \'concurrency\' column.")'),
-    ('st.warning(\"综合测试报告：没有有效的综合测试数据。\")',
-     'st.warning("Matrix test report: no valid matrix test data.")'),
-    ('\" 综合性能洞察\"', '" Comprehensive Performance Insights"'),
-    ('f\"**评级**: {grade} ({description})\"', 'f"**Grade**: {grade} ({description})"'),
-    ('f\"系统QPM (随输入长度变化) {out_label}\"', 'f"System QPM (by Input Length) {out_label}"'),
-    ('f\"并发-上下文综合测试报告 - {model_id}\"', 'f"Concurrency-Context Matrix Test Report - {model_id}"'),
-
+    (
+        'st.subheader("并发-上下文 综合测试图表")',
+        'st.subheader("Concurrency-Context Matrix Test Charts")',
+    ),
+    (
+        'report_md = "# 并发-上下文 综合测试报告\\n\\n"',
+        'report_md = "# Concurrency-Context Matrix Test Report\\n\\n"',
+    ),
+    (
+        "st.error(\"综合测试报告失败：数据中缺少 'context_length_target' 或 'concurrency' 列。\")",
+        "st.error(\"Matrix test report failed: missing 'context_length_target' or 'concurrency' column.\")",
+    ),
+    (
+        'st.warning("综合测试报告：没有有效的综合测试数据。")',
+        'st.warning("Matrix test report: no valid matrix test data.")',
+    ),
+    ('"综合性能洞察"', '"Comprehensive Performance Insights"'),
+    ('f"**评级**: {grade} ({description})"', 'f"**Grade**: {grade} ({description})"'),
+    (
+        'f"系统QPM (随输入长度变化) {out_label}"',
+        'f"System QPM (by Input Length) {out_label}"',
+    ),
+    (
+        'f"并发-上下文综合测试报告 - {model_id}"',
+        'f"Concurrency-Context Matrix Test Report - {model_id}"',
+    ),
     # Segmented report
-    ('st.subheader(\"分段上下文测试图表 (Prefix Caching)\")', 'st.subheader("Segmented Context Test Charts (Prefix Caching)")'),
-    ('report_md = \"# 分段上下文测试报告 (Prefix Caching)\\n\\n\"', 'report_md = "# Segmented Context Test Report (Prefix Caching)\\n\\n"'),
-    ('st.error(\"分段上下文测试报告失败：数据中缺少 \'context_length_target\' 列。\")',
-     'st.error("Segmented context test report failed: missing \'context_length_target\' column in data.")'),
-    ('st.warning(\"分段上下文测试报告：没有有效的测试数据。\")',
-     'st.warning("Segmented context test report: no valid test data.")'),
-    ('st.subheader(f\"最佳性能统计 (每级 {requests_per_level} 个请求)\")',
-     'st.subheader(f"Best Performance Stats ({requests_per_level} requests per level)")'),
-
+    (
+        'st.subheader("分段上下文测试图表 (Prefix Caching)")',
+        'st.subheader("Segmented Context Test Charts (Prefix Caching)")',
+    ),
+    (
+        'report_md = "# 分段上下文测试报告 (Prefix Caching)\\n\\n"',
+        'report_md = "# Segmented Context Test Report (Prefix Caching)\\n\\n"',
+    ),
+    (
+        "st.error(\"分段上下文测试报告失败：数据中缺少 'context_length_target' 列。\")",
+        "st.error(\"Segmented context test report failed: missing 'context_length_target' column in data.\")",
+    ),
+    (
+        'st.warning("分段上下文测试报告：没有有效的测试数据。")',
+        'st.warning("Segmented context test report: no valid test data.")',
+    ),
+    (
+        'st.subheader(f"最佳性能统计 (每级 {requests_per_level} 个请求)")',
+        'st.subheader(f"Best Performance Stats ({requests_per_level} requests per level)")',
+    ),
     # Segmented tooltips and insights
-    ('\"平均缓存命中 Token 数：API 返回的 cached_tokens 均值，越高说明 Prefix Caching 效果越好。\"',
-     '"Average Cache Hit Tokens: Mean of cached_tokens returned by API. Higher values indicate better Prefix Caching."'),
-    ('\"缓存命中率：Cache Hit Tokens / Input Tokens，越高说明 Prefix Caching 效果越好。\"',
-     '"Cache Hit Rate: Cache Hit Tokens / Input Tokens. Higher values indicate better Prefix Caching."'),
-    ('\"平均首字延迟：所有请求的 TTFT 均值。\"', '"Average TTFT: Mean TTFT across all requests."'),
-    ('help=\"缓存命中率 (越高说明 Prefix Caching 效果越好)\"',
-     'help="Cache Hit Rate (higher indicates better Prefix Caching)"'),
-    ('f\" **最佳 TTFT**: `{best_ttft_row[\'Best_TTFT (s)\']:.4f}s` (分段: {best_ttft_row[\'context_length_target\']})\"',
-     'f" **Best TTFT**: `{best_ttft_row[\'Best_TTFT (s)\']:.4f}s` (segment: {best_ttft_row[\'context_length_target\']})"'),
-    ('f\" **最高 Prefill 速度**: `{best_prefill_row[\'Max_Prefill_Speed (tokens/s)\']:.0f} tokens/s` (分段: {best_prefill_row[\'context_length_target\']})\"',
-     'f" **Peak Prefill Speed**: `{best_prefill_row[\'Max_Prefill_Speed (tokens/s)\']:.0f} tokens/s` (segment: {best_prefill_row[\'context_length_target\']})"'),
-    ('f\" **最高缓存命中率**: `{max_cache_rate:.1f}%` (分段: {best_cache_row[\'context_length_target\']})\"',
-     'f" **Peak Cache Hit Rate**: `{max_cache_rate:.1f}%` (segment: {best_cache_row[\'context_length_target\']})"'),
-    ('\" **缓存效果递增**: 随着分段累计增长，缓存命中率逐渐提升，说明 Prefix Caching 有效工作。\"',
-     '" **Cache Effect Increasing**: Cache hit rate grows with cumulative segments, indicating Prefix Caching is working effectively."'),
-    ('\"[WARNING] **无缓存命中**: 未检测到 Prefix Caching 效果，请确认 API 是否支持此特性。\"',
-     '"[WARNING] **No Cache Hits**: No Prefix Caching effect detected. Please verify if the API supports this feature."'),
-    ('f\"[WARNING] **TTFT 增长显著**: 从 {ttft_first:.4f}s 到 {ttft_last:.4f}s (增长 {ratio:.1f}x)。随输入增长 Prefill 时间线性增加是正常表现。\"',
-     'f"[WARNING] **Significant TTFT Growth**: From {ttft_first:.4f}s to {ttft_last:.4f}s ({ratio:.1f}x increase). Linear TTFT growth with input length is expected behavior."'),
-
+    (
+        '"平均缓存命中 Token 数：API 返回的 cached_tokens 均值，越高说明 Prefix Caching 效果越好。"',
+        '"Average Cache Hit Tokens: Mean of cached_tokens returned by API. Higher values indicate better Prefix Caching."',
+    ),
+    (
+        '"缓存命中率：Cache Hit Tokens / Input Tokens，越高说明 Prefix Caching 效果越好。"',
+        '"Cache Hit Rate: Cache Hit Tokens / Input Tokens. Higher values indicate better Prefix Caching."',
+    ),
+    (
+        '"平均首字延迟：所有请求的 TTFT 均值。"',
+        '"Average TTFT: Mean TTFT across all requests."',
+    ),
+    (
+        'help="缓存命中率 (越高说明 Prefix Caching 效果越好)"',
+        'help="Cache Hit Rate (higher indicates better Prefix Caching)"',
+    ),
+    (
+        "f\"**最佳 TTFT**: `{best_ttft_row['Best_TTFT (s)']:.4f}s` (分段: {best_ttft_row['context_length_target']})\"",
+        "f\"**Best TTFT**: `{best_ttft_row['Best_TTFT (s)']:.4f}s` (segment: {best_ttft_row['context_length_target']})\"",
+    ),
+    (
+        "f\"**最高 Prefill 速度**: `{best_prefill_row['Max_Prefill_Speed (tokens/s)']:.0f} tokens/s` (分段: {best_prefill_row['context_length_target']})\"",
+        "f\"**Peak Prefill Speed**: `{best_prefill_row['Max_Prefill_Speed (tokens/s)']:.0f} tokens/s` (segment: {best_prefill_row['context_length_target']})\"",
+    ),
+    (
+        "f\"**最高缓存命中率**: `{max_cache_rate:.1f}%` (分段: {best_cache_row['context_length_target']})\"",
+        "f\"**Peak Cache Hit Rate**: `{max_cache_rate:.1f}%` (segment: {best_cache_row['context_length_target']})\"",
+    ),
+    (
+        '"**缓存效果递增**: 随着分段累计增长，缓存命中率逐渐提升，说明 Prefix Caching 有效工作。"',
+        '"**Cache Effect Increasing**: Cache hit rate grows with cumulative segments, indicating Prefix Caching is working effectively."',
+    ),
+    (
+        '"**无缓存命中**: 未检测到 Prefix Caching 效果，请确认 API 是否支持此特性。"',
+        '"**No Cache Hits**: No Prefix Caching effect detected. Please verify if the API supports this feature."',
+    ),
+    (
+        'f"**TTFT 增长显著**: 从 {ttft_first:.4f}s 到 {ttft_last:.4f}s (增长 {ratio:.1f}x)。随输入增长 Prefill 时间线性增加是正常表现。"',
+        'f"**Significant TTFT Growth**: From {ttft_first:.4f}s to {ttft_last:.4f}s ({ratio:.1f}x increase). Linear TTFT growth with input length is expected behavior."',
+    ),
     # Segmented chart titles
-    ('\"首字延迟 (TTFT) by Segment\"', '"Time To First Token (TTFT) by Segment"'),
-    ('\"Context Segment (分段级别)\"', '"Context Segment"'),
-    ('\"缓存命中率 (Cache Hit Rate)\"', '"Cache Hit Rate"'),
-    ('\"缓存命中 Tokens (Cache Hit Tokens)\"', '"Cache Hit Tokens"'),
-    ('\"系统输入吞吐量 (Sys Input Throughput)\"', '"System Input Throughput"'),
-    ('\"平均每Token生成时间 (TPOT)\"', '"Avg Time Per Output Token (TPOT)"'),
-    ('f\"分段上下文测试报告 (Prefix Caching) - {model_id}\"', 'f"Segmented Context Test Report (Prefix Caching) - {model_id}"'),
-
+    ('"首字延迟 (TTFT) by Segment"', '"Time To First Token (TTFT) by Segment"'),
+    ('"Context Segment (分段级别)"', '"Context Segment"'),
+    ('"缓存命中率 (Cache Hit Rate)"', '"Cache Hit Rate"'),
+    ('"缓存命中 Tokens (Cache Hit Tokens)"', '"Cache Hit Tokens"'),
+    ('"系统输入吞吐量 (Sys Input Throughput)"', '"System Input Throughput"'),
+    ('"平均每Token生成时间 (TPOT)"', '"Avg Time Per Output Token (TPOT)"'),
+    (
+        'f"分段上下文测试报告 (Prefix Caching) - {model_id}"',
+        'f"Segmented Context Test Report (Prefix Caching) - {model_id}"',
+    ),
     # Config and system info
-    ('\"** 测试配置:**\"', '"** Test Configuration:**"'),
-    ('\"** 系统环境:**\"', '"** System Environment:**"'),
-
+    ('"**测试配置:**"', '"**Test Configuration:**"'),
+    ('"**系统环境:**"', '"**System Environment:**"'),
     # Chart comments (in Chinese)
-    ('# 新增 QPM 图表，帮助用户直观判断系统容量瓶颈',
-     '# QPM chart to help users intuitively assess system capacity bottleneck'),
-    ('# 当随并发增加 QPM 不再增长时，即为系统极限',
-     '# When QPM stops growing with concurrency, the system limit is reached'),
-    ('# 使用 effective tokens (API 优先) 来统计，回退到 tokenizer 值',
-     '# Use effective tokens (API priority) for stats, fallback to tokenizer values'),
-    ('# effective 列存在时，对缺失值填充 tokenizer 值',
-     '# When effective column exists, fill missing values with tokenizer values'),
-    ('# 添加 token_source 统计（如果有）',
-     '# Add token_source stats (if available)'),
-
+    (
+        "# 新增 QPM 图表，帮助用户直观判断系统容量瓶颈",
+        "# QPM chart to help users intuitively assess system capacity bottleneck",
+    ),
+    (
+        "# 当随并发增加 QPM 不再增长时，即为系统极限",
+        "# When QPM stops growing with concurrency, the system limit is reached",
+    ),
+    (
+        "# 使用 effective tokens (API 优先) 来统计，回退到 tokenizer 值",
+        "# Use effective tokens (API priority) for stats, fallback to tokenizer values",
+    ),
+    (
+        "# effective 列存在时，对缺失值填充 tokenizer 值",
+        "# When effective column exists, fill missing values with tokenizer values",
+    ),
+    ("# 添加 token_source 统计（如果有）", "# Add token_source stats (if available)"),
     # Remaining st.metric with Chinese (generic total metrics)
-    ('st.metric(\"总请求数\", f\"{total_requests}\", delta=f\"{successful} 成功\")',
-     'st.metric("Total Requests", f"{total_requests}", delta=f"{successful} succeeded")'),
+    (
+        'st.metric("总请求数", f"{total_requests}", delta=f"{successful} 成功")',
+        'st.metric("Total Requests", f"{total_requests}", delta=f"{successful} succeeded")',
+    ),
 ]
 
 for old, new in replacements:
     content = content.replace(old, new)
 
 # Write the file back
-with open('ui/reports.py', 'w', encoding='utf-8') as f:
+with open("ui/reports.py", "w", encoding="utf-8") as f:
     f.write(content)
 
 # Verify remaining Chinese
-lines = content.split('\n')
-remaining = [(i+1, line.rstrip()) for i, line in enumerate(lines) if re.search(r'[\u4e00-\u9fff]', line)]
+lines = content.split("\n")
+remaining = [
+    (i + 1, line.rstrip())
+    for i, line in enumerate(lines)
+    if re.search(r"[\u4e00-\u9fff]", line)
+]
 print(f"Remaining Chinese lines: {len(remaining)}")
 for num, line in remaining[:30]:
     print(f"  {num}: {line[:120]}")

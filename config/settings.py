@@ -43,6 +43,7 @@ MODEL_OPTIONS = [
     "XiaomiMiMo/MiMo-V2-Flash",
     "stepfun-ai/Step-3.7-Flash",
     "google/gemma-4-31B-it",
+    "tencent/Hy3",
 ]
 
 # --- HuggingFace Model映射 (用于自动Align) ---
@@ -83,19 +84,24 @@ HF_MODEL_MAPPING = {
     "gemma-4-31b": "./tokenizers/Gemma-4-31B-it",
     "gemma-4": "./tokenizers/Gemma-4-31B-it",
     "gemma": "./tokenizers/Gemma-4-31B-it",
+    # Hunyuan Hy3: 295B MoE(21B 激活 + 3.8B MTP)。MS=魔搭社区,HF=tencent。
+    "hy3": "./tokenizers/Hy3",
+    "hunyuan-hy3": "./tokenizers/Hy3",
+    "hunyuan": "./tokenizers/Hy3",
 }
 
 # --- Tokenizer 源配置 (统一维护，自动兼容) ---
-TOKENIZER_SOURCES = {
+TOKENIZER_SOURCES: dict[str, str | dict[str, str]] = {
     # 字符串值：MS 和 HF 地址相同
     "DeepSeek-V3.1-Terminus": "deepseek-ai/DeepSeek-V3.1-Terminus",
     "DeepSeek-V3.2": "deepseek-ai/DeepSeek-V3.2",
     "DeepSeek-V4-Flash": "deepseek-ai/DeepSeek-V4-Flash",
     "DeepSeek-V4-Pro": "deepseek-ai/DeepSeek-V4-Pro",
     "Qwen3.5-397B-A17B-FP8": "Qwen/Qwen3.5-397B-A17B-FP8",
+    "Qwen3-235B-A22B-Instruct-2507": "Qwen/Qwen3-235B-A22B-Instruct-2507",
     "Qwen3-Coder-480B-A35B-Instruct": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
     "Qwen3-Next-80B-A3B-Instruct": "Qwen/Qwen3-Next-80B-A3B-Instruct",
-    "Qwen3-VL-32B-Instruct": "Qwen/Qwen3-VL-30B-Instruct",
+    "Qwen3-VL-32B-Instruct": "Qwen/Qwen3-VL-32B-Instruct",
     "Kimi-K2.5": "moonshotai/Kimi-K2.5",
     "Kimi-K2-Thinking": "moonshotai/Kimi-K2-Thinking",
     "Kimi-K2-Instruct-0905": "moonshotai/Kimi-K2-Instruct",
@@ -105,49 +111,23 @@ TOKENIZER_SOURCES = {
     "Gemma-4-31B-it": "google/gemma-4-31B-it",
     # 字典值：MS 和 HF 地址不同
     "GLM-5": {"ms": "ZhipuAI/GLM-5", "hf": "zai-org/GLM-5"},
+    "Hy3": {"ms": "Tencent-Hunyuan/Hy3", "hf": "tencent/Hy3"},
     "GLM-4.6": {"ms": "ZhipuAI/GLM-4.7", "hf": "zai-org/GLM-4.7"},
     "MiniMax-M2.5": {"ms": "MiniMax/MiniMax-M2.5", "hf": "MiniMaxAI/MiniMax-M2.5"},
-    "Llama-3.3-70B-Instruct": {"ms": "LLM-Research/Llama-3.3-70B-Instruct", "hf": "meta-llama/Llama-3.3-70B-Instruct"},
+    "MiniMax-M2": "MiniMaxAI/MiniMax-M2",
+    "Llama-3.3-70B-Instruct": {
+        "ms": "LLM-Research/Llama-3.3-70B-Instruct",
+        "hf": "meta-llama/Llama-3.3-70B-Instruct",
+    },
     "gpt-oss-120b": {"ms": "openai-mirror/gpt-oss-120b", "hf": "openai/gpt-oss-120b"},
     "MiniMax-M3": "MiniMax/MiniMax-M3",
 }
 
 # 兼容层：从 TOKENIZER_SOURCES 自动生成旧变量
 TOKENIZER_MODELSCOPE_MAPPING = {
-    k: (v if isinstance(v, str) else v["ms"])
-    for k, v in TOKENIZER_SOURCES.items()
+    k: (v if isinstance(v, str) else v["ms"]) for k, v in TOKENIZER_SOURCES.items()
 }
 
 TOKENIZER_HF_MAPPING = {
-    k: (v if isinstance(v, str) else v["hf"])
-    for k, v in TOKENIZER_SOURCES.items()
-}
-
-# --- Tokenizer本地目录 -> ModelScope 魔搭社区 Repo映射 (国内优先) ---
-TOKENIZER_MODELSCOPE_MAPPING = {
-    # DeepSeek系列
-    "DeepSeek-V3.1-Terminus": "deepseek-ai/DeepSeek-V3.1-Terminus",
-    "DeepSeek-V3.2": "deepseek-ai/DeepSeek-V3.2",
-    "DeepSeek-V4-Flash": "deepseek-ai/DeepSeek-V4-Flash",
-    "DeepSeek-V4-Pro": "deepseek-ai/DeepSeek-V4-Pro",
-    # Qwen系列
-    "Qwen3.5-397B-A17B-FP8": "Qwen/Qwen3.5-397B-A17B-FP8",
-    "Qwen3-235B-A22B-Instruct-2507": "Qwen/Qwen3-235B-A22B-Instruct-2507",
-    "Qwen3-Coder-480B-A35B-Instruct": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-    "Qwen3-Next-80B-A3B-Instruct": "Qwen/Qwen3-Next-80B-A3B-Instruct",
-    "Qwen3-VL-32B-Instruct": "Qwen/Qwen3-VL-32B-Instruct",
-    # Kimi系列
-    "Kimi-K2.5": "moonshotai/Kimi-K2.5",
-    "Kimi-K2-Thinking": "moonshotai/Kimi-K2-Thinking",
-    "Kimi-K2-Instruct-0905": "moonshotai/Kimi-K2-Instruct-0905",
-    # GLM系列
-    "GLM-5": "ZhipuAI/GLM-5",
-    "GLM-4.6": "ZhipuAI/GLM-4.7",
-    # MiniMax系列
-    "MiniMax-M2.5": "MiniMaxAI/MiniMax-M2.5",
-    "MiniMax-M2": "MiniMaxAI/MiniMax-M2",
-    # Llama系列
-    "Llama-3.3-70B-Instruct": "LLM-Research/Llama-3.3-70B-Instruct",
-    # MiMo系列
-    "MiMo-V2-Flash": "XiaomiMiMo/MiMo-V2-Flash",
+    k: (v if isinstance(v, str) else v["hf"]) for k, v in TOKENIZER_SOURCES.items()
 }

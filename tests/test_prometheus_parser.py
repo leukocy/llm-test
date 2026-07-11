@@ -11,7 +11,6 @@ from core.prometheus_parser import (
     parse_prometheus,
 )
 
-
 VLLM_SAMPLE = """# HELP vllm:gpu_cache_usage_perc Ratio of GPU KV cache used.
 # TYPE vllm:gpu_cache_usage_perc gauge
 vllm:gpu_cache_usage_perc 0.4231

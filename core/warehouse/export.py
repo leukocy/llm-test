@@ -42,10 +42,7 @@ def export_template_csv(template: str, rows: list[dict[str, Any]]) -> str:
 def export_template_json(template: str, rows: list[dict[str, Any]]) -> str:
     """按模板字段顺序导出为 JSON（保留 None 以区分"缺测"与"零值"）。"""
     fields = TEMPLATE_FIELDS.get(template, [])
-    out = [
-        {f: row.get(f) for f in fields}
-        for row in rows
-    ]
+    out = [{f: row.get(f) for f in fields} for row in rows]
     return json.dumps(out, ensure_ascii=False, indent=2, default=str)
 
 
@@ -68,7 +65,11 @@ def export_all_templates_zip(
         for name, rows in template_rows.items():
             if name not in TEMPLATE_FIELDS:
                 continue
-            content = export_template_csv(name, rows) if fmt == "csv" else export_template_json(name, rows)
+            content = (
+                export_template_csv(name, rows)
+                if fmt == "csv"
+                else export_template_json(name, rows)
+            )
             # 文件名：模板中文名 + 格式
             title = TEMPLATE_TITLES.get(name, name)
             zf.writestr(f"{title}_{name}.{fmt}", content)

@@ -29,11 +29,13 @@ from core.result_metrics import success_mask_from_error
 # LatencyImport BenchmarkRunner（仅inTest执行时Load）
 _BenchmarkRunner = None
 
+
 def _get_benchmark_runner():
     """LatencyGet BenchmarkRunner 类"""
     global _BenchmarkRunner
     if _BenchmarkRunner is None:
         from core.benchmark_runner import BenchmarkRunner
+
         _BenchmarkRunner = BenchmarkRunner
     return _BenchmarkRunner
 
@@ -42,34 +44,55 @@ def _get_benchmark_runner():
 # Mock UI 组件 (用于Batch Testno UI 环境)
 # ============================================================================
 
+
 class _MockPlaceholder:
     """Mock placeholder for batch testing (no UI)"""
-    def container(self): return self
-    def empty(self): return self
-    def __enter__(self): return self
-    def __exit__(self, *args): pass
+
+    def container(self):
+        return self
+
+    def empty(self):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
 
 
 class _MockProgressBar:
     """Mock progress bar for batch testing"""
-    def progress(self, value): pass
+
+    def progress(self, value):
+        pass
 
 
 class _MockStatusText:
     """Mock status text for batch testing"""
-    def info(self, msg): pass
-    def success(self, msg): pass
-    def warning(self, msg): pass
-    def error(self, msg): pass
+
+    def info(self, msg):
+        pass
+
+    def success(self, msg):
+        pass
+
+    def warning(self, msg):
+        pass
+
+    def error(self, msg):
+        pass
 
 
 # ============================================================================
 # 批量Test Configuration
 # ============================================================================
 
+
 @dataclass
 class BatchTestItem:
     """单Batch Test items"""
+
     name: str  # Test名称
     api_base_url: str  # API 地址
     model_id: str  # Model ID
@@ -91,6 +114,7 @@ class BatchTestItem:
     enabled: bool = True  # is否启用此Test
     status: str = "pending"  # pending, running, completed, failed, skipped
     result: Any | None = None
+    error: str | None = None  # 失败时的错误信息
 
     def to_dict(self) -> dict[str, Any]:
         """Convertis字典"""
@@ -108,21 +132,19 @@ class BatchTestItem:
             "reasoning_effort": self.reasoning_effort,
             "extra_params": self.extra_params,
             "enabled": self.enabled,
-            "status": self.status
+            "status": self.status,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "BatchTestItem":
         """从字典Create"""
-        return cls(**{
-            k: v for k, v in data.items()
-            if k in cls.__dataclass_fields__
-        })
+        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
 @dataclass
 class BatchTestConfig:
     """批量Test Configuration"""
+
     name: str  # Batch Test名称
     description: str = ""
     items: list[BatchTestItem] = field(default_factory=list)
@@ -142,13 +164,15 @@ class BatchTestConfig:
             "parallel": self.parallel,
             "max_parallel": self.max_parallel,
             "stop_on_error": self.stop_on_error,
-            "save_intermediate": self.save_intermediate
+            "save_intermediate": self.save_intermediate,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "BatchTestConfig":
         """从字典Create"""
-        items = [BatchTestItem.from_dict(item_data) for item_data in data.get("items", [])]
+        items = [
+            BatchTestItem.from_dict(item_data) for item_data in data.get("items", [])
+        ]
         return cls(
             name=data["name"],
             description=data.get("description", ""),
@@ -156,7 +180,7 @@ class BatchTestConfig:
             parallel=data.get("parallel", False),
             max_parallel=data.get("max_parallel", 2),
             stop_on_error=data.get("stop_on_error", False),
-            save_intermediate=data.get("save_intermediate", True)
+            save_intermediate=data.get("save_intermediate", True),
         )
 
 
@@ -164,9 +188,11 @@ class BatchTestConfig:
 # Batch Test进度
 # ============================================================================
 
+
 @dataclass
 class BatchTestProgress:
     """Batch Test进度"""
+
     total_items: int
     completed_items: int = 0
     failed_items: int = 0
@@ -210,7 +236,7 @@ class BatchTestProgress:
             "start_time": self.start_time,
             "end_time": self.end_time,
             "progress_percentage": self.progress_percentage,
-            "elapsed_time": self.elapsed_time
+            "elapsed_time": self.elapsed_time,
         }
 
 
@@ -218,9 +244,11 @@ class BatchTestProgress:
 # 批量Test Results
 # ============================================================================
 
+
 @dataclass
 class BatchTestResult:
     """批量Test Results"""
+
     batch_name: str
     start_time: str
     end_time: str
@@ -241,15 +269,17 @@ class BatchTestResult:
         """Get汇总 DataFrame"""
         data = []
         for item_result in self.item_results:
-            data.append({
-                "Test名称": item_result.get("name", "未知"),
-                "Model": item_result.get("model_id", "未知"),
-                "Status": item_result.get("status", "未知"),
-                "Accuracy": item_result.get("accuracy", 0),
-                "AverageLatency": item_result.get("avg_latency_ms", 0),
-                "AverageTPS": item_result.get("avg_tps", 0),
-                "Error": item_result.get("error", "")
-            })
+            data.append(
+                {
+                    "Test名称": item_result.get("name", "未知"),
+                    "Model": item_result.get("model_id", "未知"),
+                    "Status": item_result.get("status", "未知"),
+                    "Accuracy": item_result.get("accuracy", 0),
+                    "AverageLatency": item_result.get("avg_latency_ms", 0),
+                    "AverageTPS": item_result.get("avg_tps", 0),
+                    "Error": item_result.get("error", ""),
+                }
+            )
 
         return pd.DataFrame(data)
 
@@ -262,15 +292,17 @@ class BatchTestResult:
         data = []
         for item_result in self.item_results:
             if item_result.get("status") == "completed":
-                data.append({
-                    "Test名称": item_result.get("name", "未知"),
-                    "Model": item_result.get("model_id", "未知"),
-                    "Accuracy": item_result.get("accuracy", 0),
-                    "AverageLatency": item_result.get("avg_latency_ms", 0),
-                    "AverageTPS": item_result.get("avg_tps", 0),
-                    "输入Tokens": item_result.get("total_input_tokens", 0),
-                    "输出Tokens": item_result.get("total_output_tokens", 0)
-                })
+                data.append(
+                    {
+                        "Test名称": item_result.get("name", "未知"),
+                        "Model": item_result.get("model_id", "未知"),
+                        "Accuracy": item_result.get("accuracy", 0),
+                        "AverageLatency": item_result.get("avg_latency_ms", 0),
+                        "AverageTPS": item_result.get("avg_tps", 0),
+                        "输入Tokens": item_result.get("total_input_tokens", 0),
+                        "输出Tokens": item_result.get("total_output_tokens", 0),
+                    }
+                )
 
         return pd.DataFrame(data) if data else pd.DataFrame()
 
@@ -279,16 +311,19 @@ class BatchTestResult:
 # 辅助函数
 # ============================================================================
 
+
 def _create_batch_csv_filename(item: BatchTestItem) -> str:
     """GenerateBatch Test唯一 CSV Filename"""
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    safe_name = "".join(c if c.isalnum() else '_' for c in item.name)
+    safe_name = "".join(c if c.isalnum() else "_" for c in item.name)
     temp_dir = Path(gettempdir()) / "llm_batch_tests"
     temp_dir.mkdir(exist_ok=True)
     return str(temp_dir / f"batch_{safe_name}_{timestamp}.csv")
 
 
-def _extract_metrics_from_dataframe(df: pd.DataFrame, item: BatchTestItem) -> dict[str, Any]:
+def _extract_metrics_from_dataframe(
+    df: pd.DataFrame, item: BatchTestItem
+) -> dict[str, Any]:
     """从Test Results DataFrame in提取关键指标"""
     if df.empty:
         return {
@@ -300,7 +335,7 @@ def _extract_metrics_from_dataframe(df: pd.DataFrame, item: BatchTestItem) -> di
             "avg_tps": 0,
             "accuracy": 0,
             "total_input_tokens": 0,
-            "total_output_tokens": 0
+            "total_output_tokens": 0,
         }
 
     result = {
@@ -343,6 +378,7 @@ def _extract_metrics_from_dataframe(df: pd.DataFrame, item: BatchTestItem) -> di
 # Batch Test调度器
 # ============================================================================
 
+
 class BatchTestScheduler:
     """Batch Test调度器"""
 
@@ -351,7 +387,7 @@ class BatchTestScheduler:
         config: BatchTestConfig,
         test_function: Callable,
         progress_callback: Callable[[BatchTestProgress], None] | None = None,
-        log_callback: Callable[[str], None] | None = None
+        log_callback: Callable[[str], None] | None = None,
     ):
         self.config = config
         self.test_function = test_function
@@ -409,7 +445,7 @@ class BatchTestScheduler:
             item_results=item_results,
             total_items=len(enabled_items),
             completed_items=progress.completed_items,
-            failed_items=progress.failed_items
+            failed_items=progress.failed_items,
         )
 
         # Generate对比Data
@@ -421,9 +457,7 @@ class BatchTestScheduler:
         return result
 
     async def _run_sequential(
-        self,
-        items: list[BatchTestItem],
-        progress: BatchTestProgress
+        self, items: list[BatchTestItem], progress: BatchTestProgress
     ) -> list[dict[str, Any]]:
         """串行执行Test"""
         results = []
@@ -475,9 +509,7 @@ class BatchTestScheduler:
         return results
 
     async def _run_parallel(
-        self,
-        items: list[BatchTestItem],
-        progress: BatchTestProgress
+        self, items: list[BatchTestItem], progress: BatchTestProgress
     ) -> list[dict[str, Any]]:
         """并行执行Test"""
         results = []
@@ -487,7 +519,7 @@ class BatchTestScheduler:
         self._log(f"并行执行: 最大并行数 {max_parallel}")
 
         for i in range(0, len(items), max_parallel):
-            batch = items[i:i + max_parallel]
+            batch = items[i : i + max_parallel]
 
             # Check stop signal before starting batch
             if self.should_stop:
@@ -509,7 +541,7 @@ class BatchTestScheduler:
                     continue
 
                 item.status = "running"
-                progress.current_item = f"批次 {i//max_parallel + 1}"
+                progress.current_item = f"批次 {i // max_parallel + 1}"
 
                 tasks.append(self._run_single_test_wrapper(item))
 
@@ -579,9 +611,13 @@ class BatchTestScheduler:
                 provider="OpenAI",
                 dashboard=None,
                 output_placeholder=output_placeholder,
-                thinking_enabled=item.thinking_enabled if item.thinking_enabled else None,
-                thinking_budget=item.thinking_budget if item.thinking_budget > 0 else None,
-                reasoning_effort=item.reasoning_effort or None
+                thinking_enabled=(
+                    item.thinking_enabled if item.thinking_enabled else None
+                ),
+                thinking_budget=(
+                    item.thinking_budget if item.thinking_budget > 0 else None
+                ),
+                reasoning_effort=item.reasoning_effort or None,
             )
 
             # 4. based on test_type 执行对应Test
@@ -592,23 +628,27 @@ class BatchTestScheduler:
                     selected_concurrencies=[item.concurrency],
                     rounds_per_level=1,
                     max_tokens=item.max_tokens,
-                    input_tokens_target=item.extra_params.get("input_tokens_target", 0)
+                    input_tokens_target=item.extra_params.get("input_tokens_target", 0),
                 )
 
             elif item.test_type == "prefill":
-                token_levels = item.extra_params.get("token_levels", [512, 1024, 2048, 4096])
+                token_levels = item.extra_params.get(
+                    "token_levels", [512, 1024, 2048, 4096]
+                )
                 result_df = await runner.run_prefill_test(
                     token_levels=token_levels,
                     requests_per_level=1,
-                    max_tokens=item.max_tokens
+                    max_tokens=item.max_tokens,
                 )
 
             elif item.test_type == "long_context":
-                context_lengths = item.extra_params.get("context_lengths", [1024, 2048, 4096, 8192])
+                context_lengths = item.extra_params.get(
+                    "context_lengths", [1024, 2048, 4096, 8192]
+                )
                 result_df = await runner.run_long_context_test(
                     context_lengths=context_lengths,
                     rounds_per_level=1,
-                    max_tokens=item.max_tokens
+                    max_tokens=item.max_tokens,
                 )
 
             else:
@@ -636,7 +676,7 @@ class BatchTestScheduler:
                 "avg_tps": 0,
                 "accuracy": 0,
                 "total_input_tokens": 0,
-                "total_output_tokens": 0
+                "total_output_tokens": 0,
             }
 
     def _log(self, message: str):
@@ -649,6 +689,7 @@ class BatchTestScheduler:
 # Batch Test管理器
 # ============================================================================
 
+
 class BatchTestManager:
     """Batch Test管理器"""
 
@@ -659,11 +700,13 @@ class BatchTestManager:
     def save_config(self, config: BatchTestConfig) -> bool:
         """Save批量Test Configuration"""
         try:
-            safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in config.name)
-            filename = safe_name.lower().replace(' ', '_') + ".json"
+            safe_name = "".join(
+                c if c.isalnum() or c in (" ", "-", "_") else "_" for c in config.name
+            )
+            filename = safe_name.lower().replace(" ", "_") + ".json"
             filepath = self.save_dir / filename
 
-            with open(filepath, 'w', encoding='utf-8') as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(config.to_dict(), f, ensure_ascii=False, indent=2)
 
             return True
@@ -674,14 +717,16 @@ class BatchTestManager:
     def load_config(self, name: str) -> BatchTestConfig | None:
         """Load批量Test Configuration"""
         try:
-            safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in name)
-            pattern = safe_name.lower().replace(' ', '_') + ".json"
+            safe_name = "".join(
+                c if c.isalnum() or c in (" ", "-", "_") else "_" for c in name
+            )
+            pattern = safe_name.lower().replace(" ", "_") + ".json"
             matching_files = list(self.save_dir.glob(pattern))
 
             if not matching_files:
                 return None
 
-            with open(matching_files[0], encoding='utf-8') as f:
+            with open(matching_files[0], encoding="utf-8") as f:
                 data = json.load(f)
 
             return BatchTestConfig.from_dict(data)
@@ -694,15 +739,19 @@ class BatchTestManager:
         configs = []
         for config_file in self.save_dir.glob("*.json"):
             try:
-                with open(config_file, encoding='utf-8') as f:
+                with open(config_file, encoding="utf-8") as f:
                     data = json.load(f)
 
-                configs.append({
-                    "name": data.get("name", config_file.stem),
-                    "description": data.get("description", ""),
-                    "test_count": len(data.get("items", [])),
-                    "file_time": datetime.fromtimestamp(config_file.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-                })
+                configs.append(
+                    {
+                        "name": data.get("name", config_file.stem),
+                        "description": data.get("description", ""),
+                        "test_count": len(data.get("items", [])),
+                        "file_time": datetime.fromtimestamp(
+                            config_file.stat().st_mtime
+                        ).strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+                )
             except Exception:
                 continue
 
@@ -711,7 +760,10 @@ class BatchTestManager:
     def save_result(self, result: BatchTestResult) -> bool:
         """Save批量Test Results"""
         try:
-            safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in result.batch_name)
+            safe_name = "".join(
+                c if c.isalnum() or c in (" ", "-", "_") else "_"
+                for c in result.batch_name
+            )
             filename = f"{safe_name.lower().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             filepath = self.save_dir / "results" / filename
             filepath.parent.mkdir(exist_ok=True)
@@ -725,15 +777,19 @@ class BatchTestManager:
                 "item_results": result.item_results,
                 "total_items": result.total_items,
                 "completed_items": result.completed_items,
-                "failed_items": result.failed_items
+                "failed_items": result.failed_items,
             }
 
-            with open(filepath, 'w', encoding='utf-8') as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(result_data, f, ensure_ascii=False, indent=2)
 
             # Save对比CSV
-            csv_path = self.save_dir / "results" / filepath.stem.replace('.json', '_comparison.csv')
-            result.get_comparison_df().to_csv(csv_path, index=False, encoding='utf-8')
+            csv_path = (
+                self.save_dir
+                / "results"
+                / filepath.stem.replace(".json", "_comparison.csv")
+            )
+            result.get_comparison_df().to_csv(csv_path, index=False, encoding="utf-8")
 
             return True
         except Exception as e:
@@ -749,18 +805,20 @@ class BatchTestManager:
         results = []
         for result_file in results_dir.glob("*.json"):
             try:
-                with open(result_file, encoding='utf-8') as f:
+                with open(result_file, encoding="utf-8") as f:
                     data = json.load(f)
 
-                results.append({
-                    "batch_name": data.get("batch_name", result_file.stem),
-                    "start_time": data.get("start_time", ""),
-                    "end_time": data.get("end_time", ""),
-                    "duration_seconds": data.get("duration_seconds", 0),
-                    "total_items": data.get("total_items", 0),
-                    "completed_items": data.get("completed_items", 0),
-                    "failed_items": data.get("failed_items", 0)
-                })
+                results.append(
+                    {
+                        "batch_name": data.get("batch_name", result_file.stem),
+                        "start_time": data.get("start_time", ""),
+                        "end_time": data.get("end_time", ""),
+                        "duration_seconds": data.get("duration_seconds", 0),
+                        "total_items": data.get("total_items", 0),
+                        "completed_items": data.get("completed_items", 0),
+                        "failed_items": data.get("failed_items", 0),
+                    }
+                )
             except Exception:
                 continue
 

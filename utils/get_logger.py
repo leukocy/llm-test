@@ -7,6 +7,7 @@ Usage:
     logger.debug("Debug message")
     logger.info("Info message")
 """
+
 import logging
 import sys
 
@@ -18,13 +19,13 @@ def _setup_logging():
     if not root.handlers:
         handler = logging.StreamHandler(sys.stdout)
         formatter = logging.Formatter(
-            '[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s',
-            datefmt='%H:%M:%S'
+            "[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s", datefmt="%H:%M:%S"
         )
         handler.setFormatter(formatter)
         root.addHandler(handler)
         root.setLevel(logging.INFO)  # Default level, can be overridden
     return root
+
 
 _root_logger = _setup_logging()
 
@@ -56,8 +57,7 @@ def get_logger(name: str | None = None, level: int = logging.INFO) -> logging.Lo
     if not logger.handlers:
         handler = logging.StreamHandler(sys.stdout)
         formatter = logging.Formatter(
-            '[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s',
-            datefmt='%H:%M:%S'
+            "[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s", datefmt="%H:%M:%S"
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)

@@ -210,7 +210,7 @@ class LogIndex:
 
     def get_stats(self) -> dict[str, Any]:
         """GetIndexStatistics"""
-        stats = {
+        stats: dict[str, Any] = {
             "total": len(self._entries),
             "by_status": {},
             "by_test_type": {},
@@ -218,8 +218,12 @@ class LogIndex:
         }
 
         for entry in self._entries.values():
-            stats["by_status"][entry.status] = stats["by_status"].get(entry.status, 0) + 1
-            stats["by_test_type"][entry.test_type] = stats["by_test_type"].get(entry.test_type, 0) + 1
+            stats["by_status"][entry.status] = (
+                stats["by_status"].get(entry.status, 0) + 1
+            )
+            stats["by_test_type"][entry.test_type] = (
+                stats["by_test_type"].get(entry.test_type, 0) + 1
+            )
             stats["by_date"][entry.date] = stats["by_date"].get(entry.date, 0) + 1
 
         return stats
@@ -653,7 +657,7 @@ class RequestLogger:
                 metrics["token_count"] = len(token_timestamps)
                 if metrics.get("total_time") and metrics["token_count"] > 0:
                     # Calculate average streamed chunk interval.
-                    if first_token_time is not None:
+                    if first_token_time is not None and end_time is not None:
                         generation_time = end_time - first_token_time
                         if generation_time > 0:
                             metrics["tpot_avg"] = round(
@@ -661,7 +665,7 @@ class RequestLogger:
                             )
 
             # Build响应信息
-            response_info = {
+            response_info: dict[str, Any] = {
                 "full_content": full_response_content,
                 "reasoning_content": reasoning_content,
                 "usage": usage_info or {},

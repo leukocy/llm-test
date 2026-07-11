@@ -36,6 +36,7 @@ def test_registry_has_stable_order_and_plain_labels():
         "custom",
         "all",
         "stability",
+        "environment",
         "batch",
         "quality",
         "comparison",

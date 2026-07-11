@@ -53,14 +53,14 @@ class AIME2025Evaluator(BaseEvaluator):
         dataset_path: str = "datasets/aime2025",
         num_shots: int = 0,  # AIME 通常use 0-shot (Question太难，few-shot意义not大)
         max_samples: int | None = None,
-        seed: int = 42
+        seed: int = 42,
     ):
         super().__init__(
             dataset_name=dataset_name,
             dataset_path=dataset_path,
             num_shots=num_shots,
             max_samples=max_samples,
-            seed=seed
+            seed=seed,
         )
         random.seed(seed)
 
@@ -79,7 +79,10 @@ class AIME2025Evaluator(BaseEvaluator):
         # 1. Try DatasetManager (auto-download)
         try:
             from core.dataset_manager import get_dataset
-            samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
+
+            samples = get_dataset(
+                self.dataset_name, split="test", max_samples=None, seed=self.seed
+            )
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for AIME: {e}")
 
@@ -96,18 +99,18 @@ class AIME2025Evaluator(BaseEvaluator):
             for filepath in possible_files:
                 if os.path.exists(filepath):
                     try:
-                        if filepath.endswith('.jsonl'):
-                            with open(filepath, encoding='utf-8') as f:
+                        if filepath.endswith(".jsonl"):
+                            with open(filepath, encoding="utf-8") as f:
                                 for line in f:
                                     if line.strip():
                                         samples.append(json.loads(line))
                         else:
-                            with open(filepath, encoding='utf-8') as f:
+                            with open(filepath, encoding="utf-8") as f:
                                 data = json.load(f)
                             if isinstance(data, list):
                                 samples = data
-                            elif isinstance(data, dict) and 'data' in data:
-                                samples = data['data']
+                            elif isinstance(data, dict) and "data" in data:
+                                samples = data["data"]
                         break
                     except Exception as e:
                         print(f"Load {filepath} 失败: {e}")
@@ -121,28 +124,29 @@ class AIME2025Evaluator(BaseEvaluator):
 
         # 按子集Filter
         if subset:
-            subset_upper = subset.upper().replace('_', '-')
+            subset_upper = subset.upper().replace("_", "-")
             samples = [
-                s for s in samples
-                if subset_upper in s.get('source', '').upper()
+                s for s in samples if subset_upper in s.get("source", "").upper()
             ]
 
         # 随机打乱
         random.shuffle(samples)
 
         # Calculate总需Sample count = TestQuestion + few-shot 示例 (AIME 通常 0-shot)
-        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
+        total_needed = self.num_shots + (
+            self.max_samples if self.max_samples else len(samples)
+        )
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
         # Set few-shot 示例 (AIME 通常not用)
         if self.num_shots > 0 and len(samples) > self.num_shots:
-            self.few_shot_examples = samples[:self.num_shots]
-            samples = samples[self.num_shots:]
+            self.few_shot_examples = samples[: self.num_shots]
+            samples = samples[self.num_shots :]
 
         # 限制TestSample count
         if self.max_samples and len(samples) > self.max_samples:
-            samples = samples[:self.max_samples]
+            samples = samples[: self.max_samples]
 
         self.samples = samples
         return samples
@@ -183,78 +187,80 @@ class AIME2025Evaluator(BaseEvaluator):
                 "id": "aime_2025_I_1",
                 "problem": "Find the sum of all positive integers $n$ such that $n^2 - 1$ divides $2025^{\\gcd(n,2025)} - 1$.",
                 "answer": "68",
-                "source": "2025-I"
+                "source": "2025-I",
             },
             {
                 "id": "aime_2025_I_2",
                 "problem": "The 9 members of a baseball team are arranged in a 3×3 grid. Each member must be adjacent (horizontally, vertically, or diagonally) to at least two other members. In how many ways can the 9 members be arranged?",
                 "answer": "720",
-                "source": "2025-I"
+                "source": "2025-I",
             },
             {
                 "id": "aime_2025_I_3",
                 "problem": "In the sequence $a_1, a_2, a_3, \\ldots$, $a_1 = 1$, and for all positive integers $n$, $a_{n+1} = a_n + \\lfloor \\sqrt{a_n} \\rfloor$. Find the value of $a_{100}$.",
                 "answer": "981",
-                "source": "2025-I"
+                "source": "2025-I",
             },
             {
                 "id": "aime_2025_I_4",
                 "problem": "Let $S$ be the set of all positive integers that can be expressed as a sum of distinct powers of 3. If $n$ is chosen uniformly at random from the 200 smallest elements of $S$, the probability that $n$ is divisible by 9 can be expressed as $\\frac{m}{n}$ where $m$ and $n$ are relatively prime positive integers. Find $m + n$.",
                 "answer": "134",
-                "source": "2025-I"
+                "source": "2025-I",
             },
             {
                 "id": "aime_2025_I_5",
-                "problem": "Alice and Bob each have a standard deck of 52 cards. They repeatedly draw two cards at a time (one from each deck). Define a \"match\" as the event where the two cards drawn are identical. Find the expected number of matches.",
+                "problem": 'Alice and Bob each have a standard deck of 52 cards. They repeatedly draw two cards at a time (one from each deck). Define a "match" as the event where the two cards drawn are identical. Find the expected number of matches.',
                 "answer": "4",
-                "source": "2025-I"
+                "source": "2025-I",
             },
             # AIME 2025-II 部分Question
             {
                 "id": "aime_2025_II_1",
                 "problem": "The polynomial $x^3 - 6x^2 + 11x - 6$ has roots $r$, $s$, and $t$. Find the value of $(r+1)(s+1)(t+1)$.",
                 "answer": "24",
-                "source": "2025-II"
+                "source": "2025-II",
             },
             {
                 "id": "aime_2025_II_2",
                 "problem": "Find the number of ordered pairs $(a,b)$ of positive integers such that $\\gcd(a,b) = 1$ and $a^3 b - ab^3 = 2025$.",
                 "answer": "16",
-                "source": "2025-II"
+                "source": "2025-II",
             },
             {
                 "id": "aime_2025_II_3",
                 "problem": "In triangle $ABC$, $\\cos A = \\frac{3}{5}$, $\\cos B = \\frac{5}{13}$. The area of triangle $ABC$ is 120. Find the perimeter of triangle $ABC$.",
                 "answer": "60",
-                "source": "2025-II"
+                "source": "2025-II",
             },
             {
                 "id": "aime_2025_II_4",
                 "problem": "How many positive integers $n \\leq 1000$ are there such that $n$ divides both $10^n + 1$ and $10^n - 1$?",
                 "answer": "3",
-                "source": "2025-II"
+                "source": "2025-II",
             },
             {
                 "id": "aime_2025_II_5",
                 "problem": "Let $P(x) = x^4 + ax^3 + bx^2 + cx + d$ be a polynomial with integer coefficients such that $P(1) = P(2) = P(3) = P(4) = 2025$. Find the value of $|P(5) - P(0)|$.",
                 "answer": "120",
-                "source": "2025-II"
+                "source": "2025-II",
             },
         ]
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """
         Format AIME 样本is Prompt
 
         AIME Questionuse Chain-of-Thought 格式，Answermustis 0-999 整数
         """
-        problem = sample.get('problem', '')
+        problem = sample.get("problem", "")
 
         prompt_lines = [f"Problem: {problem}"]
 
         if include_answer:
-            answer = sample.get('answer', '')
-            solution = sample.get('solution', f"The answer is {answer}.")
+            answer = sample.get("answer", "")
+            solution = sample.get("solution", f"The answer is {answer}.")
             prompt_lines.append(f"Solution: {solution}")
             prompt_lines.append(f"Final Answer: {answer}")
         else:
@@ -276,7 +282,7 @@ class AIME2025Evaluator(BaseEvaluator):
 
         # Few-shot 示例 (通常 AIME 用 0-shot)
         examples = []
-        for example in self.few_shot_examples[:self.num_shots]:
+        for example in self.few_shot_examples[: self.num_shots]:
             examples.append(self.format_prompt(example, include_answer=True))
 
         # 待评估问题
@@ -300,8 +306,13 @@ class AIME2025Evaluator(BaseEvaluator):
         )
         messages.append({"role": "system", "content": system_instruction})
 
-        for ex in self.few_shot_examples[:self.num_shots]:
-            messages.append({"role": "user", "content": self.format_prompt(ex, include_answer=False)})
+        for ex in self.few_shot_examples[: self.num_shots]:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": self.format_prompt(ex, include_answer=False),
+                }
+            )
             # Extract the solution portion for the assistant message
             full_example = self.format_prompt(ex, include_answer=True)
             solution_part = full_example.split("Solution:", 1)
@@ -311,7 +322,12 @@ class AIME2025Evaluator(BaseEvaluator):
                 assistant_content = full_example
             messages.append({"role": "assistant", "content": assistant_content})
 
-        messages.append({"role": "user", "content": self.format_prompt(sample, include_answer=False)})
+        messages.append(
+            {
+                "role": "user",
+                "content": self.format_prompt(sample, include_answer=False),
+            }
+        )
         return messages
 
     def parse_response(self, response: str) -> str:
@@ -334,20 +350,20 @@ class AIME2025Evaluator(BaseEvaluator):
         boxed_answers = []
         i = 0
         while i < len(response):
-            if response[i:i+7] == r'\boxed{':
+            if response[i : i + 7] == r"\boxed{":
                 start = i + 7
                 depth = 1
                 j = start
 
                 while j < len(response) and depth > 0:
-                    if response[j] == '{':
+                    if response[j] == "{":
                         depth += 1
-                    elif response[j] == '}':
+                    elif response[j] == "}":
                         depth -= 1
                     j += 1
 
                 if depth == 0:
-                    content = response[start:j-1].strip()
+                    content = response[start : j - 1].strip()
                     boxed_answers.append(content)
                     i = j
                     continue
@@ -362,9 +378,9 @@ class AIME2025Evaluator(BaseEvaluator):
 
         # Fallback: pattern-based extraction
         patterns = [
-            r'(?:final\s+)?answer\s*(?:is|:)\s*(\d{1,3})\b',
-            r'Answer[isis：:]\s*(\d{1,3})\b',
-            r'(?:=|equals?)\s*(\d{1,3})\s*$',
+            r"(?:final\s+)?answer\s*(?:is|:)\s*(\d{1,3})\b",
+            r"Answer[isis：:]\s*(\d{1,3})\b",
+            r"(?:=|equals?)\s*(\d{1,3})\s*$",
         ]
 
         for pattern in patterns:
@@ -376,7 +392,7 @@ class AIME2025Evaluator(BaseEvaluator):
                     return str(num).zfill(3) if num < 100 else str(num)
 
         # Final fallback: last valid 0-999 integer
-        all_integers = re.findall(r'\b(\d{1,3})\b', response)
+        all_integers = re.findall(r"\b(\d{1,3})\b", response)
         for num_str in reversed(all_integers):
             num = int(num_str)
             if 0 <= num <= 999:
@@ -388,14 +404,14 @@ class AIME2025Evaluator(BaseEvaluator):
         """从文本in提取整数"""
         clean = text.strip()
 
-        clean = clean.replace('^\\circ', '')
-        clean = clean.replace('^{\\circ}', '')
-        clean = clean.replace('\\circ', '')
-        clean = clean.replace('°', '')
-        clean = clean.replace('\\degree', '')
+        clean = clean.replace("^\\circ", "")
+        clean = clean.replace("^{\\circ}", "")
+        clean = clean.replace("\\circ", "")
+        clean = clean.replace("°", "")
+        clean = clean.replace("\\degree", "")
 
-        clean = re.sub(r'\\+[a-zA-Z]+\{([^{}]*)\}', r'\1', clean)
-        clean = clean.replace('$', '').replace(',', '').strip()
+        clean = re.sub(r"\\+[a-zA-Z]+\{([^{}]*)\}", r"\1", clean)
+        clean = clean.replace("$", "").replace(",", "").strip()
 
         try:
             num = int(clean)
@@ -404,7 +420,7 @@ class AIME2025Evaluator(BaseEvaluator):
         except ValueError:
             pass
 
-        match = re.search(r'(\d{1,3})', clean)
+        match = re.search(r"(\d{1,3})", clean)
         if match:
             num = int(match.group(1))
             if 0 <= num <= 999:
@@ -433,8 +449,8 @@ class AIME2025Evaluator(BaseEvaluator):
             return pred_int == corr_int
 
         # Fallback: string match
-        pred_clean = re.sub(r'\s+', '', predicted).lower()
-        corr_clean = re.sub(r'\s+', '', correct).lower()
+        pred_clean = re.sub(r"\s+", "", predicted).lower()
+        corr_clean = re.sub(r"\s+", "", correct).lower()
 
         try:
             pred_num = str(int(pred_clean))
@@ -447,9 +463,9 @@ class AIME2025Evaluator(BaseEvaluator):
 
     def get_sample_category(self, sample: dict[str, Any]) -> str:
         """Get样本分类 (AIME-I or AIME-II)"""
-        source = sample.get('source', 'AIME-2025')
-        return source
+        source = sample.get("source", "AIME-2025")
+        return str(source)
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
         """GetCorrect answer"""
-        return str(sample.get('answer', ''))
+        return str(sample.get("answer", ""))

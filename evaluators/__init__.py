@@ -40,10 +40,12 @@ def register_evaluator(name: str):
         class MMLUEvaluator(BaseEvaluator):
             ...
     """
+
     def decorator(cls):
         _EVALUATOR_REGISTRY[name] = cls
         cls._registry_name = name
         return cls
+
     return decorator
 
 
@@ -85,28 +87,28 @@ for _importer, _module_name, _is_pkg in pkgutil.iter_modules([str(_package_dir)]
 def _legacy_register():
     """Register evaluators that haven't been updated with the decorator yet."""
     legacy_mappings = {
-        'mmlu': 'mmlu_evaluator.MMLUEvaluator',
-        'gsm8k': 'gsm8k_evaluator.GSM8KEvaluator',
-        'math500': 'math500_evaluator.MATH500Evaluator',
-        'humaneval': 'humaneval_evaluator.HumanEvalEvaluator',
-        'gpqa': 'gpqa_evaluator.GPQAEvaluator',
-        'arc': 'arc_evaluator.ARCEvaluator',
-        'truthfulqa': 'truthfulqa_evaluator.TruthfulQAEvaluator',
-        'hellaswag': 'hellaswag_evaluator.HellaSwagEvaluator',
-        'winogrande': 'winogrande_evaluator.WinoGrandeEvaluator',
-        'mbpp': 'mbpp_evaluator.MBPPEvaluator',
-        'longbench': 'longbench_evaluator.LongBenchEvaluator',
-        'swebench_lite': 'swebench_evaluator.SWEBenchLiteEvaluator',
-        'needle_haystack': 'needle_haystack_evaluator.NeedleHaystackEvaluator',
-        'custom_needle': 'custom_needle_evaluator.CustomNeedleEvaluator',
-        'aime2025': 'aime_evaluator.AIME2025Evaluator',
-        'arena_hard': 'arena_hard_evaluator.ArenaHardEvaluator',
-        'global_piqa': 'global_piqa_evaluator.GlobalPIQAEvaluator',
+        "mmlu": "mmlu_evaluator.MMLUEvaluator",
+        "gsm8k": "gsm8k_evaluator.GSM8KEvaluator",
+        "math500": "math500_evaluator.MATH500Evaluator",
+        "humaneval": "humaneval_evaluator.HumanEvalEvaluator",
+        "gpqa": "gpqa_evaluator.GPQAEvaluator",
+        "arc": "arc_evaluator.ARCEvaluator",
+        "truthfulqa": "truthfulqa_evaluator.TruthfulQAEvaluator",
+        "hellaswag": "hellaswag_evaluator.HellaSwagEvaluator",
+        "winogrande": "winogrande_evaluator.WinoGrandeEvaluator",
+        "mbpp": "mbpp_evaluator.MBPPEvaluator",
+        "longbench": "longbench_evaluator.LongBenchEvaluator",
+        "swebench_lite": "swebench_evaluator.SWEBenchLiteEvaluator",
+        "needle_haystack": "needle_haystack_evaluator.NeedleHaystackEvaluator",
+        "custom_needle": "custom_needle_evaluator.CustomNeedleEvaluator",
+        "aime2025": "aime_evaluator.AIME2025Evaluator",
+        "arena_hard": "arena_hard_evaluator.ArenaHardEvaluator",
+        "global_piqa": "global_piqa_evaluator.GlobalPIQAEvaluator",
     }
 
     for name, class_path in legacy_mappings.items():
         if name not in _EVALUATOR_REGISTRY:
-            module_name, class_name = class_path.rsplit('.', 1)
+            module_name, class_name = class_path.rsplit(".", 1)
             try:
                 mod = importlib.import_module(f".{module_name}", package=__name__)
                 cls = getattr(mod, class_name)
@@ -120,10 +122,12 @@ _legacy_register()
 
 # === YAML Evaluator support ===
 
+
 def list_yaml_tasks():
     """List available YAML task configurations."""
     try:
         from core.task_config import TaskConfigLoader
+
         loader = TaskConfigLoader("task_configs")
         return loader.list_tasks()
     except Exception:
@@ -134,6 +138,7 @@ def get_yaml_evaluator(task_name: str, **kwargs):
     """Get a YAML-driven evaluator instance."""
     try:
         from .yaml_evaluator import YAMLEvaluator
+
         return YAMLEvaluator(task_name, **kwargs)
     except Exception as e:
         print(f"Failed to create YAML Evaluator: {e}")
@@ -141,17 +146,17 @@ def get_yaml_evaluator(task_name: str, **kwargs):
 
 
 __all__ = [
-    'BaseEvaluator',
-    'EvaluationResult',
-    'SampleResult',
-    'DatasetType',
-    'register_evaluator',
-    'get_evaluator',
-    'list_available_datasets',
-    'list_evaluators',
-    'extract_choice_answer',
-    'extract_number_answer',
-    'normalize_text',
-    'list_yaml_tasks',
-    'get_yaml_evaluator',
+    "BaseEvaluator",
+    "EvaluationResult",
+    "SampleResult",
+    "DatasetType",
+    "register_evaluator",
+    "get_evaluator",
+    "list_available_datasets",
+    "list_evaluators",
+    "extract_choice_answer",
+    "extract_number_answer",
+    "normalize_text",
+    "list_yaml_tasks",
+    "get_yaml_evaluator",
 ]

@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
-from core.publish_gate import (
-    LEVEL_BADGE,
-    evaluate_publish_gate,
-    gate_from_run,
-)
+from core.publish_gate import LEVEL_BADGE, evaluate_publish_gate, gate_from_run
 
 
 def _ok(**overrides):
     base = {
-        "tester": "alice", "machine_id": "host1", "has_hardware_fingerprint": True,
-        "seed_recorded": True, "insights": ["🚀 good"], "success_rate": 0.99,
-        "has_monitor": True, "requested_external_level": "publishable",
+        "tester": "alice",
+        "machine_id": "host1",
+        "has_hardware_fingerprint": True,
+        "seed_recorded": True,
+        "insights": ["🚀 good"],
+        "success_rate": 0.99,
+        "has_monitor": True,
+        "requested_external_level": "publishable",
     }
     base.update(overrides)
     return evaluate_publish_gate(**base)
@@ -112,7 +113,8 @@ def test_never_auto_promote_to_publishable_without_human():
 
 def test_gate_from_run_convenience():
     run = {
-        "tester": "bob", "machine_id": "m1",
+        "tester": "bob",
+        "machine_id": "m1",
         "system_info": {"hardware_fingerprint": _fp()},
         "config": {"random_seed": 42},
         "resource_monitor_json": '{"peaks": {}}',
@@ -127,8 +129,11 @@ def test_gate_from_run_convenience():
 
 def test_gate_from_run_case03_blocks_when_required_fields_missing():
     run = {
-        "tester": "bob", "machine_id": "m1",
-        "system_info": {"hardware_fingerprint": {"machine_id": "m1"}},  # 缺 PCIe/通道/频率
+        "tester": "bob",
+        "machine_id": "m1",
+        "system_info": {
+            "hardware_fingerprint": {"machine_id": "m1"}
+        },  # 缺 PCIe/通道/频率
         "config": {"random_seed": 42},
         "resource_monitor_json": '{"peaks": {}}',
         "external_level": "publishable",
@@ -179,7 +184,8 @@ def test_wilson_lower_bound_passes_large_sample():
 
 def test_gate_from_run_passes_sample_size_from_run():
     run = {
-        "tester": "bob", "machine_id": "m1",
+        "tester": "bob",
+        "machine_id": "m1",
         "system_info": {"hardware_fingerprint": _fp()},
         "config": {"random_seed": 42},
         "resource_monitor_json": '{"peaks": {}}',

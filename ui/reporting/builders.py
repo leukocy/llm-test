@@ -185,7 +185,9 @@ def build_prefill_summary(df_group: pd.DataFrame) -> pd.DataFrame:
 def build_long_context_summary(df_group: pd.DataFrame) -> pd.DataFrame:
     """Build the long-context report summary without Streamlit dependencies."""
     if "context_length_target" not in df_group.columns:
-        raise ValueError("Long context summary failed: missing 'context_length_target' column in data.")
+        raise ValueError(
+            "Long context summary failed: missing 'context_length_target' column in data."
+        )
 
     work = df_group.copy()
     if work.empty:
@@ -269,9 +271,7 @@ def build_long_context_summary(df_group: pd.DataFrame) -> pd.DataFrame:
     # TPOT_Mean. Averaging tps separately would NOT invert mean(tpot), because
     # mean(1/x) != 1/mean(x); the gap widens with per-round variance (e.g. 32k).
     summary_sys_output = stats[["context_length_target", "TPOT_Mean"]].copy()
-    summary_sys_output["Max_System_Output_Throughput"] = (
-        1000.0 / summary_sys_output["TPOT_Mean"]
-    )
+    summary_sys_output["Max_System_Output_Throughput"] = 1000.0 / summary_sys_output["TPOT_Mean"]
     summary_sys_output = summary_sys_output.drop(columns=["TPOT_Mean"])
     summary_sys_total = summarize_metric_extreme(
         work,

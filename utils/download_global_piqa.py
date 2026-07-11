@@ -51,7 +51,9 @@ def download_from_huggingface():
 
         for config, lang_name in language_configs:
             try:
-                ds = load_dataset("mrlbenchmarks/global-piqa-nonparallel", config, split="test")
+                ds = load_dataset(
+                    "mrlbenchmarks/global-piqa-nonparallel", config, split="test"
+                )
 
                 for i, item in enumerate(ds):
                     # Data集use字段名: prompt, solution0, solution1, label
@@ -60,15 +62,21 @@ def download_from_huggingface():
                         "goal": item.get("prompt", item.get("goal", "")),
                         "sol1": item.get("solution0", item.get("sol1", "")),
                         "sol2": item.get("solution1", item.get("sol2", "")),
-                        "label": int(item.get("label", 0)) if item.get("label") is not None else 0,
+                        "label": (
+                            int(item.get("label", 0))
+                            if item.get("label") is not None
+                            else 0
+                        ),
                         "language": lang_name,
-                        "country": item.get("country", "")
+                        "country": item.get("country", ""),
                     }
 
                     if sample["goal"] and sample["sol1"] and sample["sol2"]:
                         all_samples.append(sample)
 
-                print(f"  - {lang_name} ({config}): {len([s for s in all_samples if s['language'] == lang_name])} 样本")
+                print(
+                    f"  - {lang_name} ({config}): {len([s for s in all_samples if s['language'] == lang_name])} 样本"
+                )
 
             except Exception as e:
                 print(f"  - {lang_name} ({config}): 跳过 ({e})")
@@ -85,7 +93,7 @@ def download_from_huggingface():
 
     # SaveData
     output_file = os.path.join(output_dir, "global_piqa.json")
-    with open(output_file, 'w', encoding='utf-8') as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(all_samples, f, ensure_ascii=False, indent=2)
 
     # Statistics语言

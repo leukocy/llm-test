@@ -19,8 +19,8 @@ from evaluators.answer_parser import (
 )
 from evaluators.base_evaluator import (
     extract_choice_answer,
-    extract_numeric_answer,
     extract_number_answer,
+    extract_numeric_answer,
     normalize_text,
 )
 
@@ -34,36 +34,45 @@ class TestMultiChoiceParser:
         self.parser = MultiChoiceParser()
 
     # English patterns
-    @pytest.mark.parametrize("response,expected", [
-        ("ANSWER: B", "B"),
-        ("Answer: C", "C"),
-        ("The answer is A", "A"),
-        ("I choose D", "D"),
-        ("I select B", "B"),
-        ("My answer is C", "C"),
-    ])
+    @pytest.mark.parametrize(
+        "response,expected",
+        [
+            ("ANSWER: B", "B"),
+            ("Answer: C", "C"),
+            ("The answer is A", "A"),
+            ("I choose D", "D"),
+            ("I select B", "B"),
+            ("My answer is C", "C"),
+        ],
+    )
     def test_english_patterns(self, response, expected):
         assert self.parser.parse(response) == expected
 
     # Chinese patterns
-    @pytest.mark.parametrize("response,expected", [
-        ("答案是A", "A"),
-        ("选择B", "B"),
-        ("选项C", "C"),
-        ("正确答案为D", "D"),
-        ("答案为A", "A"),
-    ])
+    @pytest.mark.parametrize(
+        "response,expected",
+        [
+            ("答案是A", "A"),
+            ("选择B", "B"),
+            ("选项C", "C"),
+            ("正确答案为D", "D"),
+            ("答案为A", "A"),
+        ],
+    )
     def test_chinese_patterns(self, response, expected):
         assert self.parser.parse(response) == expected
 
     # Structured formats
-    @pytest.mark.parametrize("response,expected", [
-        ("(A)", "A"),
-        ("（B）", "B"),
-        ("[C]", "C"),
-        ("A. First option", "A"),
-        ("B。第二个选项", "B"),
-    ])
+    @pytest.mark.parametrize(
+        "response,expected",
+        [
+            ("(A)", "A"),
+            ("（B）", "B"),
+            ("[C]", "C"),
+            ("A. First option", "A"),
+            ("B。第二个选项", "B"),
+        ],
+    )
     def test_structured_formats(self, response, expected):
         assert self.parser.parse(response) == expected
 
@@ -227,7 +236,9 @@ class TestGetParserForDataset:
 
     def test_choice_datasets(self):
         for name in ["mmlu", "gpqa", "hellaswag", "truthfulqa", "winogrande", "arc"]:
-            assert isinstance(get_parser_for_dataset(name), MultiChoiceParser), f"{name}"
+            assert isinstance(
+                get_parser_for_dataset(name), MultiChoiceParser
+            ), f"{name}"
 
     def test_math_datasets(self):
         for name in ["gsm8k", "math500", "aime2025", "aime"]:
@@ -254,6 +265,7 @@ class TestGetParserForDataset:
 # ===========================================================================
 # Migrated from test_smart_answer_parser.py — equivalent coverage via new parsers
 # ===========================================================================
+
 
 class TestMigratedNumberParsing:
     """Number parsing tests migrated from SmartAnswerParser, now using MathAnswerParser."""
@@ -345,6 +357,7 @@ class TestMigratedChoiceParsing:
 # extract_choice_answer / extract_numeric_answer (base_evaluator delegation)
 # ===========================================================================
 
+
 class TestExtractChoiceAnswer:
     """Tests for the base_evaluator.extract_choice_answer function."""
 
@@ -430,6 +443,7 @@ class TestNormalizeText:
 # MathAnswerParser — additional edge cases
 # ===========================================================================
 
+
 class TestMathAnswerParserEdgeCases:
     """Additional edge cases for MathAnswerParser beyond migrated tests."""
 
@@ -482,6 +496,7 @@ class TestMathAnswerParserEdgeCases:
 # CodeAnswerParser — additional edge cases
 # ===========================================================================
 
+
 class TestCodeAnswerParserEdgeCases:
 
     def setup_method(self):
@@ -507,6 +522,7 @@ class TestCodeAnswerParserEdgeCases:
 # TextAnswerParser — additional edge cases
 # ===========================================================================
 
+
 class TestTextAnswerParserEdgeCases:
 
     def test_both_empty(self):
@@ -520,7 +536,10 @@ class TestTextAnswerParserEdgeCases:
 
     def test_partial_overlap(self):
         """Fuzzy match with partial overlap."""
-        assert TextAnswerParser.check_answer("The capital of France", "capital of France") is True
+        assert (
+            TextAnswerParser.check_answer("The capital of France", "capital of France")
+            is True
+        )
 
     def test_completely_different(self):
         assert TextAnswerParser.check_answer("apple", "orange") is False
@@ -536,6 +555,7 @@ class TestTextAnswerParserEdgeCases:
 # MultiChoiceParser — additional edge cases
 # ===========================================================================
 
+
 class TestMultiChoiceParserEdgeCases:
 
     def setup_method(self):
@@ -550,7 +570,10 @@ class TestMultiChoiceParserEdgeCases:
         assert result == "B"
 
     def test_choice_e_and_f(self):
-        assert self.parser.parse("Answer: E", choices=["A", "B", "C", "D", "E", "F"]) == "E"
+        assert (
+            self.parser.parse("Answer: E", choices=["A", "B", "C", "D", "E", "F"])
+            == "E"
+        )
 
     def test_chinese_答案是_with_paren(self):
         assert self.parser.parse("答案是（C）") == "C"
@@ -565,6 +588,7 @@ class TestMultiChoiceParserEdgeCases:
 # Tests derived from patterns in evalscope/utils/multi_choices.py and
 # evalscope/metrics/math_parser.py to ensure feature parity.
 # ===========================================================================
+
 
 class TestEvalScopeChoicePatterns:
     """Tests for EvalScope-style ANSWER: X and 答案：X patterns."""
@@ -593,7 +617,9 @@ class TestEvalScopeChoicePatterns:
 
     def test_evalscope_format_example(self):
         """EvalScope format_example outputs: 'ANSWER: X'."""
-        response = "What is the capital of France?\nA) London\nB) Paris\nC) Berlin\nANSWER: B"
+        response = (
+            "What is the capital of France?\nA) London\nB) Paris\nC) Berlin\nANSWER: B"
+        )
         assert self.parser.parse(response) == "B"
 
     def test_fallback_last_uppercase(self):

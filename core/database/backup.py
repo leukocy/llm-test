@@ -23,7 +23,9 @@ class DatabaseBackup:
     - RestoreBackup
     """
 
-    def __init__(self, db_path: str = "data/benchmark.db", backup_dir: str = "data/backups"):
+    def __init__(
+        self, db_path: str = "data/benchmark.db", backup_dir: str = "data/backups"
+    ):
         self.db_path = Path(db_path)
         self.backup_dir = Path(backup_dir)
         self.backup_dir.mkdir(parents=True, exist_ok=True)
@@ -115,15 +117,17 @@ class DatabaseBackup:
         backups = []
         for f in self.backup_dir.glob("benchmark_*.db"):
             stat = f.stat()
-            backups.append({
-                "path": str(f),
-                "name": f.name,
-                "size_mb": round(stat.st_size / 1024 / 1024, 2),
-                "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-            })
+            backups.append(
+                {
+                    "path": str(f),
+                    "name": f.name,
+                    "size_mb": round(stat.st_size / 1024 / 1024, 2),
+                    "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                }
+            )
 
         # 按时间倒序排列
-        backups.sort(key=lambda x: x['created_at'], reverse=True)
+        backups.sort(key=lambda x: str(x["created_at"]), reverse=True)
         return backups
 
     def _cleanup_old_backups(self):
@@ -132,9 +136,9 @@ class DatabaseBackup:
 
         if len(backups) > self.max_backups:
             # Delete最旧Backup
-            for backup in backups[self.max_backups:]:
+            for backup in backups[self.max_backups :]:
                 try:
-                    Path(backup['path']).unlink()
+                    Path(backup["path"]).unlink()
                     logger.info(f"已Delete旧Backup: {backup['name']}")
                 except Exception as e:
                     logger.warning(f"DeleteBackup失败: {e}")
@@ -152,7 +156,7 @@ class DatabaseBackup:
             return True
 
         # Check时间间隔
-        last_backup_time = datetime.fromisoformat(backups[0]['created_at'])
+        last_backup_time = datetime.fromisoformat(backups[0]["created_at"])
         hours_since_backup = (datetime.now() - last_backup_time).total_seconds() / 3600
 
         if hours_since_backup >= self.min_interval_hours:
@@ -161,7 +165,7 @@ class DatabaseBackup:
         # CheckDatabase大小变化
         if self.db_path.exists():
             current_size = self.db_path.stat().st_size
-            last_backup_size = backups[0]['size_mb'] * 1024 * 1024
+            last_backup_size = backups[0]["size_mb"] * 1024 * 1024
             size_change_mb = abs(current_size - last_backup_size) / 1024 / 1024
 
             if size_change_mb >= self.max_size_change_mb:
@@ -183,7 +187,7 @@ class DatabaseBackup:
     def get_backup_summary(self) -> dict:
         """GetBackup摘要"""
         backups = self.list_backups()
-        total_size = sum(b['size_mb'] for b in backups)
+        total_size = sum(b["size_mb"] for b in backups)
 
         return {
             "count": len(backups),

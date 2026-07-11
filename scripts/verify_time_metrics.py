@@ -1,11 +1,10 @@
-
 import asyncio
 import os
 import sys
 import time
 
 # Add project root to sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.providers.openai import OpenAIProvider
 
@@ -17,10 +16,15 @@ async def test_provider(name, api_base_url, api_key, model_id=None):
     # Try to fetch available models if model_id is not provided
     if not model_id:
         import aiohttp
+
         print("Fetching available models...")
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{api_base_url}/models", headers={"Authorization": f"Bearer {api_key}"}, timeout=5) as resp:
+                async with session.get(
+                    f"{api_base_url}/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    timeout=5,
+                ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         models = data.get("data", [])
@@ -56,13 +60,16 @@ async def test_provider(name, api_base_url, api_key, model_id=None):
         result = await provider.get_completion(client, session_id, prompt, max_tokens)
 
         if result.get("error"):
-            print(f"[ERROR] Request failed: {result.get('error')}")
+            print(f"Request failed: {result.get('error')}")
             if result.get("error_info"):
-                 import json
-                 print(f"Error Info:\n{json.dumps(result['error_info'], ensure_ascii=False, indent=2)}")
+                import json
+
+                print(
+                    f"Error Info:\n{json.dumps(result['error_info'], ensure_ascii=False, indent=2)}"
+                )
             return
 
-        print("[OK] Request successful!")
+        print("Request successful!")
 
         # Verify timestamps
         created_at = result.get("created_at")
@@ -75,30 +82,34 @@ async def test_provider(name, api_base_url, api_key, model_id=None):
 
         now = time.time()
         if created_at and abs(now - created_at) < 60:
-            print(f"[OK] created_at valid (delta={now - created_at:.2f}s)")
+            print(f"created_at valid (delta={now - created_at:.2f}s)")
         else:
-            print(f"[ERROR] created_at invalid! (delta={now - created_at:.2f}s, val={created_at})")
+            print(
+                f"created_at invalid! (delta={now - created_at:.2f}s, val={created_at})"
+            )
 
         if start_time < end_time:
-             print("[OK] Monotonicity: start < end")
+            print("Monotonicity: start < end")
         else:
-             print("[ERROR] Monotonicity violation!")
+            print("Monotonicity violation!")
 
         if first_token_time:
             ttft = first_token_time - start_time
             if start_time <= first_token_time <= end_time:
-                print(f"[OK] TTFT valid: {ttft*1000:.2f}ms")
+                print(f"TTFT valid: {ttft*1000:.2f}ms")
             else:
-                print("[ERROR] TTFT out of range!")
+                print("TTFT out of range!")
         else:
-            print("[ERROR] No TTFT recorded!")
+            print("No TTFT recorded!")
 
         duration = end_time - start_time
         print(f"Duration: {duration:.4f}s")
 
         # Granularity
         token_timestamps = result.get("token_timestamps", [])
-        completion_tokens = result['usage_info'].get('completion_tokens', len(token_timestamps))
+        completion_tokens = result["usage_info"].get(
+            "completion_tokens", len(token_timestamps)
+        )
 
         print(f"Tokens: {completion_tokens}, Chunks: {len(token_timestamps)}")
 
@@ -106,34 +117,48 @@ async def test_provider(name, api_base_url, api_key, model_id=None):
             tokens_per_chunk = completion_tokens / len(token_timestamps)
             print(f"Granularity: {tokens_per_chunk:.2f} tokens/chunk")
             if tokens_per_chunk <= 1.5:
-                print("[OK] Good granularity (Streaming works)")
+                print("Good granularity (Streaming works)")
             else:
-                print("[WARNING]  Poor granularity (Buffered/Packet aggregation)")
+                print(" Poor granularity (Buffered/Packet aggregation)")
         else:
-            print("[WARNING]  Not enough chunks for granularity analysis")
+            print(" Not enough chunks for granularity analysis")
 
     except Exception as e:
-        print(f"[ERROR] Exception: {e}")
+        print(f"Exception: {e}")
         import traceback
+
         traceback.print_exc()
+
 
 async def main():
     print("Starting Multi-Provider Verification...")
 
     providers = [
         # Local (configure via environment variables)
-        ("Local", os.getenv("API_BASE_URL", "http://localhost:8000/v1"), os.getenv("API_KEY", ""), None),
+        (
+            "Local",
+            os.getenv("API_BASE_URL", "http://localhost:8000/v1"),
+            os.getenv("API_KEY", ""),
+            None,
+        ),
         # Cloud (NVIDIA NIM)
-        ("NVIDIA NIM", "https://integrate.api.nvidia.com/v1", os.getenv("NVIDIA_API_KEY", "nvapi-placeholder"), None)
+        (
+            "NVIDIA NIM",
+            "https://integrate.api.nvidia.com/v1",
+            os.getenv("NVIDIA_API_KEY", "nvapi-placeholder"),
+            None,
+        ),
     ]
 
     try:
         for name, url, key, model in providers:
             await test_provider(name, url, key, model)
     except Exception as e:
-        print(f"\n[ERROR] Exception occurred in main loop: {e}")
+        print(f"\nException occurred in main loop: {e}")
         import traceback
+
         traceback.print_exc()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

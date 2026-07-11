@@ -5,7 +5,7 @@
 1. 配置完整：tester 已填 + machine_id 存在（硬件指纹已冻结）+ CASE 03 强制字段
    （PCIe Gen/宽度、内存通道数、内存频率）非空（仅当传入硬件指纹时校验）。
 2. 可复现：machine_id + 硬件指纹 + 随机种子已记录（或明确标注随机）。
-3. 指标可信：无 Error: 关键问题 + 成功率达标 + 资源监控已记录。
+3. 指标可信：无关键问题 + 成功率达标 + 资源监控已记录。
 4. 人工复核：external_level 已被人工置为 'publishable'（永不自动提升）。
 
 level 推导：publishable 需四闸全过；1-3 过 → review；否则 internal。
@@ -110,6 +110,7 @@ def evaluate_publish_gate(
     if use_wilson and success_count is not None and sample_size:
         try:
             from core.metrics import wilson_score_interval
+
             wilson_lower, _ = wilson_score_interval(success_count, sample_size, 0.95)
         except Exception:  # noqa: BLE001
             wilson_lower = None
@@ -119,18 +120,22 @@ def evaluate_publish_gate(
         sr_label = f"Wilson 95% 下界 {wilson_lower:.0%}"
     else:
         sr_ok = success_rate is None or success_rate >= success_rate_threshold
-        sr_label = f"成功率 {success_rate:.0%}" if success_rate is not None else "成功率"
+        sr_label = (
+            f"成功率 {success_rate:.0%}" if success_rate is not None else "成功率"
+        )
 
     # 样本量门槛（仅当 sample_size 传入）
     enough_samples = sample_size is None or sample_size >= min_sample_size
 
     g3_metrics = no_critical and sr_ok and has_monitor and enough_samples
     if not no_critical:
-        reasons.append("存在 Error: 关键问题（指标不可信）")
+        reasons.append("存在关键问题（指标不可信）")
     if not sr_ok:
         reasons.append(f"{sr_label} 低于阈值 {success_rate_threshold:.0%}")
     if not enough_samples and sample_size is not None:
-        reasons.append(f"样本量 {sample_size} 不足（建议≥{min_sample_size}，成功率不可信）")
+        reasons.append(
+            f"样本量 {sample_size} 不足（建议≥{min_sample_size}，成功率不可信）"
+        )
     if not has_monitor:
         reasons.append("缺资源监控数据")
 
@@ -170,6 +175,7 @@ def gate_from_run(run: dict[str, Any], **extra) -> GateResult:
     sys_info = run.get("system_info") or {}
     if isinstance(sys_info, str):
         import json as _json
+
         try:
             sys_info = _json.loads(sys_info or "{}")
         except (ValueError, TypeError):
@@ -177,6 +183,7 @@ def gate_from_run(run: dict[str, Any], **extra) -> GateResult:
     config = run.get("config") or {}
     if isinstance(config, str):
         import json as _json
+
         try:
             config = _json.loads(config or "{}")
         except (ValueError, TypeError):
@@ -209,7 +216,7 @@ GATE_LABELS = {
 }
 
 LEVEL_BADGE = {
-    "publishable": ("OK: 可对外", "green"),
-    "review": ("Review: 待复核", "orange"),
-    "internal": ("Internal: 内部", "gray"),
+    "publishable": ("可对外", "green"),
+    "review": ("待复核", "orange"),
+    "internal": ("内部", "gray"),
 }

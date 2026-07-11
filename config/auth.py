@@ -26,8 +26,8 @@ def check_credentials(username: str, password: str) -> bool:
     Returns:
         True if credentials are valid
     """
-    expected_username = os.getenv('LLM_TEST_USERNAME')
-    expected_password_hash = os.getenv('LLM_TEST_PASSWORD_HASH')
+    expected_username = os.getenv("LLM_TEST_USERNAME")
+    expected_password_hash = os.getenv("LLM_TEST_PASSWORD_HASH")
 
     # If no credentials set, authentication is disabled
     if not expected_username or not expected_password_hash:
@@ -42,7 +42,7 @@ def check_credentials(username: str, password: str) -> bool:
 
 def show_login_page():
     """Display login page and return True if authenticated."""
-    if 'authenticated' in st.session_state and st.session_state.authenticated:
+    if "authenticated" in st.session_state and st.session_state.authenticated:
         return True
 
     st.title("LLM Test Platform - Login")
@@ -67,7 +67,7 @@ def require_auth():
 
     Call this at the beginning of main().
     """
-    if 'authenticated' not in st.session_state:
+    if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
 
     if not st.session_state.authenticated:

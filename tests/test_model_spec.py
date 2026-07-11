@@ -7,34 +7,41 @@ from pathlib import Path
 
 import pytest
 
-from core.model_spec import (
-    MODEL_SPEC_REGISTRY,
-    ModelSpec,
-    from_local_config,
-    resolve_spec,
-)
-from core.serving_config import ServingConfig, from_sidebar
 from core.effective_bandwidth import compute_effective_bandwidth, summarize_gap
-
+from core.model_spec import MODEL_SPEC_REGISTRY, ModelSpec, from_local_config, resolve_spec
+from core.serving_config import ServingConfig, from_sidebar
 
 # ---------- ModelSpec ----------
 
+
 def test_bytes_per_token_read_dense():
-    spec = ModelSpec(name="x", architecture="dense", total_params_b=72,
-                     active_params_b=72, weight_dtype="bf16")
+    spec = ModelSpec(
+        name="x",
+        architecture="dense",
+        total_params_b=72,
+        active_params_b=72,
+        weight_dtype="bf16",
+    )
     # 72B * 2 bytes = 144 GB per token
     assert spec.bytes_per_token_read() == pytest.approx(144e9, rel=1e-6)
 
 
 def test_bytes_per_token_read_moe_uses_active():
-    spec = ModelSpec(name="x", architecture="moe", total_params_b=671,
-                     active_params_b=37, weight_dtype="fp8")
+    spec = ModelSpec(
+        name="x",
+        architecture="moe",
+        total_params_b=671,
+        active_params_b=37,
+        weight_dtype="fp8",
+    )
     # 37B * 1 byte = 37 GB per token（MoE 只读激活专家）
     assert spec.bytes_per_token_read() == pytest.approx(37e9, rel=1e-6)
 
 
 def test_bytes_per_token_read_int4():
-    spec = ModelSpec(name="x", total_params_b=30, active_params_b=30, weight_dtype="int4")
+    spec = ModelSpec(
+        name="x", total_params_b=30, active_params_b=30, weight_dtype="int4"
+    )
     assert spec.bytes_per_token_read() == pytest.approx(15e9, rel=1e-6)
 
 
@@ -52,7 +59,9 @@ def test_resolve_spec_unknown_returns_none_without_override():
 
 
 def test_resolve_spec_unknown_with_override_builds_spec():
-    spec = resolve_spec("my-custom-model", override={"active_params_b": 10, "weight_dtype": "bf16"})
+    spec = resolve_spec(
+        "my-custom-model", override={"active_params_b": 10, "weight_dtype": "bf16"}
+    )
     assert spec is not None
     assert spec.active_params_b == 10
     assert spec.bytes_per_token_read() == pytest.approx(20e9, rel=1e-6)
@@ -101,6 +110,7 @@ def test_from_local_config_missing_file_returns_none(tmp_path: Path):
 
 # ---------- ServingConfig ----------
 
+
 def test_serving_config_from_sidebar_and_world_size():
     state = {
         "engine": "vLLM",
@@ -140,9 +150,12 @@ def test_serving_config_unknown_keys_ignored():
 
 # ---------- effective bandwidth ----------
 
+
 def test_effective_bandwidth_deepseek():
     spec = resolve_spec("DeepSeek-V3.1")  # 37B active, fp8 → 37 GB/token
-    bw = compute_effective_bandwidth(decode_tps=50.0, spec=spec, nominal_gpu_bandwidth_gbps=3350.0)
+    bw = compute_effective_bandwidth(
+        decode_tps=50.0, spec=spec, nominal_gpu_bandwidth_gbps=3350.0
+    )
     # 50 * 37e9 / 1e9 = 1850 GB/s
     assert bw["effective_bandwidth_gbps"] == pytest.approx(1850.0, rel=1e-3)
     assert bw["bandwidth_utilization_pct"] == pytest.approx(1850 / 3350 * 100, rel=1e-3)
@@ -150,7 +163,10 @@ def test_effective_bandwidth_deepseek():
 
 
 def test_effective_bandwidth_skips_when_missing():
-    assert compute_effective_bandwidth(None, None, None)["effective_bandwidth_gbps"] is None
+    assert (
+        compute_effective_bandwidth(None, None, None)["effective_bandwidth_gbps"]
+        is None
+    )
     spec = resolve_spec("DeepSeek-V3.1")
     # 无 nominal → 有 effective，无 utilization
     bw = compute_effective_bandwidth(50.0, spec, None)
