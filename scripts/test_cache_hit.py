@@ -74,7 +74,9 @@ def measure_request(base_url, model_id, prompt, max_tokens=10):
                         usage_info = c["usage"]
                     if c.get("choices") and len(c["choices"]) > 0:
                         delta = c["choices"][0].get("delta", {})
-                        content = delta.get("content") or delta.get("reasoning_content") or ""
+                        content = (
+                            delta.get("content") or delta.get("reasoning_content") or ""
+                        )
                         if content and t_first_token is None:
                             t_first_token = time.perf_counter()
                 except:
@@ -115,7 +117,9 @@ for name, base_url in ENDPOINTS.items():
         ttft = result["ttft"]
         total = result["total_time"]
         ttfts.append(ttft)
-        prompt_tokens = result["usage"].get("prompt_tokens", "?") if result["usage"] else "?"
+        prompt_tokens = (
+            result["usage"].get("prompt_tokens", "?") if result["usage"] else "?"
+        )
 
         cache_hit = 0
         if result["usage"]:
@@ -129,7 +133,11 @@ for name, base_url in ENDPOINTS.items():
         marker = ""
         if i > 1 and ttfts[0] and ttft and ttfts[0] > 0:
             speedup = ttfts[0] / ttft
-            marker = f"  ← 相对#1 加速 {speedup:.2f}x" if speedup > 1.1 else f"  ← {speedup:.2f}x"
+            marker = (
+                f"  ← 相对#1 加速 {speedup:.2f}x"
+                if speedup > 1.1
+                else f"  ← {speedup:.2f}x"
+            )
 
         log(
             f"  #{i}: TTFT={ttft:.4f}s | 总耗时={total:.2f}s | prompt={prompt_tokens} | cache_hit_usage={cache_hit}{marker}"
@@ -141,5 +149,5 @@ for name, base_url in ENDPOINTS.items():
             f"\n  结论: #1 TTFT={ttfts[0]:.4f}s → 后续平均={sum(ttfts[1:])/len(ttfts[1:]):.4f}s, 加速比={ttfts[0]/(sum(ttfts[1:])/len(ttfts[1:])):.2f}x"
         )
 
-log("\n✅ Test完成")
+log("\nTest完成")
 out.close()

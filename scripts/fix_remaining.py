@@ -72,13 +72,17 @@ for fn in sorted(os.listdir(ui_dir)):
         # Count remaining Chinese chars
         remaining = re.findall(r"[\u4e00-\u9fff]", content)
         cn_segs = re.findall(r"[\u4e00-\u9fff]+", content)
-        fixes = len(original) - len(content) + sum(1 for c in original if c != content[0])  # rough
-        print(f"📝 {fn}: fixed punctuation/words, {len(cn_segs)} Chinese segments remaining")
+        fixes = (
+            len(original) - len(content) + sum(1 for c in original if c != content[0])
+        )  # rough
+        print(
+            f"{fn}: fixed punctuation/words, {len(cn_segs)} Chinese segments remaining"
+        )
         total_fixes += 1
     else:
         cn_segs = re.findall(r"[\u4e00-\u9fff]+", content)
         if cn_segs:
-            print(f"⚠️  {fn}: {len(cn_segs)} Chinese segments (no changes applied)")
+            print(f" {fn}: {len(cn_segs)} Chinese segments (no changes applied)")
 
 print("\n--- Final verification ---")
 for fn in sorted(os.listdir(ui_dir)):
@@ -90,6 +94,8 @@ for fn in sorted(os.listdir(ui_dir)):
     cn_segs = re.findall(r"[\u4e00-\u9fff]+", content)
     cn_punct = re.findall(r"[\u3000-\u303f\uff01-\uff5e]", content)
     status = (
-        "✅" if not cn_segs and not cn_punct else f"⚠️  chars:{len(cn_segs)} punct:{len(cn_punct)}"
+        "[OK]"
+        if not cn_segs and not cn_punct
+        else f"[WARN] chars:{len(cn_segs)} punct:{len(cn_punct)}"
     )
     print(f"  {status} {fn}")

@@ -3,7 +3,12 @@ import re
 
 results = []
 for root, _, files in os.walk("."):
-    if ".git" in root or "__pycache__" in root or ".pytest_cache" in root or "node_modules" in root:
+    if (
+        ".git" in root
+        or "__pycache__" in root
+        or ".pytest_cache" in root
+        or "node_modules" in root
+    ):
         continue
     for f in files:
         if f.endswith(".py") and f not in ("find_chinese.py", "translate_reports.py"):

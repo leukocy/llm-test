@@ -4,6 +4,7 @@
 公共字段(硬件指纹/模型规格/服务配置)全行相同,来自 capture_hardware_fingerprint() + 已知配置。
 每 cell 指标从 baseline_kimi_consolidated.csv 按成功请求聚合。
 """
+
 from __future__ import annotations
 
 import csv
@@ -41,13 +42,17 @@ MODEL_SPEC = {
     "active_params": SPEC.active_params_b,
     "num_experts": SPEC.num_experts,
     "top_k": SPEC.num_experts_per_tok,
-    "quantization": f"{SPEC.weight_dtype}({SPEC.quant_method},gs={SPEC.group_size})"
-                    if SPEC.quant_method else SPEC.weight_dtype,
+    "quantization": (
+        f"{SPEC.weight_dtype}({SPEC.quant_method},gs={SPEC.group_size})"
+        if SPEC.quant_method
+        else SPEC.weight_dtype
+    ),
     "dtype": SPEC.weight_dtype,
     "max_context": SPEC.max_position_embeddings,
 }
 # 引擎配置自动采集(docker inspect + 日志 + /v1/models)——不再硬编码,配置变即跟着变
 from core.engine_capture import capture_engine_config
+
 _ENG = capture_engine_config("http://localhost:10814/v1")
 _SCHEDULE = _ENG.get("schedule") or {}
 _PARALLEL = _ENG.get("parallel") or {}
@@ -55,8 +60,13 @@ _RUNTIME = _ENG.get("runtime") or {}
 SERVING = {
     "engine": _ENG.get("engine", "vLLM"),
     "engine_version": _ENG.get("engine_version", ""),
-    "engine_params": _ENG.get("launch_cmd", "") or ";".join(f"{k}={v}" for k, v in _SCHEDULE.items()),
-    "parallel_strategy": (_PARALLEL and f"tp={_PARALLEL.get('tp')} + dcp={_PARALLEL.get('dcp')} + ep={_PARALLEL.get('ep')}") or "",
+    "engine_params": _ENG.get("launch_cmd", "")
+    or ";".join(f"{k}={v}" for k, v in _SCHEDULE.items()),
+    "parallel_strategy": (
+        _PARALLEL
+        and f"tp={_PARALLEL.get('tp')} + dcp={_PARALLEL.get('dcp')} + ep={_PARALLEL.get('ep')}"
+    )
+    or "",
 }
 # 单卡标称带宽(与 runner._nominal_gpu_bandwidth_gbps 同约定)
 NOMINAL_GPU_BW = gpu0.get("nominal_bandwidth_gbps") or 1792.0
@@ -135,21 +145,35 @@ for (conc, ctx), sub in df.groupby(["concurrency", "context_length_target"]):
         "concurrency": conc,
         "usecase_set_version": "",
         "prompt_tokens": int(ok["prefill_tokens"].median()) if len(ok) else "",
-        "output_tokens": int(ok["decode_tokens"].median()) if len(ok) and ok["decode_tokens"].median() else 512,
+        "output_tokens": (
+            int(ok["decode_tokens"].median())
+            if len(ok) and ok["decode_tokens"].median()
+            else 512
+        ),
         "load_time_s": LOAD_TIME_S,
         "ttft_s": round(statistics.mean(ttfts), 3) if ttfts else "",
-        "prefill_tps": round(statistics.mean(prefill_tps_list)) if prefill_tps_list else "",
+        "prefill_tps": (
+            round(statistics.mean(prefill_tps_list)) if prefill_tps_list else ""
+        ),
         "decode_tps": round(decode_tps_mean, 1) if decode_tps_mean else "",
-        "long_context_tps": round(statistics.mean(sys_out)) if (ctx >= 32768 and sys_out) else "",
+        "long_context_tps": (
+            round(statistics.mean(sys_out)) if (ctx >= 32768 and sys_out) else ""
+        ),
         "p50_latency_s": pct(ttfts, 50),
         "p95_latency_s": pct(ttfts, 95),
         "p99_latency_s": pct(ttfts, 99),
-        "gpu_vram_peak_gb": round(735.0, 1),   # 8×~92GB(run 244 实测峰值)
+        "gpu_vram_peak_gb": round(735.0, 1),  # 8×~92GB(run 244 实测峰值)
         "system_memory_peak_gb": "",
-        "effective_bandwidth_gbps": round(bw["effective_bandwidth_gbps"], 1)
-                                    if bw.get("effective_bandwidth_gbps") else "",
-        "bandwidth_utilization_pct": round(bw["bandwidth_utilization_pct"])
-                                     if bw.get("bandwidth_utilization_pct") else "",
+        "effective_bandwidth_gbps": (
+            round(bw["effective_bandwidth_gbps"], 1)
+            if bw.get("effective_bandwidth_gbps")
+            else ""
+        ),
+        "bandwidth_utilization_pct": (
+            round(bw["bandwidth_utilization_pct"])
+            if bw.get("bandwidth_utilization_pct")
+            else ""
+        ),
         "cpu_threads_used": "",
         "cpu_util_pct": "",
         "gpu_util_pct": "",
@@ -162,8 +186,11 @@ for (conc, ctx), sub in df.groupby(["concurrency", "context_length_target"]):
         "log_path": "raw_data/baseline_kimi_consolidated.csv",
         "screenshot_path": "",
         "external_level": ext,
-        "next_action": "物理检修 GPU#7 PCIe 连接(见 forensics/INCIDENT_REPORT)后再测 conc≥16 高上下文"
-                       if status == "hardware_fault" else "",
+        "next_action": (
+            "物理检修 GPU#7 PCIe 连接(见 forensics/INCIDENT_REPORT)后再测 conc≥16 高上下文"
+            if status == "hardware_fault"
+            else ""
+        ),
         "supersedes_test_id": "",
     }
     rows.append(row)
@@ -177,41 +204,61 @@ with open(csv_path, "w", encoding="utf-8", newline="") as f:
     writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
     writer.writerow(HM_TEST_FIELDS)
     for r in rows:
-        writer.writerow(["" if r.get(fld, "") in (None, "") else r.get(fld) for fld in HM_TEST_FIELDS])
+        writer.writerow(
+            [
+                "" if r.get(fld, "") in (None, "") else r.get(fld)
+                for fld in HM_TEST_FIELDS
+            ]
+        )
 
 # JSON: 每行一个对象 + 元信息
 with open(json_path, "w", encoding="utf-8") as f:
-    json.dump({
-        "template": "hmTest",
-        "source": "llm-test warehouse baseline (run 244 conc<=8 + run 245 conc=16/32 low-ctx)",
-        "exported_at": datetime.now().isoformat(),
-        "row_count": len(rows),
-        "hardware_fingerprint": fp,
-        "model_spec": SPEC.to_dict(),
-        "methodology": {
-            "effective_bandwidth": (
-                "int4 roofline: effective_bw = decode_tps × active_params × bytes_per_param; "
-                "active=32B, int4→0.5 bytes/param → 16 GB/token. "
-                "utilization vs 单卡标称带宽(与 runner._nominal_gpu_bandwidth_gbps 同约定); "
-                "TP=8 下该值为上界估计(权重跨 8 卡分片,真实每卡利用率 ≈ 值/8)。"
-            ),
-            "缺测字段": "load_time_s/resource monitor(被 _Fake UI 桩跳过)等留空,遵手册「缺测即决策信息」。",
+    json.dump(
+        {
+            "template": "hmTest",
+            "source": "llm-test warehouse baseline (run 244 conc<=8 + run 245 conc=16/32 low-ctx)",
+            "exported_at": datetime.now().isoformat(),
+            "row_count": len(rows),
+            "hardware_fingerprint": fp,
+            "model_spec": SPEC.to_dict(),
+            "methodology": {
+                "effective_bandwidth": (
+                    "int4 roofline: effective_bw = decode_tps × active_params × bytes_per_param; "
+                    "active=32B, int4→0.5 bytes/param → 16 GB/token. "
+                    "utilization vs 单卡标称带宽(与 runner._nominal_gpu_bandwidth_gbps 同约定); "
+                    "TP=8 下该值为上界估计(权重跨 8 卡分片,真实每卡利用率 ≈ 值/8)。"
+                ),
+                "缺测字段": "load_time_s/resource monitor(被 _Fake UI 桩跳过)等留空,遵手册「缺测即决策信息」。",
+            },
+            "rows": rows,
         },
-        "rows": rows,
-    }, f, ensure_ascii=False, indent=2)
+        f,
+        ensure_ascii=False,
+        indent=2,
+    )
 
-print(f"✅ 导出 {len(rows)} 行 hmTest 记录:")
+print(f"[OK] 导出 {len(rows)} 行 hmTest 记录:")
 print(f"   CSV : {csv_path}")
 print(f"   JSON: {json_path}")
 print(f"\n硬件指纹: machine_id={MACHINE_ID}")
-print(f"   CPU={cpu.get('model_name')}  socket×core={cpu.get('sockets')}×{cpu.get('cores_per_socket')}")
-print(f"   GPU={gpu0.get('name')} ×{len(gpus)}  显存={gpu0.get('vram_gb')}GB  标称带宽={gpu0.get('nominal_bandwidth_gbps')}GB/s")
+print(
+    f"   CPU={cpu.get('model_name')}  socket×core={cpu.get('sockets')}×{cpu.get('cores_per_socket')}"
+)
+print(
+    f"   GPU={gpu0.get('name')} ×{len(gpus)}  显存={gpu0.get('vram_gb')}GB  标称带宽={gpu0.get('nominal_bandwidth_gbps')}GB/s"
+)
 print(f"   driver={cuda.get('driver')}  cuda={cuda.get('cuda_version')}")
 print(f"\n字段完整性(非空率):")
 for f in HM_TEST_FIELDS:
     filled = sum(1 for r in rows if r.get(f) not in (None, ""))
     if filled == 0:
-        print(f"   ⬜ {f}: 全缺测")
+        print(f"   [MISSING] {f}: 全缺测")
 print(f"\n样例行(conc=4/ctx=4096):")
-sample = next(r for r in rows if r["concurrency"] == 4 and r["prompt_tokens"] and 3000 < (r["prompt_tokens"] or 0) < 6000)
+sample = next(
+    r
+    for r in rows
+    if r["concurrency"] == 4
+    and r["prompt_tokens"]
+    and 3000 < (r["prompt_tokens"] or 0) < 6000
+)
 print(json.dumps(sample, ensure_ascii=False, indent=2))

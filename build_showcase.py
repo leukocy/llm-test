@@ -2,6 +2,7 @@
 从真实数据组装:硬件指纹/模型规格/引擎配置/矩阵/per-cell监控/取证。
 多受众(决策者/工程师/运维/追溯),有总结 + 可追溯原始数据。自包含、零依赖。
 """
+
 from __future__ import annotations
 
 import glob
@@ -40,7 +41,11 @@ def tps_matrix():
     因窗口横跨多轮 prefill 而稀释,不可靠;用 conc×tps 替代)。"""
     _tmp = ok.copy()
     _tmp["agg_decode"] = _tmp["concurrency"] * _tmp["tps"]
-    piv = _tmp.groupby(["concurrency", "context_length_target"])["agg_decode"].median().round(0)
+    piv = (
+        _tmp.groupby(["concurrency", "context_length_target"])["agg_decode"]
+        .median()
+        .round(0)
+    )
     out = {}
     for (c, ctx), v in piv.items():
         out.setdefault(c, {})[ctx] = v
@@ -134,10 +139,10 @@ footer{{margin-top:50px;color:#9ca3af;font-size:12px;border-top:1px solid #e5e7e
 <div class="sub">机器 <code>{fp.get('machine_id')}</code>({cpu.get('model_name','')}, {len(gpus)}× {gpu0.get('name','')}) · 每请求输出 512 tokens(max_tokens=512) · 模型 Kimi-K2.7-Code · 生成 {datetime.now().strftime('%Y-%m-%d %H:%M')}</div>
 
 <div class="aud">
-<a href="#summary">🧭 决策者<span class="r">3 分钟看价值</span></a>
-<a href="#pipeline">🔧 工程师<span class="r">全流程 + 数据</span></a>
-<a href="#ops">🛠 运维<span class="r">可靠性 + 取证</span></a>
-<a href="#trace">📚 追溯<span class="r">原始数据索引</span></a>
+<a href="#summary">决策者<span class="r">3 分钟看价值</span></a>
+<a href="#pipeline">工程师<span class="r">全流程 + 数据</span></a>
+<a href="#ops">运维<span class="r">可靠性 + 取证</span></a>
+<a href="#trace">追溯<span class="r">原始数据索引</span></a>
 </div>
 
 <!-- ============ 执行摘要 ============ -->
@@ -197,7 +202,7 @@ parallel: {par}
 runtime: 权重载入 {rt.get('weight_load_s')}s + init {rt.get('init_engine_s')}s + graph {rt.get('graph_capture_s')}s = 冷启动 ~{rt.get('cold_start_s_est')}s
 KV cache: <b>{rt.get('kv_cache_tokens'):,}</b> tokens
 来源: {eng.get('capture_source')}</pre></div>
-<div class="box amber">⚠ <b>这条自动采集堵住的坑</b>:vLLM 曾把 max_num_seqs 16→64、KV 1.67M→1.53M,硬编码报告一度用陈旧值得出错误的"conc=16 饱和"。现在 per-run 自动采集,配置怎么变都不会再错。已注册引擎: {', '.join(get_adapters())}。</div>
+<div class="box amber"><b>这条自动采集堵住的坑</b>:vLLM 曾把 max_num_seqs 16→64、KV 1.67M→1.53M,硬编码报告一度用陈旧值得出错误的"conc=16 饱和"。现在 per-run 自动采集,配置怎么变都不会再错。已注册引擎: {', '.join(get_adapters())}。</div>
 
 <!-- ============ 八维数据 ============ -->
 <h2 id="dims">三、性能数据样本(per-cell,可追溯)</h2>
@@ -254,6 +259,6 @@ KV cache: <b>{rt.get('kv_cache_tokens'):,}</b> tokens
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with open(OUT, "w", encoding="utf-8") as f:
     f.write(HTML)
-print(f"✅ 展示已生成: {OUT} ({os.path.getsize(OUT)//1024} KB)")
+print(f"[OK] 展示已生成: {OUT} ({os.path.getsize(OUT)//1024} KB)")
 print(f"   数据: {n_total} 请求 / {n_cells} cell / 适配器 {get_adapters()}")
 print(f"   打开: xdg-open {OUT}")
