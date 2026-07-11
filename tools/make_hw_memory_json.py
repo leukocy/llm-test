@@ -93,19 +93,19 @@ def main() -> int:
 
     raw = run_dmidecode(args.password)
     if not raw:
-        print("❌ 无法运行 dmidecode（需 sudo 权限或 --password）", file=sys.stderr)
+        print("[ERROR] 无法运行 dmidecode（需 sudo 权限或 --password）", file=sys.stderr)
         return 1
 
     info = parse_memory(raw)
     if not any(info.values()):
-        print("❌ dmidecode 输出解析不到内存字段", file=sys.stderr)
+        print("[ERROR] dmidecode 输出解析不到内存字段", file=sys.stderr)
         return 1
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8") as f:
         json.dump(info, f, ensure_ascii=False, indent=2)
-    print(f"✅ 已写入 {out}: {info}")
+    print(f"[OK] 已写入 {out}: {info}")
     return 0
 
 
