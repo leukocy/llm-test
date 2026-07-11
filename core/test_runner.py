@@ -25,6 +25,7 @@ from .test_config import TestConfig, TestConfigLoader
 @dataclass
 class TestRunResult:
     """单次Test运行Result"""
+
     sample_id: str
     question: str
     correct_answer: str
@@ -56,6 +57,7 @@ class TestRunResult:
 @dataclass
 class ModelTestResult:
     """单 modelsTest Results"""
+
     model_id: str
     platform: str
 
@@ -93,6 +95,7 @@ class ModelTestResult:
 @dataclass
 class TestSuiteResult:
     """完整Test套件Result"""
+
     test_name: str
     test_config: TestConfig
     start_time: str
@@ -134,11 +137,7 @@ class UnifiedTestRunner:
         )
     """
 
-    def __init__(
-        self,
-        config_dir: str = "tests/config",
-        report_dir: str = "reports"
-    ):
+    def __init__(self, config_dir: str = "tests/config", report_dir: str = "reports"):
         self.config_loader = TestConfigLoader(config_dir)
         self.report_dir = Path(report_dir)
         self.report_dir.mkdir(parents=True, exist_ok=True)
@@ -154,7 +153,7 @@ class UnifiedTestRunner:
         config_path: str,
         samples: list[dict[str, Any]],
         get_response_funcs: dict[str, Callable],
-        progress_callback: Callable | None = None
+        progress_callback: Callable | None = None,
     ) -> TestSuiteResult:
         """
         从Configure文件Run Test
@@ -176,7 +175,7 @@ class UnifiedTestRunner:
         config: TestConfig,
         samples: list[dict[str, Any]],
         get_response_funcs: dict[str, Callable],
-        progress_callback: Callable | None = None
+        progress_callback: Callable | None = None,
     ) -> TestSuiteResult:
         """
         Execute test
@@ -197,12 +196,12 @@ class UnifiedTestRunner:
             test_config=config,
             start_time=start_time.isoformat(),
             end_time="",
-            duration_seconds=0.0
+            duration_seconds=0.0,
         )
 
         # 限制Sample count
         if config.dataset.samples > 0:
-            samples = samples[:config.dataset.samples]
+            samples = samples[: config.dataset.samples]
 
         total_tasks = len(samples) * len(config.models)
         current_task = 0
@@ -212,11 +211,14 @@ class UnifiedTestRunner:
             model_key = f"{model_config.platform}:{model_config.model_id}"
 
             if progress_callback:
-                progress_callback(current_task, total_tasks, f"Testing {model_config.model_id}...")
+                progress_callback(
+                    current_task, total_tasks, f"Testing {model_config.model_id}..."
+                )
 
             # Get响应函数
-            response_func = get_response_funcs.get(model_config.model_id) or \
-                           get_response_funcs.get(model_config.platform)
+            response_func = get_response_funcs.get(
+                model_config.model_id
+            ) or get_response_funcs.get(model_config.platform)
 
             if not response_func:
                 print(f"Warning: No response function for {model_key}")
@@ -228,9 +230,15 @@ class UnifiedTestRunner:
                 samples=samples,
                 get_response_func=response_func,
                 config=config,
-                progress_callback=lambda c, t: progress_callback(
-                    current_task + c, total_tasks, f"{model_config.model_id}: {c}/{t}"
-                ) if progress_callback else None
+                progress_callback=lambda c, t: (
+                    progress_callback(
+                        current_task + c,
+                        total_tasks,
+                        f"{model_config.model_id}: {c}/{t}",
+                    )
+                    if progress_callback
+                    else None
+                ),
             )
 
             result.model_results[model_key] = model_result
@@ -255,13 +263,13 @@ class UnifiedTestRunner:
         samples: list[dict[str, Any]],
         get_response_func: Callable,
         config: TestConfig,
-        progress_callback: Callable | None = None
+        progress_callback: Callable | None = None,
     ) -> ModelTestResult:
         """Test单 models"""
         model_result = ModelTestResult(
             model_id=model_config.model_id,
             platform=model_config.platform,
-            total_samples=len(samples)
+            total_samples=len(samples),
         )
 
         semaphore = asyncio.Semaphore(config.concurrency)
@@ -271,9 +279,7 @@ class UnifiedTestRunner:
             nonlocal completed
             async with semaphore:
                 result = await self._evaluate_single(
-                    sample=sample,
-                    get_response_func=get_response_func,
-                    config=config
+                    sample=sample, get_response_func=get_response_func, config=config
                 )
                 completed += 1
                 if progress_callback:
@@ -286,14 +292,16 @@ class UnifiedTestRunner:
         # ProcessResult
         for r in results:
             if isinstance(r, Exception):
-                model_result.results.append(TestRunResult(
-                    sample_id="error",
-                    question="",
-                    correct_answer="",
-                    predicted_answer="",
-                    is_correct=False,
-                    error=str(r)
-                ))
+                model_result.results.append(
+                    TestRunResult(
+                        sample_id="error",
+                        question="",
+                        correct_answer="",
+                        predicted_answer="",
+                        is_correct=False,
+                        error=str(r),
+                    )
+                )
                 model_result.error_samples += 1
             else:
                 model_result.results.append(r)
@@ -315,9 +323,10 @@ class UnifiedTestRunner:
                     "predicted_answer": r.predicted_answer,
                     "model_response": r.full_response,
                     "reasoning_content": r.reasoning_content,
-                    "error": r.error
+                    "error": r.error,
                 }
-                for r in model_result.results if not r.is_correct
+                for r in model_result.results
+                if not r.is_correct
             ]
             if failed_samples:
                 model_result.failure_report = self.failure_analyzer.analyze_batch(
@@ -327,22 +336,19 @@ class UnifiedTestRunner:
         return model_result
 
     async def _evaluate_single(
-        self,
-        sample: dict[str, Any],
-        get_response_func: Callable,
-        config: TestConfig
+        self, sample: dict[str, Any], get_response_func: Callable, config: TestConfig
     ) -> TestRunResult:
         """评估单 samples"""
-        sample_id = sample.get('sample_id', '')
-        question = sample.get('question', '')
-        correct_answer = sample.get('correct_answer', '')
+        sample_id = sample.get("sample_id", "")
+        question = sample.get("question", "")
+        correct_answer = sample.get("correct_answer", "")
 
         result = TestRunResult(
             sample_id=sample_id,
             question=question,
             correct_answer=correct_answer,
             predicted_answer="",
-            is_correct=False
+            is_correct=False,
         )
 
         try:
@@ -361,13 +367,13 @@ class UnifiedTestRunner:
             if response_data.success:
                 data = response_data.result
                 if isinstance(data, dict):
-                    result.full_response = data.get('content', '')
-                    result.reasoning_content = data.get('reasoning_content', '')
-                    result.ttft_ms = data.get('ttft_ms', 0)
-                    result.ttut_ms = data.get('ttut_ms', 0)
-                    result.input_tokens = data.get('input_tokens', 0)
-                    result.output_tokens = data.get('output_tokens', 0)
-                    result.reasoning_tokens = data.get('reasoning_tokens', 0)
+                    result.full_response = data.get("content", "")
+                    result.reasoning_content = data.get("reasoning_content", "")
+                    result.ttft_ms = data.get("ttft_ms", 0)
+                    result.ttut_ms = data.get("ttut_ms", 0)
+                    result.input_tokens = data.get("input_tokens", 0)
+                    result.output_tokens = data.get("output_tokens", 0)
+                    result.reasoning_tokens = data.get("reasoning_tokens", 0)
                 else:
                     result.full_response = str(data)
             else:
@@ -376,19 +382,16 @@ class UnifiedTestRunner:
 
             # ParseAnswer
             parse_result = self.answer_parser.parse(
-                result.full_response,
-                AnswerType.NUMBER,
-                correct_answer
+                result.full_response, AnswerType.NUMBER, correct_answer
             )
             result.predicted_answer = parse_result.extracted_answer
             result.answer_confidence = parse_result.confidence
 
             # Check正确性
             from .smart_answer_parser import compare_answers
+
             result.is_correct, _ = compare_answers(
-                parse_result.normalized_value,
-                correct_answer,
-                AnswerType.NUMBER
+                parse_result.normalized_value, correct_answer, AnswerType.NUMBER
             )
 
             # 推理Quality Assessment
@@ -398,7 +401,7 @@ class UnifiedTestRunner:
                     reasoning=result.reasoning_content,
                     final_answer=result.predicted_answer,
                     correct_answer=correct_answer,
-                    is_answer_correct=result.is_correct
+                    is_answer_correct=result.is_correct,
                 )
                 result.reasoning_quality = reasoning_eval.quality_score.overall
 
@@ -415,7 +418,9 @@ class UnifiedTestRunner:
             return
 
         # Accuracy
-        model_result.accuracy = model_result.correct_samples / model_result.total_samples
+        model_result.accuracy = (
+            model_result.correct_samples / model_result.total_samples
+        )
 
         # Latency
         latencies = [r.latency_ms for r in valid_results if r.latency_ms > 0]
@@ -435,11 +440,17 @@ class UnifiedTestRunner:
         # Tokens
         model_result.total_input_tokens = sum(r.input_tokens for r in valid_results)
         model_result.total_output_tokens = sum(r.output_tokens for r in valid_results)
-        model_result.total_reasoning_tokens = sum(r.reasoning_tokens for r in valid_results)
+        model_result.total_reasoning_tokens = sum(
+            r.reasoning_tokens for r in valid_results
+        )
 
-        total_output = model_result.total_output_tokens + model_result.total_reasoning_tokens
+        total_output = (
+            model_result.total_output_tokens + model_result.total_reasoning_tokens
+        )
         if total_output > 0:
-            model_result.avg_reasoning_ratio = model_result.total_reasoning_tokens / total_output
+            model_result.avg_reasoning_ratio = (
+                model_result.total_reasoning_tokens / total_output
+            )
 
         # TPS
         tps_values = []
@@ -450,9 +461,13 @@ class UnifiedTestRunner:
             model_result.avg_tps = sum(tps_values) / len(tps_values)
 
         # 推理质量
-        quality_scores = [r.reasoning_quality for r in valid_results if r.reasoning_quality > 0]
+        quality_scores = [
+            r.reasoning_quality for r in valid_results if r.reasoning_quality > 0
+        ]
         if quality_scores:
-            model_result.avg_reasoning_quality = sum(quality_scores) / len(quality_scores)
+            model_result.avg_reasoning_quality = sum(quality_scores) / len(
+                quality_scores
+            )
 
     def _calculate_comparison(self, result: TestSuiteResult):
         """CalculateModel比较Result"""
@@ -482,13 +497,13 @@ class UnifiedTestRunner:
             "total_models": len(models),
             "best_accuracy": {
                 "model": result.best_accuracy_model,
-                "value": best_acc.accuracy
+                "value": best_acc.accuracy,
             },
             "accuracy_ranking": sorted(
                 [(f"{m.platform}:{m.model_id}", m.accuracy) for m in models],
                 key=lambda x: x[1],
-                reverse=True
-            )
+                reverse=True,
+            ),
         }
 
     async def _generate_reports(self, result: TestSuiteResult, config: TestConfig):
@@ -502,14 +517,20 @@ class UnifiedTestRunner:
         # JSON 报告
         if config.output.json_export:
             import json
+
             json_path = output_dir / f"{base_name}.json"
-            with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump(self._result_to_dict(result, config), f, ensure_ascii=False, indent=2)
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    self._result_to_dict(result, config),
+                    f,
+                    ensure_ascii=False,
+                    indent=2,
+                )
 
         # Markdown 报告
         if config.output.markdown_export:
             md_path = output_dir / f"{base_name}.md"
-            with open(md_path, 'w', encoding='utf-8') as f:
+            with open(md_path, "w", encoding="utf-8") as f:
                 f.write(self._generate_markdown_report(result))
 
     def _result_to_dict(self, result: TestSuiteResult, config: TestConfig) -> dict:
@@ -528,10 +549,10 @@ class UnifiedTestRunner:
                     "total_samples": v.total_samples,
                     "correct_samples": v.correct_samples,
                     "avg_latency_ms": v.avg_latency_ms,
-                    "avg_reasoning_quality": v.avg_reasoning_quality
+                    "avg_reasoning_quality": v.avg_reasoning_quality,
                 }
                 for k, v in result.model_results.items()
-            }
+            },
         }
 
     def _generate_markdown_report(self, result: TestSuiteResult) -> str:
@@ -545,30 +566,30 @@ class UnifiedTestRunner:
             "## Result汇总",
             "",
             "| Model | Accuracy | AverageLatency | 推理质量 |",
-            "|------|--------|----------|----------|"
+            "|------|--------|----------|----------|",
         ]
 
         for _key, m in result.model_results.items():
             lines.append(
-                f"| {m.model_id} | {m.accuracy*100:.1f}% | {m.avg_latency_ms:.0f}ms | {m.avg_reasoning_quality:.1f}/10 |"
+                f"| {m.model_id} | {m.accuracy * 100:.1f}% | {m.avg_latency_ms:.0f}ms | {m.avg_reasoning_quality:.1f}/10 |"
             )
 
-        lines.extend([
-            "",
-            "## Best表现",
-            "",
-            f"- **HighestAccuracy**: {result.best_accuracy_model}",
-            f"- **LowestLatency**: {result.best_latency_model}",
-            f"- **Best推理质量**: {result.best_quality_model}",
-        ])
+        lines.extend(
+            [
+                "",
+                "## Best表现",
+                "",
+                f"- **HighestAccuracy**: {result.best_accuracy_model}",
+                f"- **LowestLatency**: {result.best_latency_model}",
+                f"- **Best推理质量**: {result.best_quality_model}",
+            ]
+        )
 
         return "\n".join(lines)
 
 
 async def run_test_from_config(
-    config_path: str,
-    samples: list[dict],
-    response_funcs: dict[str, Callable]
+    config_path: str, samples: list[dict], response_funcs: dict[str, Callable]
 ) -> TestSuiteResult:
     """便捷函数：从ConfigureRun Test"""
     runner = UnifiedTestRunner()

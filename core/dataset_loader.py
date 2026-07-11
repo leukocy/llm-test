@@ -29,8 +29,14 @@ class DatasetLoader:
                         or tries to access files outside the datasets directory.
         """
         # Check for path traversal patterns（含 Windows 盘符绝对路径 C:\...）
-        if ".." in filename or filename.startswith(("/", "\\")) or _WIN_ABS_PATH_RE.match(filename):
-            raise ValueError("Path traversal detected: filename must be a simple name, not a path")
+        if (
+            ".." in filename
+            or filename.startswith(("/", "\\"))
+            or _WIN_ABS_PATH_RE.match(filename)
+        ):
+            raise ValueError(
+                "Path traversal detected: filename must be a simple name, not a path"
+            )
 
         # Join with datasets directory and resolve to absolute path
         full_path = os.path.abspath(os.path.join(self.datasets_dir, filename))
@@ -38,7 +44,9 @@ class DatasetLoader:
         # Verify the resolved path is within the datasets directory
         # （用 commonpath 严格判断，比 startswith 更稳，避免 /foo/bar 与 /foo/bar2 误判）
         try:
-            inside = os.path.commonpath([full_path, self.datasets_dir]) == self.datasets_dir
+            inside = (
+                os.path.commonpath([full_path, self.datasets_dir]) == self.datasets_dir
+            )
         except ValueError:
             # 跨盘符等无法比较的情况，一律拒绝
             inside = False
@@ -56,15 +64,17 @@ class DatasetLoader:
             return []
 
         for f in os.listdir(self.datasets_dir):
-            if f.endswith(('.csv', '.json')):
+            if f.endswith((".csv", ".json")):
                 path = self._get_file_path(f)
                 try:
                     size_bytes = os.path.getsize(path)
-                    datasets.append({
-                        "filename": f,
-                        "size": f"{size_bytes / 1024:.1f} KB",
-                        "type": f.split('.')[-1].upper()
-                    })
+                    datasets.append(
+                        {
+                            "filename": f,
+                            "size": f"{size_bytes / 1024:.1f} KB",
+                            "type": f.split(".")[-1].upper(),
+                        }
+                    )
                 except OSError:
                     continue
         return datasets
@@ -74,7 +84,7 @@ class DatasetLoader:
         Validate that the dataset has the required structure.
         Must contain a 'prompt' column.
         """
-        return 'prompt' in df.columns
+        return "prompt" in df.columns
 
     def save_dataset(self, file_obj, filename: str) -> Union[str, None]:
         """
@@ -83,9 +93,9 @@ class DatasetLoader:
         """
         try:
             # Determine file type and load into DataFrame for validation
-            if filename.endswith('.csv'):
+            if filename.endswith(".csv"):
                 df = pd.read_csv(file_obj)
-            elif filename.endswith('.json'):
+            elif filename.endswith(".json"):
                 df = pd.read_json(file_obj)
             else:
                 return "Unsupported file format. Please upload .csv or .json."
@@ -96,12 +106,12 @@ class DatasetLoader:
 
             # Save to disk
             save_path = self._get_file_path(filename)
-            if filename.endswith('.csv'):
+            if filename.endswith(".csv"):
                 df.to_csv(save_path, index=False)
-            elif filename.endswith('.json'):
-                df.to_json(save_path, orient='records', indent=2)
+            elif filename.endswith(".json"):
+                df.to_json(save_path, orient="records", indent=2)
 
-            return None # Success
+            return None  # Success
 
         except Exception as e:
             return f"Error saving dataset: {str(e)}"
@@ -113,9 +123,9 @@ class DatasetLoader:
             return None
 
         try:
-            if filename.endswith('.csv'):
+            if filename.endswith(".csv"):
                 return pd.read_csv(path)
-            elif filename.endswith('.json'):
+            elif filename.endswith(".json"):
                 return pd.read_json(path)
         except Exception as e:
             print(f"Error loading dataset {filename}: {e}")

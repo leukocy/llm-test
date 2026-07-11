@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 600.0
 ULTRA_LONG_CONTEXT_TIMEOUTS: tuple[tuple[int, float], ...] = (
     (1_000_000, 7200.0),
@@ -79,8 +78,16 @@ class LLMProvider(ABC):
         self.model_id = model_id
 
     @abstractmethod
-    async def get_completion(self, client, session_id: int, prompt: str = "", max_tokens: int = 256,
-                            log_callback=None, messages: list[dict] | None = None, **kwargs) -> dict[str, Any]:
+    async def get_completion(
+        self,
+        client,
+        session_id: int,
+        prompt: str = "",
+        max_tokens: int = 256,
+        log_callback=None,
+        messages: list[dict] | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         """
         Get completion from the LLM provider.
 

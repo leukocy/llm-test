@@ -58,6 +58,7 @@ class ResourceMonitor:
         self._end_ts: float | None = None
         self._nvml_ok = False
         self._nvml_handles: list[Any] = []
+        self._gpu_static_info: list[dict[str, Any]] = []  # 一次性:power_limit/max_clock
 
     # ------------------------------------------------------------------
     # 生命周期
@@ -73,6 +74,7 @@ class ResourceMonitor:
         # 预热 CPU% 指标（psutil 首次调用返回 0.0，先喂一次基准）
         try:
             import psutil
+
             psutil.cpu_percent(interval=None)
         except Exception:  # noqa: BLE001
             pass
@@ -110,9 +112,10 @@ class ResourceMonitor:
         # CPU / 内存
         try:
             import psutil
+
             sample["cpu_percent"] = psutil.cpu_percent(interval=None)
             mem = psutil.virtual_memory()
-            sample["system_memory_gb"] = round(mem.used / 1024 ** 3, 3)
+            sample["system_memory_gb"] = round(mem.used / 1024**3, 3)
         except Exception:  # noqa: BLE001
             sample["cpu_percent"] = None
             sample["system_memory_gb"] = None
@@ -134,7 +137,8 @@ class ResourceMonitor:
         if not self._nvml_ok or not self._nvml_handles:
             return result
         try:
-            import pynvml  # type: ignore
+            import pynvml
+
             utils = []
             vram_used = 0.0
             power_w = 0.0
@@ -152,7 +156,7 @@ class ResourceMonitor:
                 try:
                     mi = pynvml.nvmlDeviceGetMemoryInfo(handle)
                     vram_used += mi.used
-                    g["vram_used_gb"] = round(mi.used / 1024 ** 3, 2)
+                    g["vram_used_gb"] = round(mi.used / 1024**3, 2)
                 except Exception:  # noqa: BLE001
                     pass
                 try:
@@ -168,11 +172,15 @@ class ResourceMonitor:
                 except Exception:  # noqa: BLE001
                     pass
                 try:
-                    g["sm_clock_mhz"] = int(pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM))
+                    g["sm_clock_mhz"] = int(
+                        pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
+                    )
                 except Exception:  # noqa: BLE001
                     pass
                 try:
-                    g["mem_clock_mhz"] = int(pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM))
+                    g["mem_clock_mhz"] = int(
+                        pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM)
+                    )
                 except Exception:  # noqa: BLE001
                     pass
                 try:
@@ -181,23 +189,50 @@ class ResourceMonitor:
                     pass
                 try:
                     g["pcie_rx_mbs"] = round(
-                        pynvml.nvmlDeviceGetPcieThroughput(handle, pynvml.NVML_PCIE_UTIL_RX_BYTES) / 1024.0, 2)
+                        pynvml.nvmlDeviceGetPcieThroughput(handle, pynvml.NVML_PCIE_UTIL_RX_BYTES)
+                        / 1024.0,
+                        2,
+                    )
                 except Exception:  # noqa: BLE001
                     pass
                 try:
                     g["pcie_tx_mbs"] = round(
-                        pynvml.nvmlDeviceGetPcieThroughput(handle, pynvml.NVML_PCIE_UTIL_TX_BYTES) / 1024.0, 2)
+                        pynvml.nvmlDeviceGetPcieThroughput(handle, pynvml.NVML_PCIE_UTIL_TX_BYTES)
+                        / 1024.0,
+                        2,
+                    )
                 except Exception:  # noqa: BLE001
                     pass
                 try:
                     g["throttle"] = _decode_throttle(
-                        pynvml.nvmlDeviceGetCurrentClocksThrottleReasons(handle))
+                        pynvml.nvmlDeviceGetCurrentClocksThrottleReasons(handle)
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+                # NVLink 吞吐量(每条 link 求和;无 NVLink 时跳过)
+                try:
+                    nvlink_rx = 0.0
+                    nvlink_tx = 0.0
+                    for link in range(pynvml.nvmlDeviceGetNvLinkVersion(handle) and 1 or 0):
+                        try:
+                            nvlink_rx += pynvml.nvmlDeviceGetNvLinkUtilizationCounter(
+                                handle, link, 0
+                            )
+                            nvlink_tx += pynvml.nvmlDeviceGetNvLinkUtilizationCounter(
+                                handle, link, 1
+                            )
+                        except Exception:  # noqa: BLE001
+                            pass
+                    if nvlink_rx or nvlink_tx:
+                        g["nvlink_throughput"] = round(
+                            (nvlink_rx + nvlink_tx) / 1e6, 2
+                        )  # MB/s approx
                 except Exception:  # noqa: BLE001
                     pass
                 per_gpu.append(g)
             if utils:
                 result["gpu_util_percent"] = round(sum(utils) / len(utils), 1)
-            result["gpu_vram_gb"] = round(vram_used / 1024 ** 3, 3) if vram_used else None
+            result["gpu_vram_gb"] = round(vram_used / 1024**3, 3) if vram_used else None
             result["gpu_power_w"] = round(power_w, 1) if power_w else None
             result["gpu_temp_c"] = temp_c or None
             result["per_gpu"] = per_gpu
@@ -211,14 +246,18 @@ class ResourceMonitor:
     def _init_nvml(self) -> None:
         try:
             try:
-                import pynvml  # type: ignore
+                import pynvml
             except ImportError:
-                from nvidia_ml_py import pynvml  # type: ignore  # noqa: F401
+                from nvidia_ml_py import pynvml  # noqa: F401
             pynvml.nvmlInit()
             count = pynvml.nvmlDeviceGetCount()
             indices = self.gpu_indices if self.gpu_indices is not None else range(count)
-            self._nvml_handles = [pynvml.nvmlDeviceGetHandleByIndex(i) for i in indices if 0 <= i < count]
+            self._nvml_handles = [
+                pynvml.nvmlDeviceGetHandleByIndex(i) for i in indices if 0 <= i < count
+            ]
             self._nvml_ok = bool(self._nvml_handles)
+            # 一次性采集静态 GPU 信息:功耗上限 / 最大 SM/mem 时钟
+            self._gpu_static_info = self._capture_gpu_static_info(pynvml)
         except Exception as e:  # noqa: BLE001
             # 无 GPU / 无驱动 / 无 nvidia-ml-py：降级为仅 CPU/内存
             logger.debug(f"NVML 不可用，仅采样 CPU/内存: {e}")
@@ -229,16 +268,49 @@ class ResourceMonitor:
         if not self._nvml_ok:
             return
         try:
-            import pynvml  # type: ignore
+            import pynvml
+
             pynvml.nvmlShutdown()
         except Exception:  # noqa: BLE001
             pass
 
+    def _capture_gpu_static_info(self, pynvml) -> list[dict[str, Any]]:
+        """一次性采集每张卡的功耗上限与最大时钟(不随采样循环变化)。"""
+        info: list[dict[str, Any]] = []
+        for i, h in enumerate(self._nvml_handles):
+            entry: dict[str, Any] = {"index": i}
+            try:
+                entry["power_limit_w"] = round(
+                    pynvml.nvmlDeviceGetPowerManagementLimit(h) / 1000.0, 1
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                entry["max_sm_clock_mhz"] = pynvml.nvmlDeviceGetMaxClockInfo(
+                    h, pynvml.NVML_CLOCK_SM
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                entry["max_mem_clock_mhz"] = pynvml.nvmlDeviceGetMaxClockInfo(
+                    h, pynvml.NVML_CLOCK_MEM
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            info.append(entry)
+        return info
+
     # ------------------------------------------------------------------
     # 汇总
     # ------------------------------------------------------------------
-    METRIC_KEYS = ("cpu_percent", "system_memory_gb", "gpu_util_percent",
-                   "gpu_vram_gb", "gpu_power_w", "gpu_temp_c")
+    METRIC_KEYS = (
+        "cpu_percent",
+        "system_memory_gb",
+        "gpu_util_percent",
+        "gpu_vram_gb",
+        "gpu_power_w",
+        "gpu_temp_c",
+    )
 
     def _summarize(self) -> dict[str, Any]:
         samples = self._samples
@@ -262,9 +334,15 @@ class ResourceMonitor:
         # per-GPU 峰值(分卡归因:哪张卡最热/最耗电/PCIe 最忙/是否降频)
         per_gpu_peaks = self._per_gpu_peaks(samples)
         # 全局观测到的 throttle 原因(去重)
-        throttle_seen = sorted({t for s in samples for g in (s.get("per_gpu") or [])
-                                for t in ([g["throttle"]] if g.get("throttle") and g["throttle"] != "none" else [])
-                                if t})
+        throttle_seen = sorted(
+            {
+                t
+                for s in samples
+                for g in (s.get("per_gpu") or [])
+                for t in ([g["throttle"]] if g.get("throttle") and g["throttle"] != "none" else [])
+                if t
+            }
+        )
 
         timeline = self._downsample(samples)
         gpu_available = any(s.get("gpu_util_percent") is not None for s in samples)
@@ -278,16 +356,24 @@ class ResourceMonitor:
             "means": means,
             "per_gpu_peaks": per_gpu_peaks,
             "throttle_reasons_seen": throttle_seen,
+            "gpu_static_info": self._gpu_static_info,
             "timeline": timeline,
         }
 
     def _per_gpu_peaks(self, samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """每张卡的峰值:最高温/最大功耗/最大利用率/PCIe 峰值/观测到的降频。"""
         by_idx: dict[int, dict[str, Any]] = {}
-        peak_keys = ("util", "power_w", "temp_c", "sm_clock_mhz", "mem_clock_mhz",
-                     "pcie_rx_mbs", "pcie_tx_mbs")
+        peak_keys = (
+            "util",
+            "power_w",
+            "temp_c",
+            "sm_clock_mhz",
+            "mem_clock_mhz",
+            "pcie_rx_mbs",
+            "pcie_tx_mbs",
+        )
         for s in samples:
-            for g in (s.get("per_gpu") or []):
+            for g in s.get("per_gpu") or []:
                 idx = g.get("index")
                 if idx is None:
                     continue

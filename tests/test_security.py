@@ -179,7 +179,7 @@ class TestPathTraversal:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a test file
             test_file = os.path.join(tmpdir, "test.csv")
-            with open(test_file, 'w') as f:
+            with open(test_file, "w") as f:
                 f.write("test")
 
             loader = DatasetLoader(tmpdir)

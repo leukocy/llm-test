@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# ruff: noqa: F601
 """
 Phase 5: Final sweep – translate all remaining Chinese in UI files.
 
@@ -15,21 +14,20 @@ import re
 
 TRANSLATIONS = {
     # === comparison_page.py ===
-    " History对比 (Historical Comparison)": " Historical Comparison",
+    "History对比 (Historical Comparison)": "Historical Comparison",
     "暂No History。请先运行一些基准Test。": "No history yet. Please run some benchmark tests first.",
     "选择要对比记录": "Select Records to Compare",
     "选择记录 (支持多选)": "Select Records (multi-select)",
     "Please select至少两记录进行对比。": "Please select at least two records to compare.",
     "no法Load选in记录。": "Unable to load selected records.",
     "选in记录in没has包含has效test data。": "Selected records do not contain valid test data.",
-    " 对比图表": " Comparison Charts",
+    "对比图表": "Comparison Charts",
     "综合性能对比 (Radar Chart)": "Overall Performance Comparison (Radar Chart)",
     "多Model综合性能对比": "Multi-Model Performance Comparison",
     "单 items指标详情": "Individual Metric Details",
     "选择Comparison Metrics": "Select Comparison Metric",
     "指标 '{metric}' in选inDatainnot存in。": "Metric '{metric}' does not exist in selected data.",
-    " 查看详细Data (Detailed Data)": " View Detailed Data",
-
+    "查看详细Data (Detailed Data)": "View Detailed Data",
     # === test_runner.py ===
     "Configure字典，包含 api_base_url, model_id, api_key etc.": "Configuration dict containing api_base_url, model_id, api_key, etc.",
     "Execute test并管理Status": "Execute test and manage status",
@@ -39,10 +37,10 @@ TRANSLATIONS = {
     "传递给Test函数参数": "Parameters passed to test function",
     "Test ResultsData框": "Test results DataFrame",
     "Checkis否isRestore模式": "Check if in resume mode",
-    " 从进度Resume Test: ": " Resuming test from saved progress: ",
+    "从进度Resume Test: ": "Resuming test from saved progress: ",
     "RestoreCompletedResult": "Restore completed results",
     "Log窗口已Initialize... etc.待Test started": "Log window initialized... waiting for test to start",
-    " 输出预览区域已就绪，etc.待首 requests完成...": " Output preview area ready, waiting for first request to complete...",
+    "输出预览区域已就绪，etc.待首 requests完成...": "Output preview area ready, waiting for first request to complete...",
     "# 捕获系统信息": "# Capture system info",
     "捕获系统信息": "Capture system information",
     "# CalculateTotal Requests": "# Calculate total requests",
@@ -69,26 +67,22 @@ TRANSLATIONS = {
     "# Initialize运行器": "# Initialize runner",
     "# CreateFilename": "# Create filename",
     "# Create UI 组件": "# Create UI components",
-
     # === dashboard_components.py ===
-    " 实时Test指标": " Real-time Test Metrics",
-    " 活跃请求": " Active Requests",
+    "实时Test指标": "Real-time Test Metrics",
+    "活跃请求": "Active Requests",
     "当前currentlyProcess请求数": "Number of requests currently being processed",
     "succeeded完成请求总数": "Total successfully completed requests",
-    "[ERROR] 失败": "[ERROR] Failed",
+    "失败": "Failed",
     "失败请求总数": "Total failed requests",
     "请求Success Rate百分比": "Request success rate percentage",
     "Average首Token时间": "Average time to first token",
     "Average每secondsGenerateToken数": "Average tokens generated per second",
     "etc.待test data...": "Waiting for test data...",
     "活跃": "Active",
-    "完成": "Completed",
-    "失败": "Failed",
-    " 请求StatusGrid": " Request Status Grid",
+    "请求StatusGrid": "Request Status Grid",
     "暂no请求": "No requests yet",
-
     # === dataset_manager.py ===
-    " Dataset管理 (Dataset Management)": " Dataset Management",
+    "Dataset管理 (Dataset Management)": "Dataset Management",
     "on传新Dataset": "Upload New Dataset",
     "选择 CSV or JSON 文件": "Select a CSV or JSON file",
     "SaveDataset": "Save Dataset",
@@ -97,14 +91,13 @@ TRANSLATIONS = {
     "Datasetmust包含 'prompt' column.optional列: 'expected_output', 'id'。": "Dataset must contain a 'prompt' column. Optional columns: 'expected_output', 'id'.",
     "SavedDataset": "Saved Datasets",
     "暂noDataset。请on传一新Dataset。": "No datasets yet. Please upload a new dataset.",
-    " 预览": " Preview",
+    "预览": "Preview",
     "已Delete ": "Deleted ",
     "Delete失败": "Delete failed",
-    " 预览: ": " Preview: ",
+    "预览: ": "Preview: ",
     "Display前 ": "Showing first ",
     " 行": " rows",
     "no法Load预览": "Unable to load preview",
-
     # === thinking_components.py ===
     "Phase 6: UI 增强组件 (Enhanced UI Components)": "Phase 6: Enhanced UI Components",
     "提供推理Model专用 UI 组件：": "Provides specialized UI components for reasoning models:",
@@ -121,7 +114,7 @@ TRANSLATIONS = {
     "is否defaultExpand": "Whether to expand by default",
     "最大高度 (px)": "Maximum height (px)",
     " 字符)": " chars)",
-    " 最终输出:": " Final Output:",
+    "最终输出:": "Final Output:",
     "Render思考指标卡片": "Render thinking metrics cards",
     "指标字典or ThinkingMetricsResult": "Metrics dict or ThinkingMetricsResult",
     "每行卡片数": "Cards per row",
@@ -169,18 +162,17 @@ TRANSLATIONS = {
     "is否currently流式接收": "Whether currently streaming",
     "is否Display推理内容": "Whether to show reasoning content",
     "# Status指示器": "# Status indicator",
-    " 接收in...": " Receiving...",
-    "[OK] 完成": "[OK] Complete",
+    "接收in...": "Receiving...",
+    "完成": "Complete",
     "# 推理预览": "# Reasoning preview",
     "# 正文预览": "# Content preview",
-    " 输出内容:": " Output Content:",
+    "输出内容:": "Output Content:",
     "Render质量Score卡片": "Render quality score card",
     "综合分": "Overall score",
     "准确性": "Accuracy",
     "连贯性": "Coherence",
     "完整性": "Completeness",
     "综合Score / 10": "Overall Score / 10",
-
     # === log_viewer.py ===
     "Render增强Log查看器": "Render enhanced log viewer",
     "BenchmarkLogger实例": "BenchmarkLogger instance",
@@ -194,21 +186,21 @@ TRANSLATIONS = {
     "# Display彩色文本Log": "# Display colored text log",
     "Render完整Log查看器": "Render full log viewer",
     "# Statistics信息卡片": "# Statistics info cards",
-    " 总Log": " Total Logs",
+    "总Log": "Total Logs",
     "# Filter控件": "# Filter controls",
     "选择要DisplayLog Level": "Select log levels to display",
-    " 搜索": " Search",
+    "搜索": "Search",
     "输入关键词搜索...": "Enter keywords to search...",
     "inLog消息in搜索": "Search within log messages",
     "Display指标": "Show Metrics",
     "inLoginDisplayPerformance Metrics": "Show performance metrics in logs",
     "# ApplyFilter": "# Apply filters",
     "# DisplayLog": "# Display logs",
-    " 没has匹配Log": " No matching logs",
+    "没has匹配Log": "No matching logs",
     "# Options卡视图": "# Tab views",
-    " 文本视图": " Text View",
-    " 表格视图": " Table View",
-    " Statistical analysis": " Statistical Analysis",
+    "文本视图": "Text View",
+    "表格视图": "Table View",
+    "Statistical analysis": "Statistical Analysis",
     "# 文本视图 - 带颜色and格式": "# Text view - with colors and formatting",
     "# 表格视图": "# Table view",
     "Render彩色文本Log": "Render colored text log",
@@ -219,34 +211,32 @@ TRANSLATIONS = {
     "级别": "Level",
     "消息": "Message",
     "RenderLog分析": "Render log analytics",
-    " Log Level分布": " Log Level Distribution",
+    "Log Level分布": "Log Level Distribution",
     "数量": "Count",
     "暂noLogData": "No log data yet",
     "# 时间线分析": "# Timeline analysis",
-    " Log Time线": " Log Timeline",
+    "Log Time线": "Log Timeline",
     "# 按minutesStatisticsLog数量": "# Count logs per minute",
     "Log活动时间线": "Log Activity Timeline",
     "# ErrorandWarning详情": "# Error and warning details",
-    "[WARNING] 问题详情": "[WARNING] Issue Details",
+    "问题详情": "Issue Details",
     "最近5条": "last 5",
     "Performance Metrics摘要": "Performance Metrics Summary",
-    " Performance Metrics摘要": " Performance Metrics Summary",
     "范围: ": "Range: ",
     "CreateLogDownload button": "Create log download buttons",
-    " ExportLog": " Export Logs",
+    "ExportLog": "Export Logs",
     "# JSONExport": "# JSON export",
-    " under载 JSON": " Download JSON",
+    "under载 JSON": "Download JSON",
     "结构化JSON格式，包含所has字段": "Structured JSON format with all fields",
     "# 文本Export": "# Text export",
-    " under载 TXT": " Download TXT",
+    "under载 TXT": "Download TXT",
     "可读文本格式": "Readable text format",
     "# CSVExport": "# CSV export",
-    " under载 CSV": " Download CSV",
+    "under载 CSV": "Download CSV",
     "CSV格式，可用Excel打开": "CSV format, can be opened with Excel",
-
     # === export.py ===
-    " under载 Excel 报告": " Download Excel Report",
-    " under载 HTML 报告": " Download HTML Report",
+    "under载 Excel 报告": "Download Excel Report",
+    "under载 HTML 报告": "Download HTML Report",
     "图表 ": "Chart ",
     "Data表 ": "Data Table ",
     "Generate时间: ": "Generated: ",
@@ -278,7 +268,7 @@ TRANSLATIONS = {
     "Model name": "Model name",
     "Test时间 (optional，default当前时间)": "Test time (optional, defaults to current time)",
     "性能报告图表Export failed: ": "Performance report chart export failed: ",
-    " under载静态图表": " Download Static Chart",
+    "under载静态图表": "Download Static Chart",
     "Create静态图表under载链接": "Create static chart download link",
     "图表字节流": "Chart byte stream",
     "under载Filename": "Download filename",
@@ -319,14 +309,12 @@ TRANSLATIONS = {
     "Average每TokenGenerate时间 (TPOT)": "Average Time Per Output Token (TPOT)",
     "# Checkis否至少has 1 has效面板": "# Check if at least 1 valid panel exists",
     "汇总图表Export failed: ": "Summary chart export failed: ",
-
     # === history_browser.py ===
     "History浏览 UI": "History Browser UI",
     "提供TestHistory浏览、搜索、Export功能。": "Provides test history browsing, search, and export functionality.",
     "RenderHistory浏览器": "Render history browser",
-    " TestHistory": " Test History",
+    "TestHistory": "Test History",
     "# 搜索and筛选": "# Search and filter",
-    "搜索": "Search",
     "输入ModelID、Labelor备注...": "Enter model ID, label, or notes...",
     "全部": "All",
     "时间范围": "Time Range",
@@ -354,8 +342,8 @@ TRANSLATIONS = {
     "Render单 tests运行卡片": "Render single test run card",
     "# Status颜色": "# Status colors",
     "# 操作按钮": "# Action buttons",
-    " 详情": " Details",
-    " 指标": " Metrics",
+    "详情": "Details",
+    "指标": "Metrics",
     "已Delete": "Deleted",
     "DisplayTest运行Detailed Metrics": "Display detailed test run metrics",
     "# GetResultStatistics": "# Get result statistics",
@@ -365,7 +353,7 @@ TRANSLATIONS = {
     "ExportTest运行": "Export test run",
     "已Export: ": "Exported: ",
     "RenderData import面板": "Render data import panel",
-    " Import历史Data": " Import Historical Data",
+    "Import历史Data": "Import Historical Data",
     "will现has CSV Test ResultsImport到Databasein": "Import existing CSV test results into the database",
     "# 选择Import源": "# Select import source",
     "Import源": "Import Source",
@@ -378,7 +366,6 @@ TRANSLATIONS = {
     "开始Import": "Start Import",
     "Importin...": "Importing...",
     "succeededImport ": "Successfully imported ",
-    " 条记录": " records",
     "目录路径": "Directory Path",
     "For example: raw_data/": "e.g.: raw_data/",
     "扫描并Import": "Scan and Import",
@@ -388,7 +375,7 @@ TRANSLATIONS = {
     "查看Error (": "View Errors (",
     " 条)": " items)",
     "Render仪表盘": "Render dashboard",
-    " 仪表盘": " Dashboard",
+    "仪表盘": "Dashboard",
     "# 总览": "# Overview",
     "Database大小": "Database Size",
     "Backup数": "Backups",
@@ -398,9 +385,8 @@ TRANSLATIONS = {
     "#### 按Test TypeStatistics": "#### Statistics by Test Type",
     "# 最近Test": "# Recent tests",
     "#### 最近Test": "#### Recent Tests",
-
     # === markdown_summary.py ===
-    "###  Test摘要 (Summary)\\n\\n": "###  Test Summary\\n\\n",
+    "### Test摘要 (Summary)\\n\\n": "### Test Summary\\n\\n",
     "总Data量": "Total Data Volume",
     "输入 ": "Input ",
     " tokens, 输出 ": " tokens, Output ",
@@ -461,10 +447,9 @@ TRANSLATIONS = {
     "TTFT 范围": "TTFT Range",
     "Concurrency ": "Concurrency ",
     " × onunder文 ": " × context ",
-
     # === evaluation_dashboard.py ===
     "Streamlit 组件，用于VisualizationEvaluationResult。": "Streamlit component for visualizing evaluation results.",
-    " EvaluationResultDashboard": " Evaluation Results Dashboard",
+    "EvaluationResultDashboard": "Evaluation Results Dashboard",
     "Render完整EvaluationResultDashboard": "Render full evaluation results dashboard",
     "EvaluationResult字典，包含 models, summary etc.字段": "Evaluation results dict containing models, summary, etc.",
     "Dashboard标题": "Dashboard title",
@@ -474,33 +459,33 @@ TRANSLATIONS = {
     "# Model对比表格": "# Model comparison table",
     "# 图表区域": "# Chart area",
     "RenderModel Comparison表格": "Render model comparison table",
-    " Model性能对比": " Model Performance Comparison",
+    "Model性能对比": "Model Performance Comparison",
     "平台": "Platform",
     "正确数": "Correct",
     "AverageLatency": "Avg Latency",
     "推理质量": "Reasoning Quality",
     "# 高亮Best值": "# Highlight best values",
     "RenderAccuracy对比图": "Render accuracy comparison chart",
-    " Accuracy对比": " Accuracy Comparison",
+    "Accuracy对比": "Accuracy Comparison",
     "# 颜色方案": "# Color scheme",
     "RenderLatency对比图": "Render latency comparison chart",
-    " Latency对比": " Latency Comparison",
+    "Latency对比": "Latency Comparison",
     "AverageLatency (ms)": "Average Latency (ms)",
     "Render失败分析面板": "Render failure analysis panel",
-    "[ERROR] 失败分析": "[ERROR] Failure Analysis",
+    "失败分析": "Failure Analysis",
     "# 失败率": "# Failure rate",
     "失败率": "Failure Rate",
     "失败Sample count": "Failed Samples",
     "# 类别分布Pie Chart": "# Category distribution pie chart",
     "# 改进Suggestion": "# Improvement suggestions",
-    " 改进Suggestion:": " Improvement Suggestions:",
+    "改进Suggestion:": "Improvement Suggestions:",
     "Render一致性Test面板": "Render consistency test panel",
-    " 一致性Test": " Consistency Test",
+    "一致性Test": "Consistency Test",
     "整体一致率": "Overall Consistency",
     "整体Accuracy": "Overall Accuracy",
     "稳定样本比例": "Stable Sample Ratio",
     "Render鲁棒性Test面板": "Render robustness test panel",
-    " 鲁棒性Test": " Robustness Test",
+    "鲁棒性Test": "Robustness Test",
     "原始Accuracy": "Original Accuracy",
     "Accuracyunder降": "Accuracy Drop",
     "整体鲁棒性": "Overall Robustness",
@@ -508,17 +493,15 @@ TRANSLATIONS = {
     "扰动敏感性分析:": "Perturbation Sensitivity Analysis:",
     "敏感度 (%)": "Sensitivity (%)",
     "Render推理质量分解": "Render reasoning quality breakdown",
-    " 推理质量分析": " Reasoning Quality Analysis",
+    "推理质量分析": "Reasoning Quality Analysis",
     "暂no推理质量Data": "No reasoning quality data yet",
     "# 提取各维度Average分": "# Extract average scores per dimension",
-    "连贯性": "Coherence",
-    "完整性": "Completeness",
     "相关性": "Relevance",
     "正确性": "Correctness",
     "效率": "Efficiency",
     "# 闭合": "# Close the loop",
     "Render样本详情表格": "Render sample details table",
-    " 样本详情": " Sample Details",
+    "样本详情": "Sample Details",
     "# FilterOptions": "# Filter options",
     "筛选": "Filter",
     "仅正确": "Correct Only",
@@ -534,10 +517,8 @@ TRANSLATIONS = {
     "问题:": "Question:",
     "预测Answer:": "Predicted Answer:",
     "RenderExport区域": "Render export section",
-    " Export Report": " Export Report",
-    " under载 JSON": " Download JSON",
-    " under载 CSV": " Download CSV",
-    " [查看完整报告]()": " [View Full Report]()",
+    "Export Report": "Export Report",
+    "[查看完整报告]()": "[View Full Report]()",
     "Render迷你Dashboard（用于侧边栏or小空间）": "Render mini dashboard (for sidebar or small space)",
     "# Accuracy进度条": "# Accuracy progress bar",
     "**AverageLatency**": "**Average Latency**",
@@ -545,14 +526,12 @@ TRANSLATIONS = {
     "输入: ": "Input: ",
     "推理: ": "Reasoning: ",
     "输出: ": "Output: ",
-
     # === quality_reports.py ===
     "质量Test Report模块 - GenerateQuality AssessmentVisualization报告": "Quality test report module - generates quality assessment visualization reports",
     "GenerateQuality Assessment汇总表": "Generate quality assessment summary table",
     "Evaluation result字典 {dataset_name: EvaluationResult}": "Evaluation results dict {dataset_name: EvaluationResult}",
     "汇总 DataFrame": "Summary DataFrame",
     "# Calculate AI 裁判修正数": "# Calculate AI judge correction count",
-    "正确数": "Correct",
     "总样本": "Total Samples",
     "裁判修正": "Judge Corrections",
     "耗时(seconds)": "Duration (s)",
@@ -561,11 +540,11 @@ TRANSLATIONS = {
     "输出Tokens": "Output Tokens",
     "评估时间": "Eval Time",
     "RenderAccuracyBar Chart": "Render accuracy bar chart",
-    " 各DatasetAccuracy": " Accuracy by Dataset",
+    "各DatasetAccuracy": "Accuracy by Dataset",
     "Render能力Radar Chart (适用于多Dataset评估)": "Render capability radar chart (for multi-dataset evaluation)",
     "# 闭合Radar Chart": "# Close the radar chart",
     "Model能力": "Model Capability",
-    " Model能力Radar Chart": " Model Capability Radar",
+    "Model能力Radar Chart": "Model Capability Radar",
     "Render分类别AccuracyHeatmap": "Render per-category accuracy heatmap",
     "# 提取Data": "# Extract data",
     "# 按AccuracySort": "# Sort by accuracy",
@@ -575,12 +554,12 @@ TRANSLATIONS = {
     "Render增强版Error分析面板": "Render enhanced error analysis panel",
     "not再直接Return DataFrame，而isin这里负责Renderandunder载": "No longer returns DataFrame directly, handles rendering and download here",
     "# 提取Error样本": "# Extract error samples",
-    " 太棒！in该Dataseton没has发现Error样本。": " Great! No error samples found in this dataset.",
+    "太棒！in该Dataseton没has发现Error样本。": "Great! No error samples found in this dataset.",
     "# --- 新增: Display自动失败分析报告 ---": "# --- New: Display automated failure analysis report ---",
-    " 智能失败分析报告": " Automated Failure Analysis Report",
+    "智能失败分析报告": "Automated Failure Analysis Report",
     "总体失败率": "Overall Failure Rate",
-    "#####  主要失败原因": "#####  Top Failure Causes",
-    "#####  改进Suggestion": "#####  Improvement Suggestions",
+    "##### 主要失败原因": "##### Top Failure Causes",
+    "##### 改进Suggestion": "##### Improvement Suggestions",
     "# 分布图": "# Distribution chart",
     "失败原因分布": "Failure Cause Distribution",
     "# 1. 控制栏：筛选与Export": "# 1. Control bar: filter and export",
@@ -590,18 +569,17 @@ TRANSLATIONS = {
     "# FilterData": "# Filter data",
     "# Build完整 CSV Data用于under载": "# Build complete CSV data for download",
     "Export所hasError，not仅仅isFilter后": "Export all errors, not just filtered ones",
-    " under载Error报告": " Download Error Report",
+    "under载Error报告": "Download Error Report",
     "under载包含 Prompt and完整响应所hasError样本": "Download all error samples with prompts and full responses",
     "# 2. Error列表概览 (Display部分)": "# 2. Error list overview (display section)",
-    "#### [ERROR] Error列表": "#### [ERROR] Error List",
-    "类别": "Category",
+    "#### Error列表": "#### Error List",
     "问题摘要": "Question Summary",
     "Correct answer": "Correct Answer",
     "Model预测": "Model Prediction",
     "*列表仅Display前 ": "*Showing only the first ",
     " 条，请useon方按钮under载完整报告，oruseunder方工具查看详情。*": " items. Use the button above to download the full report or the tool below for details.*",
     "# 3. 深度诊断工具": "# 3. Deep diagnosis tool",
-    "####  深度诊断": "####  Deep Diagnosis",
+    "#### 深度诊断": "#### Deep Diagnosis",
     "选择一 samples ID 以查看完整 Prompt andModel原始响应，分析Error原因。": "Select a sample ID to view the full prompt and model raw response for error analysis.",
     "选择样本 ID": "Select Sample ID",
     "# 查找选inError details": "# Find selected error details",
@@ -618,18 +596,18 @@ TRANSLATIONS = {
     "is否Display详细信息": "Whether to show detailed information",
     "暂noEvaluation result": "No evaluation results yet",
     "# 标题": "# Title",
-    " ModelQuality Assessment报告": " Model Quality Assessment Report",
+    "ModelQuality Assessment报告": "Model Quality Assessment Report",
     "# 汇总表格": "# Summary table",
-    "###  评估汇总": "###  Evaluation Summary",
+    "### 评估汇总": "### Evaluation Summary",
     "# FormatAccuracy列": "# Format accuracy column",
     "# AccuracyBar Chart": "# Accuracy bar chart",
     "need至少 3 Dataset才能DisplayRadar Chart": "Need at least 3 datasets to display radar chart",
     "# Performance Metrics面板": "# Performance metrics panel",
     "# 分类别详情": "# Per-category details",
-    "###  分类别分析": "###  Per-Category Analysis",
+    "### 分类别分析": "### Per-Category Analysis",
     " 详细分析": " Detailed Analysis",
     "# 分类别Accuracy": "# Per-category accuracy",
-    " AI 裁判succeeded修正 ": " AI Judge successfully corrected ",
+    "AI 裁判succeeded修正 ": "AI Judge successfully corrected ",
     " 误判样本！(这些样本已计入正确率)": " misjudged samples! (these are now included in the accuracy calculation)",
     "查看裁判修正详情": "View Judge Correction Details",
     "问题: ": "Question: ",
@@ -639,12 +617,12 @@ TRANSLATIONS = {
     " | 提取预测(Error): ": " | Extracted prediction (wrong): ",
     "# Error分析": "# Error analysis",
     "# ExportOptions": "# Export options",
-    "###  ExportResult": "###  Export Results",
-    " under载汇总 CSV": " Download Summary CSV",
-    " under载详细 JSON": " Download Detailed JSON",
+    "### ExportResult": "### Export Results",
+    "under载汇总 CSV": "Download Summary CSV",
+    "under载详细 JSON": "Download Detailed JSON",
     "Render多Model Comparison报告": "Render multi-model comparison report",
     "暂no对比Data": "No comparison data yet",
-    " Model能力对比": " Model Capability Comparison",
+    "Model能力对比": "Model Capability Comparison",
     "# 收集所hasDataset": "# Collect all datasets",
     "# Build对比Data": "# Build comparison data",
     "# Display对比表": "# Display comparison table",
@@ -652,7 +630,6 @@ TRANSLATIONS = {
     "# 对比Bar Chart": "# Comparison bar chart",
     "### Visualization对比": "### Visual Comparison",
     "各Modelinnot同DatasetonAccuracy对比": "Accuracy Comparison Across Models and Datasets",
-
     # Short common fragments (apply last due to ordering)
     "Display ": "Showing ",
 }
@@ -660,7 +637,7 @@ TRANSLATIONS = {
 
 def translate_file(filepath: str, translations: dict) -> tuple[int, list[str]]:
     """Apply translations to a single file. Returns (count, changes)."""
-    with open(filepath, encoding='utf-8') as f:
+    with open(filepath, encoding="utf-8") as f:
         content = f.read()
 
     original = content
@@ -677,7 +654,7 @@ def translate_file(filepath: str, translations: dict) -> tuple[int, list[str]]:
             changes.append(f"  [{count}x] '{cn_text[:50]}...' → '{en_text[:50]}...'")
 
     if content != original:
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             f.write(content)
 
     return len(changes), changes
@@ -685,24 +662,24 @@ def translate_file(filepath: str, translations: dict) -> tuple[int, list[str]]:
 
 def count_chinese(filepath: str) -> int:
     """Count Chinese character segments in a file."""
-    with open(filepath, encoding='utf-8') as f:
+    with open(filepath, encoding="utf-8") as f:
         content = f.read()
-    return len(re.findall(r'[\u4e00-\u9fff]+', content))
+    return len(re.findall(r"[\u4e00-\u9fff]+", content))
 
 
 def main():
     target_files = [
-        'ui/comparison_page.py',
-        'ui/test_runner.py',
-        'ui/dashboard_components.py',
-        'ui/dataset_manager.py',
-        'ui/thinking_components.py',
-        'ui/log_viewer.py',
-        'ui/export.py',
-        'ui/history_browser.py',
-        'ui/markdown_summary.py',
-        'ui/evaluation_dashboard.py',
-        'ui/quality_reports.py',
+        "ui/comparison_page.py",
+        "ui/test_runner.py",
+        "ui/dashboard_components.py",
+        "ui/dataset_manager.py",
+        "ui/thinking_components.py",
+        "ui/log_viewer.py",
+        "ui/export.py",
+        "ui/history_browser.py",
+        "ui/markdown_summary.py",
+        "ui/evaluation_dashboard.py",
+        "ui/quality_reports.py",
     ]
 
     print("=" * 60)
@@ -713,15 +690,17 @@ def main():
 
     for fp in target_files:
         if not os.path.exists(fp):
-            print(f"\n[WARNING]  {fp} not found, skipping.")
+            print(f"\n {fp} not found, skipping.")
             continue
 
         before = count_chinese(fp)
         n_changes, changes = translate_file(fp, TRANSLATIONS)
         after = count_chinese(fp)
 
-        print(f"\n {fp}")
-        print(f"   Before: {before} segments → After: {after} segments  ({n_changes} replacements)")
+        print(f"\n{fp}")
+        print(
+            f"   Before: {before} segments → After: {after} segments  ({n_changes} replacements)"
+        )
         if changes:
             for c in changes[:5]:
                 print(c)
@@ -735,13 +714,13 @@ def main():
     print("=" * 60)
 
     # Summary
-    print("\n Final Chinese segment counts:")
+    print("\nFinal Chinese segment counts:")
     for fp in target_files:
         if os.path.exists(fp):
             remaining = count_chinese(fp)
-            status = "[OK]" if remaining == 0 else "[WARNING] "
+            status = "[OK]" if remaining == 0 else "[WARN]"
             print(f"  {status} {fp}: {remaining}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

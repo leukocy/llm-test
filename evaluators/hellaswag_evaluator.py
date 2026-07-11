@@ -35,14 +35,14 @@ class HellaSwagEvaluator(BaseEvaluator):
         dataset_path: str = "datasets/hellaswag",
         num_shots: int = 5,
         max_samples: int | None = None,
-        seed: int = 42
+        seed: int = 42,
     ):
         super().__init__(
             dataset_name=dataset_name,
             dataset_path=dataset_path,
             num_shots=num_shots,
             max_samples=max_samples,
-            seed=seed
+            seed=seed,
         )
         random.seed(seed)
 
@@ -53,7 +53,10 @@ class HellaSwagEvaluator(BaseEvaluator):
         # 1. Try DatasetManager (auto-download)
         try:
             from core.dataset_manager import get_dataset
-            samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
+
+            samples = get_dataset(
+                self.dataset_name, split="test", max_samples=None, seed=self.seed
+            )
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for HellaSwag: {e}")
 
@@ -69,18 +72,18 @@ class HellaSwagEvaluator(BaseEvaluator):
             for filepath in possible_files:
                 if os.path.exists(filepath):
                     try:
-                        if filepath.endswith('.jsonl'):
-                            with open(filepath, encoding='utf-8') as f:
+                        if filepath.endswith(".jsonl"):
+                            with open(filepath, encoding="utf-8") as f:
                                 for line in f:
                                     if line.strip():
                                         samples.append(json.loads(line))
                         else:
-                            with open(filepath, encoding='utf-8') as f:
+                            with open(filepath, encoding="utf-8") as f:
                                 data = json.load(f)
                             if isinstance(data, list):
                                 samples = data
-                            elif isinstance(data, dict) and 'data' in data:
-                                samples = data['data']
+                            elif isinstance(data, dict) and "data" in data:
+                                samples = data["data"]
                         break
                     except Exception as e:
                         print(f"Load {filepath} 失败: {e}")
@@ -91,16 +94,18 @@ class HellaSwagEvaluator(BaseEvaluator):
         samples = self._normalize_samples(samples)
         random.shuffle(samples)
 
-        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
+        total_needed = self.num_shots + (
+            self.max_samples if self.max_samples else len(samples)
+        )
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
         if self.num_shots > 0:
-            self.few_shot_examples = samples[:self.num_shots]
-            samples = samples[self.num_shots:]
+            self.few_shot_examples = samples[: self.num_shots]
+            samples = samples[self.num_shots :]
 
         if self.max_samples and len(samples) > self.max_samples:
-            samples = samples[:self.max_samples]
+            samples = samples[: self.max_samples]
 
         self.samples = samples
         return samples
@@ -112,34 +117,36 @@ class HellaSwagEvaluator(BaseEvaluator):
         for sample in samples:
             try:
                 # Getonunder文
-                ctx = sample.get('ctx', '')
+                ctx = sample.get("ctx", "")
                 if not ctx:
-                    ctx_a = sample.get('ctx_a', '')
-                    ctx_b = sample.get('ctx_b', '')
+                    ctx_a = sample.get("ctx_a", "")
+                    ctx_b = sample.get("ctx_b", "")
                     ctx = f"{ctx_a} {ctx_b}".strip()
 
                 # GetOptions
-                endings = sample.get('endings', [])
+                endings = sample.get("endings", [])
                 if isinstance(endings, dict):
-                    endings = endings.get('text', [])
+                    endings = endings.get("text", [])
 
                 while len(endings) < 4:
-                    endings.append('')
+                    endings.append("")
 
                 # GetLabel
-                label = sample.get('label', 0)
+                label = sample.get("label", 0)
                 if isinstance(label, str):
-                    if label in 'ABCD':
-                        label = ord(label) - ord('A')
+                    if label in "ABCD":
+                        label = ord(label) - ord("A")
                     elif label.isdigit():
                         label = int(label)
 
-                normalized.append({
-                    'context': ctx,
-                    'activity': sample.get('activity_label', ''),
-                    'choices': endings[:4],
-                    'answer': label
-                })
+                normalized.append(
+                    {
+                        "context": ctx,
+                        "activity": sample.get("activity_label", ""),
+                        "choices": endings[:4],
+                        "answer": label,
+                    }
+                )
             except Exception as e:
                 continue
 
@@ -155,9 +162,9 @@ class HellaSwagEvaluator(BaseEvaluator):
                     "rinses the dog off with a hose.",
                     "uses a brush to scrape the dog.",
                     "gets the dog wet with a towel.",
-                    "walks away and lets the dog play."
+                    "walks away and lets the dog play.",
                 ],
-                "answer": 0
+                "answer": 0,
             },
             {
                 "context": "A man is sitting on a roof. He starts pulling up shingles. He",
@@ -166,9 +173,9 @@ class HellaSwagEvaluator(BaseEvaluator):
                     "takes a nap on the roof.",
                     "removes the old shingles and starts nailing new ones.",
                     "starts to put on a helmet.",
-                    "begins to dance on the roof."
+                    "begins to dance on the roof.",
                 ],
-                "answer": 1
+                "answer": 1,
             },
             {
                 "context": "A young woman is sitting at a table. She picks up a piece of paper and a pencil. She",
@@ -177,9 +184,9 @@ class HellaSwagEvaluator(BaseEvaluator):
                     "tears the paper into pieces.",
                     "begins to sketch a portrait.",
                     "throws the pencil away.",
-                    "starts eating the paper."
+                    "starts eating the paper.",
                 ],
-                "answer": 1
+                "answer": 1,
             },
             {
                 "context": "Two men are in a boxing ring. The referee signals the start of the match. They",
@@ -188,9 +195,9 @@ class HellaSwagEvaluator(BaseEvaluator):
                     "shake hands and leave the ring.",
                     "start circling each other and throwing punches.",
                     "sit down in their corners.",
-                    "begin playing chess."
+                    "begin playing chess.",
                 ],
-                "answer": 1
+                "answer": 1,
             },
             {
                 "context": "A chef is in a kitchen preparing food. He picks up a knife and a cutting board. He",
@@ -199,10 +206,10 @@ class HellaSwagEvaluator(BaseEvaluator):
                     "starts juggling the knives.",
                     "begins chopping vegetables.",
                     "throws the cutting board away.",
-                    "sits down to rest."
+                    "sits down to rest.",
                 ],
-                "answer": 1
-            }
+                "answer": 1,
+            },
         ]
 
     def build_chat_messages(self, sample: dict[str, Any]) -> list[dict[str, str]]:
@@ -212,17 +219,31 @@ class HellaSwagEvaluator(BaseEvaluator):
         system_instruction = "Complete the following scenario by choosing the most plausible continuation."
         messages.append({"role": "system", "content": system_instruction})
 
-        for ex in self.few_shot_examples[:self.num_shots]:
-            messages.append({"role": "user", "content": self.format_prompt(ex, include_answer=False)})
-            messages.append({"role": "assistant", "content": self.get_correct_answer(ex)})
+        for ex in self.few_shot_examples[: self.num_shots]:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": self.format_prompt(ex, include_answer=False),
+                }
+            )
+            messages.append(
+                {"role": "assistant", "content": self.get_correct_answer(ex)}
+            )
 
-        messages.append({"role": "user", "content": self.format_prompt(sample, include_answer=False)})
+        messages.append(
+            {
+                "role": "user",
+                "content": self.format_prompt(sample, include_answer=False),
+            }
+        )
         return messages
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """Format HellaSwag 样本"""
-        context = sample.get('context', '')
-        choices = sample.get('choices', [])
+        context = sample.get("context", "")
+        choices = sample.get("choices", [])
 
         while len(choices) < 4:
             choices.append("")
@@ -238,8 +259,12 @@ class HellaSwagEvaluator(BaseEvaluator):
         ]
 
         if include_answer:
-            answer_idx = sample.get('answer', 0)
-            answer_letter = chr(ord('A') + answer_idx) if isinstance(answer_idx, int) else answer_idx
+            answer_idx = sample.get("answer", 0)
+            answer_letter = (
+                chr(ord("A") + answer_idx)
+                if isinstance(answer_idx, int)
+                else answer_idx
+            )
             prompt_lines.append(f"Answer: {answer_letter}")
         else:
             prompt_lines.append("Answer:")
@@ -248,12 +273,10 @@ class HellaSwagEvaluator(BaseEvaluator):
 
     def build_full_prompt(self, sample: dict[str, Any]) -> str:
         """Build完整 prompt"""
-        instruction = (
-            "Complete the following scenario by choosing the most plausible continuation.\n\n"
-        )
+        instruction = "Complete the following scenario by choosing the most plausible continuation.\n\n"
 
         examples = []
-        for example in self.few_shot_examples[:self.num_shots]:
+        for example in self.few_shot_examples[: self.num_shots]:
             examples.append(self.format_prompt(example, include_answer=True))
 
         question = self.format_prompt(sample, include_answer=False)
@@ -266,17 +289,17 @@ class HellaSwagEvaluator(BaseEvaluator):
         return full_prompt
 
     def parse_response(self, response: str) -> str:
-        return extract_choice_answer(response, ['A', 'B', 'C', 'D'])
+        return extract_choice_answer(response, ["A", "B", "C", "D"])
 
     def check_answer(self, predicted: str, correct: str) -> bool:
         if not predicted:
             return False
         if isinstance(correct, int) or (isinstance(correct, str) and correct.isdigit()):
-            correct = chr(ord('A') + int(correct))
+            correct = chr(ord("A") + int(correct))
         return predicted.upper() == correct.upper()
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
-        answer = sample.get('answer', 0)
+        answer = sample.get("answer", 0)
         if isinstance(answer, int):
-            return chr(ord('A') + answer)
+            return chr(ord("A") + answer)
         return str(answer).upper()

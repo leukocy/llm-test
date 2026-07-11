@@ -50,14 +50,14 @@ class GlobalPIQAEvaluator(BaseEvaluator):
         dataset_path: str = "datasets/global_piqa",
         num_shots: int = 3,  # use few-shot HelpModel理解格式
         max_samples: int | None = None,
-        seed: int = 42
+        seed: int = 42,
     ):
         super().__init__(
             dataset_name=dataset_name,
             dataset_path=dataset_path,
             num_shots=num_shots,
             max_samples=max_samples,
-            seed=seed
+            seed=seed,
         )
         random.seed(seed)
 
@@ -73,7 +73,10 @@ class GlobalPIQAEvaluator(BaseEvaluator):
         # 1. Try DatasetManager (auto-download)
         try:
             from core.dataset_manager import get_dataset
-            samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
+
+            samples = get_dataset(
+                self.dataset_name, split="test", max_samples=None, seed=self.seed
+            )
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for Global PIQA: {e}")
 
@@ -89,18 +92,18 @@ class GlobalPIQAEvaluator(BaseEvaluator):
             for filepath in possible_files:
                 if os.path.exists(filepath):
                     try:
-                        if filepath.endswith('.jsonl'):
-                            with open(filepath, encoding='utf-8') as f:
+                        if filepath.endswith(".jsonl"):
+                            with open(filepath, encoding="utf-8") as f:
                                 for line in f:
                                     if line.strip():
                                         samples.append(json.loads(line))
                         else:
-                            with open(filepath, encoding='utf-8') as f:
+                            with open(filepath, encoding="utf-8") as f:
                                 data = json.load(f)
                             if isinstance(data, list):
                                 samples = data
-                            elif isinstance(data, dict) and 'data' in data:
-                                samples = data['data']
+                            elif isinstance(data, dict) and "data" in data:
+                                samples = data["data"]
                         break
                     except Exception as e:
                         print(f"Load {filepath} 失败: {e}")
@@ -114,24 +117,25 @@ class GlobalPIQAEvaluator(BaseEvaluator):
         # 按语言Filter
         if subset:
             samples = [
-                s for s in samples
-                if s.get('language', '').lower() == subset.lower()
+                s for s in samples if s.get("language", "").lower() == subset.lower()
             ]
 
         random.shuffle(samples)
 
         # Calculate总需Sample count
-        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
+        total_needed = self.num_shots + (
+            self.max_samples if self.max_samples else len(samples)
+        )
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
         # Set few-shot 示例
         if self.num_shots > 0 and len(samples) > self.num_shots:
-            self.few_shot_examples = samples[:self.num_shots]
-            samples = samples[self.num_shots:]
+            self.few_shot_examples = samples[: self.num_shots]
+            samples = samples[self.num_shots :]
 
         if self.max_samples and len(samples) > self.max_samples:
-            samples = samples[:self.max_samples]
+            samples = samples[: self.max_samples]
 
         self.samples = samples
         return samples
@@ -147,7 +151,7 @@ class GlobalPIQAEvaluator(BaseEvaluator):
                 "sol2": s.get("sol2", s.get("solution2", s.get("choice_b", ""))),
                 "label": s.get("label", 0),
                 "language": s.get("language", s.get("lang", "English")),
-                "country": s.get("country", s.get("region", ""))
+                "country": s.get("country", s.get("region", "")),
             }
             normalized.append(sample)
         return normalized
@@ -163,7 +167,7 @@ class GlobalPIQAEvaluator(BaseEvaluator):
                 "sol2": "Keep it in a bread box at room temperature",
                 "label": 1,
                 "language": "English",
-                "country": "USA"
+                "country": "USA",
             },
             {
                 "id": "piqa_en_2",
@@ -172,7 +176,7 @@ class GlobalPIQAEvaluator(BaseEvaluator):
                 "sol2": "Heat the ring with a lighter",
                 "label": 0,
                 "language": "English",
-                "country": "UK"
+                "country": "UK",
             },
             {
                 "id": "piqa_en_3",
@@ -181,7 +185,7 @@ class GlobalPIQAEvaluator(BaseEvaluator):
                 "sol2": "Heat the onion in the microwave before cutting",
                 "label": 0,
                 "language": "English",
-                "country": "Australia"
+                "country": "Australia",
             },
             # in文示例
             {
@@ -191,7 +195,7 @@ class GlobalPIQAEvaluator(BaseEvaluator):
                 "sol2": "用冷水而notis热水开始煮",
                 "label": 0,
                 "language": "Chinese",
-                "country": "China"
+                "country": "China",
             },
             {
                 "id": "piqa_zh_2",
@@ -200,7 +204,7 @@ class GlobalPIQAEvaluator(BaseEvaluator):
                 "sol2": "把饺子皮放in温水里泡一under",
                 "label": 0,
                 "language": "Chinese",
-                "country": "China"
+                "country": "China",
             },
             {
                 "id": "piqa_zh_3",
@@ -209,7 +213,7 @@ class GlobalPIQAEvaluator(BaseEvaluator):
                 "sol2": "把蒜放in冰箱里冻一will儿",
                 "label": 0,
                 "language": "Chinese",
-                "country": "China"
+                "country": "China",
             },
             # 日语示例
             {
@@ -219,7 +223,7 @@ class GlobalPIQAEvaluator(BaseEvaluator):
                 "sol2": "一度たっぷりの水で強くこすり洗いする",
                 "label": 0,
                 "language": "Japanese",
-                "country": "Japan"
+                "country": "Japan",
             },
             # 西班牙语示例
             {
@@ -229,7 +233,7 @@ class GlobalPIQAEvaluator(BaseEvaluator):
                 "sol2": "Dejarlo al sol para que se seque",
                 "label": 0,
                 "language": "Spanish",
-                "country": "Mexico"
+                "country": "Mexico",
             },
             # 法语示例
             {
@@ -239,7 +243,7 @@ class GlobalPIQAEvaluator(BaseEvaluator):
                 "sol2": "Le mettre dans un sac en plastique hermétique directement",
                 "label": 0,
                 "language": "French",
-                "country": "France"
+                "country": "France",
             },
             # 阿拉伯语示例
             {
@@ -249,15 +253,17 @@ class GlobalPIQAEvaluator(BaseEvaluator):
                 "sol2": "وضعه في كيس بلاستيكي محكم الإغلاق",
                 "label": 0,
                 "language": "Arabic",
-                "country": "Egypt"
-            }
+                "country": "Egypt",
+            },
         ]
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """Format样本is Prompt"""
-        goal = sample.get('goal', '')
-        sol1 = sample.get('sol1', '')
-        sol2 = sample.get('sol2', '')
+        goal = sample.get("goal", "")
+        sol1 = sample.get("sol1", "")
+        sol2 = sample.get("sol2", "")
 
         prompt = f"""Goal: {goal}
 
@@ -268,7 +274,7 @@ B. {sol2}
 Answer:"""
 
         if include_answer:
-            answer = "A" if sample.get('label', 0) == 0 else "B"
+            answer = "A" if sample.get("label", 0) == 0 else "B"
             prompt += f" {answer}"
 
         return prompt
@@ -283,7 +289,7 @@ Answer:"""
 
         # Few-shot 示例
         examples = []
-        for example in self.few_shot_examples[:self.num_shots]:
+        for example in self.few_shot_examples[: self.num_shots]:
             examples.append(self.format_prompt(example, include_answer=True))
 
         # 待Evaluation问题
@@ -301,24 +307,26 @@ Answer:"""
         response = response.strip().upper()
 
         # 直接匹配 A or B
-        if response.startswith('A'):
-            return 'A'
-        if response.startswith('B'):
-            return 'B'
+        if response.startswith("A"):
+            return "A"
+        if response.startswith("B"):
+            return "B"
 
         # 尝试从完整响应in提取
-        answer = extract_choice_answer(response, choices=['A', 'B'])
+        answer = extract_choice_answer(response, choices=["A", "B"])
         if answer:
             return answer
 
         # 查找 "answer is A/B" 模式
-        match = re.search(r'(?:answer|choice|solution)[:\s]*([AB])', response, re.IGNORECASE)
+        match = re.search(
+            r"(?:answer|choice|solution)[:\s]*([AB])", response, re.IGNORECASE
+        )
         if match:
             return match.group(1).upper()
 
         # 最后尝试：取一 A or B
         for char in response[:20]:
-            if char in ['A', 'B']:
+            if char in ["A", "B"]:
                 return char
 
         return ""
@@ -335,9 +343,9 @@ Answer:"""
 
     def get_sample_category(self, sample: dict[str, Any]) -> str:
         """Get样本类别 (语言)"""
-        return sample.get('language', 'Unknown')
+        return str(sample.get("language", "Unknown"))
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
         """GetCorrect answer"""
-        label = sample.get('label', 0)
-        return 'A' if label == 0 else 'B'
+        label = sample.get("label", 0)
+        return "A" if label == 0 else "B"

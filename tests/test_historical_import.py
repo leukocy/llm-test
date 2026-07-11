@@ -88,7 +88,11 @@ def test_parse_memory_none():
 
 
 def test_fingerprint_assembles_and_machine_id_stable():
-    sys_info = {"gpu": "1* pro 6000", "memory": "4*48G DDR5 6400", "engine_name": "vLLM-v0.22.0-MTP3"}
+    sys_info = {
+        "gpu": "1* pro 6000",
+        "memory": "4*48G DDR5 6400",
+        "engine_name": "vLLM-v0.22.0-MTP3",
+    }
     fp = build_legacy_fingerprint(sys_info)
     assert fp["machine_id"] is not None
     assert len(fp["machine_id"]) == 16

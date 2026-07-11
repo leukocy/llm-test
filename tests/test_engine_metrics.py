@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from core.engine_metrics import EngineMetricsPoller, default_metrics_url
-
 
 VLLM_METRICS = """# TYPE vllm:gpu_cache_usage_perc gauge
 vllm:gpu_cache_usage_perc 0.40
@@ -40,7 +39,9 @@ def _run_poller(url, samples_text, duration=0.25, interval=0.05):
         def get(self, url):
             call["n"] += 1
             # 让 num_preemption 随采样递增，验证窗口增量
-            text = samples_text.replace("vllm:num_preemption 5", f"vllm:num_preemption {5 + call['n']}")
+            text = samples_text.replace(
+                "vllm:num_preemption 5", f"vllm:num_preemption {5 + call['n']}"
+            )
             return FakeResponse(text)
 
         def close(self):
@@ -55,15 +56,23 @@ def _run_poller(url, samples_text, duration=0.25, interval=0.05):
 
 # ---------- default_metrics_url ----------
 
+
 def test_default_metrics_url_strips_path():
-    assert default_metrics_url("http://localhost:8000/v1") == "http://localhost:8000/metrics"
-    assert default_metrics_url("https://gpu-host:443/openai/v1") == "https://gpu-host:443/metrics"
+    assert (
+        default_metrics_url("http://localhost:8000/v1")
+        == "http://localhost:8000/metrics"
+    )
+    assert (
+        default_metrics_url("https://gpu-host:443/openai/v1")
+        == "https://gpu-host:443/metrics"
+    )
     assert default_metrics_url("localhost:8000") == "http://localhost:8000/metrics"
     assert default_metrics_url(None) is None
     assert default_metrics_url("") is None
 
 
 # ---------- 轮询与汇总 ----------
+
 
 def test_poller_captures_peaks_and_timeline():
     summary = _run_poller("http://h/metrics", VLLM_METRICS)

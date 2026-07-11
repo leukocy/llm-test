@@ -10,7 +10,14 @@ from core.application_scenario import (
 
 
 def test_coding_scenarios():
-    for name in ("humaneval", "HumanEval", "human_eval", "mbpp", "swebench_lite", "sw_bench"):
+    for name in (
+        "humaneval",
+        "HumanEval",
+        "human_eval",
+        "mbpp",
+        "swebench_lite",
+        "sw_bench",
+    ):
         assert scenario_from_dataset(name) == "coding", name
 
 
@@ -23,8 +30,18 @@ def test_long_doc_and_retrieval_and_dialogue():
 
 
 def test_knowledge_qa_is_not_application():
-    for name in ("mmlu", "gsm8k", "math500", "aime2025", "arc", "hellaswag",
-                 "winogrande", "truthfulqa", "gpqa", "global_piqa"):
+    for name in (
+        "mmlu",
+        "gsm8k",
+        "math500",
+        "aime2025",
+        "arc",
+        "hellaswag",
+        "winogrande",
+        "truthfulqa",
+        "gpqa",
+        "global_piqa",
+    ):
         assert scenario_from_dataset(name) == "knowledge_qa", name
         assert not is_application_scenario(scenario_from_dataset(name))
 

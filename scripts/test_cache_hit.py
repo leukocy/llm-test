@@ -1,6 +1,7 @@
 """
 用 ~30K tokens 长 prompt Test prefix caching TTFT 差异
 """
+
 import json
 import os
 import time
@@ -9,7 +10,10 @@ import requests
 
 ENDPOINTS = {
     name: url
-    for name, url in [("Server1", os.getenv("SERVER1_URL")), ("Server2", os.getenv("SERVER2_URL"))]
+    for name, url in [
+        ("Server1", os.getenv("SERVER1_URL")),
+        ("Server2", os.getenv("SERVER2_URL")),
+    ]
     if url
 }
 
@@ -28,10 +32,12 @@ long_prompt = base_text * 150  # ~150 * 150 ≈ 22500 tokens
 
 out = open("cache_ttft_results_30k.txt", "w", encoding="utf-8")  # noqa: SIM115
 
+
 def log(msg):
     print(msg, flush=True)
     out.write(msg + "\n")
     out.flush()
+
 
 def measure_request(base_url, model_id, prompt, max_tokens=10):
     payload = {
@@ -45,18 +51,22 @@ def measure_request(base_url, model_id, prompt, max_tokens=10):
     t_start = time.perf_counter()
     t_first_token = None
 
-    with requests.post(f"{base_url}/chat/completions", json=payload,
-                       headers={"Content-Type": "application/json"},
-                       stream=True, timeout=300) as r:
+    with requests.post(
+        f"{base_url}/chat/completions",
+        json=payload,
+        headers={"Content-Type": "application/json"},
+        stream=True,
+        timeout=300,
+    ) as r:
         if r.status_code != 200:
             return {"error": f"HTTP {r.status_code}: {r.text[:200]}"}
         for line in r.iter_lines():
             if not line:
                 continue
-            l = line.decode('utf-8').strip()
-            if l.startswith('data: '):
+            l = line.decode("utf-8").strip()
+            if l.startswith("data: "):
                 d = l[6:].strip()
-                if d == '[DONE]':
+                if d == "[DONE]":
                     break
                 try:
                     c = json.loads(d)
@@ -64,10 +74,12 @@ def measure_request(base_url, model_id, prompt, max_tokens=10):
                         usage_info = c["usage"]
                     if c.get("choices") and len(c["choices"]) > 0:
                         delta = c["choices"][0].get("delta", {})
-                        content = delta.get("content") or delta.get("reasoning_content") or ""
+                        content = (
+                            delta.get("content") or delta.get("reasoning_content") or ""
+                        )
                         if content and t_first_token is None:
                             t_first_token = time.perf_counter()
-                except json.JSONDecodeError:
+                except Exception:
                     pass
     t_end = time.perf_counter()
     return {
@@ -75,6 +87,7 @@ def measure_request(base_url, model_id, prompt, max_tokens=10):
         "total_time": t_end - t_start,
         "usage": usage_info,
     }
+
 
 for name, base_url in ENDPOINTS.items():
     log(f"\n{'='*60}")
@@ -104,7 +117,9 @@ for name, base_url in ENDPOINTS.items():
         ttft = result["ttft"]
         total = result["total_time"]
         ttfts.append(ttft)
-        prompt_tokens = result["usage"].get("prompt_tokens", "?") if result["usage"] else "?"
+        prompt_tokens = (
+            result["usage"].get("prompt_tokens", "?") if result["usage"] else "?"
+        )
 
         cache_hit = 0
         if result["usage"]:
@@ -118,13 +133,21 @@ for name, base_url in ENDPOINTS.items():
         marker = ""
         if i > 1 and ttfts[0] and ttft and ttfts[0] > 0:
             speedup = ttfts[0] / ttft
-            marker = f"  ← 相对#1 加速 {speedup:.2f}x" if speedup > 1.1 else f"  ← {speedup:.2f}x"
+            marker = (
+                f"  ← 相对#1 加速 {speedup:.2f}x"
+                if speedup > 1.1
+                else f"  ← {speedup:.2f}x"
+            )
 
-        log(f"  #{i}: TTFT={ttft:.4f}s | 总耗时={total:.2f}s | prompt={prompt_tokens} | cache_hit_usage={cache_hit}{marker}")
+        log(
+            f"  #{i}: TTFT={ttft:.4f}s | 总耗时={total:.2f}s | prompt={prompt_tokens} | cache_hit_usage={cache_hit}{marker}"
+        )
         time.sleep(2)
 
     if len(ttfts) >= 3:
-        log(f"\n  结论: #1 TTFT={ttfts[0]:.4f}s → 后续平均={sum(ttfts[1:])/len(ttfts[1:]):.4f}s, 加速比={ttfts[0]/(sum(ttfts[1:])/len(ttfts[1:])):.2f}x")
+        log(
+            f"\n  结论: #1 TTFT={ttfts[0]:.4f}s → 后续平均={sum(ttfts[1:])/len(ttfts[1:]):.4f}s, 加速比={ttfts[0]/(sum(ttfts[1:])/len(ttfts[1:])):.2f}x"
+        )
 
-log("\n[OK] Test完成")
+log("\nTest完成")
 out.close()

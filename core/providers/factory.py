@@ -3,7 +3,9 @@ from .gemini import GeminiProvider
 from .openai import OpenAIProvider
 
 
-def get_provider(provider_name: str, api_base_url: str, api_key: str, model_id: str) -> LLMProvider:
+def get_provider(
+    provider_name: str, api_base_url: str, api_key: str, model_id: str
+) -> LLMProvider:
     """
     Factory function to get the appropriate LLM provider.
 

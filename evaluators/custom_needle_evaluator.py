@@ -37,16 +37,18 @@ class CustomNeedleEvaluator(BaseEvaluator):
         num_shots: int = 0,
         max_samples: int | None = None,
         seed: int = 42,
-        test_filter: str | None = None,  # FilterTest: "frankenstein", "gatsby", "1needle", "2needle", "3needle"
+        test_filter: (
+            str | None
+        ) = None,  # FilterTest: "frankenstein", "gatsby", "1needle", "2needle", "3needle"
         context_filter: str | None = None,  # Filteronunder文大小: "20K", "40K"
-        difficulty_filter: str | None = None  # Filter难度: "easy", "medium", "hard"
+        difficulty_filter: str | None = None,  # Filter难度: "easy", "medium", "hard"
     ):
         super().__init__(
             dataset_name=dataset_name,
             dataset_path=dataset_path,
             num_shots=num_shots,
             max_samples=max_samples,
-            seed=seed
+            seed=seed,
         )
 
         self.test_filter = test_filter
@@ -67,32 +69,32 @@ class CustomNeedleEvaluator(BaseEvaluator):
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"TestConfigure文件Not found: {config_path}")
 
-        with open(config_path, encoding='utf-8') as f:
+        with open(config_path, encoding="utf-8") as f:
             config_data = json.load(f)
 
-        self.test_configs = config_data.get('tests', [])
+        self.test_configs = config_data.get("tests", [])
 
         # based onFilter条件筛选Test
         for test in self.test_configs:
             # ApplyFilter器
             if self.test_filter:
-                if self.test_filter in ['frankenstein', 'gatsby']:
-                    if test.get('series') != self.test_filter:
+                if self.test_filter in ["frankenstein", "gatsby"]:
+                    if test.get("series") != self.test_filter:
                         continue
-                elif 'needle' in self.test_filter:
-                    needle_count = int(self.test_filter.replace('needle', ''))
-                    if test.get('needle_count') != needle_count:
+                elif "needle" in self.test_filter:
+                    needle_count = int(self.test_filter.replace("needle", ""))
+                    if test.get("needle_count") != needle_count:
                         continue
 
-            if self.context_filter and test.get('context_size') != self.context_filter:
+            if self.context_filter and test.get("context_size") != self.context_filter:
                 continue
 
             if self.difficulty_filter:
-                if test.get('difficulty') != self.difficulty_filter:
+                if test.get("difficulty") != self.difficulty_filter:
                     continue
 
             # LoadTest文件内容
-            test_file = test.get('file', '')
+            test_file = test.get("file", "")
             file_path = os.path.join(self.dataset_path, test_file)
             if not os.path.exists(file_path):
                 file_path = os.path.join(self.DEFAULT_TEST_DIR, test_file)
@@ -102,7 +104,7 @@ class CustomNeedleEvaluator(BaseEvaluator):
                 continue
 
             try:
-                with open(file_path, encoding='utf-8') as f:
+                with open(file_path, encoding="utf-8") as f:
                     context = f.read()
             except Exception as e:
                 print(f"LoadTest文件失败 {test_file}: {e}")
@@ -110,32 +112,34 @@ class CustomNeedleEvaluator(BaseEvaluator):
 
             # Build样本
             sample = {
-                'id': test.get('id', ''),
-                'name': test.get('name', ''),
-                'context': context,
-                'question': test.get('prompt', ''),
-                'expected_answer': test.get('expected_answer', {}),
-                'keywords': test.get('keywords', []),
-                'required_keywords': test.get('required_keywords', 1),
-                'series': test.get('series', ''),
-                'difficulty': test.get('difficulty', ''),
-                'needle_count': test.get('needle_count', 1),
-                'context_size': test.get('context_size', ''),
-                'calc_base': test.get('calc_base'),
-                'calc_multiplier': test.get('calc_multiplier')
+                "id": test.get("id", ""),
+                "name": test.get("name", ""),
+                "context": context,
+                "question": test.get("prompt", ""),
+                "expected_answer": test.get("expected_answer", {}),
+                "keywords": test.get("keywords", []),
+                "required_keywords": test.get("required_keywords", 1),
+                "series": test.get("series", ""),
+                "difficulty": test.get("difficulty", ""),
+                "needle_count": test.get("needle_count", 1),
+                "context_size": test.get("context_size", ""),
+                "calc_base": test.get("calc_base"),
+                "calc_multiplier": test.get("calc_multiplier"),
             }
             samples.append(sample)
 
         if self.max_samples and len(samples) > self.max_samples:
-            samples = samples[:self.max_samples]
+            samples = samples[: self.max_samples]
 
         self.samples = samples
         return samples
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """FormatTest prompt"""
-        context = sample.get('context', '')
-        question = sample.get('question', '')
+        context = sample.get("context", "")
+        question = sample.get("question", "")
 
         # Build完整 prompt
         prompt = f"""Please read the following text carefully and answer the question.
@@ -149,7 +153,7 @@ class CustomNeedleEvaluator(BaseEvaluator):
 Please provide your answer based strictly on the information in the text above."""
 
         if include_answer:
-            answer = json.dumps(sample.get('expected_answer', {}), ensure_ascii=False)
+            answer = json.dumps(sample.get("expected_answer", {}), ensure_ascii=False)
             prompt += f"\n\nExpected Answer: {answer}"
 
         return prompt
@@ -176,10 +180,10 @@ Please provide your answer based strictly on the information in the text above."
         predicted_lower = predicted.lower()
 
         # 从当前样本Get关键词 (needin evaluate_single inSet)
-        keywords = getattr(self, '_current_keywords', [])
-        required_count = getattr(self, '_current_required', 1)
-        calc_base = getattr(self, '_current_calc_base', None)
-        calc_multiplier = getattr(self, '_current_calc_multiplier', None)
+        keywords = getattr(self, "_current_keywords", [])
+        required_count = getattr(self, "_current_required", 1)
+        calc_base = getattr(self, "_current_calc_base", None)
+        calc_multiplier = getattr(self, "_current_calc_multiplier", None)
 
         # Calculate题Validate
         if calc_base and calc_multiplier:
@@ -202,23 +206,20 @@ Please provide your answer based strictly on the information in the text above."
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
         """GetCorrect answer字符串表示"""
-        expected = sample.get('expected_answer', {})
+        expected = sample.get("expected_answer", {})
         if isinstance(expected, dict):
             return json.dumps(expected, ensure_ascii=False)
         return str(expected)
 
     def get_sample_category(self, sample: dict[str, Any]) -> str:
         """Get样本类别"""
-        series = sample.get('series', 'unknown')
-        needle_count = sample.get('needle_count', 1)
-        context_size = sample.get('context_size', '')
+        series = sample.get("series", "unknown")
+        needle_count = sample.get("needle_count", 1)
+        context_size = sample.get("context_size", "")
         return f"{series}_{context_size}_{needle_count}needle"
 
     async def evaluate_single(
-        self,
-        sample: dict[str, Any],
-        get_response_func,
-        sample_index: int = 0
+        self, sample: dict[str, Any], get_response_func, sample_index: int = 0
     ) -> SampleResult:
         """
         评估单 samples
@@ -226,10 +227,10 @@ Please provide your answer based strictly on the information in the text above."
         重写父类方法以传递关键词信息到 check_answer
         """
         # Set当前样本评估参数
-        self._current_keywords = sample.get('keywords', [])
-        self._current_required = sample.get('required_keywords', 1)
-        self._current_calc_base = sample.get('calc_base')
-        self._current_calc_multiplier = sample.get('calc_multiplier')
+        self._current_keywords = sample.get("keywords", [])
+        self._current_required = sample.get("required_keywords", 1)
+        self._current_calc_base = sample.get("calc_base")
+        self._current_calc_multiplier = sample.get("calc_multiplier")
 
         # 调用父类方法
         result = await super().evaluate_single(sample, get_response_func, sample_index)
@@ -252,7 +253,7 @@ class NeedleTestRunner:
 
     def __init__(self, test_dir: str = "needle_haystack_data"):
         self.test_dir = test_dir
-        self.evaluator = None
+        self.evaluator: CustomNeedleEvaluator | None = None
 
     def get_available_tests(self) -> list[dict[str, str]]:
         """Get所has可用Test列表"""
@@ -260,19 +261,21 @@ class NeedleTestRunner:
         if not os.path.exists(config_path):
             return []
 
-        with open(config_path, encoding='utf-8') as f:
+        with open(config_path, encoding="utf-8") as f:
             config = json.load(f)
 
         tests = []
-        for test in config.get('tests', []):
-            tests.append({
-                'id': test.get('id', ''),
-                'name': test.get('name', ''),
-                'series': test.get('series', ''),
-                'difficulty': test.get('difficulty', ''),
-                'needle_count': test.get('needle_count', 1),
-                'context_size': test.get('context_size', '')
-            })
+        for test in config.get("tests", []):
+            tests.append(
+                {
+                    "id": test.get("id", ""),
+                    "name": test.get("name", ""),
+                    "series": test.get("series", ""),
+                    "difficulty": test.get("difficulty", ""),
+                    "needle_count": test.get("needle_count", 1),
+                    "context_size": test.get("context_size", ""),
+                }
+            )
         return tests
 
     def create_evaluator(
@@ -280,7 +283,7 @@ class NeedleTestRunner:
         test_filter: str | None = None,
         context_filter: str | None = None,
         difficulty_filter: str | None = None,
-        max_samples: int | None = None
+        max_samples: int | None = None,
     ) -> CustomNeedleEvaluator:
         """CreateEvaluator实例"""
         self.evaluator = CustomNeedleEvaluator(
@@ -288,15 +291,13 @@ class NeedleTestRunner:
             test_filter=test_filter,
             context_filter=context_filter,
             difficulty_filter=difficulty_filter,
-            max_samples=max_samples
+            max_samples=max_samples,
         )
-        return self.evaluator
+        evaluator = self.evaluator
+        assert evaluator is not None
+        return evaluator
 
-    def run_single_test(
-        self,
-        test_id: str,
-        model_response: str
-    ) -> dict[str, Any]:
+    def run_single_test(self, test_id: str, model_response: str) -> dict[str, Any]:
         """
         运行单 tests快捷方法
 
@@ -308,22 +309,22 @@ class NeedleTestRunner:
             TestResult字典
         """
         config_path = os.path.join(self.test_dir, "needle_tests_config.json")
-        with open(config_path, encoding='utf-8') as f:
+        with open(config_path, encoding="utf-8") as f:
             config = json.load(f)
 
         test_config = None
-        for test in config.get('tests', []):
-            if test.get('id') == test_id:
+        for test in config.get("tests", []):
+            if test.get("id") == test_id:
                 test_config = test
                 break
 
         if not test_config:
-            return {'error': f'Test not found: {test_id}'}
+            return {"error": f"Test not found: {test_id}"}
 
         # 关键词匹配评估
         predicted_lower = model_response.lower()
-        keywords = test_config.get('keywords', [])
-        required = test_config.get('required_keywords', 1)
+        keywords = test_config.get("keywords", [])
+        required = test_config.get("required_keywords", 1)
 
         found_keywords = []
         for kw in keywords:
@@ -333,22 +334,25 @@ class NeedleTestRunner:
         is_correct = len(found_keywords) >= required
 
         # Calculate题额外Validate
-        calc_base = test_config.get('calc_base')
-        calc_multiplier = test_config.get('calc_multiplier')
+        calc_base = test_config.get("calc_base")
+        calc_multiplier = test_config.get("calc_multiplier")
         if calc_base and calc_multiplier:
             expected_result = calc_base * calc_multiplier
-            if str(expected_result) in model_response or f"{expected_result:,}" in model_response:
+            if (
+                str(expected_result) in model_response
+                or f"{expected_result:,}" in model_response
+            ):
                 is_correct = True
 
         return {
-            'test_id': test_id,
-            'test_name': test_config.get('name', ''),
-            'is_correct': is_correct,
-            'found_keywords': found_keywords,
-            'required_keywords': required,
-            'expected_answer': test_config.get('expected_answer', {}),
-            'difficulty': test_config.get('difficulty', ''),
-            'needle_count': test_config.get('needle_count', 1)
+            "test_id": test_id,
+            "test_name": test_config.get("name", ""),
+            "is_correct": is_correct,
+            "found_keywords": found_keywords,
+            "required_keywords": required,
+            "expected_answer": test_config.get("expected_answer", {}),
+            "difficulty": test_config.get("difficulty", ""),
+            "needle_count": test_config.get("needle_count", 1),
         }
 
 
@@ -360,7 +364,7 @@ def get_needle_test_prompt(test_dir: str, test_id: str) -> str | None:
     evaluator.load_dataset()
 
     for sample in evaluator.samples:
-        if sample.get('id') == test_id:
+        if sample.get("id") == test_id:
             return evaluator.build_full_prompt(sample)
 
     return None

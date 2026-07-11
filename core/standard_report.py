@@ -40,9 +40,11 @@ from typing import Any
 # Data结构
 # ============================================
 
+
 @dataclass
 class ModelInfo:
     """Model信息"""
+
     model_id: str
     model_type: str = "unknown"  # standard, thinking, code
     provider: str = ""
@@ -56,6 +58,7 @@ class ModelInfo:
 @dataclass
 class EnvironmentInfo:
     """运行环境信息"""
+
     python_version: str = ""
     os_name: str = ""
     os_version: str = ""
@@ -64,53 +67,52 @@ class EnvironmentInfo:
     library_versions: dict[str, str] = field(default_factory=dict)
 
     @classmethod
-    def capture(cls) -> 'EnvironmentInfo':
-        """捕获当前环境信息"""
+    def capture(cls) -> "EnvironmentInfo":
+        """捕获当前环境信息。委托给 capture_system_info()(含 hardware_fingerprint +
+        library_versions + git/project version),保留原字段名兼容。"""
         info = cls()
-
-        # Python Version
-        info.python_version = platform.python_version()
-
-        # 操作系统
-        info.os_name = platform.system()
-        info.os_version = platform.release()
-
-        # 主机名
         try:
-            info.hostname = platform.node()
-        except:
-            pass
+            from core.system_info import capture_system_info, get_library_versions
 
-        # Git hash
-        try:
-            result = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0:
-                info.git_hash = result.stdout.strip()[:8]
-        except:
-            pass
-
-        # 关键库Version
-        try:
-            import torch
-            info.library_versions["torch"] = torch.__version__
-        except ImportError:
-            pass
-
-        try:
-            import transformers
-            info.library_versions["transformers"] = transformers.__version__
-        except ImportError:
-            pass
-
-        try:
-            import datasets
-            info.library_versions["datasets"] = datasets.__version__
-        except ImportError:
-            pass
-
+            si = capture_system_info()
+            info.python_version = si.get("python_version", "")
+            info.os_name = si.get("os_name", "")
+            info.os_version = si.get("os_version", "")
+            info.hostname = si.get("hostname", "")
+            info.git_hash = si.get("git_hash", "")
+            # library_versions:capture_system_info 现在已含 get_library_versions() 的全量结果
+            lv = si.get("library_versions") or get_library_versions()
+            info.library_versions = dict(lv) if isinstance(lv, dict) else {}
+        except Exception:  # noqa: BLE001
+            # 降级:直接用 platform(原逻辑)
+            info.python_version = platform.python_version()
+            info.os_name = platform.system()
+            info.os_version = platform.release()
+            try:
+                info.hostname = platform.node()
+            except Exception:
+                pass
+            try:
+                result = subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    info.git_hash = result.stdout.strip()[:8]
+            except Exception:
+                pass
+            for mod_name, display in [
+                ("torch", "torch"),
+                ("transformers", "Transformers"),
+                ("datasets", "Datasets"),
+            ]:
+                try:
+                    mod = __import__(mod_name)
+                    info.library_versions[display] = getattr(mod, "__version__", "unknown")
+                except ImportError:
+                    pass
         return info
 
     def to_dict(self) -> dict[str, Any]:
@@ -120,6 +122,7 @@ class EnvironmentInfo:
 @dataclass
 class DatasetMetrics:
     """单Dataset指标"""
+
     dataset_name: str
     alias: str = ""
 
@@ -158,6 +161,7 @@ class DatasetMetrics:
 @dataclass
 class FailureCase:
     """失败案例"""
+
     sample_id: int
     question: str
     expected_answer: str
@@ -170,12 +174,14 @@ class FailureCase:
     def to_dict(self) -> dict[str, Any]:
         return {
             "sample_id": self.sample_id,
-            "question": self.question[:200] + "..." if len(self.question) > 200 else self.question,
+            "question": (
+                self.question[:200] + "..." if len(self.question) > 200 else self.question
+            ),
             "expected": self.expected_answer,
             "predicted": self.predicted_answer,
             "category": self.category,
             "failure_type": self.failure_type,
-            "analysis": self.analysis
+            "analysis": self.analysis,
         }
 
 
@@ -186,6 +192,7 @@ class StandardReport:
 
     兼容 lm-evaluation-harness Result格式
     """
+
     # 元信息
     report_id: str = ""
     created_at: str = ""
@@ -222,8 +229,8 @@ class StandardReport:
         cls,
         result,  # EvaluationResult
         model_info: ModelInfo | None = None,
-        config: dict[str, Any] | None = None
-    ) -> 'StandardReport':
+        config: dict[str, Any] | None = None,
+    ) -> "StandardReport":
         """从 EvaluationResult Create标准报告"""
         report = cls()
 
@@ -246,29 +253,28 @@ class StandardReport:
             total_samples=result.total_samples,
             correct_samples=result.correct_samples,
             per_category=result.by_category,
-            duration_seconds=result.duration_seconds
+            duration_seconds=result.duration_seconds,
         )
 
         # 扩展指标
-        if hasattr(result, 'extended_metrics') and result.extended_metrics:
-            metrics.accuracy_stderr = result.extended_metrics.get('stderr', 0)
-            metrics.ci_lower = result.extended_metrics.get('ci_lower', 0)
-            metrics.ci_upper = result.extended_metrics.get('ci_upper', 0)
+        if hasattr(result, "extended_metrics") and result.extended_metrics:
+            metrics.accuracy_stderr = result.extended_metrics.get("stderr", 0)
+            metrics.ci_lower = result.extended_metrics.get("ci_lower", 0)
+            metrics.ci_upper = result.extended_metrics.get("ci_upper", 0)
 
         # Performance Metrics
-        if hasattr(result, 'performance_stats') and result.performance_stats:
-            metrics.avg_ttft_ms = result.performance_stats.get('avg_ttft_ms', 0)
-            metrics.avg_tps = result.performance_stats.get('avg_tps', 0)
-            metrics.avg_latency_ms = result.performance_stats.get('avg_latency_ms', 0)
-            metrics.total_tokens = (
-                result.performance_stats.get('total_input_tokens', 0) +
-                result.performance_stats.get('total_output_tokens', 0)
-            )
+        if hasattr(result, "performance_stats") and result.performance_stats:
+            metrics.avg_ttft_ms = result.performance_stats.get("avg_ttft_ms", 0)
+            metrics.avg_tps = result.performance_stats.get("avg_tps", 0)
+            metrics.avg_latency_ms = result.performance_stats.get("avg_latency_ms", 0)
+            metrics.total_tokens = result.performance_stats.get(
+                "total_input_tokens", 0
+            ) + result.performance_stats.get("total_output_tokens", 0)
 
         report.results[result.dataset_name] = metrics
 
         # 失败案例分析
-        if hasattr(result, 'details'):
+        if hasattr(result, "details"):
             failures = []
             for detail in result.details:
                 if not detail.is_correct and not detail.error:
@@ -278,8 +284,8 @@ class StandardReport:
                         expected_answer=detail.expected,
                         predicted_answer=detail.predicted,
                         model_response=detail.response[:500] if detail.response else "",
-                        category=detail.category if hasattr(detail, 'category') else "",
-                        failure_type=cls._classify_failure(detail)
+                        category=detail.category if hasattr(detail, "category") else "",
+                        failure_type=cls._classify_failure(detail),
                     )
                     failures.append(failure)
 
@@ -296,8 +302,8 @@ class StandardReport:
         cls,
         results: list,  # List[EvaluationResult]
         model_info: ModelInfo | None = None,
-        config: dict[str, Any] | None = None
-    ) -> 'StandardReport':
+        config: dict[str, Any] | None = None,
+    ) -> "StandardReport":
         """从多Evaluation resultCreate汇总报告"""
         report = cls()
 
@@ -337,7 +343,7 @@ class StandardReport:
             "avg_accuracy": sum(accuracies) / len(accuracies) if accuracies else 0,
             "total_samples": sum(r.total_samples for r in self.results.values()),
             "total_correct": sum(r.correct_samples for r in self.results.values()),
-            "num_datasets": len(self.results)
+            "num_datasets": len(self.results),
         }
 
     def to_dict(self) -> dict[str, Any]:
@@ -352,15 +358,15 @@ class StandardReport:
             "results": {k: v.to_dict() for k, v in self.results.items()},
             "aggregate": self.aggregate,
             "failure_analysis": {
-                k: [f.to_dict() for f in v]
-                for k, v in self.failure_analysis.items()
-            }
+                k: [f.to_dict() for f in v] for k, v in self.failure_analysis.items()
+            },
         }
 
 
 # ============================================
 # 报告Export器
 # ============================================
+
 
 class ReportExporter:
     """
@@ -374,9 +380,13 @@ class ReportExporter:
 
     def to_json(self, filepath: str, indent: int = 2) -> str:
         """Exportis标准 JSON 格式"""
-        os.makedirs(os.path.dirname(filepath), exist_ok=True) if os.path.dirname(filepath) else None
+        (
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            if os.path.dirname(filepath)
+            else None
+        )
 
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             json.dump(self.report.to_dict(), f, ensure_ascii=False, indent=indent)
 
         return filepath
@@ -399,16 +409,16 @@ class ReportExporter:
             "n-shot": {...}
         }
         """
-        lm_eval_result = {
+        lm_eval_result: dict[str, Any] = {
             "results": {},
             "configs": {},
             "versions": {},
             "n-shot": {},
             "config": {
                 "model": self.report.model.model_id,
-                "model_args": self.report.model.parameters
+                "model_args": self.report.model.parameters,
             },
-            "git_hash": self.report.environment.git_hash
+            "git_hash": self.report.environment.git_hash,
         }
 
         for name, metrics in self.report.results.items():
@@ -418,7 +428,7 @@ class ReportExporter:
                 "acc_stderr": metrics.accuracy_stderr,
                 "acc,none": metrics.accuracy,  # lm-eval 新格式
                 "acc_stderr,none": metrics.accuracy_stderr,
-                "alias": metrics.alias or name
+                "alias": metrics.alias or name,
             }
 
             # Add额外指标
@@ -431,9 +441,13 @@ class ReportExporter:
             # N-shot 信息
             lm_eval_result["n-shot"][name] = self.report.config.get("num_shots", 0)
 
-        os.makedirs(os.path.dirname(filepath), exist_ok=True) if os.path.dirname(filepath) else None
+        (
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            if os.path.dirname(filepath)
+            else None
+        )
 
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             json.dump(lm_eval_result, f, ensure_ascii=False, indent=2)
 
         return filepath
@@ -442,10 +456,10 @@ class ReportExporter:
         """
         Exportis OpenCompass 兼容格式
         """
-        oc_result = {
+        oc_result: dict[str, Any] = {
             "model": self.report.model.model_id,
             "time": self.report.created_at,
-            "results": {}
+            "results": {},
         }
 
         for name, metrics in self.report.results.items():
@@ -454,13 +468,17 @@ class ReportExporter:
                 "score": metrics.accuracy * 100,
                 "details": {
                     "total": metrics.total_samples,
-                    "correct": metrics.correct_samples
-                }
+                    "correct": metrics.correct_samples,
+                },
             }
 
-        os.makedirs(os.path.dirname(filepath), exist_ok=True) if os.path.dirname(filepath) else None
+        (
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            if os.path.dirname(filepath)
+            else None
+        )
 
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             json.dump(oc_result, f, ensure_ascii=False, indent=2)
 
         return filepath
@@ -503,7 +521,9 @@ class ReportExporter:
         if self.report.aggregate:
             lines.append("### 汇总")
             lines.append("")
-            lines.append(f"- **AverageAccuracy**: {self.report.aggregate.get('avg_accuracy', 0):.4f}")
+            lines.append(
+                f"- **AverageAccuracy**: {self.report.aggregate.get('avg_accuracy', 0):.4f}"
+            )
             lines.append(f"- **总Sample count**: {self.report.aggregate.get('total_samples', 0)}")
             lines.append(f"- **Dataset数量**: {self.report.aggregate.get('num_datasets', 0)}")
             lines.append("")
@@ -518,9 +538,9 @@ class ReportExporter:
                 lines.append("")
 
                 # 按失败类型Statistics
-                failure_types = {}
-                for f in failures:
-                    ft = f.failure_type or "unknown"
+                failure_types: dict[str, int] = {}
+                for fc in failures:
+                    ft = fc.failure_type or "unknown"
                     failure_types[ft] = failure_types.get(ft, 0) + 1
 
                 lines.append("**失败类型分布:**")
@@ -531,27 +551,33 @@ class ReportExporter:
                 # 示例
                 lines.append("**示例 (前5):**")
                 lines.append("")
-                for i, f in enumerate(failures[:5]):
-                    lines.append(f"**案例 {i+1}** (ID: {f.sample_id})")
-                    lines.append(f"- 期望: `{f.expected_answer}`")
-                    lines.append(f"- 预测: `{f.predicted_answer}`")
-                    lines.append(f"- 类型: {f.failure_type}")
+                for i, fc in enumerate(failures[:5]):
+                    lines.append(f"**案例 {i + 1}** (ID: {fc.sample_id})")
+                    lines.append(f"- 期望: `{fc.expected_answer}`")
+                    lines.append(f"- 预测: `{fc.predicted_answer}`")
+                    lines.append(f"- 类型: {fc.failure_type}")
                     lines.append("")
 
         # 环境信息
         lines.append("## 环境信息")
         lines.append("")
         lines.append(f"- Python: {self.report.environment.python_version}")
-        lines.append(f"- OS: {self.report.environment.os_name} {self.report.environment.os_version}")
+        lines.append(
+            f"- OS: {self.report.environment.os_name} {self.report.environment.os_version}"
+        )
         if self.report.environment.git_hash:
             lines.append(f"- Git: {self.report.environment.git_hash}")
         lines.append("")
 
         content = "\n".join(lines)
 
-        os.makedirs(os.path.dirname(filepath), exist_ok=True) if os.path.dirname(filepath) else None
+        (
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            if os.path.dirname(filepath)
+            else None
+        )
 
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             f.write(content)
 
         return filepath
@@ -560,30 +586,45 @@ class ReportExporter:
         """Export as CSV 格式 (简易表格)"""
         import csv
 
-        os.makedirs(os.path.dirname(filepath), exist_ok=True) if os.path.dirname(filepath) else None
+        (
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            if os.path.dirname(filepath)
+            else None
+        )
 
-        with open(filepath, 'w', newline='', encoding='utf-8') as f:
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
 
             # 表头
-            writer.writerow([
-                "dataset", "accuracy", "stderr", "ci_lower", "ci_upper",
-                "total_samples", "correct_samples", "avg_ttft_ms", "avg_tps"
-            ])
+            writer.writerow(
+                [
+                    "dataset",
+                    "accuracy",
+                    "stderr",
+                    "ci_lower",
+                    "ci_upper",
+                    "total_samples",
+                    "correct_samples",
+                    "avg_ttft_ms",
+                    "avg_tps",
+                ]
+            )
 
             # Data
             for name, metrics in self.report.results.items():
-                writer.writerow([
-                    name,
-                    f"{metrics.accuracy:.6f}",
-                    f"{metrics.accuracy_stderr:.6f}",
-                    f"{metrics.ci_lower:.6f}",
-                    f"{metrics.ci_upper:.6f}",
-                    metrics.total_samples,
-                    metrics.correct_samples,
-                    f"{metrics.avg_ttft_ms:.2f}",
-                    f"{metrics.avg_tps:.2f}"
-                ])
+                writer.writerow(
+                    [
+                        name,
+                        f"{metrics.accuracy:.6f}",
+                        f"{metrics.accuracy_stderr:.6f}",
+                        f"{metrics.ci_lower:.6f}",
+                        f"{metrics.ci_upper:.6f}",
+                        metrics.total_samples,
+                        metrics.correct_samples,
+                        f"{metrics.avg_ttft_ms:.2f}",
+                        f"{metrics.avg_tps:.2f}",
+                    ]
+                )
 
         return filepath
 
@@ -592,10 +633,8 @@ class ReportExporter:
 # 失败分析工具
 # ============================================
 
-def generate_failure_analysis(
-    failures: list[FailureCase],
-    top_n: int = 10
-) -> dict[str, Any]:
+
+def generate_failure_analysis(failures: list[FailureCase], top_n: int = 10) -> dict[str, Any]:
     """
     Generate详细失败分析报告
 
@@ -624,24 +663,23 @@ def generate_failure_analysis(
         by_category[cat] = by_category.get(cat, 0) + 1
 
     # Generate分析
-    analysis = {
+    recommendations: list[str] = []
+    analysis: dict[str, Any] = {
         "total_failures": len(failures),
         "by_failure_type": {k: len(v) for k, v in by_type.items()},
         "by_category": by_category,
         "top_cases": [f.to_dict() for f in failures[:top_n]],
-        "recommendations": []
+        "recommendations": recommendations,
     }
 
     # GenerateSuggestion
-    if by_type.get("parse_error", 0) > len(failures) * 0.2:
-        analysis["recommendations"].append(
+    if len(by_type.get("parse_error", [])) > len(failures) * 0.2:
+        recommendations.append(
             "ParseError rate较高，SuggestionCheckAnswer提取逻辑or启用增强Parse器"
         )
 
-    if by_type.get("empty_response", 0) > 0:
-        analysis["recommendations"].append(
-            "存in空响应，可能is API Erroror超时问题"
-        )
+    if by_type.get("empty_response"):
+        recommendations.append("存in空响应，可能is API Erroror超时问题")
 
     return analysis
 
@@ -649,6 +687,7 @@ def generate_failure_analysis(
 # ============================================
 # 便捷函数
 # ============================================
+
 
 def export_lm_eval_format(result, filepath: str) -> str:
     """快速Export lm-eval 格式"""
@@ -668,13 +707,13 @@ def export_all_formats(result, output_dir: str, prefix: str = "report") -> dict[
         "json": exporter.to_json(os.path.join(output_dir, f"{prefix}.json")),
         "lm_eval": exporter.to_lm_eval_format(os.path.join(output_dir, f"{prefix}_lm_eval.json")),
         "markdown": exporter.to_markdown(os.path.join(output_dir, f"{prefix}.md")),
-        "csv": exporter.to_csv(os.path.join(output_dir, f"{prefix}.csv"))
+        "csv": exporter.to_csv(os.path.join(output_dir, f"{prefix}.csv")),
     }
 
 
 def load_report(filepath: str) -> StandardReport:
     """从 JSON 文件Load报告"""
-    with open(filepath, encoding='utf-8') as f:
+    with open(filepath, encoding="utf-8") as f:
         data = json.load(f)
 
     report = StandardReport()
@@ -702,13 +741,13 @@ def load_report(filepath: str) -> StandardReport:
 
 def compare_reports(report1: StandardReport, report2: StandardReport) -> dict[str, Any]:
     """比较两报告"""
-    comparison = {
+    comparison: dict[str, Any] = {
         "report1_id": report1.report_id,
         "report2_id": report2.report_id,
         "model1": report1.model.model_id,
         "model2": report2.model.model_id,
         "datasets": {},
-        "summary": {}
+        "summary": {},
     }
 
     # 找出共同Dataset
@@ -723,20 +762,21 @@ def compare_reports(report1: StandardReport, report2: StandardReport) -> dict[st
             "report1_accuracy": m1.accuracy,
             "report2_accuracy": m2.accuracy,
             "difference": diff,
-            "better": "report2" if diff > 0 else "report1" if diff < 0 else "equal"
+            "better": "report2" if diff > 0 else "report1" if diff < 0 else "equal",
         }
 
     # 汇总
     if common_datasets:
-        avg_diff = sum(
-            comparison["datasets"][ds]["difference"]
-            for ds in common_datasets
-        ) / len(common_datasets)
+        avg_diff = sum(comparison["datasets"][ds]["difference"] for ds in common_datasets) / len(
+            common_datasets
+        )
 
         comparison["summary"] = {
             "common_datasets": len(common_datasets),
             "avg_difference": avg_diff,
-            "overall_better": "report2" if avg_diff > 0 else "report1" if avg_diff < 0 else "equal"
+            "overall_better": (
+                "report2" if avg_diff > 0 else "report1" if avg_diff < 0 else "equal"
+            ),
         }
 
     return comparison

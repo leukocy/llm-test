@@ -19,6 +19,7 @@ import streamlit as st
 def _parse_param_value(raw, ptype):
     """Convert a raw string input to the requested type. Returns (value, error)."""
     import json
+
     raw = (raw or "").strip()
     if ptype == "number":
         try:
@@ -49,46 +50,48 @@ def _render_custom_params(st_module):
     """
     st = st_module
 
-    st.markdown("##### Custom request parameters")
+    st.markdown("##### Custom Request Parameters")
     if "custom_params_rows" not in st.session_state:
         st.session_state.custom_params_rows = []  # list of {name,type,loc}
 
     rows = st.session_state.custom_params_rows
     cadd, _ = st.columns([1, 3])
-    if cadd.button(
-        "Add parameter",
-        key="custom_param_add",
-        use_container_width=True,
-        icon=material_icon("add"),
-    ):
+    if cadd.button("Add Parameter", key="custom_param_add", use_container_width=True):
         rows.append({"name": "", "type": "text", "loc": "payload"})
 
     parsed = []
     for idx, row in enumerate(rows):
         with st.container():
             cols = st.columns([3, 2, 3, 2, 1])
-            row["name"] = cols[0].text_input("Name", value=row["name"],
-                                              key=f"cp_name_{idx}", placeholder="e.g. top_p")
-            row["type"] = cols[1].selectbox("Type", ["text", "number", "boolean", "json"],
-                                              index=["text", "number", "boolean", "json"].index(row["type"]),
-                                              key=f"cp_type_{idx}")
+            row["name"] = cols[0].text_input(
+                "Name",
+                value=row["name"],
+                key=f"cp_name_{idx}",
+                placeholder="e.g. top_p",
+            )
+            row["type"] = cols[1].selectbox(
+                "Type",
+                ["text", "number", "boolean", "json"],
+                index=["text", "number", "boolean", "json"].index(row["type"]),
+                key=f"cp_type_{idx}",
+            )
             # value input depends on type
             if row["type"] == "boolean":
-                raw_val = cols[2].selectbox("Value", ["false", "true"],
-                                             key=f"cp_val_{idx}")
+                raw_val = cols[2].selectbox("Value", ["false", "true"], key=f"cp_val_{idx}")
             else:
-                raw_val = cols[2].text_input("Value", key=f"cp_val_{idx}",
-                                              placeholder="{}" if row["type"] == "json" else "")
-            row["loc"] = cols[3].selectbox("Location", ["payload", "extra_body"],
-                                            index=["payload", "extra_body"].index(row["loc"]),
-                                            key=f"cp_loc_{idx}",
-                                            help="payload = request top-level; extra_body = OpenAI extra_body sub-object")
-            if cols[4].button(
-                "Delete",
-                key=f"cp_del_{idx}",
-                help="Delete this parameter",
-                icon=material_icon("delete"),
-            ):
+                raw_val = cols[2].text_input(
+                    "Value",
+                    key=f"cp_val_{idx}",
+                    placeholder="{}" if row["type"] == "json" else "",
+                )
+            row["loc"] = cols[3].selectbox(
+                "Location",
+                ["payload", "extra_body"],
+                index=["payload", "extra_body"].index(row["loc"]),
+                key=f"cp_loc_{idx}",
+                help="payload = request top-level; extra_body = OpenAI extra_body sub-object",
+            )
+            if cols[4].button("Delete", key=f"cp_del_{idx}", help="删除此参数"):
                 rows.pop(idx)
                 st.rerun()
 
@@ -109,7 +112,8 @@ from config.settings import HF_MODEL_MAPPING
 from config.test_types import test_type_label
 from core.error_messages import ErrorMessages, get_error_info
 from core.tokenizer_utils import get_cached_tokenizer
-from ui.design_system import material_icon, render_sidebar_brand
+from ui.components import status_icon
+from ui.design_system import material_icon
 from utils.custom_config import get_all_models, get_all_providers
 
 
@@ -141,7 +145,7 @@ def _on_model_change():
     """
     Callback when model selection changes - auto-update tokenizer mapping.
     """
-    model_id = st.session_state.get('model_id_selector', '')
+    model_id = st.session_state.get("model_id_selector", "")
     if model_id:
         mapped_tokenizer = _auto_map_tokenizer(model_id)
         if mapped_tokenizer:
@@ -161,17 +165,18 @@ def fetch_models(api_base, api_key):
     """
     try:
         import requests
-        url = api_base.rstrip('/')
+
+        url = api_base.rstrip("/")
         headers = {}
         if api_key:
-            headers['Authorization'] = f'Bearer {api_key}'
+            headers["Authorization"] = f"Bearer {api_key}"
 
-        response = requests.get(f'{url}/models', headers=headers, timeout=10)
+        response = requests.get(f"{url}/models", headers=headers, timeout=10)
         response.raise_for_status()
         data = response.json()
 
-        if 'data' in data:
-            return [model['id'] for model in data['data']]
+        if "data" in data:
+            return [model["id"] for model in data["data"]]
         return []
     except requests.exceptions.Timeout as e:
         error_info = get_error_info(e, context=f"API URL: {api_base}", language="en")
@@ -214,22 +219,28 @@ def _render_tokenizer_status_panel():
     with st.expander("Tokenizer Status", expanded=False):
         # Show status for all registered tokenizers
         for t in tokenizers:
-            availability = "Available" if t["available"] else "Missing"
+            status = status_icon("completed" if t["available"] else "failed")
             size_str = f"{t['size_mb']:.1f} MB" if t["available"] else "—"
-            st.markdown(f"**{t['name']}** · {availability} — {size_str}")
+            st.markdown(f"{status} **{t['name']}** — {size_str}", unsafe_allow_html=True)
 
         # Download buttons for missing tokenizers
         if missing:
             st.markdown("---")
             st.caption(f"{len(missing)} tokenizer(s) need download")
 
-            if st.button("Download All Missing Tokenizers", key="download_all_tokenizers", type="primary"):
+            if st.button(
+                "Download All Missing Tokenizers",
+                key="download_all_tokenizers",
+                type="primary",
+            ):
                 progress = st.progress(0)
                 status = st.empty()
                 total = len(missing)
                 ok = 0
                 for i, t in enumerate(missing):
-                    status.info(f"Downloading {t['name']} from {t['hf_repo_id']}... ({i+1}/{total})")
+                    status.info(
+                        f"Downloading {t['name']} from {t['hf_repo_id']}... ({i+1}/{total})"
+                    )
                     local = ensure_tokenizer_available(t["local_path"])
                     if local:
                         ok += 1
@@ -275,29 +286,38 @@ def render_sidebar():
             }
     """
     config = {}
-    render_sidebar_brand()
 
-    pending_preset = st.session_state.get('_pending_preset_apply')
+    pending_preset = st.session_state.get("_pending_preset_apply")
     if pending_preset:
-        st.session_state['_pending_preset_apply'] = None
+        st.session_state["_pending_preset_apply"] = None
         try:
             from utils.test_config_manager import apply_preset
+
             if apply_preset(pending_preset):
-                st.session_state['_applied_preset_name'] = pending_preset
+                st.session_state["_applied_preset_name"] = pending_preset
         except Exception as e:
-            st.session_state['_preset_apply_error'] = str(e)
+            st.session_state["_preset_apply_error"] = str(e)
 
     # Import stop flag control function
     try:
         from core.providers.openai import set_stop_requested
     except ImportError:
-        def set_stop_requested(value): pass
 
-    # Import Gemini abort function
+        def set_stop_requested(value: bool):
+            pass
+
+    # Import Gemini abort function (may not exist — optional dependency)
     try:
-        from core.providers.gemini import abort_all_clients as abort_gemini_clients
+        import importlib
+
+        _gemini_mod = importlib.import_module("core.providers.gemini")
+        abort_gemini_clients = getattr(_gemini_mod, "abort_all_clients", None)
+        if abort_gemini_clients is None:
+            raise ImportError
     except ImportError:
-        def abort_gemini_clients(): pass
+
+        def abort_gemini_clients() -> None:
+            pass
 
     # Import pause/stop control functions
     from config.session_state import is_test_paused, is_test_running
@@ -305,10 +325,10 @@ def render_sidebar():
     # Only show status indicator in sidebar, control buttons are in test_control_panel
     is_running = is_test_running()
     is_paused = is_test_paused()
-    test_status = st.session_state.get('test_status', 'Idle')
+    test_status = st.session_state.get("test_status", "Idle")
 
     # Auto-fix: if test_status is not Running/Paused but flags are still True, fix them
-    if test_status not in ('Running', 'Paused') and (is_running or is_paused):
+    if test_status not in ("Running", "Paused") and (is_running or is_paused):
         st.session_state.test_running = False
         st.session_state.test_paused = False
         # 不调用 st.rerun()，让当前渲染周期正常完成，避免全页白屏刷新
@@ -327,19 +347,21 @@ def render_sidebar():
         selected_provider = st.selectbox(
             "Select API Provider",
             options=list(all_providers.keys()),
-            key="provider_selector"
+            key="provider_selector",
         )
 
         default_api_base_url = all_providers[selected_provider]
         api_base_url = st.text_input("API Base URL", default_api_base_url)
 
         if "Non-Compatible" in selected_provider:
-            st.warning(f"**Special Handling**: {selected_provider} uses non-OpenAI standard API. Dedicated adapter enabled.")
+            st.warning(
+                f"**Special Handling**: {selected_provider} uses non-OpenAI standard API. Dedicated adapter enabled."
+            )
 
         api_key = st.text_input("API Key (Optional)", "", type="password")
 
         # Dynamically fetch model list
-        if 'fetched_models' not in st.session_state:
+        if "fetched_models" not in st.session_state:
             st.session_state.fetched_models = []
 
         options = st.session_state.fetched_models or get_all_models()
@@ -351,7 +373,7 @@ def render_sidebar():
             "Model ID (Quick Select)",
             options=options,
             key="model_id_selector",
-            on_change=_on_model_change
+            on_change=_on_model_change,
         )
 
         if st.button(
@@ -365,16 +387,15 @@ def render_sidebar():
                 models = fetch_models(api_base_url, api_key)
                 if models:
                     st.session_state.fetched_models = models
-                    if models and st.session_state.get('model_id_selector') not in models:
+                    if models and st.session_state.get("model_id_selector") not in models:
                         st.session_state.model_id_selector = models[0]
-                        # Auto-map tokenizer for the first model
                         _on_model_change()
                     st.success(f"Fetched {len(models)} models")
 
         model_id_custom = st.text_input(
             "Custom Model ID (Overrides above)",
             "",
-            help="If entered here, this ID will be used instead."
+            help="If entered here, this ID will be used instead.",
         )
 
         model_id = model_id_custom if model_id_custom else model_id_selected
@@ -382,7 +403,7 @@ def render_sidebar():
         st.markdown("---")
 
         # System calibration
-        st.markdown("##### System calibration")
+        st.markdown("##### System Calibration")
 
         # Probe button section - rendered FIRST so its callback can update state before widget is created
         if st.button(
@@ -401,10 +422,7 @@ def render_sidebar():
 
                 measured_rtt = min(t_starts)
                 st.session_state["latency_offset_input"] = measured_rtt
-                st.toast(
-                    f"Calibrated latency: {measured_rtt:.3f}s",
-                    icon=material_icon("speed"),
-                )
+                st.toast(f"Calibrated latency: {measured_rtt:.3f}s")
                 # 无需 rerun，Streamlit 自动检测 widget key 值变化
 
         # Number input section
@@ -419,20 +437,22 @@ def render_sidebar():
             step=0.01,
             format="%.3f",
             key="latency_offset_input",
-            help="This value is automatically subtracted from each TTFT calculation to exclude network latency and system overhead. Use Measure latency to auto-detect."
+            help="This value is automatically subtracted from each TTFT calculation to exclude network latency and system overhead. Use Measure latency to auto-detect.",
         )
         # Sync to session_state.latency_offset for other components to read
         st.session_state.latency_offset = latency_offset
 
         if "template_tokens_input" not in st.session_state:
-            st.session_state.template_tokens_input = int(st.session_state.get("template_tokens", 0) or 0)
+            st.session_state.template_tokens_input = int(
+                st.session_state.get("template_tokens", 0) or 0
+            )
 
         template_tokens = st.number_input(
             "Template Token Overhead",
             min_value=0,
             step=1,
             key="template_tokens_input",
-            help="Extra tokens added by the engine/model chat template. This value is subtracted from generated prompt length targets."
+            help="Extra tokens added by the engine/model chat template. This value is subtracted from generated prompt length targets.",
         )
         st.session_state.template_tokens = int(template_tokens)
 
@@ -440,7 +460,7 @@ def render_sidebar():
         st.checkbox(
             "Skip First Token for TPS",
             key="skip_first_token_for_tps",
-            help="For PD-separated providers: treat the 2nd token as generation start for TPS/TPOT, so decode speed is measured accurately. TTFT is unaffected."
+            help="For PD-separated providers: treat the 2nd token as generation start for TPS/TPOT, so decode speed is measured accurately. TTFT is unaffected.",
         )
 
         # Composable prompt-suffix builder: type (multi) x difficulty (single) x output-instruction (multi)
@@ -454,7 +474,8 @@ def render_sidebar():
                 set_aime_difficulty,
                 set_suffix_builder,
             )
-            st.markdown("##### Prompt suffix builder")
+
+            st.markdown("##### Prompt Suffix Builder")
 
             # --- Question types (multi-select) ---
             type_keys = [k for k, _, _ in SUFFIX_TYPE_OPTIONS]
@@ -478,14 +499,18 @@ def render_sidebar():
             if "math" in sel_types:
                 difficulty_keys = [k for k, _, _ in AIME_DIFFICULTY_OPTIONS]
                 difficulty_labels = [lbl for _, lbl, _ in AIME_DIFFICULTY_OPTIONS]
-                default_idx = difficulty_keys.index(get_aime_difficulty()) if get_aime_difficulty() in difficulty_keys else 0
+                default_idx = (
+                    difficulty_keys.index(get_aime_difficulty())
+                    if get_aime_difficulty() in difficulty_keys
+                    else 0
+                )
                 sel_idx = st.selectbox(
                     "AIME Difficulty (math type)",
                     options=range(len(difficulty_labels)),
                     format_func=lambda i: difficulty_labels[i],
                     index=default_idx,
                     help="Stable-fill layer for the math (AIME) type. Harder layers reliably "
-                         "fill larger decode windows.",
+                    "fill larger decode windows.",
                 )
                 set_aime_difficulty(difficulty_keys[sel_idx])
             else:
@@ -504,10 +529,10 @@ def render_sidebar():
                 format_func=lambda k: ins_labels[k],
                 key="suffix_ins_widget",
                 help="题目之后追加的指令文本，用来引导输出形态/长度（让模型写得更详细更长，"
-                     "提高 decode 撞满 max_tokens 的概率）。多选则随机拼接多条；"
-                     "选 'none' 表示只用纯题干、不追加任何指令。仅对走构造器的测试生效"
-                     "（并发/prefill/长上下文/matrix/stability）；Custom Text Test 有独立的"
-                     " 'Extra Suffix Instruction' 输入框。",
+                "提高 decode 撞满 max_tokens 的概率）。多选则随机拼接多条；"
+                "选 'none' 表示只用纯题干、不追加任何指令。仅对走构造器的测试生效"
+                "（并发/prefill/长上下文/matrix/stability）；Custom Text Test 有独立的"
+                " 'Extra Suffix Instruction' 输入框。",
             )
 
             set_suffix_builder(sel_types, sel_ins)
@@ -517,14 +542,14 @@ def render_sidebar():
             pass
 
         # Random seed (for reproducibility)
-        st.markdown("##### Random seed")
+        st.markdown("##### Random Seed")
         col_seed_1, col_seed_2 = st.columns([3, 1])
         with col_seed_1:
             seed_enabled = st.checkbox(
                 "Enable Fixed Seed",
                 value=False,
                 key="random_seed_enabled",
-                help="When enabled, random operations during tests (e.g., prompt generation) will use a fixed seed for reproducibility"
+                help="When enabled, random operations during tests (e.g., prompt generation) will use a fixed seed for reproducibility",
             )
         with col_seed_2:
             if seed_enabled:
@@ -535,20 +560,20 @@ def render_sidebar():
                     value=42,
                     step=1,
                     key="random_seed_value",
-                    help="Fixed seed value. Same seed + same config = reproducible results"
+                    help="Fixed seed value. Same seed + same config = reproducible results",
                 )
                 st.session_state.random_seed = random_seed
             else:
                 st.session_state.random_seed = None
 
         # Sampling temperature (default: not sent -> API default)
-        st.markdown("##### Sampling temperature")
+        st.markdown("##### Sampling Temperature")
         temp_enabled = st.checkbox(
             "Override Temperature",
             value=False,
             key="temperature_enabled",
             help="When OFF, no temperature is sent to the API (uses the provider's default). "
-                 "When ON, set a specific sampling temperature."
+            "When ON, set a specific sampling temperature.",
         )
         if temp_enabled:
             temperature = st.slider(
@@ -558,7 +583,7 @@ def render_sidebar():
                 value=0.7,
                 step=0.05,
                 key="temperature_value",
-                help="Lower = more deterministic; higher = more random. Sent as the 'temperature' field."
+                help="Lower = more deterministic; higher = more random. Sent as the 'temperature' field.",
             )
             st.session_state.temperature = temperature
         else:
@@ -572,9 +597,13 @@ def render_sidebar():
 
         tokenizer_option = st.selectbox(
             "Token Counting Method",
-            ["HuggingFace Tokenizer", "API (usage field)", "Character Count (Fallback)"],
+            [
+                "HuggingFace Tokenizer",
+                "API (usage field)",
+                "Character Count (Fallback)",
+            ],
             key="tokenizer_option_selector",
-            help="Recommend 'API (usage field)' for the most accurate results. For non-OpenAI models, choose 'HuggingFace Tokenizer' and specify the model ID."
+            help="Recommend 'API (usage field)' for the most accurate results. For non-OpenAI models, choose 'HuggingFace Tokenizer' and specify the model ID.",
         )
 
         # Tokenizer status panel (when HF tokenizer is selected)
@@ -592,7 +621,9 @@ def render_sidebar():
 
             # Calculate default matching HF model (longer keys first for specificity)
             default_hf_model = hf_model_presets[0]
-            for mapping_key, hf_id in sorted(model_mapping.items(), key=lambda x: len(x[0]), reverse=True):
+            for mapping_key, hf_id in sorted(
+                model_mapping.items(), key=lambda x: len(x[0]), reverse=True
+            ):
                 if mapping_key.lower() in current_model_lower:
                     default_hf_model = hf_id
                     break
@@ -607,7 +638,7 @@ def render_sidebar():
                 hf_model_presets,
                 index=default_index,
                 key="hf_model_selector",
-                help="Auto-recommends matching tokenizer based on current model"
+                help="Auto-recommends matching tokenizer based on current model",
             )
 
             if selected_hf_preset == "Custom":
@@ -615,20 +646,26 @@ def render_sidebar():
                     "Enter Custom Model ID",
                     value="",
                     key="hf_custom_model_id",
-                    help="Enter the HuggingFace model ID, e.g., 'deepseek-ai/deepseek-llm-7b-chat' or a local path."
+                    help="Enter the HuggingFace model ID, e.g., 'deepseek-ai/deepseek-llm-7b-chat' or a local path.",
                 )
             else:
                 hf_tokenizer_model_id = selected_hf_preset
 
         # Token counter
-        with st.sidebar.expander("Token counter", expanded=False):
-            st.caption(f"Current Tokenizer: {hf_tokenizer_model_id if hf_tokenizer_model_id else 'Not Selected'}")
+        with st.sidebar.expander("Token Counter", expanded=False):
+            st.caption(
+                f"Current Tokenizer: {hf_tokenizer_model_id if hf_tokenizer_model_id else 'Not Selected'}"
+            )
 
-            calc_text = st.text_area("Enter text to count tokens", height=100, key="token_calc_input")
+            calc_text = st.text_area(
+                "Enter text to count tokens", height=100, key="token_calc_input"
+            )
 
             if calc_text:
                 if not hf_tokenizer_model_id:
-                    st.warning("Please select a model in the HuggingFace Tokenizer section above first.")
+                    st.warning(
+                        "Please select a model in the HuggingFace Tokenizer section above first."
+                    )
                 else:
                     try:
                         with st.spinner("Loading Tokenizer..."):
@@ -646,10 +683,11 @@ def render_sidebar():
     st.sidebar.markdown("---")
 
     # Test configuration
-    st.sidebar.header("Test workspace")
+    st.sidebar.header("Test Configuration")
 
     # Check optional modules
     import importlib
+
     try:
         importlib.import_module("core.quality_evaluator")
         quality_available = True
@@ -671,6 +709,7 @@ def render_sidebar():
         "custom",
         "all",
         "stability",
+        "environment",
         "batch",
     ]
     if quality_available:
@@ -702,24 +741,26 @@ def render_sidebar():
         _test_types,
         index=_test_types.index(selected_test_type),
         key=test_type_widget_key,
-        disabled=is_running or is_paused,
         format_func=test_type_label,
+        disabled=is_running or is_paused,
     )
     set_current_test_type(test_type, _test_types, sync_widget_key=False)
 
     # Return configuration dict
-    config.update({
-        'provider': selected_provider,
-        'api_base_url': api_base_url,
-        'model_id': model_id,
-        'api_key': api_key,
-        'tokenizer_option': tokenizer_option,
-        'hf_tokenizer_model_id': hf_tokenizer_model_id,
-        'test_type': test_type,
-        'latency_offset': st.session_state.latency_offset,
-        'template_tokens': st.session_state.template_tokens,
-        'custom_sys_info': st.session_state.custom_sys_info
-    })
+    config.update(
+        {
+            "provider": selected_provider,
+            "api_base_url": api_base_url,
+            "model_id": model_id,
+            "api_key": api_key,
+            "tokenizer_option": tokenizer_option,
+            "hf_tokenizer_model_id": hf_tokenizer_model_id,
+            "test_type": test_type,
+            "latency_offset": st.session_state.latency_offset,
+            "template_tokens": st.session_state.template_tokens,
+            "custom_sys_info": st.session_state.custom_sys_info,
+        }
+    )
 
     return config
 
@@ -777,7 +818,9 @@ def render_sidebar_bottom():
                         use_container_width=True,
                         help="Load this saved CSV and regenerate statistics, charts, and conclusions.",
                     ):
-                        if restore_result_file_to_session(st.session_state, options[selected_saved]):
+                        if restore_result_file_to_session(
+                            st.session_state, options[selected_saved]
+                        ):
                             st.session_state["_force_test_type_selector"] = st.session_state.get(
                                 "current_test_type"
                             )
@@ -813,7 +856,7 @@ def render_sidebar_bottom():
             st.warning(f"Saved result loader unavailable: {e}")
 
     # Config presets
-    with st.sidebar.expander("Config presets", expanded=False):
+    with st.sidebar.expander("Config Presets", expanded=False):
         try:
             from utils.test_config_manager import config_manager
 
@@ -822,29 +865,26 @@ def render_sidebar_bottom():
 
             if all_presets:
                 preset_names = [p["name"] for p in all_presets]
-                selected_preset = st.selectbox("Select Preset", [""] + preset_names, key="preset_select")
+                selected_preset = st.selectbox(
+                    "Select Preset", [""] + preset_names, key="preset_select"
+                )
 
-                applied_preset = st.session_state.get('_applied_preset_name')
+                applied_preset = st.session_state.get("_applied_preset_name")
                 if applied_preset:
                     st.success(f"Applied: {applied_preset}")
-                    st.session_state['_applied_preset_name'] = None
+                    st.session_state["_applied_preset_name"] = None
 
-                preset_error = st.session_state.get('_preset_apply_error')
+                preset_error = st.session_state.get("_preset_apply_error")
                 if preset_error:
                     st.error(f"Load failed: {preset_error}")
-                    st.session_state['_preset_apply_error'] = None
+                    st.session_state["_preset_apply_error"] = None
 
                 if selected_preset:
                     col_load, col_del = st.columns(2)
 
                     with col_load:
-                        if st.button(
-                            "Apply",
-                            key="preset_load_btn",
-                            use_container_width=True,
-                            icon=material_icon("download"),
-                        ):
-                            st.session_state['_pending_preset_apply'] = selected_preset
+                        if st.button("Apply", key="preset_load_btn", use_container_width=True):
+                            st.session_state["_pending_preset_apply"] = selected_preset
                             st.rerun()
 
                     with col_del:
@@ -853,7 +893,6 @@ def render_sidebar_bottom():
                             key="preset_del_btn",
                             help="Delete preset",
                             use_container_width=True,
-                            icon=material_icon("delete"),
                         ):
                             if config_manager.delete_preset(selected_preset):
                                 st.success(f"Deleted: {selected_preset}")
@@ -864,31 +903,32 @@ def render_sidebar_bottom():
             st.warning(f"Preset management unavailable: {e}")
 
     # Save current config as preset
-    with st.sidebar.expander("Save current configuration", expanded=False):
-        preset_name = st.text_input("Preset Name", key="save_preset_name", placeholder="e.g.: My Quick Test")
-        preset_desc = st.text_input("Description (Optional)", key="save_preset_desc", placeholder="Describe config purpose...")
+    with st.sidebar.expander("Save Current Config", expanded=False):
+        preset_name = st.text_input(
+            "Preset Name", key="save_preset_name", placeholder="e.g.: My Quick Test"
+        )
+        preset_desc = st.text_input(
+            "Description (Optional)",
+            key="save_preset_desc",
+            placeholder="Describe config purpose...",
+        )
 
-        if st.button(
-            "Save as preset",
-            key="save_preset_btn",
-            use_container_width=True,
-            icon=material_icon("save"),
-        ):
+        if st.button("Save as Preset", key="save_preset_btn", use_container_width=True):
             if preset_name:
                 try:
                     from utils.test_config_manager import ConfigPreset, get_current_config
 
                     current_config = get_current_config()
-                    current_config.update({
-                        'api_base_url': st.session_state.get('current_api_base', ''),
-                        'model_id': st.session_state.get('current_model_id', ''),
-                        'concurrency': st.session_state.get('current_concurrency', 1)
-                    })
+                    current_config.update(
+                        {
+                            "api_base_url": st.session_state.get("current_api_base", ""),
+                            "model_id": st.session_state.get("current_model_id", ""),
+                            "concurrency": st.session_state.get("current_concurrency", 1),
+                        }
+                    )
 
                     preset = ConfigPreset(
-                        name=preset_name,
-                        description=preset_desc,
-                        config=current_config
+                        name=preset_name, description=preset_desc, config=current_config
                     )
 
                     if config_manager.save_preset(preset):
@@ -899,40 +939,82 @@ def render_sidebar_bottom():
                 st.warning("Please enter a preset name")
 
     # Report info configuration
-    with st.sidebar.expander("Report information", expanded=False):
-        st.caption("Manually enter hardware info here, which will be displayed in generated charts.\n(Leave empty to hide; defaults to empty for API tests)")
+    with st.sidebar.expander("Report Info Config", expanded=False):
+        st.caption(
+            "Manually enter hardware info here, which will be displayed in generated charts.\n(Leave empty to hide; defaults to empty for API tests)"
+        )
 
-        if 'custom_sys_info' not in st.session_state:
+        if "custom_sys_info" not in st.session_state:
             st.session_state.custom_sys_info = {}
 
-        c_proc = st.text_input("Processor", value=st.session_state.custom_sys_info.get('processor', ''), key="bottom_proc")
-        c_mb = st.text_input("Mainboard", value=st.session_state.custom_sys_info.get('mainboard', ''), key="bottom_mb")
-        c_mem = st.text_input("Memory", value=st.session_state.custom_sys_info.get('memory', ''), key="bottom_mem")
-        c_gpu = st.text_input("GPU", value=st.session_state.custom_sys_info.get('gpu', ''), key="bottom_gpu")
-        c_sys = st.text_input("System", value=st.session_state.custom_sys_info.get('system', ''), key="bottom_sys")
-        c_engine = st.text_input("Engine", value=st.session_state.custom_sys_info.get('engine_name', ''), help="Inference engine name, e.g., vLLM, SGLang, Ollama, etc.", key="bottom_engine")
+        c_proc = st.text_input(
+            "Processor",
+            value=st.session_state.custom_sys_info.get("processor", ""),
+            key="bottom_proc",
+        )
+        c_mb = st.text_input(
+            "Mainboard",
+            value=st.session_state.custom_sys_info.get("mainboard", ""),
+            key="bottom_mb",
+        )
+        c_mem = st.text_input(
+            "Memory",
+            value=st.session_state.custom_sys_info.get("memory", ""),
+            key="bottom_mem",
+        )
+        c_gpu = st.text_input(
+            "GPU",
+            value=st.session_state.custom_sys_info.get("gpu", ""),
+            key="bottom_gpu",
+        )
+        c_sys = st.text_input(
+            "System",
+            value=st.session_state.custom_sys_info.get("system", ""),
+            key="bottom_sys",
+        )
+        c_engine = st.text_input(
+            "Engine",
+            value=st.session_state.custom_sys_info.get("engine_name", ""),
+            help="Inference engine name, e.g., vLLM, SGLang, Ollama, etc.",
+            key="bottom_engine",
+        )
 
-        st.session_state.custom_sys_info.update({
-            'processor': c_proc,
-            'mainboard': c_mb,
-            'memory': c_mem,
-            'gpu': c_gpu,
-            'system': c_sys,
-            'engine_name': c_engine
-        })
+        st.session_state.custom_sys_info.update(
+            {
+                "processor": c_proc,
+                "mainboard": c_mb,
+                "memory": c_mem,
+                "gpu": c_gpu,
+                "system": c_sys,
+                "engine_name": c_engine,
+            }
+        )
 
     # 数据仓库输入面板：模型规格 / 服务配置 / 测试元数据（详见 ui/warehouse_panels.py）
-    try:
-        from ui.warehouse_panels import (
-            render_engine_runtime_panel,
-            render_model_spec_panel,
-            render_serving_config_panel,
-            render_test_metadata_panel,
-        )
-        render_model_spec_panel(st.session_state.get('model_id_selector', ''))
-        render_serving_config_panel()
-        render_test_metadata_panel()
-        render_engine_runtime_panel(st.session_state.get('api_base_url_input', ''))
-    except Exception:
-        # 面板渲染失败不应阻塞 sidebar
-        pass
+    # 每个面板独立 try/except + 日志：一个失败不连累其余，且错误可见（不再静默吞掉）。
+    import logging as _logging
+
+    _wh_log = _logging.getLogger("ui.sidebar.warehouse_panels")
+    from ui.warehouse_panels import (
+        render_engine_runtime_panel,
+        render_model_spec_panel,
+        render_serving_config_panel,
+        render_test_metadata_panel,
+    )
+
+    for _fn, _arg in (
+        (render_model_spec_panel, st.session_state.get("model_id_selector", "")),
+        (render_serving_config_panel, None),
+        (render_test_metadata_panel, None),
+        (render_engine_runtime_panel, st.session_state.get("api_base_url_input", "")),
+    ):
+        try:
+            if _arg is not None:
+                _fn(_arg)
+            else:
+                _fn()
+        except Exception as _e:  # noqa: BLE001
+            _wh_log.warning(
+                f"仓库面板 {getattr(_fn, '__name__', _fn)} 渲染失败: {_e}",
+                exc_info=True,
+            )

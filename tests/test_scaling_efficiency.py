@@ -69,8 +69,12 @@ def test_no_tp1_baseline_efficiency_none():
 
 
 def test_multiple_models_separate():
-    runs = [_mk("M1", "tp1", 40.0), _mk("M1", "tp2", 70.0),
-            _mk("M2", "tp1", 30.0), _mk("M2", "tp2", 50.0)]
+    runs = [
+        _mk("M1", "tp1", 40.0),
+        _mk("M1", "tp2", 70.0),
+        _mk("M2", "tp1", 30.0),
+        _mk("M2", "tp2", 50.0),
+    ]
     rows = build_scaling_efficiency(runs)
     models = {r["model_name"] for r in rows}
     assert models == {"M1", "M2"}

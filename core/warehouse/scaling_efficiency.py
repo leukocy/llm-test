@@ -73,14 +73,20 @@ def build_scaling_efficiency(
             else:
                 speedup = None
                 efficiency = None
-            rows.append({
-                "model_name": model,
-                "tp_size": tp,
-                metric: round(val, 3),
-                "speedup_vs_tp1": round(speedup, 3) if speedup is not None else None,
-                "efficiency": round(efficiency, 3) if efficiency is not None else None,
-                "linear_ideal_speedup": tp,  # 理想线性加速 = tp
-            })
+            rows.append(
+                {
+                    "model_name": model,
+                    "tp_size": tp,
+                    metric: round(val, 3),
+                    "speedup_vs_tp1": (
+                        round(speedup, 3) if speedup is not None else None
+                    ),
+                    "efficiency": (
+                        round(efficiency, 3) if efficiency is not None else None
+                    ),
+                    "linear_ideal_speedup": tp,  # 理想线性加速 = tp
+                }
+            )
 
     rows.sort(key=lambda x: (x["model_name"], x["tp_size"]))
     return rows

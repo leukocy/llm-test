@@ -10,26 +10,42 @@ import sqlite3
 
 import pytest
 
-from core.database.schema import CREATE_TEST_RUNS, create_tables
 from core.database.migrations import MIGRATIONS, run_migrations
+from core.database.schema import create_tables
 from core.models.test_run import TestRun
-
 
 # 1.2.0 + 1.3.0 新增的列（迁移 + DDL 都应包含）
 WAREHOUSE_COLUMNS = [
-    "machine_id", "tester", "external_level", "bottleneck", "next_action",
-    "supersedes_test_id", "comparison_group", "mtp_enabled",
-    "effective_bandwidth_gbps", "bandwidth_utilization_pct",
-    "gpu_vram_peak_gb", "system_memory_peak_gb",
-    "model_spec_json", "serving_config_json", "resource_monitor_json", "status_detail",
+    "machine_id",
+    "tester",
+    "external_level",
+    "bottleneck",
+    "next_action",
+    "supersedes_test_id",
+    "comparison_group",
+    "mtp_enabled",
+    "effective_bandwidth_gbps",
+    "bandwidth_utilization_pct",
+    "gpu_vram_peak_gb",
+    "system_memory_peak_gb",
+    "model_spec_json",
+    "serving_config_json",
+    "resource_monitor_json",
+    "status_detail",
     # 1.3.0 推理引擎运行时
-    "engine_metrics_json", "gpu_kv_cache_usage_peak_pct", "num_preemption_total",
-    "engine_running_requests_peak", "kv_cache_capacity_tokens",
+    "engine_metrics_json",
+    "gpu_kv_cache_usage_peak_pct",
+    "num_preemption_total",
+    "engine_running_requests_peak",
+    "kv_cache_capacity_tokens",
 ]
 
 ENGINE_COLUMNS = [
-    "engine_metrics_json", "gpu_kv_cache_usage_peak_pct", "num_preemption_total",
-    "engine_running_requests_peak", "kv_cache_capacity_tokens",
+    "engine_metrics_json",
+    "gpu_kv_cache_usage_peak_pct",
+    "num_preemption_total",
+    "engine_running_requests_peak",
+    "kv_cache_capacity_tokens",
 ]
 
 
@@ -38,6 +54,7 @@ def _columns(conn, table="test_runs") -> set[str]:
 
 
 # ---------- DDL ----------
+
 
 def test_create_tables_has_warehouse_columns(tmp_path):
     conn = sqlite3.connect(str(tmp_path / "fresh.db"))
@@ -56,6 +73,7 @@ def test_create_tables_has_warehouse_columns(tmp_path):
 
 
 # ---------- 迁移 ----------
+
 
 def test_migration_1_1_0_to_latest_adds_all_warehouse_columns(tmp_path):
     """模拟一个 1.1.0 老库，迁移到最新版本应补齐 1.2.0 + 1.3.0 全部列。"""
@@ -78,12 +96,15 @@ def test_migration_1_1_0_to_latest_adds_all_warehouse_columns(tmp_path):
         CREATE TABLE reports (id INTEGER PRIMARY KEY);
         """
         conn.executescript(legacy_ddl)
-        conn.execute("INSERT INTO db_meta (key, value) VALUES ('schema_version', '1.1.0')")
+        conn.execute(
+            "INSERT INTO db_meta (key, value) VALUES ('schema_version', '1.1.0')"
+        )
         conn.commit()
 
         assert "machine_id" not in _columns(conn)
 
         from core.database.schema import SCHEMA_VERSION
+
         run_migrations(conn, SCHEMA_VERSION)
 
         cols = _columns(conn)
@@ -92,7 +113,9 @@ def test_migration_1_1_0_to_latest_adds_all_warehouse_columns(tmp_path):
         # 1.3.0 引擎列必须在
         for c in ENGINE_COLUMNS:
             assert c in cols
-        ver = conn.execute("SELECT value FROM db_meta WHERE key='schema_version'").fetchone()[0]
+        ver = conn.execute(
+            "SELECT value FROM db_meta WHERE key='schema_version'"
+        ).fetchone()[0]
         assert ver == SCHEMA_VERSION
     finally:
         conn.close()
@@ -124,6 +147,7 @@ def test_migration_skips_when_already_at_target(tmp_path):
 
 
 # ---------- TestRun 模型往返 ----------
+
 
 def test_testrun_roundtrip_warehouse_fields():
     run = TestRun.create(test_type="concurrency", model_id="DeepSeek-V3.1")
@@ -167,8 +191,10 @@ def test_testrun_external_level_defaults_internal():
 
 # ---------- extra_fields / 元数据写入（临时 DB） ----------
 
+
 def _fresh_db(tmp_path):
     from core.database.connection import Database
+
     Database._instance = None
     return Database(str(tmp_path / "wh.db"))
 
@@ -181,14 +207,18 @@ def test_repo_complete_writes_warehouse_columns(tmp_path):
         repo = TestRunRepository(db)
         run = TestRun.create(test_type="concurrency", model_id="m")
         rid = repo.insert(run)
-        repo.complete(rid, success=True, stats={
-            "machine_id": "abc123",
-            "gpu_vram_peak_gb": 70.5,
-            "effective_bandwidth_gbps": 1850.0,
-            "mtp_enabled": 1,
-            "bottleneck": "memory_bandwidth",
-            "model_spec_json": '{"active_params_b": 37}',
-        })
+        repo.complete(
+            rid,
+            success=True,
+            stats={
+                "machine_id": "abc123",
+                "gpu_vram_peak_gb": 70.5,
+                "effective_bandwidth_gbps": 1850.0,
+                "mtp_enabled": 1,
+                "bottleneck": "memory_bandwidth",
+                "model_spec_json": '{"active_params_b": 37}',
+            },
+        )
         row = db.fetch_one("SELECT * FROM test_runs WHERE id = ?", (rid,))
         assert row["machine_id"] == "abc123"
         assert row["gpu_vram_peak_gb"] == pytest.approx(70.5)
@@ -198,6 +228,7 @@ def test_repo_complete_writes_warehouse_columns(tmp_path):
         assert "active_params_b" in (row["model_spec_json"] or "")
     finally:
         from core.database.connection import Database
+
         Database._instance = None
 
 
@@ -211,7 +242,8 @@ def test_manager_complete_test_run_with_extra_fields(tmp_path):
         mgr = DatabaseManager(str(tmp_path / "mgr.db"))
         run = mgr.start_test_run("concurrency", "DeepSeek-V3.1")
         mgr.complete_test_run(
-            run, success=True,
+            run,
+            success=True,
             extra_fields={
                 "machine_id": "host1",
                 "gpu_vram_peak_gb": 70.5,
@@ -240,13 +272,16 @@ def test_manager_update_publish_metadata(tmp_path):
         mgr = DatabaseManager(str(tmp_path / "meta.db"))
         run = mgr.start_test_run("concurrency", "m")
         mgr.complete_test_run(run, success=True)
-        ok = mgr.update_publish_metadata(run.id, {
-            "tester": "bob",
-            "external_level": "review",
-            "next_action": "需复测长上下文",
-            "bottleneck": "kv_cache",
-            "bogus_field": "ignored",  # 不在 allowlist，应被忽略
-        })
+        ok = mgr.update_publish_metadata(
+            run.id,
+            {
+                "tester": "bob",
+                "external_level": "review",
+                "next_action": "需复测长上下文",
+                "bottleneck": "kv_cache",
+                "bogus_field": "ignored",  # 不在 allowlist，应被忽略
+            },
+        )
         assert ok is True
         row = mgr.db.fetch_one("SELECT * FROM test_runs WHERE id = ?", (run.id,))
         assert row["tester"] == "bob"

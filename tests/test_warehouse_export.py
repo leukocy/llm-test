@@ -16,12 +16,16 @@ from core.warehouse.export import (
 
 
 def test_csv_header_matches_template_fields():
-    rows = [{"test_id": "t1", "machine_id": "m1"}, {"test_id": "t2", "machine_id": "m2"}]
+    rows = [
+        {"test_id": "t1", "machine_id": "m1"},
+        {"test_id": "t2", "machine_id": "m2"},
+    ]
     out = export_template_csv("hmTest", rows)
     # BOM（﻿）是 Excel 友好的 UTF-8 标记，读表头前剥掉
     reader = csv.reader(io.StringIO(out.lstrip("﻿")))
     header = next(reader)
     from core.warehouse.templates import HM_TEST_FIELDS
+
     assert header == HM_TEST_FIELDS
     data = list(reader)
     assert len(data) == 2

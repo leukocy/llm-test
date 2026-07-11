@@ -33,13 +33,15 @@ logger = logging.getLogger(__name__)
 # 字符串 system_info 解析（纯函数）
 # ===========================================================================
 
-_ENGINE_RE = re.compile(r"(vllm|sglang|tensorrt-?llm|trtllm|lmdeploy|llama\.cpp)", re.IGNORECASE)
+_ENGINE_RE = re.compile(
+    r"(vllm|sglang|tensorrt-?llm|trtllm|lmdeploy|llama\.cpp)", re.IGNORECASE
+)
 _VERSION_RE = re.compile(r"v?(\d+\.\d+(?:\.\d+)?)")
 _MTP_RE = re.compile(r"[-_]?\s*mtp\s*(\d+)", re.IGNORECASE)
 
 
 def parse_engine_name(engine_name: str | None) -> dict[str, Any]:
-    """"vLLM-v0.22.0-MTP3" → {engine, engine_version, mtp_enabled, num_speculative_tokens}。"""
+    """ "vLLM-v0.22.0-MTP3" → {engine, engine_version, mtp_enabled, num_speculative_tokens}。"""
     if not engine_name:
         return {}
     s = engine_name.strip()
@@ -61,7 +63,7 @@ _GPU_COUNT_RE = re.compile(r"(\d+)\s*[*×xX]\s*(.+)")
 
 
 def parse_gpu_str(gpu_str: str | None) -> list[dict[str, Any]]:
-    """"1* pro 6000" / "4*H100" / "2× RTX 4090" → [{name, count, nominal_bandwidth_gbps}]。
+    """ "1* pro 6000" / "4*H100" / "2× RTX 4090" → [{name, count, nominal_bandwidth_gbps}]。
 
     count 标注但**不可靠**（"1*" 可能是型号数而非卡数），故 machine_id 不依赖它。
     """
@@ -75,7 +77,13 @@ def parse_gpu_str(gpu_str: str | None) -> list[dict[str, Any]]:
     else:
         count = None
         name = s
-    return [{"name": name, "count": count, "nominal_bandwidth_gbps": _lookup_gpu_bandwidth(name, None)}]
+    return [
+        {
+            "name": name,
+            "count": count,
+            "nominal_bandwidth_gbps": _lookup_gpu_bandwidth(name, None),
+        }
+    ]
 
 
 _MEM_RE = re.compile(
@@ -85,7 +93,7 @@ _MEM_RE = re.compile(
 
 
 def parse_memory_str(mem_str: str | None) -> dict[str, Any]:
-    """"4*48G DDR5 6400" → {sticks, capacity_gb_per_stick, total_gb, type, speed_mt_s}。"""
+    """ "4*48G DDR5 6400" → {sticks, capacity_gb_per_stick, total_gb, type, speed_mt_s}。"""
     if not mem_str:
         return {}
     m = _MEM_RE.search(mem_str.strip())
@@ -110,7 +118,11 @@ def build_legacy_fingerprint(sys_info: dict[str, Any]) -> dict[str, Any]:
         "|".join(sorted(g["name"] for g in gpus if g.get("name")))
         + f"|mem={mem.get('total_gb')}"
     )
-    machine_id = hashlib.sha1(fp_key.encode()).hexdigest()[:16] if fp_key != "|mem=None" else None
+    machine_id = (
+        hashlib.sha1(fp_key.encode()).hexdigest()[:16]
+        if fp_key != "|mem=None"
+        else None
+    )
     return {
         "machine_id": machine_id,
         "gpus": gpus,
@@ -190,7 +202,9 @@ def row_to_test_result(row: dict[str, Any], run_id: int, index: int) -> TestResu
 # ===========================================================================
 
 
-def import_meta_group(db, meta_path: str | Path, csv_path: str | Path | None = None) -> dict[str, Any]:
+def import_meta_group(
+    db, meta_path: str | Path, csv_path: str | Path | None = None
+) -> dict[str, Any]:
     """导入一组（meta + 对应 csv）：创建带维度 run + 导入 test_results。返回统计。"""
     meta_path = Path(meta_path)
     if csv_path:
@@ -236,7 +250,9 @@ def import_meta_group(db, meta_path: str | Path, csv_path: str | Path | None = N
         try:
             with csv_path.open(encoding="utf-8-sig", newline="") as f:
                 reader = csv.DictReader(f)
-                results = [row_to_test_result(row, run_id, i) for i, row in enumerate(reader)]
+                results = [
+                    row_to_test_result(row, run_id, i) for i, row in enumerate(reader)
+                ]
             if results:
                 db.results.insert_batch(results)
                 result_count = len(results)
@@ -265,7 +281,13 @@ def import_raw_data_directory(db, raw_data_dir: str | Path) -> dict[str, Any]:
     """遍历 raw_data_dir 下所有 *.csv.meta.json，批量导入。返回汇总。"""
     raw_data_dir = Path(raw_data_dir)
     metas = sorted(raw_data_dir.rglob("*.csv.meta.json"))
-    summary = {"total": len(metas), "imported": 0, "failed": 0, "results": 0, "errors": []}
+    summary = {
+        "total": len(metas),
+        "imported": 0,
+        "failed": 0,
+        "results": 0,
+        "errors": [],
+    }
     for meta_path in metas:
         r = import_meta_group(db, meta_path)
         if r.get("ok"):

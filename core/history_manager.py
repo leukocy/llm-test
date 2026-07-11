@@ -21,7 +21,9 @@ class HistoryManager:
             return []
 
         # Find all CSV files recursively
-        csv_files = glob.glob(os.path.join(self.base_dir, "**", "*.csv"), recursive=True)
+        csv_files = glob.glob(
+            os.path.join(self.base_dir, "**", "*.csv"), recursive=True
+        )
 
         history = []
         for path in csv_files:
@@ -32,27 +34,33 @@ class HistoryManager:
                 # Or just use the filename as display name.
 
                 # Let's try to parse, but fallback to filename
-                parts = filename.replace('.csv', '').split('_')
+                parts = filename.replace(".csv", "").split("_")
 
                 # Simple parsing logic (heuristic)
-                timestamp = parts[-2] + "_" + parts[-1] if len(parts) >= 2 and parts[-1].isdigit() else "Unknown"
+                timestamp = (
+                    parts[-2] + "_" + parts[-1]
+                    if len(parts) >= 2 and parts[-1].isdigit()
+                    else "Unknown"
+                )
 
                 # Get file stats
                 stats = os.stat(path)
                 size_kb = stats.st_size / 1024
 
-                history.append({
-                    "display_name": filename,
-                    "path": path,
-                    "size_kb": size_kb,
-                    "timestamp": timestamp
-                })
+                history.append(
+                    {
+                        "display_name": filename,
+                        "path": path,
+                        "size_kb": size_kb,
+                        "timestamp": timestamp,
+                    }
+                )
             except Exception as e:
                 print(f"Error parsing file {path}: {e}")
                 continue
 
         # Sort by modification time (newest first)
-        history.sort(key=lambda x: os.path.getmtime(x['path']), reverse=True)
+        history.sort(key=lambda x: os.path.getmtime(x["path"]), reverse=True)
         return history
 
     def load_results(self, paths: list[str]) -> dict[str, pd.DataFrame]:
@@ -67,7 +75,7 @@ class HistoryManager:
                     df = pd.read_csv(path)
                     # Add a column for source identification if needed
                     filename = os.path.basename(path)
-                    df['source_file'] = filename
+                    df["source_file"] = filename
                     results[filename] = df
             except Exception as e:
                 print(f"Error loading {path}: {e}")

@@ -12,6 +12,7 @@ from io import StringIO
 
 class SafeExecutionError(Exception):
     """Raised when safe execution fails."""
+
     pass
 
 
@@ -32,13 +33,13 @@ def validate_math_expression(expr: str) -> bool:
 
     # Check for suspicious patterns
     dangerous_patterns = [
-        r'__.*__',  # Double underscores (magic methods/dunder)
-        r'import\s',  # Import statements
-        r'from\s',     # From imports
-        r'exec\s*\(',  # exec function
-        r'eval\s*\(',  # eval function
-        r'open\s*\(',  # open function
-        r'compile\s*\(',  # compile function
+        r"__.*__",  # Double underscores (magic methods/dunder)
+        r"import\s",  # Import statements
+        r"from\s",  # From imports
+        r"exec\s*\(",  # exec function
+        r"eval\s*\(",  # eval function
+        r"open\s*\(",  # open function
+        r"compile\s*\(",  # compile function
     ]
 
     for pattern in dangerous_patterns:
@@ -46,28 +47,31 @@ def validate_math_expression(expr: str) -> bool:
             return False
 
     # Only allow safe characters: digits, operators, parens, dots, spaces, word chars
-    safe_chars = re.compile(r'^[0-9+\-*/().\s\w]+$')
+    safe_chars = re.compile(r"^[0-9+\-*/().\s\w]+$")
     if not safe_chars.match(expr):
         return False
 
     # Try to parse as AST to ensure it's a valid expression
     try:
-        tree = ast.parse(expr, mode='eval')
+        tree = ast.parse(expr, mode="eval")
         # Walk the AST to check for dangerous constructs
         for node in ast.walk(tree):
             # Check for attribute access (could be used to access dangerous modules)
             if isinstance(node, ast.Attribute):
                 # Only allow math module attributes
-                if isinstance(node.value, ast.Name) and node.value.id == 'math':
+                if isinstance(node.value, ast.Name) and node.value.id == "math":
                     continue
                 # Other attribute access is not allowed
-                if not (isinstance(node.value, ast.Name) and node.value.id == 'math'):
+                if not (isinstance(node.value, ast.Name) and node.value.id == "math"):
                     return False
             # Check for function calls
             elif isinstance(node, ast.Call):
                 # Only allow math function calls
                 if isinstance(node.func, ast.Attribute):
-                    if isinstance(node.func.value, ast.Name) and node.func.value.id == 'math':
+                    if (
+                        isinstance(node.func.value, ast.Name)
+                        and node.func.value.id == "math"
+                    ):
                         continue
                 return False
             # Check for imports
@@ -133,9 +137,7 @@ def safe_eval_math(expr: str) -> float | None:
 
 
 def safe_exec_code(
-    code: str,
-    test_code: str | None = None,
-    timeout_seconds: int = 5
+    code: str, test_code: str | None = None, timeout_seconds: int = 5
 ) -> tuple[bool, str | None, str | None]:
     """
     Safely execute Python code in a restricted environment.
@@ -156,9 +158,20 @@ def safe_exec_code(
 
     # Basic validation - check for obviously dangerous operations
     dangerous_keywords = [
-        'os', 'subprocess', 'sys', 'importlib', 'builtins',
-        'eval', 'exec', 'compile', 'open', '__import__',
-        'globals', 'locals', 'vars', 'dir'
+        "os",
+        "subprocess",
+        "sys",
+        "importlib",
+        "builtins",
+        "eval",
+        "exec",
+        "compile",
+        "open",
+        "__import__",
+        "globals",
+        "locals",
+        "vars",
+        "dir",
     ]
 
     code_lower = code.lower()
@@ -167,20 +180,23 @@ def safe_exec_code(
     for dangerous in dangerous_keywords:
         dangerous_lower = dangerous.lower()
         # Check for "import os" or "from os import"
-        if f'import {dangerous_lower}' in code_lower or f'from {dangerous_lower}' in code_lower:
+        if (
+            f"import {dangerous_lower}" in code_lower
+            or f"from {dangerous_lower}" in code_lower
+        ):
             return False, f"Import of '{dangerous}' is not allowed", None
 
     # Check for direct access to dangerous modules through builtins
-    if '__builtins__' in code_lower or '__import__' in code_lower:
+    if "__builtins__" in code_lower or "__import__" in code_lower:
         return False, "Access to __builtins__ or __import__ is not allowed", None
 
     # Check for dangerous attribute access patterns
     dangerous_patterns = [
-        r'__class__',
-        r'__base__',
-        r'__subclasses__',
-        r'__mro__',
-        r'__globals__',
+        r"__class__",
+        r"__base__",
+        r"__subclasses__",
+        r"__mro__",
+        r"__globals__",
     ]
     for pattern in dangerous_patterns:
         if re.search(pattern, code):
@@ -195,40 +211,40 @@ def safe_exec_code(
     exec_globals = {
         "__builtins__": {
             # Only allow specific, safe builtins
-            'print': print,
-            'range': range,
-            'len': len,
-            'str': str,
-            'int': int,
-            'float': float,
-            'bool': bool,
-            'list': list,
-            'dict': dict,
-            'tuple': tuple,
-            'set': set,
-            'sum': sum,
-            'min': min,
-            'max': max,
-            'abs': abs,
-            'round': round,
-            'sorted': sorted,
-            'enumerate': enumerate,
-            'zip': zip,
-            'map': map,
-            'filter': filter,
-            'any': any,
-            'all': all,
-            'isinstance': isinstance,
-            'type': type,
-            'reversed': reversed,
+            "print": print,
+            "range": range,
+            "len": len,
+            "str": str,
+            "int": int,
+            "float": float,
+            "bool": bool,
+            "list": list,
+            "dict": dict,
+            "tuple": tuple,
+            "set": set,
+            "sum": sum,
+            "min": min,
+            "max": max,
+            "abs": abs,
+            "round": round,
+            "sorted": sorted,
+            "enumerate": enumerate,
+            "zip": zip,
+            "map": map,
+            "filter": filter,
+            "any": any,
+            "all": all,
+            "isinstance": isinstance,
+            "type": type,
+            "reversed": reversed,
         },
         # Add typing support (commonly needed in HumanEval)
-        'List': list,
-        'Dict': dict,
-        'Tuple': tuple,
-        'Optional': type(None),  # Simplified
-        'Any': object,
-        'Union': lambda *args: object,  # Simplified
+        "List": list,
+        "Dict": dict,
+        "Tuple": tuple,
+        "Optional": type(None),  # Simplified
+        "Any": object,
+        "Union": lambda *args: object,  # Simplified
     }
 
     # Capture output
@@ -257,10 +273,11 @@ def safe_exec_legacy(code: str, globals_dict: dict, locals_dict: dict = None):
     Issues a deprecation warning.
     """
     import warnings
+
     warnings.warn(
         "safe_exec_legacy is deprecated. Use safe_exec_code instead.",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
     success, error, output = safe_exec_code(code)
     if not success:

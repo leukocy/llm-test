@@ -7,7 +7,7 @@ from typing import Any, Generic, TypeVar
 
 from core.database.connection import Database, db
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class BaseRepository(ABC, Generic[T]):
@@ -17,7 +17,7 @@ class BaseRepository(ABC, Generic[T]):
     提供通用 CRUD 操作andQuery方法。
     """
 
-    def __init__(self, database: Database = None):
+    def __init__(self, database: Database | None = None):
         self.db = database or db
         self._table_name: str = ""
 
@@ -49,10 +49,7 @@ class BaseRepository(ABC, Generic[T]):
         return self._from_row(row) if row else None
 
     def find_all(
-        self,
-        limit: int = 100,
-        offset: int = 0,
-        order_by: str = "id DESC"
+        self, limit: int = 100, offset: int = 0, order_by: str = "id DESC"
     ) -> list[T]:
         """
         查找所has记录
@@ -74,7 +71,7 @@ class BaseRepository(ABC, Generic[T]):
         where: str,
         params: tuple = (),
         limit: int = 100,
-        order_by: str = "id DESC"
+        order_by: str = "id DESC",
     ) -> list[T]:
         """
         条件Query
@@ -158,7 +155,9 @@ class BaseRepository(ABC, Generic[T]):
         """
         return self.db.delete(self._table_name, where, params)
 
-    def update_by(self, data: dict[str, Any], where: str, where_params: tuple = ()) -> int:
+    def update_by(
+        self, data: dict[str, Any], where: str, where_params: tuple = ()
+    ) -> int:
         """
         条件Update
 
@@ -190,7 +189,7 @@ class BaseRepository(ABC, Generic[T]):
         page_size: int = 20,
         where: str = "",
         params: tuple = (),
-        order_by: str = "id DESC"
+        order_by: str = "id DESC",
     ) -> dict[str, Any]:
         """
         分页Query
@@ -215,7 +214,9 @@ class BaseRepository(ABC, Generic[T]):
             sql = f"SELECT * FROM {self._table_name} WHERE {where} ORDER BY {order_by} LIMIT ? OFFSET ?"
             rows = self.db.fetch_all(sql, params + (page_size, offset))
         else:
-            sql = f"SELECT * FROM {self._table_name} ORDER BY {order_by} LIMIT ? OFFSET ?"
+            sql = (
+                f"SELECT * FROM {self._table_name} ORDER BY {order_by} LIMIT ? OFFSET ?"
+            )
             rows = self.db.fetch_all(sql, (page_size, offset))
 
         items = [self._from_row(r) for r in rows]

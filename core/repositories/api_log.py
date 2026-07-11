@@ -13,20 +13,20 @@ from core.repositories.base import BaseRepository
 class ApiLogRepository(BaseRepository[ApiLog]):
     """API Log Repository"""
 
-    def __init__(self, database: Database = None):
+    def __init__(self, database: Database | None = None):
         super().__init__(database)
         self._table_name = "api_logs"
 
     def _from_row(self, row: dict[str, Any]) -> ApiLog:
         return ApiLog.from_row(row)
 
-    def insert(self, log: ApiLog) -> int:
+    def insert(self, log: ApiLog) -> int | None:
         """InsertLog"""
         data = log.to_dict()
-        columns = [k for k, v in data.items() if v is not None and k != 'id']
+        columns = [k for k, v in data.items() if v is not None and k != "id"]
         placeholders = ", ".join(["?" for _ in columns])
         columns_str = ", ".join(columns)
-        values = [v for k, v in data.items() if v is not None and k != 'id']
+        values = [v for k, v in data.items() if v is not None and k != "id"]
 
         sql = f"INSERT INTO api_logs ({columns_str}) VALUES ({placeholders})"
         cursor = self.db.execute(sql, tuple(values))
@@ -45,19 +45,14 @@ class ApiLogRepository(BaseRepository[ApiLog]):
         return self.find_by("session_id = ?", (session_id,))
 
     def find_by_date_range(
-        self,
-        start: datetime,
-        end: datetime,
-        limit: int = 1000
+        self, start: datetime, end: datetime, limit: int = 1000
     ) -> list[ApiLog]:
         """based on日期范围查找"""
         return self.find_by(
-            "created_at BETWEEN ? AND ?",
-            (start.isoformat(), end.isoformat()),
-            limit
+            "created_at BETWEEN ? AND ?", (start.isoformat(), end.isoformat()), limit
         )
 
-    def get_statistics(self, run_id: int = None) -> dict[str, Any]:
+    def get_statistics(self, run_id: int | None = None) -> dict[str, Any]:
         """GetStatistics信息"""
         where = "run_id = ?" if run_id else "1=1"
         params = (run_id,) if run_id else ()
@@ -78,7 +73,9 @@ class ApiLogRepository(BaseRepository[ApiLog]):
     def cleanup_old_logs(self, days: int = 30) -> int:
         """Cleanup旧Log"""
         cutoff = datetime.now().timestamp() - (days * 86400)
-        return self.delete_by("created_at < ?", (datetime.fromtimestamp(cutoff).isoformat(),))
+        return self.delete_by(
+            "created_at < ?", (datetime.fromtimestamp(cutoff).isoformat(),)
+        )
 
     def get_error_summary(self, limit: int = 20) -> list[dict[str, Any]]:
         """GetError摘要"""

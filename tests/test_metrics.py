@@ -8,11 +8,9 @@ Test评估Metric calculation函数，包括:
 - Statistical analysis (Confidence Interval, 标准误差)
 """
 
-
 import pytest
 
-from core.metrics import (
-    # Metric calculation器
+from core.metrics import (  # Metric calculation器; 精确匹配指标; 文本相似度指标; 数值比较指标; 代码Generate指标
     EvalMetricsCalculator,
     accuracy,
     bleu_score,
@@ -20,15 +18,11 @@ from core.metrics import (
     compute_accuracy_with_ci,
     compute_metrics,
     estimate_pass_at_k,
-    # 精确匹配指标
     exact_match,
-    # 文本相似度指标
     f1_score,
     f1_score_batch,
-    # 数值比较指标
     mean_absolute_error,
     normalized_accuracy,
-    # 代码Generate指标
     pass_at_k,
     per_category_accuracy,
     root_mean_squared_error,
@@ -52,7 +46,7 @@ class TestAccuracyMetrics:
         """部分正确情况"""
         predictions = ["A", "B", "D"]
         references = ["A", "B", "C"]
-        assert exact_match(predictions, references) == pytest.approx(2/3)
+        assert exact_match(predictions, references) == pytest.approx(2 / 3)
 
     def test_exact_match_all_wrong(self):
         """全部Error情况"""
@@ -74,7 +68,7 @@ class TestAccuracyMetrics:
         """字符串Accuracy"""
         predictions = ["apple", "banana", "cherry"]
         references = ["apple", "banana", "date"]
-        assert accuracy(predictions, references) == pytest.approx(2/3)
+        assert accuracy(predictions, references) == pytest.approx(2 / 3)
 
     def test_accuracy_numeric_comparison(self):
         """数值Accuracy"""
@@ -98,7 +92,7 @@ class TestAccuracyMetrics:
         normalized = normalized_accuracy(predictions, references, num_choices=4)
 
         # (0.5 - 0.25) / (1 - 0.25) = 0.25 / 0.75 = 1/3
-        assert normalized == pytest.approx(1/3)
+        assert normalized == pytest.approx(1 / 3)
 
     def test_normalized_accuracy_below_random(self):
         """低于随机基准时Return0"""
@@ -126,7 +120,9 @@ class TestTextSimilarityMetrics:
         # ref: hello, world, example
         # common: hello, world (2)
         # precision = 2/3, recall = 2/3, f1 = 2/3
-        assert f1_score("hello world test", "hello world example") == pytest.approx(2/3)
+        assert f1_score("hello world test", "hello world example") == pytest.approx(
+            2 / 3
+        )
 
     def test_f1_score_batch(self):
         """批量F1Calculate"""
@@ -301,10 +297,10 @@ class TestEvalMetricsCalculator:
         results = calculator.compute(
             predictions=["A", "B", "C"],
             references=["A", "B", "D"],
-            metrics=["accuracy"]
+            metrics=["accuracy"],
         )
         assert "accuracy" in results
-        assert results["accuracy"].value == pytest.approx(2/3)
+        assert results["accuracy"].value == pytest.approx(2 / 3)
 
     def test_compute_multiple_metrics(self):
         """Calculate多指标"""
@@ -312,7 +308,7 @@ class TestEvalMetricsCalculator:
         results = calculator.compute(
             predictions=["A", "B", "C"],
             references=["A", "B", "D"],
-            metrics=["accuracy", "exact_match", "f1"]
+            metrics=["accuracy", "exact_match", "f1"],
         )
         assert len(results) == 3
         assert "accuracy" in results
@@ -325,7 +321,7 @@ class TestEvalMetricsCalculator:
         results = calculator.compute(
             predictions=["A", "B"] * 10,
             references=["A", "B"] * 10,
-            metrics=["accuracy"]
+            metrics=["accuracy"],
         )
         assert results["accuracy"].stderr is not None
         assert results["accuracy"].confidence_interval is not None
@@ -337,7 +333,7 @@ class TestEvalMetricsCalculator:
             predictions=["A", "B", "A"],
             references=["A", "B", "B"],
             metrics=["accuracy"],
-            categories=["cat1", "cat1", "cat2"]
+            categories=["cat1", "cat1", "cat2"],
         )
         assert "per_category" in results["accuracy"].details
 
@@ -345,9 +341,7 @@ class TestEvalMetricsCalculator:
         """Calculate pass@k"""
         calculator = EvalMetricsCalculator()
         results = calculator.compute_pass_at_k(
-            num_samples=[10, 20, 15],
-            num_correct=[5, 10, 12],
-            k_values=[1, 5]
+            num_samples=[10, 20, 15], num_correct=[5, 10, 12], k_values=[1, 5]
         )
         assert "pass@1" in results
         assert "pass@5" in results
@@ -361,16 +355,15 @@ class TestConvenienceFunctions:
         results = compute_metrics(
             predictions=["A", "B", "C"],
             references=["A", "B", "D"],
-            metrics=["accuracy", "exact_match"]
+            metrics=["accuracy", "exact_match"],
         )
-        assert results["accuracy"] == pytest.approx(2/3)
-        assert results["exact_match"] == pytest.approx(2/3)
+        assert results["accuracy"] == pytest.approx(2 / 3)
+        assert results["exact_match"] == pytest.approx(2 / 3)
 
     def test_compute_accuracy_with_ci(self):
         """CalculateAccuracyand其Confidence Interval"""
         results = compute_accuracy_with_ci(
-            predictions=["A", "B"] * 10,
-            references=["A", "B"] * 10
+            predictions=["A", "B"] * 10, references=["A", "B"] * 10
         )
         assert "accuracy" in results
         assert "stderr" in results

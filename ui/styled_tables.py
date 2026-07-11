@@ -4,6 +4,7 @@ Styled table components for professional data visualization.
 Provides styled pandas DataFrames with conditional formatting,
 highlighting, and custom themes.
 """
+
 import importlib.util
 
 import numpy as np
@@ -34,9 +35,14 @@ def create_styled_summary_table(df, highlight_cols=None, highlight_best=True):
     for col in df.columns:
         series = df[col]
         if pd.api.types.is_numeric_dtype(series):
-            clean[col] = [float(x) if isinstance(x, (np.floating, float)) else int(x)
-                          if isinstance(x, (np.integer, int)) else x
-                          for x in series]
+            clean[col] = [
+                (
+                    float(x)
+                    if isinstance(x, (np.floating, float))
+                    else int(x) if isinstance(x, (np.integer, int)) else x
+                )
+                for x in series
+            ]
         else:
             clean[col] = series.tolist()
     df = pd.DataFrame(clean)
@@ -45,21 +51,22 @@ def create_styled_summary_table(df, highlight_cols=None, highlight_best=True):
 
     # 1. Apply gradient to specified columns
     if highlight_cols:
+
         def _get_custom_gradient(s):
             """Calculate gradient colors without matplotlib dependency."""
             if not pd.api.types.is_numeric_dtype(s):
-                return ['' for _ in s]
+                return ["" for _ in s]
 
             min_v, max_v = s.min(), s.max()
             if min_v == max_v or pd.isna(min_v) or pd.isna(max_v):
-                return ['' for _ in s]
+                return ["" for _ in s]
 
             rng = max_v - min_v
             styles = []
 
             for v in s:
                 if pd.isna(v):
-                    styles.append('')
+                    styles.append("")
                     continue
 
                 # Normalize 0..1
@@ -84,7 +91,7 @@ def create_styled_summary_table(df, highlight_cols=None, highlight_best=True):
                     b = int(0 + (113 - 0) * local_norm)
 
                 # Use black text for better contrast on light colors
-                styles.append(f'background-color: rgb({r}, {g}, {b}); color: black')
+                styles.append(f"background-color: rgb({r}, {g}, {b}); color: black")
             return styles
 
         for col in highlight_cols:
@@ -94,7 +101,6 @@ def create_styled_summary_table(df, highlight_cols=None, highlight_best=True):
                 except Exception:
                     pass
 
-
     # 2. Format numeric columns with smart decimal places
     def get_smart_format(col):
         """Smart format selection based on column max value"""
@@ -102,100 +108,128 @@ def create_styled_summary_table(df, highlight_cols=None, highlight_best=True):
             return None
         max_val = df[col].abs().max()
         if pd.isna(max_val):
-            return '{:.2f}'
+            return "{:.2f}"
         if max_val > 100:
-            return '{:.0f}'
+            return "{:.0f}"
         elif max_val > 10:
-            return '{:.1f}'
+            return "{:.1f}"
         else:
-            return '{:.2f}'
+            return "{:.2f}"
 
     format_dict = {}
     for col in df.columns:
         # Handle columns with unit suffixes like "(s)", "(ms)", "(tokens/s)"
-        col_base = col.split('(')[0].strip()
+        col_base = col.split("(")[0].strip()
 
-        if 'TTFT' in col_base or 'time' in col_base.lower():
+        if "TTFT" in col_base or "time" in col_base.lower():
             # TTFT columns - always use 3 decimal places (usually small values in seconds)
-            format_dict[col] = '{:.3f}'
-        elif 'TPOT' in col_base:
+            format_dict[col] = "{:.3f}"
+        elif "TPOT" in col_base:
             # TPOT in ms - smart format based on value
-            format_dict[col] = get_smart_format(col) or '{:.2f}'
-        elif 'TPS' in col_base or 'Speed' in col_base or 'Throughput' in col_base:
+            format_dict[col] = get_smart_format(col) or "{:.2f}"
+        elif "TPS" in col_base or "Speed" in col_base or "Throughput" in col_base:
             # TPS/Speed/Throughput - smart format based on value
-            format_dict[col] = get_smart_format(col) or '{:.2f}'
-        elif 'Rate' in col_base:
+            format_dict[col] = get_smart_format(col) or "{:.2f}"
+        elif "Rate" in col_base:
             # Rate columns may be stored as fractions or already as 0-100 percentages.
-            format_dict[col] = '{:.1f}%' if '(%)' in col else '{:.1%}'
-        elif 'Tokens' in col_base and pd.api.types.is_numeric_dtype(df.get(col, pd.Series(dtype=float))):
-            format_dict[col] = '{:,.0f}'
+            format_dict[col] = "{:.1f}%" if "(%)" in col else "{:.1%}"
+        elif "Tokens" in col_base and pd.api.types.is_numeric_dtype(
+            df.get(col, pd.Series(dtype=float))
+        ):
+            format_dict[col] = "{:,.0f}"
         elif pd.api.types.is_float_dtype(df.get(col, pd.Series(dtype=float))):
             # Other float columns - smart format
-            format_dict[col] = get_smart_format(col) or '{:.2f}'
+            format_dict[col] = get_smart_format(col) or "{:.2f}"
 
     if format_dict:
-        styler = styler.format(format_dict, na_rep='-')
+        styler = styler.format(format_dict, na_rep="-")
 
     # 3. Table-wide styles
-    styler = styler.set_table_styles([
-        # Header style
-        {'selector': 'thead th',
-         'props': [
-             ('background-color', '#007bff'),
-             ('color', 'white'),
-             ('font-weight', 'bold'),
-             ('text-align', 'center'),
-             ('padding', '12px 8px'),
-             ('border', '1px solid #0056b3'),
-             ('font-size', '13px')
-         ]},
-        # Cell style
-        {'selector': 'tbody td',
-         'props': [
-             ('text-align', 'center'),
-             ('padding', '10px 8px'),
-             ('border', '1px solid #e6e9ef'),
-             ('font-size', '12px')
-         ]},
-        # Hover effect
-        {'selector': 'tbody tr:hover',
-         'props': [('background-color', '#f1f8ff !important')]},
-        # Alternating rows
-        {'selector': 'tbody tr:nth-child(even)',
-         'props': [('background-color', '#f8f9fa')]},
-        # Table border
-        {'selector': '',
-         'props': [
-             ('border-collapse', 'collapse'),
-             ('width', '100%'),
-             ('box-shadow', '0 2px 8px rgba(0,0,0,0.1)')
-         ]}
-    ])
+    styler = styler.set_table_styles(
+        [
+            # Header style
+            {
+                "selector": "thead th",
+                "props": [
+                    ("background-color", "#007bff"),
+                    ("color", "white"),
+                    ("font-weight", "bold"),
+                    ("text-align", "center"),
+                    ("padding", "12px 8px"),
+                    ("border", "1px solid #0056b3"),
+                    ("font-size", "13px"),
+                ],
+            },
+            # Cell style
+            {
+                "selector": "tbody td",
+                "props": [
+                    ("text-align", "center"),
+                    ("padding", "10px 8px"),
+                    ("border", "1px solid #e6e9ef"),
+                    ("font-size", "12px"),
+                ],
+            },
+            # Hover effect
+            {
+                "selector": "tbody tr:hover",
+                "props": [("background-color", "#f1f8ff !important")],
+            },
+            # Alternating rows
+            {
+                "selector": "tbody tr:nth-child(even)",
+                "props": [("background-color", "#f8f9fa")],
+            },
+            # Table border
+            {
+                "selector": "",
+                "props": [
+                    ("border-collapse", "collapse"),
+                    ("width", "100%"),
+                    ("box-shadow", "0 2px 8px rgba(0,0,0,0.1)"),
+                ],
+            },
+        ]
+    )
 
     # 4. Highlight best values
     if highlight_best:
+
         def highlight_best_value(s):
             """Highlight best value in each numeric column."""
             if not pd.api.types.is_numeric_dtype(s):
-                return ['' for _ in s]
+                return ["" for _ in s]
 
             # Determine if smaller or larger is better
-            if any(keyword in s.name for keyword in ['TTFT', 'TPOT', 'time', 'latency', 'delay']):
+            if any(
+                keyword in s.name
+                for keyword in ["TTFT", "TPOT", "time", "latency", "delay"]
+            ):
                 # Smaller is better
                 is_best = s == s.min()
-                return ['background-color: #90EE90; font-weight: bold' if v else '' for v in is_best]
-            elif any(keyword in s.name for keyword in ['TPS', 'Speed', 'Throughput', 'Rate']):
+                return [
+                    "background-color: #90EE90; font-weight: bold" if v else ""
+                    for v in is_best
+                ]
+            elif any(
+                keyword in s.name for keyword in ["TPS", "Speed", "Throughput", "Rate"]
+            ):
                 # Larger is better
                 is_best = s == s.max()
-                return ['background-color: #90EE90; font-weight: bold' if v else '' for v in is_best]
+                return [
+                    "background-color: #90EE90; font-weight: bold" if v else ""
+                    for v in is_best
+                ]
 
-            return ['' for _ in s]
+            return ["" for _ in s]
 
         styler = styler.apply(highlight_best_value)
 
     # 5. Hide index if it's just sequential numbers
-    if df.index.name is None and all(isinstance(i, (int, np.integer)) for i in df.index):
-        styler = styler.hide(axis='index')
+    if df.index.name is None and all(
+        isinstance(i, (int, np.integer)) for i in df.index
+    ):
+        styler = styler.hide(axis="index")
 
     return styler
 
@@ -216,13 +250,13 @@ def add_statistical_summary(df, metric_cols, group_col=None):
 
     # Define statistics to calculate
     stats_config = [
-        ('Mean', 'mean', '{:.2f}'),
-        ('Median', 'median', '{:.2f}'),
-        ('P95', lambda x: x.quantile(0.95) if len(x) > 0 else np.nan, '{:.2f}'),
-        ('P99', lambda x: x.quantile(0.99) if len(x) > 0 else np.nan, '{:.2f}'),
-        ('Min', 'min', '{:.2f}'),
-        ('Max', 'max', '{:.2f}'),
-        ('StdDev', 'std', '{:.3f}')
+        ("Mean", "mean", "{:.2f}"),
+        ("Median", "median", "{:.2f}"),
+        ("P95", lambda x: x.quantile(0.95) if len(x) > 0 else np.nan, "{:.2f}"),
+        ("P99", lambda x: x.quantile(0.99) if len(x) > 0 else np.nan, "{:.2f}"),
+        ("Min", "min", "{:.2f}"),
+        ("Max", "max", "{:.2f}"),
+        ("StdDev", "std", "{:.3f}"),
     ]
 
     for stat_name, stat_func, _fmt in stats_config:
@@ -242,12 +276,12 @@ def add_statistical_summary(df, metric_cols, group_col=None):
                     if callable(stat_func):
                         value = stat_func(df[col].dropna())
                     else:
-                        value = getattr(df[col].dropna(), stat_func)()
+                        value = getattr(df[col].dropna(), str(stat_func))()
                     row[col] = value
                 except Exception:
                     row[col] = np.nan
             elif col not in row:
-                row[col] = ''
+                row[col] = ""
 
         summary_rows.append(row)
 
@@ -272,7 +306,7 @@ def create_comparison_table(df1, df2, labels=None, metrics=None):
         Styled comparison DataFrame
     """
     if labels is None:
-        labels = ['Run 1', 'Run 2']
+        labels = ["Run 1", "Run 2"]
     if metrics is None:
         metrics = df1.select_dtypes(include=[np.number]).columns.tolist()
 
@@ -285,13 +319,15 @@ def create_comparison_table(df1, df2, labels=None, metrics=None):
             diff = val2 - val1
             diff_pct = (diff / val1 * 100) if val1 != 0 else 0
 
-            comparison_data.append({
-                'Metric': metric,
-                labels[0]: val1,
-                labels[1]: val2,
-                'Difference': diff,
-                'Change %': diff_pct
-            })
+            comparison_data.append(
+                {
+                    "Metric": metric,
+                    labels[0]: val1,
+                    labels[1]: val2,
+                    "Difference": diff,
+                    "Change %": diff_pct,
+                }
+            )
 
     comp_df = pd.DataFrame(comparison_data)
 
@@ -301,37 +337,45 @@ def create_comparison_table(df1, df2, labels=None, metrics=None):
     # Highlight improvements (green) and regressions (red)
     def highlight_change(val):
         if pd.isna(val) or val == 0:
-            return ''
-        color = '#90EE90' if val > 0 else '#FFB6C1'
-        return f'background-color: {color}; font-weight: bold'
+            return ""
+        color = "#90EE90" if val > 0 else "#FFB6C1"
+        return f"background-color: {color}; font-weight: bold"
 
-    styler = styler.applymap(highlight_change, subset=['Change %'])
+    styler = styler.applymap(highlight_change, subset=["Change %"])
 
     # Format columns
-    styler = styler.format({
-        labels[0]: '{:.2f}',
-        labels[1]: '{:.2f}',
-        'Difference': '{:+.2f}',
-        'Change %': '{:+.1f}%'
-    })
+    styler = styler.format(
+        {
+            labels[0]: "{:.2f}",
+            labels[1]: "{:.2f}",
+            "Difference": "{:+.2f}",
+            "Change %": "{:+.1f}%",
+        }
+    )
 
     # Apply table styles
-    styler = styler.set_table_styles([
-        {'selector': 'thead th',
-         'props': [
-             ('background-color', '#007bff'),
-             ('color', 'white'),
-             ('font-weight', 'bold'),
-             ('text-align', 'center'),
-             ('padding', '10px')
-         ]},
-        {'selector': 'tbody td',
-         'props': [
-             ('text-align', 'center'),
-             ('padding', '8px'),
-             ('border', '1px solid #ddd')
-         ]}
-    ])
+    styler = styler.set_table_styles(
+        [
+            {
+                "selector": "thead th",
+                "props": [
+                    ("background-color", "#007bff"),
+                    ("color", "white"),
+                    ("font-weight", "bold"),
+                    ("text-align", "center"),
+                    ("padding", "10px"),
+                ],
+            },
+            {
+                "selector": "tbody td",
+                "props": [
+                    ("text-align", "center"),
+                    ("padding", "8px"),
+                    ("border", "1px solid #ddd"),
+                ],
+            },
+        ]
+    )
 
     return styler
 
@@ -351,20 +395,20 @@ def format_large_numbers(df, columns=None):
 
     if columns is None:
         # Auto-detect columns with "Tokens" in name
-        columns = [col for col in df.columns if 'Tokens' in col or 'tokens' in col]
+        columns = [col for col in df.columns if "Tokens" in col or "tokens" in col]
 
     def format_number(num):
         if pd.isna(num):
-            return '-'
+            return "-"
         if abs(num) >= 1_000_000:
-            return f'{num/1_000_000:.2f}M'
+            return f"{num/1_000_000:.2f}M"
         elif abs(num) >= 1_000:
-            return f'{num/1_000:.1f}K'
+            return f"{num/1_000:.1f}K"
         else:
-            return f'{num:.0f}'
+            return f"{num:.0f}"
 
     for col in columns:
         if col in df_copy.columns:
-            df_copy[f'{col}_formatted'] = df_copy[col].apply(format_number)
+            df_copy[f"{col}_formatted"] = df_copy[col].apply(format_number)
 
     return df_copy

@@ -4,13 +4,14 @@ Error消息增强功能演示
 展示新增ErrorTip功能如何Help用户更好地理解Error并获得Solution。
 """
 
-import sys
 import io
+import sys
 
 # Set UTF-8 编码输出
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 from core.error_messages import get_enhanced_error
+
 
 def demo_error_messages():
     """演示各种Error增强Tip"""
@@ -56,7 +57,9 @@ def demo_error_messages():
     try:
         raise Exception("HTTP 500: Internal server error")
     except Exception as e:
-        error_msg = get_enhanced_error(e, context="API URL: https://api.example.com", language="zh")
+        error_msg = get_enhanced_error(
+            e, context="API URL: https://api.example.com", language="zh"
+        )
         print(error_msg)
     print()
 
@@ -66,7 +69,9 @@ def demo_error_messages():
     try:
         raise Exception("Connection refused - Network unreachable")
     except Exception as e:
-        error_msg = get_enhanced_error(e, context="API URL: https://api.example.com", language="zh")
+        error_msg = get_enhanced_error(
+            e, context="API URL: https://api.example.com", language="zh"
+        )
         print(error_msg)
     print()
 

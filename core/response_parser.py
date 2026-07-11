@@ -13,6 +13,7 @@ from .thinking_params import get_content_field, get_platform_features, get_reaso
 @dataclass
 class ParsedChunk:
     """Parse后响应块"""
+
     content: str = ""  # 正文内容
     reasoning: str = ""  # 推理内容
     finish_reason: str | None = None  # 完成原因
@@ -23,6 +24,7 @@ class ParsedChunk:
 @dataclass
 class ParsedResponse:
     """Parse后完整响应"""
+
     full_content: str = ""  # 完整正文
     full_reasoning: str = ""  # 完整推理内容
     total_chunks: int = 0  # 总块数
@@ -89,7 +91,9 @@ class UnifiedResponseParser:
         Returns:
             ParsedChunk: Parse后响应块
         """
-        result = ParsedChunk(raw_chunk=chunk if self._total_chunks < self.max_snapshots else None)
+        result = ParsedChunk(
+            raw_chunk=chunk if self._total_chunks < self.max_snapshots else None
+        )
 
         # Save快照
         if self._total_chunks < self.max_snapshots:
@@ -137,7 +141,9 @@ class UnifiedResponseParser:
 
         return result
 
-    def _parse_standard_chunk(self, delta: dict[str, Any], result: ParsedChunk) -> ParsedChunk:
+    def _parse_standard_chunk(
+        self, delta: dict[str, Any], result: ParsedChunk
+    ) -> ParsedChunk:
         """Parse标准格式响应块 (OpenAI 兼容)"""
         # 提取正文
         content = delta.get(self.content_field, "") or ""
@@ -149,7 +155,9 @@ class UnifiedResponseParser:
 
         return result
 
-    def _parse_gemini_chunk(self, delta: dict[str, Any], result: ParsedChunk) -> ParsedChunk:
+    def _parse_gemini_chunk(
+        self, delta: dict[str, Any], result: ParsedChunk
+    ) -> ParsedChunk:
         """Parse Gemini 格式响应块"""
         # Gemini  delta 可能直接包含 parts，也可能is标准格式
         parts = delta.get("parts", [])
@@ -185,7 +193,7 @@ class UnifiedResponseParser:
             finish_reason=self._finish_reason,
             first_reasoning_chunk_index=self._first_reasoning_idx,
             first_content_chunk_index=self._first_content_idx,
-            raw_snapshots=self._snapshots
+            raw_snapshots=self._snapshots,
         )
 
     def reset(self):
@@ -216,8 +224,7 @@ class UnifiedResponseParser:
 
 
 def parse_stream_response(
-    chunks: list[dict[str, Any]],
-    platform: str
+    chunks: list[dict[str, Any]], platform: str
 ) -> ParsedResponse:
     """
     便捷函数：Parse完整流式响应

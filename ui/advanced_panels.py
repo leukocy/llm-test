@@ -13,8 +13,6 @@ import os
 import pandas as pd
 import streamlit as st
 
-from ui.design_system import material_icon
-
 # ============================================================================
 # Lazy Import Modules (loaded on demand)
 # ============================================================================
@@ -29,16 +27,21 @@ def _get_quality_eval_module():
     if _quality_eval_module is None:
         try:
             from core import quality_evaluator
-            from evaluators import EVALUATOR_REGISTRY, GSM8KEvaluator, MMLUEvaluator
+            from evaluators import (  # type: ignore[attr-defined]
+                EVALUATOR_REGISTRY,
+                GSM8KEvaluator,
+                MMLUEvaluator,
+            )
             from ui import quality_reports
+
             _quality_eval_module = {
-                'QualityEvaluator': quality_evaluator.QualityEvaluator,
-                'QualityTestConfig': quality_evaluator.QualityTestConfig,
-                'EVALUATOR_REGISTRY': EVALUATOR_REGISTRY,
-                'GSM8KEvaluator': GSM8KEvaluator,
-                'MMLUEvaluator': MMLUEvaluator,
-                'generate_quality_summary': quality_reports.generate_quality_summary,
-                'render_quality_report': quality_reports.render_quality_report,
+                "QualityEvaluator": quality_evaluator.QualityEvaluator,
+                "QualityTestConfig": quality_evaluator.QualityTestConfig,
+                "EVALUATOR_REGISTRY": EVALUATOR_REGISTRY,
+                "GSM8KEvaluator": GSM8KEvaluator,
+                "MMLUEvaluator": MMLUEvaluator,
+                "generate_quality_summary": quality_reports.generate_quality_summary,
+                "render_quality_report": quality_reports.render_quality_report,
             }
         except ImportError:
             pass
@@ -51,12 +54,13 @@ def _get_enhanced_eval_module():
     if _enhanced_eval_module is None:
         try:
             from core import model_comparator, reasoning_evaluator, smart_answer_parser
+
             _enhanced_eval_module = {
-                'ModelComparator': model_comparator.ModelComparator,
-                'ModelConfig': model_comparator.ModelConfig,
-                'ReasoningQualityEvaluator': reasoning_evaluator.ReasoningQualityEvaluator,
-                'AnswerType': smart_answer_parser.AnswerType,
-                'SmartAnswerParser': smart_answer_parser.SmartAnswerParser,
+                "ModelComparator": model_comparator.ModelComparator,
+                "ModelConfig": model_comparator.ModelConfig,
+                "ReasoningQualityEvaluator": reasoning_evaluator.ReasoningQualityEvaluator,
+                "AnswerType": smart_answer_parser.AnswerType,
+                "SmartAnswerParser": smart_answer_parser.SmartAnswerParser,
             }
         except ImportError:
             pass
@@ -96,12 +100,25 @@ def _check_enhanced_eval():
 
 # Mapping from dataset key to display name
 _DATASET_DISPLAY_NAMES = {
-    "mmlu": "MMLU", "gsm8k": "GSM8K", "math500": "MATH-500", "humaneval": "HumanEval",
-    "ceval": "C-Eval", "gpqa": "GPQA", "arc": "ARC-Challenge", "truthfulqa": "TruthfulQA",
-    "winogrande": "WinoGrande", "hellaswag": "HellaSwag", "mbpp": "MBPP",
-    "aime2025": "AIME 2025", "longbench": "LongBench", "arena_hard": "Arena Hard",
-    "global_piqa": "PIQA", "swebench_lite": "SWE-Bench Lite",
-    "needle_haystack": "Needle Haystack", "custom_needle": "Custom Needle",
+    "mmlu": "MMLU",
+    "gsm8k": "GSM8K",
+    "math500": "MATH-500",
+    "humaneval": "HumanEval",
+    "ceval": "C-Eval",
+    "gpqa": "GPQA",
+    "arc": "ARC-Challenge",
+    "truthfulqa": "TruthfulQA",
+    "winogrande": "WinoGrande",
+    "hellaswag": "HellaSwag",
+    "mbpp": "MBPP",
+    "aime2025": "AIME 2025",
+    "aime2026": "AIME 2026",
+    "longbench": "LongBench",
+    "arena_hard": "Arena Hard",
+    "global_piqa": "PIQA",
+    "swebench_lite": "SWE-Bench Lite",
+    "needle_haystack": "Needle Haystack",
+    "custom_needle": "Custom Needle",
 }
 
 
@@ -113,8 +130,11 @@ def _render_dataset_status_panel(available_datasets):
     # Only show datasets registered in DatasetManager
     try:
         from core.dataset_manager import get_manager
+
         manager = get_manager()
-        managed_datasets = [d for d in available_datasets if d in manager.configs and d not in _SYNTHETIC_DATASETS]
+        managed_datasets = [
+            d for d in available_datasets if d in manager.configs and d not in _SYNTHETIC_DATASETS
+        ]
     except Exception:
         return
 
@@ -137,19 +157,21 @@ def _render_dataset_status_panel(available_datasets):
                 if size_mb > 0:
                     size_str = f"{size_mb:.1f} MB" if size_mb < 1024 else f"{size_mb/1024:.1f} GB"
 
-            status_data.append({
-                "Dataset": display_name,
-                "Key": ds_name,
-                "Available": is_avail,
-                "Size": size_str,
-            })
+            status_data.append(
+                {
+                    "Dataset": display_name,
+                    "Key": ds_name,
+                    "Available": is_avail,
+                    "Size": size_str,
+                }
+            )
             if not is_avail:
                 missing_datasets.append(ds_name)
 
         # Display status table
         for row in status_data:
-            icon = "Available" if row["Available"] else "Download required"
-            st.markdown(f"{icon} **{row['Dataset']}** — {row['Size']}")
+            status = "Available" if row["Available"] else "Missing"
+            st.markdown(f"**{row['Dataset']}** — {status} — {row['Size']}")
 
         # Download buttons for missing datasets
         if missing_datasets:
@@ -214,18 +236,20 @@ def render_quality_test_panel(config, run_test_func):
 
     # Lazy detect and load module
     if not _check_quality_eval():
-        st.error("Quality assessment module failed to load. Please check if the evaluators directory is complete.")
+        st.error(
+            "Quality assessment module failed to load. Please check if the evaluators directory is complete."
+        )
         return False
 
     quality_module = _get_quality_eval_module()
 
     # Initialize quality test status
-    if 'quality_results' not in st.session_state:
+    if "quality_results" not in st.session_state:
         st.session_state.quality_results = {}
-    if 'quality_test_running' not in st.session_state:
+    if "quality_test_running" not in st.session_state:
         st.session_state.quality_test_running = False
 
-    available_datasets = list(quality_module['EVALUATOR_REGISTRY'].keys())
+    available_datasets = list(quality_module["EVALUATOR_REGISTRY"].keys())
 
     with st.sidebar.expander("Quality Test Parameters", expanded=True):
         # Dataset status panel
@@ -236,30 +260,36 @@ def render_quality_test_panel(config, run_test_func):
 
         # Define dataset layout: (registry_key, display_name, default, help_text)
         _BASIC_DATASETS = [
-            ("mmlu",       "MMLU",          True,  "General knowledge (57 subjects)"),
-            ("gsm8k",      "GSM8K",         True,  "Elementary math reasoning"),
-            ("math500",    "MATH-500",      False, "Advanced math competitions"),
-            ("humaneval",  "HumanEval",     False, "Python code generation"),
-            ("ceval",      "C-Eval",        False, "Chinese knowledge evaluation"),
+            ("mmlu", "MMLU", True, "General knowledge (57 subjects)"),
+            ("gsm8k", "GSM8K", True, "Elementary math reasoning"),
+            ("math500", "MATH-500", False, "Advanced math competitions"),
+            ("humaneval", "HumanEval", False, "Python code generation"),
+            ("ceval", "C-Eval", False, "Chinese knowledge evaluation"),
         ]
         _REASONING_DATASETS = [
-            ("gpqa",       "GPQA",          False, "Graduate-level scientific reasoning"),
-            ("arc",        "ARC-Challenge",  False, "Scientific commonsense reasoning"),
-            ("truthfulqa", "TruthfulQA",     False, "Truthfulness testing"),
-            ("winogrande", "WinoGrande",     False, "Coreference resolution"),
-            ("hellaswag",  "HellaSwag",      False, "Commonsense reasoning"),
+            ("gpqa", "GPQA", False, "Graduate-level scientific reasoning"),
+            ("arc", "ARC-Challenge", False, "Scientific commonsense reasoning"),
+            ("truthfulqa", "TruthfulQA", False, "Truthfulness testing"),
+            ("winogrande", "WinoGrande", False, "Coreference resolution"),
+            ("hellaswag", "HellaSwag", False, "Commonsense reasoning"),
         ]
         _CODE_EXTRA_DATASETS = [
-            ("mbpp",        "MBPP",          False, "Python code generation (extended)"),
-            ("aime2025",    "AIME 2025",     False, "Competition math (hard)"),
-            ("longbench",   "LongBench",     False, "Long context understanding"),
-            ("arena_hard",  "Arena Hard",    False, "Hard prompts evaluation"),
-            ("global_piqa", "PIQA",          False, "Physical reasoning"),
+            ("mbpp", "MBPP", False, "Python code generation (extended)"),
+            ("aime2025", "AIME 2025", False, "Competition math (hard)"),
+            (
+                "aime2026",
+                "AIME 2026",
+                False,
+                "Competition math (hard) - official GLM-5.2",
+            ),
+            ("longbench", "LongBench", False, "Long context understanding"),
+            ("arena_hard", "Arena Hard", False, "Hard prompts evaluation"),
+            ("global_piqa", "PIQA", False, "Physical reasoning"),
         ]
         _SPECIAL_DATASETS = [
-            ("swebench_lite",   "SWE-Bench Lite",    False, "Software engineering"),
-            ("needle_haystack", "Needle Haystack",    False, "Long context retrieval"),
-            ("custom_needle",   "Custom Needle",      False, "Custom retrieval tests"),
+            ("swebench_lite", "SWE-Bench Lite", False, "Software engineering"),
+            ("needle_haystack", "Needle Haystack", False, "Long context retrieval"),
+            ("custom_needle", "Custom Needle", False, "Custom retrieval tests"),
         ]
 
         selected_datasets = []
@@ -293,7 +323,7 @@ def render_quality_test_panel(config, run_test_func):
             "Model Type",
             ["Standard Model", "Reasoning Model (CoT)", "Code Model"],
             index=0,
-            key="quality_model_type"
+            key="quality_model_type",
         )
 
         model_type = "standard"
@@ -305,19 +335,37 @@ def render_quality_test_panel(config, run_test_func):
         # Sampling Mode
         sampling_mode = st.radio(
             "Sampling Mode",
-            ["Quick sampling (100 questions/dataset)", "Medium sampling (500 questions)", "Custom sampling", "Full test (all)"],
+            [
+                "Quick sampling (100 questions/dataset)",
+                "Medium sampling (500 questions)",
+                "Custom sampling",
+                "Full test (all)",
+            ],
             key="quality_sampling_mode",
-            horizontal=True
+            horizontal=True,
         )
 
         # Dataset sample count mapping
         DATASET_SAMPLE_COUNTS = {
-            'arc': 1167, 'gpqa': 195, 'gsm8k': 1314, 'hellaswag': 10037,
-            'humaneval': 164, 'longbench': 4150, 'math500': 496, 'mbpp': 497,
-            'mmlu': 14037, 'needle_haystack': 30, 'swebench_lite': 300,
-            'truthfulqa': 812, 'winogrande': 1262, 'aime2025': 30,
-            'arena_hard': 500, 'global_piqa': 2000, 'custom_needle': 30,
-            'ceval': 13948,
+            "arc": 1167,
+            "gpqa": 195,
+            "gsm8k": 1314,
+            "hellaswag": 10037,
+            "humaneval": 164,
+            "longbench": 4150,
+            "math500": 496,
+            "mbpp": 497,
+            "mmlu": 14037,
+            "needle_haystack": 30,
+            "swebench_lite": 300,
+            "truthfulqa": 812,
+            "winogrande": 1262,
+            "aime2025": 30,
+            "aime2026": 30,
+            "arena_hard": 500,
+            "global_piqa": 2000,
+            "custom_needle": 30,
+            "ceval": 13948,
         }
 
         if sampling_mode == "Quick sampling (100 questions/dataset)":
@@ -326,15 +374,20 @@ def render_quality_test_panel(config, run_test_func):
             max_samples = 500
         elif sampling_mode == "Custom sampling":
             if selected_datasets:
-                min_dataset_size = min(DATASET_SAMPLE_COUNTS.get(ds, 10000) for ds in selected_datasets)
+                min_dataset_size = min(
+                    DATASET_SAMPLE_COUNTS.get(ds, 10000) for ds in selected_datasets
+                )
                 max_allowed = min(min_dataset_size, 10000)
                 st.caption(f"Min sample count for selected datasets: {min_dataset_size}")
             else:
                 max_allowed = 10000
             max_samples = st.number_input(
-                "Number of questions", min_value=1, max_value=max_allowed,
-                value=min(200, max_allowed), step=50,
-                key="custom_sample_count"
+                "Number of questions",
+                min_value=1,
+                max_value=max_allowed,
+                value=min(200, max_allowed),
+                step=50,
+                key="custom_sample_count",
             )
         else:
             max_samples = None
@@ -346,16 +399,21 @@ def render_quality_test_panel(config, run_test_func):
         # Detailed parameters
         with st.expander("Detailed Parameter Settings", expanded=True):
             quality_temperature = st.number_input(
-                "Temperature",
-                min_value=0.0, max_value=2.0, value=0.0, step=0.1
+                "Temperature", min_value=0.0, max_value=2.0, value=0.0, step=0.1
             )
             quality_max_tokens = st.number_input(
                 "Max Output Tokens",
-                min_value=1, max_value=131072, value=8192, step=1024
+                min_value=1,
+                max_value=131072,
+                value=8192,
+                step=1024,
             )
             quality_concurrency = st.slider(
-                "Concurrent requests", 1, 32, 4,
-                help="Recommended: Local model 1-2, API model 4-10"
+                "Concurrent requests",
+                1,
+                32,
+                4,
+                help="Recommended: Local model 1-2, API model 4-10",
             )
 
             st.markdown("---")
@@ -363,13 +421,13 @@ def render_quality_test_panel(config, run_test_func):
                 "AI Judge (secondary verification)",
                 value=False,
                 key="quality_use_llm_judge",
-                help="Use LLM to re-evaluate uncertain answers, reducing misjudgments"
+                help="Use LLM to re-evaluate uncertain answers, reducing misjudgments",
             )
             quality_use_cache = st.checkbox(
                 "Response caching",
                 value=True,
                 key="quality_use_cache",
-                help="Cache API responses to avoid duplicate calls (7-day TTL)"
+                help="Cache API responses to avoid duplicate calls (7-day TTL)",
             )
 
             # Thinking model parameters (only relevant for reasoning models)
@@ -378,16 +436,19 @@ def render_quality_test_panel(config, run_test_func):
                 st.markdown("**Reasoning Model Settings**")
                 quality_thinking_budget = st.number_input(
                     "Thinking Token Budget",
-                    min_value=256, max_value=131072, value=4096, step=512,
+                    min_value=256,
+                    max_value=131072,
+                    value=4096,
+                    step=512,
                     key="quality_thinking_budget",
-                    help="Maximum tokens for the model's internal reasoning chain"
+                    help="Maximum tokens for the model's internal reasoning chain",
                 )
                 quality_reasoning_effort = st.selectbox(
                     "Reasoning Effort",
                     ["low", "medium", "high"],
                     index=1,
                     key="quality_reasoning_effort",
-                    help="Controls reasoning depth: low=fast, high=thorough"
+                    help="Controls reasoning depth: low=fast, high=thorough",
                 )
             else:
                 quality_thinking_budget = 4096
@@ -396,10 +457,9 @@ def render_quality_test_panel(config, run_test_func):
         # Start button
         start_quality_btn = st.button(
             "Start Quality Assessment",
-            icon=material_icon("play_arrow"),
             key="start_quality_btn",
             type="primary",
-            disabled=st.session_state.quality_test_running or not selected_datasets
+            disabled=st.session_state.quality_test_running or not selected_datasets,
         )
 
     # Main area
@@ -409,36 +469,54 @@ def render_quality_test_panel(config, run_test_func):
 
     if start_quality_btn and selected_datasets:
         return _run_quality_test(
-            config, selected_datasets, max_samples, num_shots,
-            model_type, quality_temperature, quality_max_tokens, quality_concurrency,
-            quality_use_llm_judge, quality_use_cache,
-            quality_thinking_budget, quality_reasoning_effort
+            config,
+            selected_datasets,
+            max_samples,
+            num_shots,
+            model_type,
+            quality_temperature,
+            quality_max_tokens,
+            quality_concurrency,
+            quality_use_llm_judge,
+            quality_use_cache,
+            quality_thinking_budget,
+            quality_reasoning_effort,
         )
 
     # Display results
     if st.session_state.quality_results:
         st.markdown("---")
-        quality_module['render_quality_report'](
-            st.session_state.quality_results,
-            config['model_id'],
-            show_details=True
+        quality_module["render_quality_report"](
+            st.session_state.quality_results, config["model_id"], show_details=True
         )
 
     return False
 
 
-def _run_quality_test(config, selected_datasets, max_samples, num_shots,
-                        model_type, temperature, max_tokens, concurrency,
-                        use_llm_judge=False, use_cache=True,
-                        thinking_budget=4096, reasoning_effort="medium"):
+def _run_quality_test(
+    config,
+    selected_datasets,
+    max_samples,
+    num_shots,
+    model_type,
+    temperature,
+    max_tokens,
+    concurrency,
+    use_llm_judge=False,
+    use_cache=True,
+    thinking_budget=4096,
+    reasoning_effort="medium",
+):
     """Run quality test"""
     # Pre-check: ensure datasets are available
     _SYNTHETIC_DATASETS = {"needle_haystack", "custom_needle"}
     try:
         from core.dataset_manager import get_manager
+
         manager = get_manager()
         missing = [
-            ds for ds in selected_datasets
+            ds
+            for ds in selected_datasets
             if ds not in _SYNTHETIC_DATASETS
             and ds in manager.configs
             and not manager.is_available(ds)
@@ -491,12 +569,12 @@ def _run_quality_test(config, selected_datasets, max_samples, num_shots,
         # Build configuration
         from core.thinking_params import get_intelligent_preset
 
-        thinking_enabled = (model_type == "thinking")
+        thinking_enabled = model_type == "thinking"
 
         # For thinking models, try intelligent preset first, fall back to UI values
         if thinking_enabled:
             try:
-                preset = get_intelligent_preset(config['api_base_url'], config['model_id'])
+                preset = get_intelligent_preset(config["api_base_url"], config["model_id"])
                 # Use UI values as override, preset as starting point
                 final_budget = thinking_budget or preset.get("thinking_budget", 4096)
                 final_effort = reasoning_effort or preset.get("reasoning_effort", "medium")
@@ -507,7 +585,7 @@ def _run_quality_test(config, selected_datasets, max_samples, num_shots,
             final_budget = thinking_budget
             final_effort = reasoning_effort
 
-        quality_config = quality_module['QualityTestConfig'](
+        quality_config = quality_module["QualityTestConfig"](
             datasets=selected_datasets,
             num_shots=num_shots,
             max_samples=max_samples,
@@ -520,20 +598,20 @@ def _run_quality_test(config, selected_datasets, max_samples, num_shots,
             reasoning_effort=final_effort,
             dataset_overrides={},
             use_llm_judge=use_llm_judge,
-            use_cache=use_cache
+            use_cache=use_cache,
         )
 
         # Create evaluator
-        evaluator = quality_module['QualityEvaluator'](
-            api_base_url=config['api_base_url'],
-            model_id=config['model_id'],
-            api_key=config['api_key'],
-            provider=config['provider'],
-            output_dir="quality_results"
+        evaluator = quality_module["QualityEvaluator"](
+            api_base_url=config["api_base_url"],
+            model_id=config["model_id"],
+            api_key=config["api_key"],
+            provider=config["provider"],
+            output_dir="quality_results",
         )
 
         # Register evaluator classes
-        for ds_name, evaluator_class in quality_module['EVALUATOR_REGISTRY'].items():
+        for ds_name, evaluator_class in quality_module["EVALUATOR_REGISTRY"].items():
             evaluator.register_evaluator(ds_name, evaluator_class)
 
         # Progress callback
@@ -552,6 +630,7 @@ def _run_quality_test(config, selected_datasets, max_samples, num_shots,
         asyncio.set_event_loop(loop)
 
         import sniffio
+
         token = sniffio.current_async_library_cvar.set("asyncio")
 
         try:
@@ -595,9 +674,9 @@ def render_ab_comparison_panel(config):
     enhanced_module = _get_enhanced_eval_module()
     quality_module = _get_quality_eval_module()
 
-    if 'ab_comparison_running' not in st.session_state:
+    if "ab_comparison_running" not in st.session_state:
         st.session_state.ab_comparison_running = False
-    if 'ab_result' not in st.session_state:
+    if "ab_result" not in st.session_state:
         st.session_state.ab_result = None
 
     col_models, col_config = st.columns([1, 1])
@@ -616,15 +695,19 @@ def render_ab_comparison_panel(config):
         model_b_provider = st.selectbox(
             "Provider",
             ["openai", "anthropic", "gemini", "siliconflow", "together", "deepseek"],
-            key="ab_model_b_provider"
+            key="ab_model_b_provider",
         )
-        model_b_base = st.text_input("API Base URL", key="ab_model_b_base", value="https://api.openai.com/v1")
+        model_b_base = st.text_input(
+            "API Base URL", key="ab_model_b_base", value="https://api.openai.com/v1"
+        )
         model_b_key = st.text_input("API Key", key="ab_model_b_key", type="password")
 
     with col_config:
         st.subheader("Test Configuration")
 
-        available_datasets = list(quality_module['EVALUATOR_REGISTRY'].keys()) if quality_module else []
+        available_datasets = (
+            list(quality_module["EVALUATOR_REGISTRY"].keys()) if quality_module else []
+        )
         st.markdown("**Select test datasets**")
 
         selected_datasets_ab = []
@@ -634,20 +717,33 @@ def render_ab_comparison_panel(config):
                 if st.checkbox(ds_name, key=f"ab_ds_{ds_name}"):
                     selected_datasets_ab.append(ds_name)
 
-        ab_max_samples = st.number_input("Samples per dataset", min_value=10, value=50, step=10, key="ab_max_samples")
-        ab_num_shots = st.number_input("Number of few-shots", min_value=0, value=0, key="ab_num_shots")
+        ab_max_samples = st.number_input(
+            "Samples per dataset", min_value=10, value=50, step=10, key="ab_max_samples"
+        )
+        ab_num_shots = st.number_input(
+            "Number of few-shots", min_value=0, value=0, key="ab_num_shots"
+        )
 
         start_ab_btn = st.button(
             "Start Comparison",
-            icon=material_icon("compare_arrows"),
             type="primary",
-            disabled=st.session_state.ab_comparison_running or not selected_datasets_ab or not model_b_id
+            disabled=st.session_state.ab_comparison_running
+            or not selected_datasets_ab
+            or not model_b_id,
         )
 
         # Run comparison
         if start_ab_btn and selected_datasets_ab and model_b_id:
-            return _run_ab_comparison(config, model_b_id, model_b_provider, model_b_base, model_b_key,
-                                    selected_datasets_ab, ab_max_samples, ab_num_shots)
+            return _run_ab_comparison(
+                config,
+                model_b_id,
+                model_b_provider,
+                model_b_base,
+                model_b_key,
+                selected_datasets_ab,
+                ab_max_samples,
+                ab_num_shots,
+            )
 
         # Display results
         if st.session_state.ab_result:
@@ -656,8 +752,9 @@ def render_ab_comparison_panel(config):
     return False
 
 
-def _run_ab_comparison(config, model_b_id, provider, base_url, api_key,
-                       datasets, max_samples, num_shots):
+def _run_ab_comparison(
+    config, model_b_id, provider, base_url, api_key, datasets, max_samples, num_shots
+):
     """Run A/B comparison test"""
     st.session_state.ab_comparison_running = True
     st.session_state.ab_result = None
@@ -671,20 +768,18 @@ def _run_ab_comparison(config, model_b_id, provider, base_url, api_key,
             st.error("Enhanced evaluation module not available")
             return False
 
-        ModelComparator = enhanced_module['ModelComparator']
-        ModelConfig = enhanced_module['ModelConfig']
+        ModelComparator = enhanced_module["ModelComparator"]
+        ModelConfig = enhanced_module["ModelConfig"]
 
-        comparator = ModelComparator(
-            output_dir=os.path.join("quality_results", "comparisons")
-        )
+        comparator = ModelComparator(output_dir=os.path.join("quality_results", "comparisons"))
 
         # Configure Model A
         config_a = ModelConfig(
-            model_id=config['model_id'],
-            api_base_url=config['api_base_url'],
-            api_key=config['api_key'],
-            provider=config['provider'],
-            label=f"{config['model_id']} (A)"
+            model_id=config["model_id"],
+            api_base_url=config["api_base_url"],
+            api_key=config["api_key"],
+            provider=config["provider"],
+            label=f"{config['model_id']} (A)",
         )
         comparator.add_model("model_a", config_a)
 
@@ -694,7 +789,7 @@ def _run_ab_comparison(config, model_b_id, provider, base_url, api_key,
             api_base_url=base_url,
             api_key=api_key,
             provider=provider,
-            label=f"{model_b_id} (B)"
+            label=f"{model_b_id} (B)",
         )
         comparator.add_model("model_b", config_b)
 
@@ -703,12 +798,15 @@ def _run_ab_comparison(config, model_b_id, provider, base_url, api_key,
             status_text.info(msg)
 
         import asyncio
-        result = asyncio.run(comparator.run_comparison(
-            datasets=datasets,
-            max_samples=max_samples,
-            num_shots=num_shots,
-            progress_callback=update_progress
-        ))
+
+        result = asyncio.run(
+            comparator.run_comparison(
+                datasets=datasets,
+                max_samples=max_samples,
+                num_shots=num_shots,
+                progress_callback=update_progress,
+            )
+        )
 
         st.session_state.ab_result = result
         st.success("Comparison complete!")
@@ -757,10 +855,14 @@ def _display_ab_comparison_results(result):
 def render_advanced_eval_panel(config):
     """Render advanced evaluation analysis panel"""
     st.header("Advanced Evaluation Analysis")
-    st.info("Provides advanced evaluation tools: consistency testing, robustness testing, smart answer parser demo.")
+    st.info(
+        "Provides advanced evaluation tools: consistency testing, robustness testing, smart answer parser demo."
+    )
 
     if not _check_enhanced_eval():
-        st.error("Enhanced evaluation module failed to load. Please check if core/ directory contains required modules.")
+        st.error(
+            "Enhanced evaluation module failed to load. Please check if core/ directory contains required modules."
+        )
         return False
 
     enhanced_module = _get_enhanced_eval_module()
@@ -769,12 +871,14 @@ def render_advanced_eval_panel(config):
 
     with adv_tabs[0]:
         st.subheader("Smart Answer Parser Demo")
-        st.markdown("""
+        st.markdown(
+            """
         Smart answer parser uses a layered strategy to extract answers:
         1. **Pattern matching** (fast) - Matches standard formats like `\\boxed{}`, `####`, `ANSWER: X`
         2. **Heuristic rules** - Pattern matching like "answer is X", "答案是X"
         3. **Symbolic comparison** (math) - SymPy equivalence for math expressions
-        """)
+        """
+        )
 
         col1, col2 = st.columns([2, 1])
 
@@ -783,19 +887,30 @@ def render_advanced_eval_panel(config):
                 "Enter model response",
                 value="Let me solve this step by step.\n\n15 + 27 = 42\n\nTherefore, the answer is \\boxed{42}.",
                 height=150,
-                key="smart_parse_input"
+                key="smart_parse_input",
             )
 
         with col2:
             demo_dataset_type = st.selectbox(
                 "Dataset Type",
-                ["auto", "mmlu", "gsm8k", "math500", "humaneval", "gpqa", "truthfulqa", "longbench"],
+                [
+                    "auto",
+                    "mmlu",
+                    "gsm8k",
+                    "math500",
+                    "humaneval",
+                    "gpqa",
+                    "truthfulqa",
+                    "longbench",
+                ],
                 key="smart_parse_dataset_type",
-                help="Select the dataset type to use the appropriate parser. 'auto' tries all parsers."
+                help="Select the dataset type to use the appropriate parser. 'auto' tries all parsers.",
             )
-            demo_correct = st.text_input("Correct answer (optional)", "42", key="smart_parse_correct")
+            demo_correct = st.text_input(
+                "Correct answer (optional)", "42", key="smart_parse_correct"
+            )
 
-        if st.button("Parse Answer", key="smart_parse_btn", icon=material_icon("search")):
+        if st.button("Parse Answer", key="smart_parse_btn"):
             try:
                 from evaluators.answer_parser import MathAnswerParser, get_parser_for_dataset
 
@@ -820,19 +935,24 @@ def render_advanced_eval_panel(config):
                         is_match = MathAnswerParser.check_answer(extracted, demo_correct)
                     else:
                         from evaluators.answer_parser import TextAnswerParser
+
                         is_match = TextAnswerParser.check_answer(extracted, demo_correct)
 
                     if is_match:
                         st.success("Answer matches!")
                     else:
-                        st.error(f"Answer does not match. Expected: {demo_correct}, Got: {extracted}")
+                        st.error(
+                            f"Answer does not match. Expected: {demo_correct}, Got: {extracted}"
+                        )
 
             except Exception as e:
                 st.error(f"Parse failed: {e}")
 
     with adv_tabs[1]:
         st.subheader("Consistency Test")
-        st.info("Consistency testing queries the same question multiple times to evaluate model answer stability.")
+        st.info(
+            "Consistency testing queries the same question multiple times to evaluate model answer stability."
+        )
 
         col1, col2 = st.columns(2)
         with col1:
@@ -842,14 +962,14 @@ def render_advanced_eval_panel(config):
             st.text_input("Test question", "What is 15 + 27?", key="cons_question")
             st.text_input("Correct answer", "42", key="cons_answer")
 
-        st.info(f"Will run question {cons_runs} times, consistency rate ≥ {cons_threshold*100:.0f}% considered stable")
+        st.info(
+            f"Will run question {cons_runs} times, consistency rate ≥ {cons_threshold*100:.0f}% considered stable"
+        )
 
-        if st.button(
-            "Start Consistency Test",
-            key="cons_start_btn",
-            icon=material_icon("repeat"),
-        ):
-            st.info("Consistency testing requires API connection. Please configure API in the left panel first.")
+        if st.button("Start Consistency Test", key="cons_start_btn"):
+            st.info(
+                "Consistency testing requires API connection. Please configure API in the left panel first."
+            )
 
     with adv_tabs[2]:
         st.subheader("Robustness Test")
@@ -864,20 +984,14 @@ def render_advanced_eval_panel(config):
         robust_input = st.text_input(
             "Enter original question",
             "If you have 1000 apples and buy 500 more, how many do you have in total?",
-            key="robust_input"
+            key="robust_input",
         )
 
         robust_ptype = st.selectbox(
-            "Perturbation Type",
-            [p.value for p in PerturbationType],
-            key="robust_ptype"
+            "Perturbation Type", [p.value for p in PerturbationType], key="robust_ptype"
         )
 
-        if st.button(
-            "Apply Perturbation",
-            key="robust_perturb_btn",
-            icon=material_icon("shuffle"),
-        ):
+        if st.button("Apply Perturbation", key="robust_perturb_btn"):
             result = perturber.perturb(robust_input, PerturbationType(robust_ptype))
 
             col1, col2 = st.columns(2)

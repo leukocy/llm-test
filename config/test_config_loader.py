@@ -1,11 +1,12 @@
 """
 Utility to load test configurations from test_config.ini
 """
+
 import configparser
 import os
 
 
-def load_test_config(config_name='deepseek_test'):
+def load_test_config(config_name="deepseek_test"):
     """
     Load test configuration from test_config.ini
 
@@ -15,7 +16,7 @@ def load_test_config(config_name='deepseek_test'):
     Returns:
         dict: Configuration dictionary or None if file doesn't exist
     """
-    config_file = os.path.join(os.path.dirname(__file__), '..', 'test_config.ini')
+    config_file = os.path.join(os.path.dirname(__file__), "..", "test_config.ini")
 
     if not os.path.exists(config_file):
         return None
@@ -27,10 +28,12 @@ def load_test_config(config_name='deepseek_test'):
         return None
 
     return {
-        'provider': config[config_name].get('provider', 'OpenAI (兼容)'),
-        'api_base_url': config[config_name].get('api_base_url', ''),
-        'model_id': config[config_name].get('model_id', ''),
-        'api_key': config[config_name].get('api_key', ''),
-        'tokenizer_option': config[config_name].get('tokenizer_option', 'API (usage field)'),
-        'template_tokens': config[config_name].getint('template_tokens', fallback=0)
+        "provider": config[config_name].get("provider", "OpenAI (兼容)"),
+        "api_base_url": config[config_name].get("api_base_url", ""),
+        "model_id": config[config_name].get("model_id", ""),
+        "api_key": config[config_name].get("api_key", ""),
+        "tokenizer_option": config[config_name].get(
+            "tokenizer_option", "API (usage field)"
+        ),
+        "template_tokens": config[config_name].getint("template_tokens", fallback=0),
     }

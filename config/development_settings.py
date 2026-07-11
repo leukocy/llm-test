@@ -19,7 +19,7 @@ def get_development_providers():
         dict: Development provider options if in dev mode, empty dict otherwise
     """
     # Check if we're in development mode
-    IS_DEVELOPMENT = os.getenv('LLM_TEST_DEV', 'false').lower() == 'true'
+    IS_DEVELOPMENT = os.getenv("LLM_TEST_DEV", "false").lower() == "true"
 
     if not IS_DEVELOPMENT:
         return {}
@@ -29,8 +29,7 @@ def get_development_providers():
     DEVELOPMENT_PROVIDERS = {
         name: url
         for name, url in {
-            f"Dev{i}": os.getenv(f'DEV{i}_URL')
-            for i in range(1, 10)
+            f"Dev{i}": os.getenv(f"DEV{i}_URL") for i in range(1, 10)
         }.items()
         if url
     }
@@ -48,5 +47,6 @@ def load_development_settings():
     if providers:
         # Import here to avoid circular dependency
         from .settings import PROVIDER_OPTIONS
+
         PROVIDER_OPTIONS.update(providers)
     return providers

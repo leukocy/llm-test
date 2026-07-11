@@ -29,7 +29,7 @@ class DataExportService:
     - Batch Export
     """
 
-    def __init__(self, database: Database = None):
+    def __init__(self, database: Database | None = None):
         self.db = database or db
         self.run_repo = TestRunRepository(self.db)
         self.result_repo = TestResultRepository(self.db)
@@ -38,10 +38,7 @@ class DataExportService:
         self.export_dir.mkdir(parents=True, exist_ok=True)
 
     def export_run_to_json(
-        self,
-        run_id: int,
-        output_path: str = None,
-        include_results: bool = True
+        self, run_id: int, output_path: str | None = None, include_results: bool = True
     ) -> str | None:
         """
         ExportTest运行到 JSON 文件
@@ -59,7 +56,7 @@ class DataExportService:
             logger.error(f"Not foundTest运行: {run_id}")
             return None
 
-        data = {
+        data: dict[str, Any] = {
             "run": run.to_dict(),
             "exported_at": datetime.now().isoformat(),
         }
@@ -69,25 +66,26 @@ class DataExportService:
             data["results"] = [r.to_dict() for r in results]
 
         if output_path is None:
-            output_path = self.export_dir / f"run_{run_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            final_path: Path = (
+                self.export_dir
+                / f"run_{run_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            )
         else:
-            output_path = Path(output_path)
+            final_path = Path(output_path)
 
         try:
-            with open(output_path, 'w', encoding='utf-8') as f:
+            with open(final_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2, default=str)
 
-            logger.info(f"已Export到: {output_path}")
-            return str(output_path)
+            logger.info(f"已Export到: {final_path}")
+            return str(final_path)
 
         except Exception as e:
             logger.error(f"Export failed: {e}")
             return None
 
     def export_run_to_csv(
-        self,
-        run_id: int,
-        output_path: str = None
+        self, run_id: int, output_path: str | None = None
     ) -> str | None:
         """
         ExportTest Results到 CSV 文件
@@ -105,39 +103,40 @@ class DataExportService:
             return None
 
         if output_path is None:
-            output_path = self.export_dir / f"results_{run_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            final_path: Path = (
+                self.export_dir
+                / f"results_{run_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            )
         else:
-            output_path = Path(output_path)
+            final_path = Path(output_path)
 
         try:
             # 收集所has字段
-            fieldnames = set()
+            fieldnames: set[str] = set()
             for r in results:
                 fieldnames.update(r.to_dict().keys())
 
-            fieldnames = sorted(fieldnames)
+            sorted_fieldnames = sorted(fieldnames)
 
-            with open(output_path, 'w', encoding='utf-8', newline='') as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
+            with open(final_path, "w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=sorted_fieldnames)
                 writer.writeheader()
 
                 for r in results:
                     row = r.to_dict()
                     # Process None 值
-                    row = {k: (v if v is not None else '') for k, v in row.items()}
+                    row = {k: (v if v is not None else "") for k, v in row.items()}
                     writer.writerow(row)
 
-            logger.info(f"已Export到: {output_path}")
-            return str(output_path)
+            logger.info(f"已Export到: {final_path}")
+            return str(final_path)
 
         except Exception as e:
             logger.error(f"Export failed: {e}")
             return None
 
     def export_run_to_excel(
-        self,
-        run_id: int,
-        output_path: str = None
+        self, run_id: int, output_path: str | None = None
     ) -> str | None:
         """
         ExportTest Results到 Excel 文件
@@ -163,39 +162,39 @@ class DataExportService:
             return None
 
         if output_path is None:
-            output_path = self.export_dir / f"report_{run_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            final_path: Path = (
+                self.export_dir
+                / f"report_{run_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+            )
         else:
-            output_path = Path(output_path)
+            final_path = Path(output_path)
 
         try:
-            with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+            with pd.ExcelWriter(final_path, engine="openpyxl") as writer:
                 # Sheet 1: Test运行摘要
                 run_df = pd.DataFrame([run.to_dict()])
-                run_df.to_excel(writer, sheet_name='运行摘要', index=False)
+                run_df.to_excel(writer, sheet_name="运行摘要", index=False)
 
                 # Sheet 2: Test Results
                 if results:
                     results_data = [r.to_dict() for r in results]
                     results_df = pd.DataFrame(results_data)
-                    results_df.to_excel(writer, sheet_name='Test Results', index=False)
+                    results_df.to_excel(writer, sheet_name="Test Results", index=False)
 
                 # Sheet 3: Statistics信息
                 stats = self.result_repo.get_aggregate_metrics(run_id)
                 stats_df = pd.DataFrame([stats])
-                stats_df.to_excel(writer, sheet_name='Statistics信息', index=False)
+                stats_df.to_excel(writer, sheet_name="Statistics信息", index=False)
 
-            logger.info(f"已Export到: {output_path}")
-            return str(output_path)
+            logger.info(f"已Export到: {final_path}")
+            return str(final_path)
 
         except Exception as e:
             logger.error(f"Export failed: {e}")
             return None
 
     def export_model_history(
-        self,
-        model_id: str,
-        output_path: str = None,
-        format: str = "json"
+        self, model_id: str, output_path: str | None = None, format: str = "json"
     ) -> str | None:
         """
         ExportModel所hasTest History
@@ -216,9 +215,12 @@ class DataExportService:
 
         if output_path is None:
             safe_model_id = model_id.replace("/", "_").replace("\\", "_")
-            output_path = self.export_dir / f"history_{safe_model_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{format}"
+            final_path: Path = (
+                self.export_dir
+                / f"history_{safe_model_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{format}"
+            )
         else:
-            output_path = Path(output_path)
+            final_path = Path(output_path)
 
         try:
             if format == "json":
@@ -227,22 +229,22 @@ class DataExportService:
                     "exported_at": datetime.now().isoformat(),
                     "runs": [r.to_dict() for r in runs],
                 }
-                with open(output_path, 'w', encoding='utf-8') as f:
+                with open(final_path, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2, default=str)
 
             elif format == "csv":
                 runs_data = [r.to_dict() for r in runs]
                 fieldnames = sorted({k for d in runs_data for k in d})
 
-                with open(output_path, 'w', encoding='utf-8', newline='') as f:
+                with open(final_path, "w", encoding="utf-8", newline="") as f:
                     writer = csv.DictWriter(f, fieldnames=fieldnames)
                     writer.writeheader()
                     for d in runs_data:
-                        row = {k: (v if v is not None else '') for k, v in d.items()}
+                        row = {k: (v if v is not None else "") for k, v in d.items()}
                         writer.writerow(row)
 
-            logger.info(f"已Export到: {output_path}")
-            return str(output_path)
+            logger.info(f"已Export到: {final_path}")
+            return str(final_path)
 
         except Exception as e:
             logger.error(f"Export failed: {e}")
@@ -254,30 +256,32 @@ class DataExportService:
         for f in self.export_dir.glob("*"):
             if f.is_file():
                 stat = f.stat()
-                exports.append({
-                    "path": str(f),
-                    "name": f.name,
-                    "size_kb": round(stat.st_size / 1024, 2),
-                    "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                })
+                exports.append(
+                    {
+                        "path": str(f),
+                        "name": f.name,
+                        "size_kb": round(stat.st_size / 1024, 2),
+                        "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    }
+                )
 
-        exports.sort(key=lambda x: x['created_at'], reverse=True)
+        exports.sort(key=lambda x: str(x["created_at"]), reverse=True)
         return exports
 
 
-def export_to_json(run_id: int, output_path: str = None) -> str | None:
+def export_to_json(run_id: int, output_path: str | None = None) -> str | None:
     """便捷函数：Export到 JSON"""
     service = DataExportService()
     return service.export_run_to_json(run_id, output_path)
 
 
-def export_to_csv(run_id: int, output_path: str = None) -> str | None:
+def export_to_csv(run_id: int, output_path: str | None = None) -> str | None:
     """便捷函数：Export到 CSV"""
     service = DataExportService()
     return service.export_run_to_csv(run_id, output_path)
 
 
-def export_to_excel(run_id: int, output_path: str = None) -> str | None:
+def export_to_excel(run_id: int, output_path: str | None = None) -> str | None:
     """便捷函数：Export到 Excel"""
     service = DataExportService()
     return service.export_run_to_excel(run_id, output_path)

@@ -37,14 +37,14 @@ class MBPPEvaluator(BaseEvaluator):
         dataset_path: str = "datasets/mbpp",
         num_shots: int = 3,  # MBPP 通常use较少 few-shot
         max_samples: int | None = None,
-        seed: int = 42
+        seed: int = 42,
     ):
         super().__init__(
             dataset_name=dataset_name,
             dataset_path=dataset_path,
             num_shots=num_shots,
             max_samples=max_samples,
-            seed=seed
+            seed=seed,
         )
         random.seed(seed)
 
@@ -62,18 +62,18 @@ class MBPPEvaluator(BaseEvaluator):
         for filepath in possible_files:
             if os.path.exists(filepath):
                 try:
-                    if filepath.endswith('.jsonl'):
-                        with open(filepath, encoding='utf-8') as f:
+                    if filepath.endswith(".jsonl"):
+                        with open(filepath, encoding="utf-8") as f:
                             for line in f:
                                 if line.strip():
                                     samples.append(json.loads(line))
                     else:
-                        with open(filepath, encoding='utf-8') as f:
+                        with open(filepath, encoding="utf-8") as f:
                             data = json.load(f)
                         if isinstance(data, list):
                             samples = data
-                        elif isinstance(data, dict) and 'data' in data:
-                            samples = data['data']
+                        elif isinstance(data, dict) and "data" in data:
+                            samples = data["data"]
                     break
                 except Exception as e:
                     print(f"Load {filepath} 失败: {e}")
@@ -84,16 +84,18 @@ class MBPPEvaluator(BaseEvaluator):
         samples = self._normalize_samples(samples)
         random.shuffle(samples)
 
-        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
+        total_needed = self.num_shots + (
+            self.max_samples if self.max_samples else len(samples)
+        )
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
         if self.num_shots > 0:
-            self.few_shot_examples = samples[:self.num_shots]
-            samples = samples[self.num_shots:]
+            self.few_shot_examples = samples[: self.num_shots]
+            samples = samples[self.num_shots :]
 
         if self.max_samples and len(samples) > self.max_samples:
-            samples = samples[:self.max_samples]
+            samples = samples[: self.max_samples]
 
         self.samples = samples
         return samples
@@ -104,25 +106,27 @@ class MBPPEvaluator(BaseEvaluator):
 
         for sample in samples:
             try:
-                task_id = sample.get('task_id', 0)
-                text = sample.get('text', sample.get('prompt', ''))
-                code = sample.get('code', sample.get('canonical_solution', ''))
+                task_id = sample.get("task_id", 0)
+                text = sample.get("text", sample.get("prompt", ""))
+                code = sample.get("code", sample.get("canonical_solution", ""))
 
                 # ProcessTest case
-                test_list = sample.get('test_list', [])
+                test_list = sample.get("test_list", [])
                 if isinstance(test_list, str):
                     test_list = [test_list]
 
                 # 提取函数签名
                 func_name = self._extract_function_name(code)
 
-                normalized.append({
-                    'task_id': task_id,
-                    'text': text,
-                    'code': code,
-                    'test_list': test_list,
-                    'func_name': func_name
-                })
+                normalized.append(
+                    {
+                        "task_id": task_id,
+                        "text": text,
+                        "code": code,
+                        "test_list": test_list,
+                        "func_name": func_name,
+                    }
+                )
             except Exception as e:
                 continue
 
@@ -130,7 +134,7 @@ class MBPPEvaluator(BaseEvaluator):
 
     def _extract_function_name(self, code: str) -> str:
         """从代码in提取函数名"""
-        match = re.search(r'def\s+(\w+)\s*\(', code)
+        match = re.search(r"def\s+(\w+)\s*\(", code)
         if match:
             return match.group(1)
         return "solution"
@@ -142,43 +146,51 @@ class MBPPEvaluator(BaseEvaluator):
                 "task_id": 1,
                 "text": "Write a function to find the minimum of two numbers.",
                 "code": "def min_of_two(a, b):\n    return min(a, b)",
-                "test_list": ["assert min_of_two(3, 5) == 3", "assert min_of_two(7, 2) == 2"],
-                "func_name": "min_of_two"
+                "test_list": [
+                    "assert min_of_two(3, 5) == 3",
+                    "assert min_of_two(7, 2) == 2",
+                ],
+                "func_name": "min_of_two",
             },
             {
                 "task_id": 2,
                 "text": "Write a function to calculate the factorial of a number.",
                 "code": "def factorial(n):\n    if n <= 1:\n        return 1\n    return n * factorial(n-1)",
                 "test_list": ["assert factorial(5) == 120", "assert factorial(0) == 1"],
-                "func_name": "factorial"
+                "func_name": "factorial",
             },
             {
                 "task_id": 3,
                 "text": "Write a function to check if a number is prime.",
                 "code": "def is_prime(n):\n    if n < 2:\n        return False\n    for i in range(2, int(n**0.5)+1):\n        if n % i == 0:\n            return False\n    return True",
-                "test_list": ["assert is_prime(7) == True", "assert is_prime(4) == False"],
-                "func_name": "is_prime"
+                "test_list": [
+                    "assert is_prime(7) == True",
+                    "assert is_prime(4) == False",
+                ],
+                "func_name": "is_prime",
             },
             {
                 "task_id": 4,
                 "text": "Write a function to reverse a string.",
                 "code": "def reverse_string(s):\n    return s[::-1]",
                 "test_list": ["assert reverse_string('hello') == 'olleh'"],
-                "func_name": "reverse_string"
+                "func_name": "reverse_string",
             },
             {
                 "task_id": 5,
                 "text": "Write a function to find the sum of a list of numbers.",
                 "code": "def sum_list(nums):\n    return sum(nums)",
                 "test_list": ["assert sum_list([1,2,3]) == 6"],
-                "func_name": "sum_list"
-            }
+                "func_name": "sum_list",
+            },
         ]
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """Format MBPP 样本"""
-        text = sample.get('text', '')
-        test_list = sample.get('test_list', [])
+        text = sample.get("text", "")
+        test_list = sample.get("test_list", [])
 
         # BuildTest case描述
         test_desc = ""
@@ -188,7 +200,7 @@ class MBPPEvaluator(BaseEvaluator):
         prompt = f"Task: {text}{test_desc}\n\n"
 
         if include_answer:
-            code = sample.get('code', '')
+            code = sample.get("code", "")
             prompt += f"Solution:\n```python\n{code}\n```"
         else:
             prompt += "Solution:\n```python\n"
@@ -203,7 +215,7 @@ class MBPPEvaluator(BaseEvaluator):
         )
 
         examples = []
-        for example in self.few_shot_examples[:self.num_shots]:
+        for example in self.few_shot_examples[: self.num_shots]:
             examples.append(self.format_prompt(example, include_answer=True))
 
         question = self.format_prompt(sample, include_answer=False)
@@ -224,17 +236,27 @@ class MBPPEvaluator(BaseEvaluator):
         )
         messages.append({"role": "system", "content": system_instruction})
 
-        for ex in self.few_shot_examples[:self.num_shots]:
-            messages.append({"role": "user", "content": self.format_prompt(ex, include_answer=False)})
+        for ex in self.few_shot_examples[: self.num_shots]:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": self.format_prompt(ex, include_answer=False),
+                }
+            )
             # Extract the code solution for the assistant message
-            code = ex.get('code', '')
+            code = ex.get("code", "")
             if code:
                 assistant_content = f"```python\n{code}\n```"
             else:
                 assistant_content = code
             messages.append({"role": "assistant", "content": assistant_content})
 
-        messages.append({"role": "user", "content": self.format_prompt(sample, include_answer=False)})
+        messages.append(
+            {
+                "role": "user",
+                "content": self.format_prompt(sample, include_answer=False),
+            }
+        )
         return messages
 
     def parse_response(self, response: str) -> str:
@@ -246,11 +268,11 @@ class MBPPEvaluator(BaseEvaluator):
             return parsed
 
         # Fallback: original extraction
-        code_match = re.search(r'```python\s*(.*?)```', response, re.DOTALL)
+        code_match = re.search(r"```python\s*(.*?)```", response, re.DOTALL)
         if code_match:
             return code_match.group(1).strip()
 
-        code_match = re.search(r'```\s*(.*?)```', response, re.DOTALL)
+        code_match = re.search(r"```\s*(.*?)```", response, re.DOTALL)
         if code_match:
             return code_match.group(1).strip()
 
@@ -264,17 +286,17 @@ class MBPPEvaluator(BaseEvaluator):
 
         # 简单语法Check
         try:
-            compile(predicted, '<string>', 'exec')
+            compile(predicted, "<string>", "exec")
         except SyntaxError:
             return False
 
         # 对于简单Validate，我们Check预测代码is否包含关键函数定义
         # 完整Validateneed沙箱执行Test case
-        return 'def ' in predicted
+        return "def " in predicted
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
         """GetCorrect answer（代码）"""
-        return sample.get('code', '')
+        return str(sample.get("code", ""))
 
     def get_sample_category(self, sample: dict[str, Any]) -> str:
         """Get样本类别"""

@@ -49,6 +49,12 @@ TEST_TYPE_SPECS = (
     TestTypeSpec("custom", "Custom Text Test", "edit_note", ("custom_text", "custom_text_test")),
     TestTypeSpec("all", "All Tests", "select_all", ("all_tests",)),
     TestTypeSpec("stability", "Stability Test", "monitor_heart", ("stability_test",)),
+    TestTypeSpec(
+        "environment",
+        "Environment Information",
+        "memory",
+        ("environment_info", "环境信息"),
+    ),
     TestTypeSpec("batch", "Batch Test", "stacks"),
     TestTypeSpec("quality", "Model Quality Test", "fact_check", ("dataset",)),
     TestTypeSpec("comparison", "A/B Model Comparison", "compare_arrows", ("ab_comparison",)),

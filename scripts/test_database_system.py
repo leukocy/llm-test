@@ -9,10 +9,11 @@ import sys
 from pathlib import Path
 
 # Set控制台编码
-if sys.platform == 'win32':
+if sys.platform == "win32":
     import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
 # Add items目根目录到 Python 路径
 project_root = Path(__file__).parent
@@ -21,9 +22,9 @@ sys.path.insert(0, str(project_root))
 
 def test_database_connection():
     """test data库Connect"""
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("Test 1: DatabaseConnect")
-    print("="*50)
+    print("=" * 50)
 
     from core.database import SCHEMA_VERSION, db
 
@@ -32,10 +33,17 @@ def test_database_connection():
     print(f"Database大小: {db.get_database_size()} bytes")
 
     # Validate表存in
-    tables = ['test_runs', 'test_results', 'api_logs', 'execution_logs', 'reports', 'db_meta']
+    tables = [
+        "test_runs",
+        "test_results",
+        "api_logs",
+        "execution_logs",
+        "reports",
+        "db_meta",
+    ]
     for table in tables:
         exists = db.table_exists(table)
-        print(f"  表 {table}: {'[OK]' if exists else '[ERROR]'}")
+        print(f"  表 {table}: {'[OK]' if exists else '[MISSING]'}")
 
     print("DatabaseConnectTest: via")
     return True
@@ -43,9 +51,9 @@ def test_database_connection():
 
 def test_test_run_crud():
     """Test TestRun CRUD 操作"""
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("Test 2: TestRun CRUD")
-    print("="*50)
+    print("=" * 50)
 
     from core.models import TestRun
     from core.repositories import TestRunRepository
@@ -92,9 +100,9 @@ def test_test_run_crud():
 
 def test_test_result_crud():
     """Test TestResult CRUD 操作"""
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("Test 3: TestResult CRUD")
-    print("="*50)
+    print("=" * 50)
 
     from core.models import TestResult, TestRun
     from core.repositories import TestResultRepository, TestRunRepository
@@ -141,11 +149,15 @@ def test_test_result_crud():
 
     # Statistics
     stats = result_repo.count_by_run(run_id)
-    print(f"Statistics: total={stats['total']}, success={stats['success']}, failed={stats['failed']}")
+    print(
+        f"Statistics: total={stats['total']}, success={stats['success']}, failed={stats['failed']}"
+    )
 
     # Aggregate指标
     metrics = result_repo.get_aggregate_metrics(run_id)
-    print(f"Aggregate指标: avg_ttft={metrics.get('avg_ttft'):.3f}, avg_tps={metrics.get('avg_tps'):.2f}")
+    print(
+        f"Aggregate指标: avg_ttft={metrics.get('avg_ttft'):.3f}, avg_tps={metrics.get('avg_tps'):.2f}"
+    )
 
     # Cleanup
     result_repo.delete_by_run(run_id)
@@ -157,9 +169,9 @@ def test_test_result_crud():
 
 def test_api_log():
     """Test API Log"""
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("Test 4: ApiLog")
-    print("="*50)
+    print("=" * 50)
 
     from core.models import ApiLog
     from core.repositories import ApiLogRepository
@@ -196,9 +208,9 @@ def test_api_log():
 
 def test_exec_log():
     """Test执行Log"""
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("Test 5: ExecLog")
-    print("="*50)
+    print("=" * 50)
 
     from core.models import ExecLog
     from core.repositories import ExecLogRepository
@@ -237,9 +249,9 @@ def test_exec_log():
 
 def test_report():
     """Test报告"""
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("Test 6: Report")
-    print("="*50)
+    print("=" * 50)
 
     from core.models import Report
     from core.repositories import ReportRepository
@@ -275,9 +287,9 @@ def test_report():
 
 def test_backup():
     """TestBackup功能"""
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("Test 7: DatabaseBackup")
-    print("="*50)
+    print("=" * 50)
 
     from core.database import DatabaseBackup
 
@@ -307,9 +319,9 @@ def test_backup():
 
 def test_data_export():
     """test dataExport"""
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("Test 8: Data export")
-    print("="*50)
+    print("=" * 50)
 
     from core.models import TestResult, TestRun
     from core.repositories import TestResultRepository, TestRunRepository
@@ -322,7 +334,10 @@ def test_data_export():
     run = TestRun.create(test_type="export-test", model_id="export-model")
     run_id = run_repo.insert(run)
 
-    results = [TestResult(run_id=run_id, session_id=i, ttft=0.1 * i, tps=50 + i) for i in range(5)]
+    results = [
+        TestResult(run_id=run_id, session_id=i, ttft=0.1 * i, tps=50 + i)
+        for i in range(5)
+    ]
     result_repo.insert_batch(results)
 
     # Export服务
@@ -350,9 +365,9 @@ def test_data_export():
 
 def run_all_tests():
     """运行所hasTest"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("   Database系统Test套件")
-    print("="*60)
+    print("=" * 60)
 
     tests = [
         ("DatabaseConnect", test_database_connection),
@@ -373,15 +388,16 @@ def run_all_tests():
             test_func()
             passed += 1
         except Exception as e:
-            print(f"\n[ERROR] Test失败: {name}")
+            print(f"\nTest失败: {name}")
             print(f"   Error: {e}")
             import traceback
+
             traceback.print_exc()
             failed += 1
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print(f"   TestResult: {passed} via, {failed} 失败")
-    print("="*60)
+    print("=" * 60)
 
     return failed == 0
 

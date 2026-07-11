@@ -23,17 +23,16 @@ class ErrorMessages:
                 "Confirm网络Connect正常",
                 "Check防火墙Set",
                 "尝试use VPN or代理",
-                "Validate API 服务is否in线"
+                "Validate API 服务is否in线",
             ],
             "solutions_en": [
                 "Verify the API Base URL is correct",
                 "Ensure network connection is working",
                 "Check firewall settings",
                 "Try using VPN or proxy",
-                "Verify API service is online"
-            ]
+                "Verify API service is online",
+            ],
         },
-
         # API Authentication failed (401)
         "authentication_error": {
             "zh": "API Authentication failed (401)",
@@ -45,17 +44,16 @@ class ErrorMessages:
                 "Check API Key is否已过期",
                 "重新Generate API Key",
                 "Confirm API Key has访问此Model权限",
-                "Check账户余额is否充足"
+                "Check账户余额is否充足",
             ],
             "solutions_en": [
                 "Verify API Key is entered correctly",
                 "Check if API Key has expired",
                 "Regenerate API Key",
                 "Confirm API Key has permission to access this model",
-                "Check if account balance is sufficient"
-            ]
+                "Check if account balance is sufficient",
+            ],
         },
-
         # Request timeout
         "timeout_error": {
             "zh": "Request timeout",
@@ -67,17 +65,16 @@ class ErrorMessages:
                 "减少请求 Token 数量",
                 "增加超时时间Set",
                 "稍后重试",
-                "Check API 服务is否负载过高"
+                "Check API 服务is否负载过高",
             ],
             "solutions_en": [
                 "Check network connection stability",
                 "Reduce the number of tokens in request",
                 "Increase timeout setting",
                 "Try again later",
-                "Check if API service is under heavy load"
-            ]
+                "Check if API service is under heavy load",
+            ],
         },
-
         # Rate limited (429)
         "rate_limit_error": {
             "zh": "请求频率超限 (429)",
@@ -89,17 +86,16 @@ class ErrorMessages:
                 "in请求之间AddLatency",
                 "etc.待几minutes后重试",
                 "升级 API 套餐以获得更高Rate limited",
-                "Check账户Remaining配额"
+                "Check账户Remaining配额",
             ],
             "solutions_en": [
                 "Reduce concurrent requests",
                 "Add delays between requests",
                 "Wait a few minutes and retry",
                 "Upgrade API plan for higher rate limit",
-                "Check remaining account quota"
-            ]
+                "Check remaining account quota",
+            ],
         },
-
         # 服务器Error (5xx)
         "server_error": {
             "zh": "服务器Error (5xx)",
@@ -111,17 +107,16 @@ class ErrorMessages:
                 "Check API 服务Status页面",
                 "联系 API 提供商支持",
                 "尝试切换到otherModel",
-                "查看 API 服务is否currently维护"
+                "查看 API 服务is否currently维护",
             ],
             "solutions_en": [
                 "Wait a few minutes and retry",
                 "Check API service status page",
                 "Contact API provider support",
                 "Try switching to another model",
-                "Check if API service is under maintenance"
-            ]
+                "Check if API service is under maintenance",
+            ],
         },
-
         # 空响应Error
         "empty_response_error": {
             "zh": "收到空响应",
@@ -133,17 +128,16 @@ class ErrorMessages:
                 "尝试修改 Prompt 内容",
                 "CheckModelis否支持此类型请求",
                 "Confirm API 参数Configure正确",
-                "尝试usenot同Model"
+                "尝试usenot同Model",
             ],
             "solutions_en": [
                 "Check if prompt was rejected by model",
                 "Try modifying the prompt content",
                 "Check if model supports this type of request",
                 "Verify API parameters are configured correctly",
-                "Try using a different model"
-            ]
+                "Try using a different model",
+            ],
         },
-
         # JSON Parse error
         "json_decode_error": {
             "zh": "响应Parse failed",
@@ -154,16 +148,15 @@ class ErrorMessages:
                 "Check API Return格式is否标准",
                 "Confirmuseis兼容 API 端点",
                 "联系 API 提供商Check服务Status",
-                "尝试not同 API 端点"
+                "尝试not同 API 端点",
             ],
             "solutions_en": [
                 "Check if API returns standard format",
                 "Confirm using compatible API endpoint",
                 "Contact API provider to check service status",
-                "Try a different API endpoint"
-            ]
+                "Try a different API endpoint",
+            ],
         },
-
         # Data集LoadError
         "dataset_load_error": {
             "zh": "DatasetLoad failed",
@@ -175,17 +168,16 @@ class ErrorMessages:
                 "ConfirmDataset文件格式正确 (JSON/CSV)",
                 "ValidateDataset文件未损坏",
                 "Check文件读取权限",
-                "尝试重新under载Dataset"
+                "尝试重新under载Dataset",
             ],
             "solutions_en": [
                 "Check if dataset file path is correct",
                 "Confirm dataset file format is correct (JSON/CSV)",
                 "Verify dataset file is not corrupted",
                 "Check file read permissions",
-                "Try re-downloading the dataset"
-            ]
+                "Try re-downloading the dataset",
+            ],
         },
-
         # Tokenizer LoadError
         "tokenizer_load_error": {
             "zh": "Tokenizer Load failed",
@@ -197,17 +189,16 @@ class ErrorMessages:
                 "Confirm网络can访问 HuggingFace",
                 "尝试useother Tokenizer",
                 "Check本地磁盘空间",
-                "use 'API (usage field)' 作is替代方案"
+                "use 'API (usage field)' 作is替代方案",
             ],
             "solutions_en": [
                 "Check if HuggingFace model ID is correct",
                 "Confirm network can access HuggingFace",
                 "Try using a different Tokenizer",
                 "Check local disk space",
-                "Use 'API (usage field)' as an alternative"
-            ]
+                "Use 'API (usage field)' as an alternative",
+            ],
         },
-
         # ResultSaveError
         "result_save_error": {
             "zh": "ResultSave failed",
@@ -219,24 +210,21 @@ class ErrorMessages:
                 "Confirmhas写入文件权限",
                 "Check磁盘空间is否充足",
                 "ValidateFile path格式正确",
-                "尝试usenot同输出路径"
+                "尝试usenot同输出路径",
             ],
             "solutions_en": [
                 "Check if output directory exists",
                 "Confirm have write permission",
                 "Check if disk space is sufficient",
                 "Verify file path format is correct",
-                "Try using a different output path"
-            ]
-        }
+                "Try using a different output path",
+            ],
+        },
     }
 
     @classmethod
     def get_error_message(
-        cls,
-        error_type: str,
-        original_error: str | None = None,
-        language: str = "zh"
+        cls, error_type: str, original_error: str | None = None, language: str = "zh"
     ) -> dict[str, Any]:
         """
         Get增强Error消息
@@ -257,15 +245,21 @@ class ErrorMessages:
         """
         error_info = cls.API_ERRORS.get(error_type, cls._get_default_error())
 
-        title = error_info.get(f"title_{language}", error_info.get("title_zh", error_type))
-        details = error_info.get(f"details_{language}", error_info.get("details_zh", ""))
-        solutions = error_info.get(f"solutions_{language}", error_info.get("solutions_zh", []))
+        title = error_info.get(
+            f"title_{language}", error_info.get("title_zh", error_type)
+        )
+        details = error_info.get(
+            f"details_{language}", error_info.get("details_zh", "")
+        )
+        solutions = error_info.get(
+            f"solutions_{language}", error_info.get("solutions_zh", [])
+        )
 
         result = {
             "title": title,
             "details": details,
             "solutions": solutions,
-            "original": original_error or ""
+            "original": original_error or "",
         }
 
         return result
@@ -279,11 +273,16 @@ class ErrorMessages:
             "details_zh": "发生未知Error。",
             "details_en": "An unknown error occurred.",
             "solutions_zh": ["Please checkLog以Get更多信息", "尝试重启Apply程序"],
-            "solutions_en": ["Check logs for more information", "Try restarting the application"]
+            "solutions_en": [
+                "Check logs for more information",
+                "Try restarting the application",
+            ],
         }
 
     @classmethod
-    def format_for_display(cls, error_data: dict[str, Any], language: str = "zh") -> str:
+    def format_for_display(
+        cls, error_data: dict[str, Any], language: str = "zh"
+    ) -> str:
         """
         FormatError消息用于Display
 
@@ -298,17 +297,17 @@ class ErrorMessages:
         bullet = "• " if language == "en" else "• "
 
         msg_parts = [
-            error_data['title'],
+            f"{error_data['title']}",
             f"\n{error_data['details']}",
         ]
 
-        if error_data['solutions']:
+        if error_data["solutions"]:
             solutions_title = "Solution:" if language == "zh" else "Solutions:"
             msg_parts.append(f"\n\n{solutions_title}")
-            for solution in error_data['solutions']:
+            for solution in error_data["solutions"]:
                 msg_parts.append(f"{bullet}{solution}")
 
-        if error_data['original']:
+        if error_data["original"]:
             original_title = "原始Error:" if language == "zh" else "Original Error:"
             msg_parts.append(f"\n\n{original_title}\n`{error_data['original']}`")
 
@@ -316,10 +315,7 @@ class ErrorMessages:
 
     @classmethod
     def detect_and_enhance_error(
-        cls,
-        error: Exception,
-        context: str | None = None,
-        language: str = "zh"
+        cls, error: Exception, context: str | None = None, language: str = "zh"
     ) -> dict[str, Any]:
         """
         自动检测Error type并Return增强Error message
@@ -338,11 +334,15 @@ class ErrorMessages:
         # 检测Error type
         if any(code in error_str for code in ["401", "unauthorized", "authentication"]):
             error_type = "authentication_error"
-        elif any(code in error_str for code in ["429", "rate limit", "too many requests"]):
+        elif any(
+            code in error_str for code in ["429", "rate limit", "too many requests"]
+        ):
             error_type = "rate_limit_error"
         elif any(code in error_str for code in ["timeout", "timed out"]):
             error_type = "timeout_error"
-        elif any(code in error_str for code in ["500", "502", "503", "504", "server error"]):
+        elif any(
+            code in error_str for code in ["500", "502", "503", "504", "server error"]
+        ):
             error_type = "server_error"
         elif any(code in error_str for code in ["connection", "connect", "network"]):
             error_type = "connection_error"
@@ -357,15 +357,13 @@ class ErrorMessages:
         # Addonunder文信息
         if context:
             context_prefix = "onunder文: " if language == "zh" else "Context: "
-            error_data['context'] = f"{context_prefix}{context}"
+            error_data["context"] = f"{context_prefix}{context}"
 
         return error_data
 
 
 def get_enhanced_error(
-    error: Exception,
-    context: str | None = None,
-    language: str = "zh"
+    error: Exception, context: str | None = None, language: str = "zh"
 ) -> str:
     """
     GetFormat增强Error消息
@@ -383,9 +381,7 @@ def get_enhanced_error(
 
 
 def get_error_info(
-    error: Exception,
-    context: str | None = None,
-    language: str = "zh"
+    error: Exception, context: str | None = None, language: str = "zh"
 ) -> dict[str, Any]:
     """
     Get结构化Error message

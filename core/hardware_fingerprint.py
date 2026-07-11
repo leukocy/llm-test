@@ -74,9 +74,17 @@ _GPU_BANDWIDTH_GBPS: list[tuple[str, float]] = [
 ]
 
 
-def _run_cmd(args: list[str], timeout: float = 8.0, env: dict[str, str] | None = None) -> str | None:
+def _run_cmd(
+    args: list[str],
+    timeout: float = 8.0,
+    env: dict[str, str] | None = None,
+    stdin_input: str | None = None,
+) -> str | None:
     """运行外部命令，返回 stdout 文本；失败/超时返回 None（绝不抛异常）。
+
     env: 追加/覆盖的环境变量（与 os.environ 合并），如 {"LC_ALL": "C"} 强制英文 locale。
+    stdin_input: 透传给子进程 stdin 的文本（如 sudo -S 的密码）。**调用方负责保证此值
+        不含敏感信息的日志/argv 暴露**——本函数只经管道传入，绝不打印。
     """
     try:
         full_env = None
@@ -90,6 +98,7 @@ def _run_cmd(args: list[str], timeout: float = 8.0, env: dict[str, str] | None =
             timeout=timeout,
             check=False,
             env=full_env,
+            input=stdin_input,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -126,12 +135,13 @@ def _query_gpus() -> list[dict[str, Any]]:
                pcie_gen, pcie_width}。
     """
     gpus: list[dict[str, Any]] = []
-    out = _run_cmd([
-        "nvidia-smi",
-        "--query-gpu=index,name,memory.total,"
-        "pcie.link.gen.max,pcie.link.width.max",
-        "--format=csv,noheader,nounits",
-    ])
+    out = _run_cmd(
+        [
+            "nvidia-smi",
+            "--query-gpu=index,name,memory.total,pcie.link.gen.max,pcie.link.width.max",
+            "--format=csv,noheader,nounits",
+        ]
+    )
     if out:
         for line in out.strip().splitlines():
             line = line.strip()
@@ -155,34 +165,39 @@ def _query_gpus() -> list[dict[str, Any]]:
             nominal = _lookup_gpu_bandwidth(name, vram_gb)
             if nominal is None:
                 nominal = _pcie_bandwidth_gbps(pcie_gen, pcie_width)
-            gpus.append({
-                "index": index,
-                "name": name,
-                "vram_gb": vram_gb,
-                "memory_type": memory_type,
-                "nominal_bandwidth_gbps": nominal,
-                "pcie_gen": pcie_gen,
-                "pcie_width": pcie_width,
-            })
+            gpus.append(
+                {
+                    "index": index,
+                    "name": name,
+                    "vram_gb": vram_gb,
+                    "memory_type": memory_type,
+                    "nominal_bandwidth_gbps": nominal,
+                    "pcie_gen": pcie_gen,
+                    "pcie_width": pcie_width,
+                }
+            )
 
     if not gpus:
         # torch.cuda 兜底（至少拿到名字与显存）
         try:
             import torch
+
             if torch.cuda.is_available():
                 for i in range(torch.cuda.device_count()):
                     props = torch.cuda.get_device_properties(i)
-                    vram_gb = round(props.total_memory / 1024 ** 3, 2)
+                    vram_gb = round(props.total_memory / 1024**3, 2)
                     name = props.name
-                    gpus.append({
-                        "index": i,
-                        "name": name,
-                        "vram_gb": vram_gb,
-                        "memory_type": None,
-                        "nominal_bandwidth_gbps": _lookup_gpu_bandwidth(name, vram_gb),
-                        "pcie_gen": None,
-                        "pcie_width": None,
-                    })
+                    gpus.append(
+                        {
+                            "index": i,
+                            "name": name,
+                            "vram_gb": vram_gb,
+                            "memory_type": None,
+                            "nominal_bandwidth_gbps": _lookup_gpu_bandwidth(name, vram_gb),
+                            "pcie_gen": None,
+                            "pcie_width": None,
+                        }
+                    )
         except Exception:  # noqa: BLE001  采集兜底，任何失败都不应中断
             pass
 
@@ -196,9 +211,9 @@ def _query_cuda_versions() -> dict[str, str | None]:
     # NVML（nvidia-ml-py / pynvml 接口一致）
     try:
         try:
-            import pynvml  # type: ignore
+            import pynvml
         except ImportError:
-            from nvidia_ml_py import pynvml  # type: ignore  # noqa: F401
+            from nvidia_ml_py import pynvml  # noqa: F401
         pynvml.nvmlInit()
         try:
             result["driver"] = pynvml.nvmlSystemGetDriverVersion()
@@ -312,13 +327,24 @@ def _platform_cpu_model() -> str | None:
 def _psutil_cpu_count(logical: bool) -> int | None:
     try:
         import psutil
-        return psutil.cpu_count(logical=logical)
+
+        count = psutil.cpu_count(logical=logical)
+        return int(count) if count is not None else None
     except Exception:  # noqa: BLE001
         return None
 
 
-def _query_memory_details() -> dict[str, Any]:
-    """内存细节：类型 / 总量 / 通道数 / 频率 / ECC。dmidecode 需 root，失败退回 psutil。"""
+def _query_memory_details(sudo_password: str | None = None) -> dict[str, Any]:
+    """内存细节：类型 / 总量 / 通道数 / 频率 / ECC。dmidecode 需 root，失败退回 psutil。
+
+    sudo_password: 可选 sudo 密码。给定时用 `sudo -S`（密码经 stdin 传入，绝不进 argv）
+        采 dmidecode。**密码只在本函数内存里用一次，不写入返回值、不落任何持久化。**
+
+    容器兜底：容器内通常无 dmidecode / 无 DMI 访问权限，内存 DIMM 细节采不到。
+    此时回退读取宿主机预置的 `/app/data/hw_memory.json`（由运维在宿主机执行
+    `sudo dmidecode -t memory` 后用 tools/make_hw_memory_json.py 生成），实现零特权
+    采集内存通道/频率/类型/ECC，避免容器给 privileged。
+    """
     info: dict[str, Any] = {
         "type": None,
         "total_gb": None,
@@ -331,9 +357,10 @@ def _query_memory_details() -> dict[str, Any]:
     # psutil：总量 / 可用（总能拿到）
     try:
         import psutil
+
         mem = psutil.virtual_memory()
-        info["total_gb"] = round(mem.total / 1024 ** 3, 2)
-        info["available_gb"] = round(mem.available / 1024 ** 3, 2)
+        info["total_gb"] = round(mem.total / 1024**3, 2)
+        info["available_gb"] = round(mem.available / 1024**3, 2)
     except Exception:  # noqa: BLE001
         pass
 
@@ -341,17 +368,28 @@ def _query_memory_details() -> dict[str, Any]:
     if shutil.which("dmidecode"):
         out = _run_cmd(["dmidecode", "-t", "memory"], timeout=10)
         if not out:
-            # dmidecode 需 root；尝试 sudo -n（需 sudoers 配 NOPASSWD: dmidecode）
+            # dmidecode 需 root；三级降级：
+            #   1. sudo -n（需 sudoers 配 NOPASSWD: dmidecode，无需密码）
+            #   2. sudo -S + 密码（stdin 传入，绝不进 argv/ps）
+            #   3. 放弃 → 内存细节留空（machine_id 不依赖，仍可采）
             out = _run_cmd(["sudo", "-n", "dmidecode", "-t", "memory"], timeout=10)
+            if not out and sudo_password:
+                # sudo -S 从 stdin 读密码；-k 先失效缓存强制用密码，避免缓存误判
+                out = _run_cmd(
+                    ["sudo", "-S", "-k", "dmidecode", "-t", "memory"],
+                    timeout=10,
+                    stdin_input=sudo_password + "\n",
+                )
         if out:
             # dmidecode 每条记录：第一行 "Handle 0x.. type 17"，第二行才是 "Memory Device"，
             # 故整块匹配（不能只看第一行）。
             dimms = [b for b in out.split("\n\n") if "Memory Device" in b]
             populated = [
-                d for d in dimms
+                d
+                for d in dimms
                 if "Size:" in d and "No Module" not in d and "No Module Installed" not in d
             ]
-            types = {_dmidecode_field(d, "Type:") for d in populated} - {None, "Unknown"}
+            types = {t for d in populated if (t := _dmidecode_field(d, "Type:")) and t != "Unknown"}
             speeds = {_dmidecode_field(d, "Speed:") for d in populated} - {None}
             if types:
                 info["type"] = "/".join(sorted(types))
@@ -366,12 +404,40 @@ def _query_memory_details() -> dict[str, Any]:
                         info["speed_mt_s"] = mt
                         break
             if "Error Correction" in out:
-                ecc_line = next(
-                    (l for l in out.splitlines() if "Error Correction" in l), ""
-                )
+                ecc_line = next((l for l in out.splitlines() if "Error Correction" in l), "")
                 info["ecc"] = ecc_line.split(":", 1)[-1].strip() or None
 
+    # 容器兜底：dmidecode 不可用（容器无 DMI 权限）→ 读宿主机预置的 hw_memory.json。
+    # 只补仍为空的 DIMM 级字段（type/channels/speed/ecc），总量/可用以 psutil 为准。
+    if info["channels"] is None:
+        _merge_hw_memory_file(info)
+
     return info
+
+
+def _merge_hw_memory_file(info: dict[str, Any]) -> None:
+    """从宿主机预置的 /app/data/hw_memory.json 补内存 DIMM 细节（仅补空字段）。
+
+    文件格式：{"type": "DDR5", "channels": 16, "speed_mt_s": 6400, "ecc": "..."}
+    缺文件 / 解析失败 / 已有值的字段一律跳过，绝不抛异常。
+    """
+    try:
+        from pathlib import Path
+
+        path = Path("data/hw_memory.json")
+        if not path.is_file():
+            return
+        import json as _json
+
+        with path.open(encoding="utf-8") as f:
+            data = _json.load(f)
+        if not isinstance(data, dict):
+            return
+        for key in ("type", "channels", "speed_mt_s", "ecc"):
+            if info.get(key) is None and data.get(key) is not None:
+                info[key] = data[key]
+    except Exception:  # noqa: BLE001  兜底，绝不抛
+        pass
 
 
 def _dmidecode_field(block: str, field: str) -> str | None:
@@ -410,9 +476,7 @@ def compute_machine_id(fingerprint: dict[str, Any]) -> str:
     只纳入硬件本体属性，忽略可用内存、pstate、时间戳等易变值。
     """
     gpus = fingerprint.get("gpus") or []
-    gpu_sig = sorted(
-        f"{g.get('name')}|{g.get('vram_gb')}" for g in gpus if g.get("name")
-    )
+    gpu_sig = sorted(f"{g.get('name')}|{g.get('vram_gb')}" for g in gpus if g.get("name"))
     cpu = fingerprint.get("cpu") or {}
     mem = fingerprint.get("memory") or {}
     stable = {
@@ -426,8 +490,110 @@ def compute_machine_id(fingerprint: dict[str, Any]) -> str:
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
 
 
-def capture_hardware_fingerprint() -> dict[str, Any]:
-    """采集结构化硬件指纹。任何子项失败都降级为空值，绝不抛异常。"""
+def _query_disk_info() -> list[dict[str, Any]]:
+    """采集主要块设备(NVMe/SSD)信息:model / 总容量 / 类型 / 可用。
+    用 lsblk 解析;优雅降级,失败返回空列表。
+    """
+    disks: list[dict[str, Any]] = []
+    out = _run_cmd(["lsblk", "-d", "-b", "-o", "NAME,MODEL,SIZE,ROTA,TYPE", "--json"], timeout=8.0)
+    if not out:
+        return disks
+    import json as _json
+
+    try:
+        data = _json.loads(out)
+    except (ValueError, _json.JSONDecodeError):
+        return disks
+    for dev in data.get("blockdevices", []):
+        if dev.get("type") != "disk":
+            continue
+        name = dev.get("name", "")
+        size_b = dev.get("size")
+        # 过滤 loop/ram/sr(光驱);ROTA=1 是机械盘,0 是 SSD/NVMe
+        if not name or name.startswith(("loop", "ram", "sr")):
+            continue
+        disks.append(
+            {
+                "name": f"/dev/{name}",
+                "model": (dev.get("model") or "").strip() or None,
+                "size_tb": round(int(size_b) / 1e12, 2) if size_b else None,
+                "is_ssd": dev.get("rota") == 0,  # ROTA=0 → 非机械 → SSD/NVMe
+            }
+        )
+    return disks
+
+
+def _query_gpu_topology() -> dict[str, Any]:
+    """GPU 互联拓扑:NVLink/NVSwitch 有无 + inter-GPU 互联类型矩阵。
+
+    用 nvidia-smi topo -m 解析。无 NVLink 时(如纯 PCIe 工作站)topology 仍记录
+    GPU 间的互联类型(NV# / SYS / PHB / PXB / SYS 等),对多卡推理调优有关键参考价值。
+    优雅降级:无 nvidia-smi 或解析失败返回空字典。
+    """
+    out = _run_cmd(["nvidia-smi", "topo", "-m"], timeout=12.0)
+    if not out:
+        return {}
+
+    info: dict[str, Any] = {"has_nvlink": False, "link_types": {}, "matrix": []}
+    lines = out.strip().splitlines()
+
+    # 解析 Legend 行,提取互联类型描述(如 "NV# Navabile via NVSwitch")
+    for line in lines:
+        low = line.lower()
+        if "legend" in low or "nvlink" in low or "nvswitch" in low:
+            if "nvlink" in low or "nvswitch" in low:
+                info["has_nvlink"] = True
+            key = line.strip()
+            if key not in info["link_types"] and len(info["link_types"]) < 12:
+                info["link_types"][key] = True
+
+    # 解析拓扑矩阵:首列是 GPU index,后续列是到各 GPU 的互联类型
+    # 矩阵行以 "GPU0", "GPU1" 等开头
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("GPU") and "\t" in stripped:
+            parts = [p.strip() for p in stripped.split("\t") if p.strip()]
+            if len(parts) >= 2:
+                # 第一列如 "GPU0",后面是对到各 GPU 的 link 类型
+                row_gpu = parts[0]
+                row_links = parts[1:]
+                # 只记前几列(GPU→GPU),跳过可能的 CPU/NIC 列
+                gpu_links = [
+                    l
+                    for l in row_links
+                    if l
+                    in (
+                        "NV0",
+                        "NV1",
+                        "NV2",
+                        "NV3",
+                        "NV4",
+                        "NV5",
+                        "NV6",
+                        "NV7",
+                        "NV8",
+                        "SYS",
+                        "PHB",
+                        "PXB",
+                        "PIX",
+                        "NODE",
+                    )
+                ]
+                if gpu_links:
+                    info["matrix"].append({"gpu": row_gpu, "links": gpu_links})
+                # 任一 link 以 NV 开头 → 有 NVLink
+                if any(l.startswith("NV") for l in row_links):
+                    info["has_nvlink"] = True
+
+    return info
+
+
+def capture_hardware_fingerprint(sudo_password: str | None = None) -> dict[str, Any]:
+    """采集结构化硬件指纹。任何子项失败都降级为空值，绝不抛异常。
+
+    sudo_password: 可选，仅用于 dmidecode（内存 DIMM 细节）的 sudo -S 通道。
+        密码只透传给子进程 stdin，不写入返回的指纹、不落任何持久化。
+    """
     fingerprint: dict[str, Any] = {}
 
     try:
@@ -436,7 +602,7 @@ def capture_hardware_fingerprint() -> dict[str, Any]:
         fingerprint["cpu"] = {}
 
     try:
-        fingerprint["memory"] = _query_memory_details()
+        fingerprint["memory"] = _query_memory_details(sudo_password)
     except Exception:  # noqa: BLE001
         fingerprint["memory"] = {}
 
@@ -449,6 +615,16 @@ def capture_hardware_fingerprint() -> dict[str, Any]:
         fingerprint["cuda"] = _query_cuda_versions()
     except Exception:  # noqa: BLE001
         fingerprint["cuda"] = {"driver": None, "cuda_version": None}
+
+    try:
+        fingerprint["gpu_topology"] = _query_gpu_topology()
+    except Exception:  # noqa: BLE001
+        fingerprint["gpu_topology"] = {}
+
+    try:
+        fingerprint["disks"] = _query_disk_info()
+    except Exception:  # noqa: BLE001
+        fingerprint["disks"] = []
 
     fingerprint["os"] = {
         "name": platform.system() or None,

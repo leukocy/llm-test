@@ -13,16 +13,18 @@ from typing import Any
 
 class ReasoningQualityDimension(Enum):
     """推理Quality Assessment维度"""
-    COHERENCE = "coherence"           # 逻辑连贯性
-    COMPLETENESS = "completeness"     # 步骤完整性
-    RELEVANCE = "relevance"           # 与问题相关性
-    CORRECTNESS = "correctness"       # Reasoning Steps正确性
-    EFFICIENCY = "efficiency"         # 推理效率（is否has冗余）
+
+    COHERENCE = "coherence"  # 逻辑连贯性
+    COMPLETENESS = "completeness"  # 步骤完整性
+    RELEVANCE = "relevance"  # 与问题相关性
+    CORRECTNESS = "correctness"  # Reasoning Steps正确性
+    EFFICIENCY = "efficiency"  # 推理效率（is否has冗余）
 
 
 @dataclass
 class ReasoningStep:
     """Reasoning Steps"""
+
     step_number: int
     content: str
     step_type: str = "reasoning"  # reasoning, calculation, conclusion, observation
@@ -33,18 +35,19 @@ class ReasoningStep:
 @dataclass
 class ReasoningQualityScore:
     """推理质量Score"""
-    coherence: float = 0.0           # 连贯性 (0-10)
-    completeness: float = 0.0        # 完整性 (0-10)
-    relevance: float = 0.0           # 相关性 (0-10)
-    correctness: float = 0.0         # 正确性 (0-10)
-    efficiency: float = 0.0          # 效率 (0-10)
 
-    overall: float = 0.0             # 综合分 (0-10)
+    coherence: float = 0.0  # 连贯性 (0-10)
+    completeness: float = 0.0  # 完整性 (0-10)
+    relevance: float = 0.0  # 相关性 (0-10)
+    correctness: float = 0.0  # 正确性 (0-10)
+    efficiency: float = 0.0  # 效率 (0-10)
+
+    overall: float = 0.0  # 综合分 (0-10)
 
     # 详细信息
-    step_count: int = 0              # Reasoning Steps数
-    valid_step_count: int = 0        # has效步骤数
-    redundant_step_count: int = 0    # 冗余步骤数
+    step_count: int = 0  # Reasoning Steps数
+    valid_step_count: int = 0  # has效步骤数
+    redundant_step_count: int = 0  # 冗余步骤数
 
     # 定性评价
     strengths: list[str] = field(default_factory=list)
@@ -54,24 +57,25 @@ class ReasoningQualityScore:
     def calculate_overall(self):
         """Calculate综合分"""
         weights = {
-            'coherence': 0.25,
-            'completeness': 0.20,
-            'relevance': 0.20,
-            'correctness': 0.25,
-            'efficiency': 0.10
+            "coherence": 0.25,
+            "completeness": 0.20,
+            "relevance": 0.20,
+            "correctness": 0.25,
+            "efficiency": 0.10,
         }
         self.overall = (
-            self.coherence * weights['coherence'] +
-            self.completeness * weights['completeness'] +
-            self.relevance * weights['relevance'] +
-            self.correctness * weights['correctness'] +
-            self.efficiency * weights['efficiency']
+            self.coherence * weights["coherence"]
+            + self.completeness * weights["completeness"]
+            + self.relevance * weights["relevance"]
+            + self.correctness * weights["correctness"]
+            + self.efficiency * weights["efficiency"]
         )
 
 
 @dataclass
 class ReasoningEvaluationResult:
     """推理评估完整Result"""
+
     # Answer评估
     final_answer_correct: bool = False
     answer_confidence: float = 0.0
@@ -119,25 +123,25 @@ class ReasoningQualityEvaluator:
     def __init__(self):
         # 推理指示词模式
         self.step_indicators = [
-            r'(?:step\s*\d+|\s*\d+\s*步)',
-            r'(?:first|second|third|fourth|fifth|首先|其次|然后|接着|最后)',
-            r'(?:therefore|thus|hence|so|因此|therefore|由此)',
-            r'(?:because|since|as|due to|because)',
-            r'(?:let\'s|we need to|we can|我们need|让我们)',
+            r"(?:step\s*\d+|\s*\d+\s*步)",
+            r"(?:first|second|third|fourth|fifth|首先|其次|然后|接着|最后)",
+            r"(?:therefore|thus|hence|so|因此|therefore|由此)",
+            r"(?:because|since|as|due to|because)",
+            r"(?:let\'s|we need to|we can|我们need|让我们)",
         ]
 
         # Calculate模式
         self.calculation_patterns = [
-            r'=\s*[\d.]+',
-            r'[\d.]+\s*[+\-*/]\s*[\d.]+',
-            r'\d+\s*(?:times|multiplied by|divided by|plus|minus)',
+            r"=\s*[\d.]+",
+            r"[\d.]+\s*[+\-*/]\s*[\d.]+",
+            r"\d+\s*(?:times|multiplied by|divided by|plus|minus)",
         ]
 
         # 结论模式
         self.conclusion_patterns = [
-            r'(?:therefore|thus|hence|so|in conclusion|finally)',
-            r'(?:the answer is|Answeris|Resultis|最终)',
-            r'(?:####|\\boxed)',
+            r"(?:therefore|thus|hence|so|in conclusion|finally)",
+            r"(?:the answer is|Answeris|Resultis|最终)",
+            r"(?:####|\\boxed)",
         ]
 
     def evaluate(
@@ -146,7 +150,7 @@ class ReasoningQualityEvaluator:
         reasoning: str,
         final_answer: str,
         correct_answer: str,
-        is_answer_correct: bool | None = None
+        is_answer_correct: bool | None = None,
     ) -> ReasoningEvaluationResult:
         """
         基于规则推理Quality Assessment
@@ -177,18 +181,32 @@ class ReasoningQualityEvaluator:
 
         # 3. 评估各维度
         if reasoning and reasoning.strip():
-            result.quality_score.coherence = self._evaluate_coherence(reasoning, result.steps)
-            result.quality_score.completeness = self._evaluate_completeness(reasoning, question, final_answer)
-            result.quality_score.relevance = self._evaluate_relevance(reasoning, question)
-            result.quality_score.correctness = self._evaluate_correctness(result.steps, result.final_answer_correct)
-            result.quality_score.efficiency = self._evaluate_efficiency(reasoning, result.steps)
+            result.quality_score.coherence = self._evaluate_coherence(
+                reasoning, result.steps
+            )
+            result.quality_score.completeness = self._evaluate_completeness(
+                reasoning, question, final_answer
+            )
+            result.quality_score.relevance = self._evaluate_relevance(
+                reasoning, question
+            )
+            result.quality_score.correctness = self._evaluate_correctness(
+                result.steps, result.final_answer_correct
+            )
+            result.quality_score.efficiency = self._evaluate_efficiency(
+                reasoning, result.steps
+            )
         else:
             # 没hasReasoning process
             result.quality_score.coherence = 0.0
             result.quality_score.completeness = 0.0
             result.quality_score.relevance = 0.0
-            result.quality_score.correctness = 5.0 if result.final_answer_correct else 0.0
-            result.quality_score.efficiency = 10.0 if result.final_answer_correct else 0.0
+            result.quality_score.correctness = (
+                5.0 if result.final_answer_correct else 0.0
+            )
+            result.quality_score.efficiency = (
+                10.0 if result.final_answer_correct else 0.0
+            )
             result.quality_score.weaknesses.append("没has提供Reasoning process")
 
         # 4. Calculate综合分
@@ -216,7 +234,7 @@ class ReasoningQualityEvaluator:
         steps = []
 
         # 按段落or换行分割
-        paragraphs = re.split(r'\n\n+', reasoning.strip())
+        paragraphs = re.split(r"\n\n+", reasoning.strip())
 
         step_num = 0
         for para in paragraphs:
@@ -225,7 +243,9 @@ class ReasoningQualityEvaluator:
                 continue
 
             # 进一步按句子分割长段落
-            sentences = re.split(r'(?<=[.。!?！？])\s*', para) if len(para) > 200 else [para]
+            sentences = (
+                re.split(r"(?<=[.。!?！？])\s*", para) if len(para) > 200 else [para]
+            )
 
             for sentence in sentences:
                 sentence = sentence.strip()
@@ -235,11 +255,13 @@ class ReasoningQualityEvaluator:
                 step_num += 1
                 step_type = self._classify_step_type(sentence)
 
-                steps.append(ReasoningStep(
-                    step_number=step_num,
-                    content=sentence[:500],  # 限制长度
-                    step_type=step_type
-                ))
+                steps.append(
+                    ReasoningStep(
+                        step_number=step_num,
+                        content=sentence[:500],  # 限制长度
+                        step_type=step_type,
+                    )
+                )
 
         return steps
 
@@ -258,7 +280,10 @@ class ReasoningQualityEvaluator:
                 return "calculation"
 
         # Checkis否is观察/引用
-        if any(word in text_lower for word in ['given', 'according to', 'based on', 'Questionin']):
+        if any(
+            word in text_lower
+            for word in ["given", "according to", "based on", "Questionin"]
+        ):
             return "observation"
 
         return "reasoning"
@@ -279,8 +304,19 @@ class ReasoningQualityEvaluator:
             score += 2.0  # hasGood步骤指示
 
         # 2. Checkis否has逻辑Connect词
-        connectors = ['therefore', 'thus', 'hence', 'so', 'because', 'since',
-                      '因此', 'therefore', '由此', 'because', 'due to']
+        connectors = [
+            "therefore",
+            "thus",
+            "hence",
+            "so",
+            "because",
+            "since",
+            "因此",
+            "therefore",
+            "由此",
+            "because",
+            "due to",
+        ]
         connector_count = sum(1 for c in connectors if c in reasoning.lower())
         if connector_count >= 2:
             score += 1.5
@@ -292,7 +328,9 @@ class ReasoningQualityEvaluator:
 
         return min(10.0, score)
 
-    def _evaluate_completeness(self, reasoning: str, question: str, final_answer: str) -> float:
+    def _evaluate_completeness(
+        self, reasoning: str, question: str, final_answer: str
+    ) -> float:
         """评估步骤完整性"""
         score = 5.0
 
@@ -312,7 +350,7 @@ class ReasoningQualityEvaluator:
                 score += 1.0
 
         # 2. Checkis否hasin间Result
-        intermediate_results = re.findall(r'=\s*[\d.]+', reasoning)
+        intermediate_results = re.findall(r"=\s*[\d.]+", reasoning)
         if len(intermediate_results) >= 2:
             score += 2.0
         elif len(intermediate_results) >= 1:
@@ -329,8 +367,8 @@ class ReasoningQualityEvaluator:
         score = 5.0
 
         # 提取问题in关键词
-        question_words = set(re.findall(r'\b\w{4,}\b', question.lower()))
-        reasoning_words = set(re.findall(r'\b\w{4,}\b', reasoning.lower()))
+        question_words = set(re.findall(r"\b\w{4,}\b", question.lower()))
+        reasoning_words = set(re.findall(r"\b\w{4,}\b", reasoning.lower()))
 
         # Calculate关键词重叠度
         if question_words:
@@ -338,16 +376,20 @@ class ReasoningQualityEvaluator:
             score += overlap * 3.0
 
         # Checkis否引用问题in数字
-        question_numbers = set(re.findall(r'\d+(?:\.\d+)?', question))
-        reasoning_numbers = set(re.findall(r'\d+(?:\.\d+)?', reasoning))
+        question_numbers = set(re.findall(r"\d+(?:\.\d+)?", question))
+        reasoning_numbers = set(re.findall(r"\d+(?:\.\d+)?", reasoning))
 
         if question_numbers:
-            number_overlap = len(question_numbers & reasoning_numbers) / len(question_numbers)
+            number_overlap = len(question_numbers & reasoning_numbers) / len(
+                question_numbers
+            )
             score += number_overlap * 2.0
 
         return min(10.0, score)
 
-    def _evaluate_correctness(self, steps: list[ReasoningStep], final_correct: bool) -> float:
+    def _evaluate_correctness(
+        self, steps: list[ReasoningStep], final_correct: bool
+    ) -> float:
         """评估Reasoning Steps正确性"""
         # 这里use启发式方法，真正正确性Validateneed LLM
 
@@ -385,8 +427,8 @@ class ReasoningQualityEvaluator:
         # 3. Checkis否hasno关发散
         # （viaCheckis否has与数学/逻辑no关内容）
         distracting_patterns = [
-            r'(?:however|but this depends|alternatively)',
-            r'(?:not过|butis这取决于|or者)',
+            r"(?:however|but this depends|alternatively)",
+            r"(?:not过|butis这取决于|or者)",
         ]
         distraction_count = 0
         for pattern in distracting_patterns:
@@ -403,8 +445,8 @@ class ReasoningQualityEvaluator:
             return False
 
         # 规范化
-        pred_clean = predicted.strip().lower().replace(',', '')
-        correct_clean = correct.strip().lower().replace(',', '')
+        pred_clean = predicted.strip().lower().replace(",", "")
+        correct_clean = correct.strip().lower().replace(",", "")
 
         # 直接比较
         if pred_clean == correct_clean:
@@ -415,7 +457,7 @@ class ReasoningQualityEvaluator:
             pred_num = float(pred_clean)
             correct_num = float(correct_clean)
             return abs(pred_num - correct_num) < 0.001
-        except:
+        except Exception:
             pass
 
         return False
@@ -425,7 +467,7 @@ class ReasoningQualityEvaluator:
         reasoning: str,
         final_answer: str,
         correct_answer: str,
-        steps: list[ReasoningStep]
+        steps: list[ReasoningStep],
     ) -> tuple[str, str]:
         """分析失败原因"""
         # Calculate步骤数
@@ -441,15 +483,15 @@ class ReasoningQualityEvaluator:
 
         # 3. Checkis否Answer格式问题
         try:
-            final_num = float(final_answer.replace(',', ''))
-            correct_num = float(correct_answer.replace(',', ''))
+            final_num = float(final_answer.replace(",", ""))
+            correct_num = float(correct_answer.replace(",", ""))
             ratio = final_num / correct_num if correct_num != 0 else 0
 
             if 0.9 <= ratio <= 1.1:
                 return "rounding_error", "Answer接近正确，可能is精度or舍入问题"
             elif ratio in [10, 100, 0.1, 0.01]:
                 return "magnitude_error", "Answer数量级Error（可能is单位换算问题）"
-        except:
+        except Exception:
             pass
 
         # 4. default：概念理解Error
@@ -485,7 +527,9 @@ class ReasoningQualityEvaluator:
         if qs.completeness < 7:
             qs.suggestions.append("Suggestion展示更多in间步骤andCalculate过程")
         if not result.final_answer_correct:
-            qs.suggestions.append(f"AnswerError，失败原因可能is：{result.failure_analysis}")
+            qs.suggestions.append(
+                f"AnswerError，失败原因可能is：{result.failure_analysis}"
+            )
 
     async def evaluate_with_llm(
         self,
@@ -494,7 +538,7 @@ class ReasoningQualityEvaluator:
         final_answer: str,
         correct_answer: str,
         llm_func,
-        is_answer_correct: bool | None = None
+        is_answer_correct: bool | None = None,
     ) -> ReasoningEvaluationResult:
         """
         use LLM 进行深度推理Quality Assessment
@@ -511,7 +555,9 @@ class ReasoningQualityEvaluator:
             ReasoningEvaluationResult
         """
         # 先进行规则评估
-        result = self.evaluate(question, reasoning, final_answer, correct_answer, is_answer_correct)
+        result = self.evaluate(
+            question, reasoning, final_answer, correct_answer, is_answer_correct
+        )
 
         if not reasoning or len(reasoning.strip()) < 50:
             return result
@@ -523,17 +569,29 @@ class ReasoningQualityEvaluator:
             )
 
             # 融合规则评估and LLM 评估
-            result.quality_score.coherence = (result.quality_score.coherence + llm_eval.get('coherence', 5)) / 2
-            result.quality_score.completeness = (result.quality_score.completeness + llm_eval.get('completeness', 5)) / 2
-            result.quality_score.relevance = (result.quality_score.relevance + llm_eval.get('relevance', 5)) / 2
-            result.quality_score.correctness = (result.quality_score.correctness + llm_eval.get('correctness', 5)) / 2
-            result.quality_score.efficiency = (result.quality_score.efficiency + llm_eval.get('efficiency', 5)) / 2
+            result.quality_score.coherence = (
+                result.quality_score.coherence + llm_eval.get("coherence", 5)
+            ) / 2
+            result.quality_score.completeness = (
+                result.quality_score.completeness + llm_eval.get("completeness", 5)
+            ) / 2
+            result.quality_score.relevance = (
+                result.quality_score.relevance + llm_eval.get("relevance", 5)
+            ) / 2
+            result.quality_score.correctness = (
+                result.quality_score.correctness + llm_eval.get("correctness", 5)
+            ) / 2
+            result.quality_score.efficiency = (
+                result.quality_score.efficiency + llm_eval.get("efficiency", 5)
+            ) / 2
 
             result.quality_score.calculate_overall()
 
             # Add LLM 反馈
-            if llm_eval.get('feedback'):
-                result.quality_score.suggestions.append(f"[AI评价] {llm_eval['feedback']}")
+            if llm_eval.get("feedback"):
+                result.quality_score.suggestions.append(
+                    f"[AI评价] {llm_eval['feedback']}"
+                )
 
             result.evaluation_method = "hybrid"
             result.evaluation_confidence = 0.85
@@ -549,7 +607,7 @@ class ReasoningQualityEvaluator:
         reasoning: str,
         final_answer: str,
         correct_answer: str,
-        llm_func
+        llm_func,
     ) -> dict[str, Any]:
         """use LLM 评估推理质量"""
         prompt = f"""You are an expert evaluator assessing the quality of mathematical/logical reasoning.
@@ -585,12 +643,14 @@ Respond in JSON format:
 
         # 尝试Parse JSON
         import json
+
         try:
             # 提取 JSON 部分
-            json_match = re.search(r'\{[^{}]+\}', response, re.DOTALL)
+            json_match = re.search(r"\{[^{}]+\}", response, re.DOTALL)
             if json_match:
-                return json.loads(json_match.group(0))
-        except:
+                result = json.loads(json_match.group(0))
+                return result if isinstance(result, dict) else {}
+        except Exception:
             pass
 
         return {}
@@ -598,10 +658,7 @@ Respond in JSON format:
 
 # 便捷函数
 def quick_evaluate_reasoning(
-    question: str,
-    reasoning: str,
-    final_answer: str,
-    correct_answer: str
+    question: str, reasoning: str, final_answer: str, correct_answer: str
 ) -> ReasoningEvaluationResult:
     """快速评估推理质量（仅规则，no LLM）"""
     evaluator = ReasoningQualityEvaluator()

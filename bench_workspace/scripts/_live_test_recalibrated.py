@@ -5,6 +5,7 @@
   Phase C: conc=[16,32] × 低上下文
 每 phase 前校验 8 卡在位;掉卡即中止。
 """
+
 import asyncio
 import os
 import subprocess
@@ -30,21 +31,41 @@ class _F:
 
 def make_runner(tag):
     return BenchmarkRunner(
-        placeholder=_F(), progress_bar=_F(), status_text=_F(),
-        api_base_url="http://localhost:10814/v1", model_id="Kimi-K2.7-Code",
-        tokenizer_option="API (usage field)", csv_filename=f"raw_data/recal_{tag}.csv",
-        api_key="EMPTY", log_placeholder=_F(), provider="OpenAI Compatible",
+        placeholder=_F(),
+        progress_bar=_F(),
+        status_text=_F(),
+        api_base_url="http://localhost:10814/v1",
+        model_id="Kimi-K2.7-Code",
+        tokenizer_option="API (usage field)",
+        csv_filename=f"raw_data/recal_{tag}.csv",
+        api_key="EMPTY",
+        log_placeholder=_F(),
+        provider="OpenAI Compatible",
         output_placeholder=_F(),
-        warehouse_context={"serving_config": {"engine": "vllm", "tp_size": 8, "max_num_seqs": 16},
-                           "test_metadata": {"tester": "claude-recal", "note": "校准修正后重测"},
-                           "model_spec_override": {}, "engine_runtime": {}, "custom_sys_info": {}},
-        ui_state=NullStateBridge(), render_progress=lambda **k: None, render_log=lambda **k: None,
+        warehouse_context={
+            "serving_config": {"engine": "vllm", "tp_size": 8, "max_num_seqs": 16},
+            "test_metadata": {"tester": "claude-recal", "note": "校准修正后重测"},
+            "model_spec_override": {},
+            "engine_runtime": {},
+            "custom_sys_info": {},
+        },
+        ui_state=NullStateBridge(),
+        render_progress=lambda **k: None,
+        render_log=lambda **k: None,
     )
 
 
 PHASES = [
-    ("A_conc12_full", [1, 2], [64, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 260000]),
-    ("B_conc48_no260k", [4, 8], [64, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072]),
+    (
+        "A_conc12_full",
+        [1, 2],
+        [64, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 260000],
+    ),
+    (
+        "B_conc48_no260k",
+        [4, 8],
+        [64, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072],
+    ),
     ("C_conc1632_low", [16, 32], [64, 1024, 2048, 4096, 8192]),
 ]
 
@@ -60,7 +81,8 @@ async def main():
             return
         r = make_runner(tag)
         await r.run_throughput_matrix_test(
-            concurrencies=conc, context_lengths=ctx, rounds=1, max_tokens=2048)
+            concurrencies=conc, context_lengths=ctx, rounds=1, max_tokens=2048
+        )
         n2 = gpu_count()
         print(f"[phase {tag} done] GPU={n2}", flush=True)
         if n2 != 8:

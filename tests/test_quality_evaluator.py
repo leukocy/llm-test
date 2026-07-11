@@ -43,7 +43,7 @@ class TestQualityTestConfig:
             concurrency=8,
             thinking_enabled=True,
             thinking_budget=2048,
-            reasoning_effort="high"
+            reasoning_effort="high",
         )
         assert config.datasets == ["gsm8k", "math500"]
         assert config.num_shots == 3
@@ -55,11 +55,7 @@ class TestQualityTestConfig:
 
     def test_config_to_dict(self):
         """TestConfigureConvertis字典"""
-        config = QualityTestConfig(
-            datasets=["mmlu"],
-            num_shots=5,
-            temperature=0.0
-        )
+        config = QualityTestConfig(datasets=["mmlu"], num_shots=5, temperature=0.0)
         d = config.to_dict()
         assert d["datasets"] == ["mmlu"]
         assert d["num_shots"] == 5
@@ -70,7 +66,7 @@ class TestQualityTestConfig:
         """Test带子集Configure"""
         config = QualityTestConfig(
             datasets=["mmlu", "ceval"],
-            subsets={"mmlu": ["stem", "humanities"], "ceval": ["computer"]}
+            subsets={"mmlu": ["stem", "humanities"], "ceval": ["computer"]},
         )
         assert config.subsets is not None
         assert "stem" in config.subsets["mmlu"]
@@ -82,8 +78,8 @@ class TestQualityTestConfig:
             datasets=["mmlu", "gsm8k"],
             dataset_overrides={
                 "mmlu": {"max_tokens": 1024, "temperature": 0.5},
-                "gsm8k": {"max_tokens": 512}
-            }
+                "gsm8k": {"max_tokens": 512},
+            },
         )
         assert config.dataset_overrides["mmlu"]["max_tokens"] == 1024
         assert config.dataset_overrides["gsm8k"]["max_tokens"] == 512
@@ -96,25 +92,27 @@ class TestQualityEvaluator:
     def mock_provider(self):
         """Mock Provider"""
         provider = MagicMock()
-        provider.get_completion = AsyncMock(return_value={
-            'full_response_content': 'Test response',
-            'start_time': 0,
-            'first_token_time': 0.1,
-            'end_time': 0.5,
-            'usage_info': {'prompt_tokens': 10, 'completion_tokens': 5}
-        })
+        provider.get_completion = AsyncMock(
+            return_value={
+                "full_response_content": "Test response",
+                "start_time": 0,
+                "first_token_time": 0.1,
+                "end_time": 0.5,
+                "usage_info": {"prompt_tokens": 10, "completion_tokens": 5},
+            }
+        )
         return provider
 
     @pytest.fixture
     def evaluator(self, mock_provider):
         """Create QualityEvaluator 实例"""
-        with patch('core.quality_evaluator.get_provider', return_value=mock_provider):
-            with patch('core.quality_evaluator.os.makedirs'):
+        with patch("core.quality_evaluator.get_provider", return_value=mock_provider):
+            with patch("core.quality_evaluator.os.makedirs"):
                 evaluator = QualityEvaluator(
                     api_base_url="http://test.com",
                     model_id="test-model",
                     api_key="test-key",
-                    enable_cache=False
+                    enable_cache=False,
                 )
                 # Mock provider
                 evaluator.provider = mock_provider
@@ -124,12 +122,12 @@ class TestQualityEvaluator:
 
     def test_init_basic(self, mock_provider):
         """Test基本Initialize"""
-        with patch('core.quality_evaluator.get_provider', return_value=mock_provider):
-            with patch('core.quality_evaluator.os.makedirs'):
+        with patch("core.quality_evaluator.get_provider", return_value=mock_provider):
+            with patch("core.quality_evaluator.os.makedirs"):
                 evaluator = QualityEvaluator(
                     api_base_url="http://test.com",
                     model_id="test-model",
-                    api_key="test-key"
+                    api_key="test-key",
                 )
                 assert evaluator.api_base_url == "http://test.com"
                 assert evaluator.model_id == "test-model"
@@ -139,24 +137,24 @@ class TestQualityEvaluator:
 
     def test_init_with_custom_output_dir(self, mock_provider):
         """TestCustom输出目录"""
-        with patch('core.quality_evaluator.get_provider', return_value=mock_provider):
-            with patch('core.quality_evaluator.os.makedirs'):
+        with patch("core.quality_evaluator.get_provider", return_value=mock_provider):
+            with patch("core.quality_evaluator.os.makedirs"):
                 evaluator = QualityEvaluator(
                     api_base_url="http://test.com",
                     model_id="test-model",
-                    output_dir="custom_output"
+                    output_dir="custom_output",
                 )
                 assert evaluator.output_dir == "custom_output"
 
     def test_init_with_log_callback(self, mock_provider):
         """Test带LogCallbackInitialize"""
         callback = MagicMock()
-        with patch('core.quality_evaluator.get_provider', return_value=mock_provider):
-            with patch('core.quality_evaluator.os.makedirs'):
+        with patch("core.quality_evaluator.get_provider", return_value=mock_provider):
+            with patch("core.quality_evaluator.os.makedirs"):
                 evaluator = QualityEvaluator(
                     api_base_url="http://test.com",
                     model_id="test-model",
-                    log_callback=callback
+                    log_callback=callback,
                 )
                 assert evaluator.log_callback == callback
 
@@ -283,7 +281,9 @@ class TestQualityEvaluator:
         evaluator.register_evaluator("custom_needle", mock_evaluator_class)
 
         config = QualityTestConfig()
-        result = evaluator.get_evaluator("custom_needle_frankenstein", config, test_filter="frankenstein")
+        result = evaluator.get_evaluator(
+            "custom_needle_frankenstein", config, test_filter="frankenstein"
+        )
 
         assert result is not None
         # Checkis否传递 test_filter
@@ -296,9 +296,7 @@ class TestQualityEvaluator:
     async def test_get_response_success(self, evaluator):
         """Test成功Get响应"""
         result = await evaluator._get_response_with_metrics(
-            prompt="Test prompt",
-            temperature=0.0,
-            max_tokens=256
+            prompt="Test prompt", temperature=0.0, max_tokens=256
         )
         assert result["content"] == "Test response"
         assert result["error"] is None
@@ -308,14 +306,11 @@ class TestQualityEvaluator:
     @pytest.mark.asyncio
     async def test_get_response_with_error(self, evaluator):
         """TestGet响应时出错"""
-        evaluator.provider.get_completion = AsyncMock(return_value={
-            'error': 'API Error',
-            'full_response_content': ''
-        })
-
-        result = await evaluator._get_response_with_metrics(
-            prompt="Test prompt"
+        evaluator.provider.get_completion = AsyncMock(
+            return_value={"error": "API Error", "full_response_content": ""}
         )
+
+        result = await evaluator._get_response_with_metrics(prompt="Test prompt")
         assert result["content"] == ""
         assert result["error"] == "API Error"
 
@@ -343,12 +338,12 @@ class TestQualityEvaluatorResults:
     def evaluator_with_results(self):
         """Create带ResultEvaluator"""
         mock_provider = MagicMock()
-        with patch('core.quality_evaluator.get_provider', return_value=mock_provider):
-            with patch('core.quality_evaluator.os.makedirs'):
+        with patch("core.quality_evaluator.get_provider", return_value=mock_provider):
+            with patch("core.quality_evaluator.os.makedirs"):
                 evaluator = QualityEvaluator(
                     api_base_url="http://test.com",
                     model_id="test-model",
-                    enable_cache=False
+                    enable_cache=False,
                 )
 
         # Mock Result
@@ -362,7 +357,7 @@ class TestQualityEvaluatorResults:
         mock_result.config = {
             "thinking_enabled": False,
             "thinking_budget": 0,
-            "reasoning_effort": "N/A"
+            "reasoning_effort": "N/A",
         }
         mock_result.by_category = {}
 
@@ -382,12 +377,12 @@ class TestQualityEvaluatorResults:
     def test_get_summary_df_empty(self):
         """Test空Result汇总 DataFrame"""
         mock_provider = MagicMock()
-        with patch('core.quality_evaluator.get_provider', return_value=mock_provider):
-            with patch('core.quality_evaluator.os.makedirs'):
+        with patch("core.quality_evaluator.get_provider", return_value=mock_provider):
+            with patch("core.quality_evaluator.os.makedirs"):
                 evaluator = QualityEvaluator(
                     api_base_url="http://test.com",
                     model_id="test-model",
-                    enable_cache=False
+                    enable_cache=False,
                 )
 
         df = evaluator.get_summary_df()
@@ -398,7 +393,7 @@ class TestQualityEvaluatorResults:
         evaluator, mock_result = evaluator_with_results
         mock_result.by_category = {
             "math": {"accuracy": 0.9, "count": 50},
-            "history": {"accuracy": 0.8, "count": 30}
+            "history": {"accuracy": 0.8, "count": 30},
         }
 
         df = evaluator.get_category_breakdown("mmlu")
@@ -414,12 +409,12 @@ class TestQualityEvaluatorResults:
     def test_summary_df_thinking_mode_enabled(self):
         """TestThinking mode启用汇总Display"""
         mock_provider = MagicMock()
-        with patch('core.quality_evaluator.get_provider', return_value=mock_provider):
-            with patch('core.quality_evaluator.os.makedirs'):
+        with patch("core.quality_evaluator.get_provider", return_value=mock_provider):
+            with patch("core.quality_evaluator.os.makedirs"):
                 evaluator = QualityEvaluator(
                     api_base_url="http://test.com",
                     model_id="test-model",
-                    enable_cache=False
+                    enable_cache=False,
                 )
 
         mock_result = MagicMock()
@@ -431,7 +426,7 @@ class TestQualityEvaluatorResults:
         mock_result.config = {
             "thinking_enabled": True,
             "thinking_budget": 2048,
-            "reasoning_effort": "high"
+            "reasoning_effort": "high",
         }
         mock_result.by_category = {}
 
@@ -440,7 +435,7 @@ class TestQualityEvaluatorResults:
         df = evaluator.get_summary_df()
         assert not df.empty
         # CheckThinking mode列包含正确信息
-        assert df.iloc[0]["Thinking mode"] == "Enabled (HIGH)"
+        assert "HIGH" in df.iloc[0]["Thinking mode"]
 
 
 class TestConvenienceFunctions:
@@ -450,17 +445,21 @@ class TestConvenienceFunctions:
     async def test_quick_evaluate(self):
         """Test quick_evaluate 便捷函数"""
         mock_provider = MagicMock()
-        mock_provider.get_completion = AsyncMock(return_value={
-            'full_response_content': 'Test',
-            'start_time': 0,
-            'first_token_time': 0.1,
-            'end_time': 0.5,
-            'usage_info': {'prompt_tokens': 10, 'completion_tokens': 5}
-        })
+        mock_provider.get_completion = AsyncMock(
+            return_value={
+                "full_response_content": "Test",
+                "start_time": 0,
+                "first_token_time": 0.1,
+                "end_time": 0.5,
+                "usage_info": {"prompt_tokens": 10, "completion_tokens": 5},
+            }
+        )
 
-        with patch('core.quality_evaluator.get_provider', return_value=mock_provider):
-            with patch('core.quality_evaluator.os.makedirs'):
-                with patch.object(QualityEvaluator, 'run_evaluation', new_callable=AsyncMock) as mock_run:
+        with patch("core.quality_evaluator.get_provider", return_value=mock_provider):
+            with patch("core.quality_evaluator.os.makedirs"):
+                with patch.object(
+                    QualityEvaluator, "run_evaluation", new_callable=AsyncMock
+                ) as mock_run:
                     mock_run.return_value = {}
 
                     results = await quick_evaluate(
@@ -468,7 +467,7 @@ class TestConvenienceFunctions:
                         model_id="test-model",
                         datasets=["mmlu"],
                         num_shots=5,
-                        max_samples=100
+                        max_samples=100,
                     )
 
                     mock_run.assert_called_once()

@@ -11,6 +11,7 @@ from typing import Any
 
 class LogLevel(Enum):
     """Log Level"""
+
     DEBUG = "DEBUG"
     INFO = "INFO"
     SUCCESS = "SUCCESS"
@@ -48,10 +49,10 @@ class ExecLog:
         cls,
         message: str,
         level: str = LogLevel.INFO.value,
-        run_id: int = None,
-        session_id: str = None,
-        metrics: dict[str, Any] = None,
-        error: str = None,
+        run_id: int | None = None,
+        session_id: str | None = None,
+        metrics: dict[str, Any] | None = None,
+        error: str | None = None,
     ) -> "ExecLog":
         """CreateLog条目"""
         return cls(
@@ -91,28 +92,30 @@ class ExecLog:
     def to_dict(self) -> dict[str, Any]:
         """Convertis字典"""
         return {
-            'id': self.id,
-            'run_id': self.run_id,
-            'level': self.level,
-            'message': self.message,
-            'session_id': self.session_id,
-            'metrics_json': json.dumps(self.metrics, ensure_ascii=False) if self.metrics else None,
-            'error': self.error,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            "id": self.id,
+            "run_id": self.run_id,
+            "level": self.level,
+            "message": self.message,
+            "session_id": self.session_id,
+            "metrics_json": (
+                json.dumps(self.metrics, ensure_ascii=False) if self.metrics else None
+            ),
+            "error": self.error,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
         }
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> "ExecLog":
         """从Database行Create"""
         return cls(
-            id=row.get('id'),
-            run_id=row.get('run_id'),
-            level=row.get('level', LogLevel.INFO.value),
-            message=row.get('message', ''),
-            session_id=row.get('session_id'),
-            metrics=json.loads(row.get('metrics_json', '{}') or '{}'),
-            error=row.get('error'),
-            timestamp=cls._parse_datetime(row.get('timestamp')),
+            id=row.get("id"),
+            run_id=row.get("run_id"),
+            level=row.get("level", LogLevel.INFO.value),
+            message=row.get("message", ""),
+            session_id=row.get("session_id"),
+            metrics=json.loads(row.get("metrics_json", "{}") or "{}"),
+            error=row.get("error"),
+            timestamp=cls._parse_datetime(row.get("timestamp")),
         )
 
     @staticmethod
@@ -128,8 +131,18 @@ class ExecLog:
 
     def to_text(self) -> str:
         """Convertis可读文本"""
+        level_emoji = {
+            LogLevel.DEBUG.value: "DBG",
+            LogLevel.INFO.value: "INF",
+            LogLevel.SUCCESS.value: "OK",
+            LogLevel.WARNING.value: "WRN",
+            LogLevel.ERROR.value: "ERR",
+            LogLevel.CRITICAL.value: "CRT",
+        }
+
         time_str = self.timestamp.strftime("%H:%M:%S") if self.timestamp else ""
-        parts = [f"[{time_str}] [{self.level.upper()}]"]
+        emoji = level_emoji.get(self.level, "LOG")
+        parts = [f"[{time_str}] {emoji}"]
 
         if self.session_id:
             parts.append(f"[{self.session_id}]")
@@ -137,8 +150,10 @@ class ExecLog:
         parts.append(self.message)
 
         if self.metrics:
-            metrics_str = ", ".join(f"{k}={v:.2f}" if isinstance(v, float) else f"{k}={v}"
-                                    for k, v in self.metrics.items())
+            metrics_str = ", ".join(
+                f"{k}={v:.2f}" if isinstance(v, float) else f"{k}={v}"
+                for k, v in self.metrics.items()
+            )
             parts.append(f"({metrics_str})")
 
         if self.error:

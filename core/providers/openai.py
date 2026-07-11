@@ -41,13 +41,15 @@ def set_stop_requested(value: bool):
             for client_id, client in list(_active_clients.items()):
                 try:
                     # 在事件循环中调度关闭操作
-                    if hasattr(client, 'aclose'):
+                    if hasattr(client, "aclose"):
                         # 尝试获取正在运行的事件循环
                         try:
                             loop = asyncio.get_running_loop()
-                            loop.call_soon_threadsafe(
-                                lambda c=client: asyncio.create_task(c.aclose())
-                            )
+
+                            def _close_client(c=client) -> None:
+                                asyncio.create_task(c.aclose())
+
+                            loop.call_soon_threadsafe(_close_client)
                         except RuntimeError:
                             # 没有运行中的事件循环，尝试同步关闭
                             pass
@@ -130,8 +132,16 @@ class OpenAIProvider(LLMProvider):
         super().__init__(api_base_url, api_key, model_id)
         self.platform = detect_platform(api_base_url, model_id)
 
-    async def get_completion(self, client, session_id: int, prompt: str = "", max_tokens: int = 256,
-                            log_callback=None, messages: list[dict] | None = None, **kwargs) -> dict[str, Any]:
+    async def get_completion(
+        self,
+        client,
+        session_id: int,
+        prompt: str = "",
+        max_tokens: int = 256,
+        log_callback=None,
+        messages: list[dict] | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         # 检查停止状态
         if is_stop_requested():
             raise asyncio.CancelledError("Test stopped by user.")
@@ -143,10 +153,10 @@ class OpenAIProvider(LLMProvider):
         usage_info = None
         full_response_content = ""
         reasoning_content = ""
-        raw_stream_chunks = []
-        token_timestamps = []
-        request_timeout = kwargs.pop('request_timeout', None)
-        input_tokens_hint = kwargs.pop('input_tokens_hint', None)
+        raw_stream_chunks: list[dict[str, Any]] = []
+        token_timestamps: list[float] = []
+        request_timeout = kwargs.pop("request_timeout", None)
+        input_tokens_hint = kwargs.pop("input_tokens_hint", None)
         actual_messages = messages if messages else [{"role": "user", "content": prompt}]
         request_timeout_seconds = get_request_timeout_seconds(
             prompt=prompt,
@@ -173,7 +183,7 @@ class OpenAIProvider(LLMProvider):
             else:
                 headers["Authorization"] = f"Bearer {self.api_key}"
 
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model_id,
             "messages": actual_messages,
             "stream": True,
@@ -189,30 +199,29 @@ class OpenAIProvider(LLMProvider):
             payload["max_tokens"] = max_tokens
 
         # Sampling temperature — only sent when explicitly provided (default: API default)
-        temperature = kwargs.pop('temperature', None)
+        temperature = kwargs.pop("temperature", None)
         if temperature is not None:
             payload["temperature"] = temperature
 
         # 提取同步屏障（用于并发请求近乎同时发送）
-        barrier = kwargs.pop('_barrier', None)
+        barrier = kwargs.pop("_barrier", None)
 
         # 提取推理相关参数
-        thinking_enabled = kwargs.pop('thinking_enabled', None)
-        thinking_budget = kwargs.pop('thinking_budget', None)
-        reasoning_effort = kwargs.pop('reasoning_effort', None)
+        thinking_enabled = kwargs.pop("thinking_enabled", None)
+        thinking_budget = kwargs.pop("thinking_budget", None)
+        reasoning_effort = kwargs.pop("reasoning_effort", None)
 
         if thinking_enabled is not None or thinking_budget or reasoning_effort:
             thinking_params = build_thinking_params(
-                thinking_enabled,
-                thinking_budget,
-                reasoning_effort,
-                self.platform
+                thinking_enabled, thinking_budget, reasoning_effort, self.platform
             )
 
             if "_extra_body_reasoning_split" in thinking_params:
                 if "extra_body" not in payload:
                     payload["extra_body"] = {}
-                payload["extra_body"]["reasoning_split"] = thinking_params.pop("_extra_body_reasoning_split")
+                payload["extra_body"]["reasoning_split"] = thinking_params.pop(
+                    "_extra_body_reasoning_split"
+                )
 
             if "_extra_body_aliyun" in thinking_params:
                 if "extra_body" not in payload:
@@ -262,11 +271,11 @@ class OpenAIProvider(LLMProvider):
                     f"{self.api_base_url}/chat/completions",
                     json=payload,
                     headers=headers,
-                    timeout=request_timeout_seconds
+                    timeout=request_timeout_seconds,
                 ) as response:
                     if response.status_code != 200:
                         status_code = response.status_code
-                        error_text = (await response.aread())[:200].decode('utf-8', errors='ignore')
+                        error_text = (await response.aread())[:200].decode("utf-8", errors="ignore")
                         if log_callback:
                             log_callback(f"API Error {status_code}: {error_text}")
 
@@ -274,16 +283,20 @@ class OpenAIProvider(LLMProvider):
                             error_info = get_error_info(
                                 Exception(f"HTTP {status_code}: {error_text}"),
                                 context=f"Model: {self.model_id}",
-                                language="zh"
+                                language="zh",
                             )
-                            raise Exception(f"HTTP {status_code}: {error_info['title']}: {error_info['details']}")
+                            raise Exception(
+                                f"HTTP {status_code}: {error_info['title']}: {error_info['details']}"
+                            )
                         elif status_code >= 500:
                             error_info = get_error_info(
                                 Exception(f"HTTP {status_code}: {error_text}"),
                                 context=f"Model: {self.model_id}, URL: {self.api_base_url}",
-                                language="zh"
+                                language="zh",
                             )
-                            raise Exception(f"HTTP {status_code}: {error_info['title']}: {error_info['details']}")
+                            raise Exception(
+                                f"HTTP {status_code}: {error_info['title']}: {error_info['details']}"
+                            )
                         else:
                             raise Exception(f"HTTP {status_code}: {error_text}")
 
@@ -317,7 +330,11 @@ class OpenAIProvider(LLMProvider):
                         if text_chunk:
                             current_time = time.monotonic()
 
-                            is_only_tag = text_chunk.strip() in ["<think", "<think\\n", "\\n<think"]
+                            is_only_tag = text_chunk.strip() in [
+                                "<think",
+                                "<think\\n",
+                                "\\n<think",
+                            ]
 
                             if first_token_time is None:
                                 if not is_only_tag or is_only_tag and len(text_chunk) > 10:
@@ -341,15 +358,12 @@ class OpenAIProvider(LLMProvider):
                 error_info = get_error_info(
                     Exception(f"Empty response received for {self.model_id}"),
                     context=f"URL: {self.api_base_url}",
-                    language="zh"
+                    language="zh",
                 )
                 return {
                     "error": f"Empty response received. {error_info['title']}: {error_info['details']}",
                     "error_info": error_info,
-                    "debug_info": {
-                        "url": self.api_base_url,
-                        "model": self.model_id
-                    }
+                    "debug_info": {"url": self.api_base_url, "model": self.model_id},
                 }
 
             if not usage_info:
@@ -357,6 +371,7 @@ class OpenAIProvider(LLMProvider):
 
             # 记录请求日志
             from ..request_logger import get_request_logger
+
             req_logger = get_request_logger()
             if req_logger:
                 req_logger.log_request(
@@ -390,7 +405,7 @@ class OpenAIProvider(LLMProvider):
                 "full_response_content": full_response_content,
                 "usage_info": usage_info,
                 "token_timestamps": token_timestamps,
-                "error": None
+                "error": None,
             }
 
         except asyncio.CancelledError:
@@ -405,9 +420,10 @@ class OpenAIProvider(LLMProvider):
             error_info = get_error_info(
                 e,
                 context=f"Model: {self.model_id}, URL: {self.api_base_url}",
-                language="zh"
+                language="zh",
             )
             from ..request_logger import get_request_logger
+
             req_logger = get_request_logger()
             if req_logger:
                 req_logger.log_request(
@@ -432,7 +448,10 @@ class OpenAIProvider(LLMProvider):
                     token_timestamps=token_timestamps,
                     error=error_msg,
                 )
-            return {"error": f"{str(e)}. {error_info['title']}: {error_info['details']}", "error_info": error_info}
+            return {
+                "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
+                "error_info": error_info,
+            }
         except httpx.NetworkError as e:
             end_time = time.monotonic()
             # 如果请求未发出就失败，使用当前时间作为 start_time
@@ -442,9 +461,10 @@ class OpenAIProvider(LLMProvider):
             error_info = get_error_info(
                 e,
                 context=f"Model: {self.model_id}, URL: {self.api_base_url}",
-                language="zh"
+                language="zh",
             )
             from ..request_logger import get_request_logger
+
             req_logger = get_request_logger()
             if req_logger:
                 req_logger.log_request(
@@ -469,7 +489,10 @@ class OpenAIProvider(LLMProvider):
                     token_timestamps=token_timestamps,
                     error=error_msg,
                 )
-            return {"error": f"{str(e)}. {error_info['title']}: {error_info['details']}", "error_info": error_info}
+            return {
+                "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
+                "error_info": error_info,
+            }
         except Exception as e:
             end_time = time.monotonic()
             # 如果请求未发出就失败，使用当前时间作为 start_time
@@ -478,12 +501,9 @@ class OpenAIProvider(LLMProvider):
             if isinstance(e, asyncio.CancelledError):
                 raise
             error_msg = f"{str(e)}. Exception"
-            error_info = get_error_info(
-                e,
-                context=f"Model: {self.model_id}",
-                language="zh"
-            )
+            error_info = get_error_info(e, context=f"Model: {self.model_id}", language="zh")
             from ..request_logger import get_request_logger
+
             req_logger = get_request_logger()
             if req_logger:
                 req_logger.log_request(
@@ -508,7 +528,10 @@ class OpenAIProvider(LLMProvider):
                     token_timestamps=token_timestamps,
                     error=error_msg,
                 )
-            return {"error": f"{str(e)}. {error_info['title']}: {error_info['original']}", "error_info": error_info}
+            return {
+                "error": f"{str(e)}. {error_info['title']}: {error_info['original']}",
+                "error_info": error_info,
+            }
         finally:
             # 取消注册客户端
             unregister_client(client_id)

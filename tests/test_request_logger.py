@@ -7,7 +7,6 @@ import os
 import tempfile
 from datetime import datetime
 
-
 from core.request_logger import (
     LogIndex,
     LogIndexEntry,
@@ -456,7 +455,9 @@ class TestRequestLogger:
                 except Exception as e:
                     errors.append(e)
 
-            threads = [threading.Thread(target=log_request, args=(i,)) for i in range(10)]
+            threads = [
+                threading.Thread(target=log_request, args=(i,)) for i in range(10)
+            ]
             for t in threads:
                 t.start()
             for t in threads:

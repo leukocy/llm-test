@@ -45,8 +45,16 @@ class GeminiProvider(LLMProvider):
                 contents.append({"role": "user", "parts": [{"text": content}]})
         return system_instruction, contents
 
-    async def get_completion(self, client, session_id: int, prompt: str = "", max_tokens: int = 256,
-                            log_callback=None, messages: list[dict] | None = None, **kwargs) -> dict[str, Any]:
+    async def get_completion(
+        self,
+        client,
+        session_id: int,
+        prompt: str = "",
+        max_tokens: int = 256,
+        log_callback=None,
+        messages: list[dict] | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
         # 检查停止状态
         if is_stop_requested():
             raise asyncio.CancelledError("Test stopped by user.")
@@ -58,8 +66,8 @@ class GeminiProvider(LLMProvider):
         start_time = None
         first_token_time = None
         full_response_content = ""
-        request_timeout = kwargs.pop('request_timeout', None)
-        input_tokens_hint = kwargs.pop('input_tokens_hint', None)
+        request_timeout = kwargs.pop("request_timeout", None)
+        input_tokens_hint = kwargs.pop("input_tokens_hint", None)
         request_timeout_seconds = get_request_timeout_seconds(
             prompt=prompt,
             messages=messages,
@@ -74,25 +82,22 @@ class GeminiProvider(LLMProvider):
         }
 
         # Sampling temperature — only sent when explicitly provided (default: API default)
-        temperature = kwargs.pop('temperature', None)
+        temperature = kwargs.pop("temperature", None)
         if temperature is not None:
             generation_config["temperature"] = temperature
 
         # 提取同步屏障（用于并发请求近乎同时发送）
-        barrier = kwargs.pop('_barrier', None)
+        barrier = kwargs.pop("_barrier", None)
 
         # 提取推理相关参数
-        thinking_enabled = kwargs.pop('thinking_enabled', None)
-        thinking_budget = kwargs.pop('thinking_budget', None)
-        reasoning_effort = kwargs.pop('reasoning_effort', None)
+        thinking_enabled = kwargs.pop("thinking_enabled", None)
+        thinking_budget = kwargs.pop("thinking_budget", None)
+        reasoning_effort = kwargs.pop("reasoning_effort", None)
 
         # 构建推理参数
         if thinking_enabled is not None or thinking_budget or reasoning_effort:
             thinking_params = build_thinking_params(
-                thinking_enabled,
-                thinking_budget,
-                reasoning_effort,
-                self.platform
+                thinking_enabled, thinking_budget, reasoning_effort, self.platform
             )
 
             # Gemini: thinkingConfig 放在 generationConfig 中
@@ -107,22 +112,22 @@ class GeminiProvider(LLMProvider):
                 if k not in generation_config:
                     generation_config[k] = v
         for k, v in kwargs.items():
-            if k not in generation_config and k != 'temperature':
-                 generation_config[k] = v
+            if k not in generation_config and k != "temperature":
+                generation_config[k] = v
 
         # Build payload: use structured messages if provided, otherwise flat prompt
         if messages:
             system_instruction, gemini_contents = self._convert_messages(messages)
             payload = {
                 "contents": gemini_contents,
-                "generationConfig": generation_config
+                "generationConfig": generation_config,
             }
             if system_instruction:
                 payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
         else:
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": generation_config
+                "generationConfig": generation_config,
             }
         headers = {"Content-Type": "application/json"}
 
@@ -152,7 +157,13 @@ class GeminiProvider(LLMProvider):
             # 在实际发送 HTTP 请求之前记录开始时间，确保并发测试的时间准确性
             start_time = time.time()
 
-            async with client.stream("POST", url, json=payload, headers=headers, timeout=request_timeout_seconds) as response:
+            async with client.stream(
+                "POST",
+                url,
+                json=payload,
+                headers=headers,
+                timeout=request_timeout_seconds,
+            ) as response:
                 # HTTP 错误检测
                 try:
                     response.raise_for_status()
@@ -160,11 +171,12 @@ class GeminiProvider(LLMProvider):
                     status_code = e.response.status_code
                     if status_code == 401 or status_code == 429 or status_code >= 500:
                         error_info = get_error_info(
-                            e,
-                            context=f"Model: {self.model_id}",
-                            language="zh"
+                            e, context=f"Model: {self.model_id}", language="zh"
                         )
-                        return {"error": f"{str(e)}. {error_info['title']}: {error_info['details']}", "error_info": error_info}
+                        return {
+                            "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
+                            "error_info": error_info,
+                        }
                     else:
                         raise
 
@@ -173,8 +185,8 @@ class GeminiProvider(LLMProvider):
                     if is_stop_requested():
                         raise asyncio.CancelledError("Test stopped by user.")
 
-                    if line.strip().startswith('data: '):
-                        line_data = line[len('data: '):].strip()
+                    if line.strip().startswith("data: "):
+                        line_data = line[len("data: ") :].strip()
                         try:
                             chunk = json.loads(line_data)
                             if "candidates" in chunk and len(chunk["candidates"]) > 0:
@@ -189,7 +201,9 @@ class GeminiProvider(LLMProvider):
                                             first_token_time = time.time()
                                             ttft_raw = first_token_time - start_time
                                             if log_callback:
-                                                log_callback(f"Session {session_id} (Gemini): FIRST_TOKEN (TTFT: {ttft_raw:.3f}s)")
+                                                log_callback(
+                                                    f"Session {session_id} (Gemini): FIRST_TOKEN (TTFT: {ttft_raw:.3f}s)"
+                                                )
                                         full_response_content += content
                         except json.JSONDecodeError:
                             continue
@@ -200,7 +214,9 @@ class GeminiProvider(LLMProvider):
             end_time = time.time()
 
             if log_callback:
-                log_callback(f"Session {session_id} (Gemini): RECV: {full_response_content[:100]}...")
+                log_callback(
+                    f"Session {session_id} (Gemini): RECV: {full_response_content[:100]}..."
+                )
 
             return {
                 "start_time": start_time,
@@ -208,48 +224,44 @@ class GeminiProvider(LLMProvider):
                 "end_time": end_time,
                 "full_response_content": full_response_content,
                 "usage_info": None,  # Gemini doesn't return usage in stream
-                "error": None
+                "error": None,
             }
 
         except httpx.TimeoutException as e:
             if log_callback:
                 log_callback(f"Session {session_id} (Gemini): ERROR: {str(e)}")
-            error_info = get_error_info(
-                e,
-                context=f"Model: {self.model_id}",
-                language="zh"
-            )
-            return {"error": f"{str(e)}. {error_info['title']}: {error_info['details']}", "error_info": error_info}
+            error_info = get_error_info(e, context=f"Model: {self.model_id}", language="zh")
+            return {
+                "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
+                "error_info": error_info,
+            }
         except httpx.NetworkError as e:
             if log_callback:
                 log_callback(f"Session {session_id} (Gemini): ERROR: {str(e)}")
-            error_info = get_error_info(
-                e,
-                context=f"Model: {self.model_id}",
-                language="zh"
-            )
-            return {"error": f"{str(e)}. {error_info['title']}: {error_info['details']}", "error_info": error_info}
+            error_info = get_error_info(e, context=f"Model: {self.model_id}", language="zh")
+            return {
+                "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
+                "error_info": error_info,
+            }
         except httpx.HTTPStatusError as e:
             if log_callback:
                 log_callback(f"Session {session_id} (Gemini): ERROR: {str(e)}")
-            error_info = get_error_info(
-                e,
-                context=f"Model: {self.model_id}",
-                language="zh"
-            )
-            return {"error": f"{str(e)}. {error_info['title']}: {error_info['details']}", "error_info": error_info}
+            error_info = get_error_info(e, context=f"Model: {self.model_id}", language="zh")
+            return {
+                "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
+                "error_info": error_info,
+            }
         except asyncio.CancelledError:
             # 用户取消 - 传播给上层
             raise
         except Exception as e:
             if log_callback:
                 log_callback(f"Session {session_id} (Gemini): ERROR: {str(e)}")
-            error_info = get_error_info(
-                e,
-                context=f"Model: {self.model_id}",
-                language="zh"
-            )
-            return {"error": f"{str(e)}. {error_info['title']}: {error_info['details']}", "error_info": error_info}
+            error_info = get_error_info(e, context=f"Model: {self.model_id}", language="zh")
+            return {
+                "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
+                "error_info": error_info,
+            }
         finally:
             # 取消注册客户端
             unregister_client(client_id)

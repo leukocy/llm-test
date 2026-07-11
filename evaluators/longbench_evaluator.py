@@ -41,12 +41,17 @@ class LongBenchEvaluator(BaseEvaluator):
 
     # 支持子任务
     TASKS = {
-        'single_doc_qa': ['narrativeqa', 'qasper', 'multifieldqa_en', 'multifieldqa_zh'],
-        'multi_doc_qa': ['hotpotqa', '2wikimqa', 'musique'],
-        'summarization': ['gov_report', 'qmsum', 'multi_news'],
-        'few_shot': ['trec', 'triviaqa', 'samsum'],
-        'code': ['lcc', 'repobench-p'],
-        'synthetic': ['passage_count', 'passage_retrieval_en', 'passage_retrieval_zh']
+        "single_doc_qa": [
+            "narrativeqa",
+            "qasper",
+            "multifieldqa_en",
+            "multifieldqa_zh",
+        ],
+        "multi_doc_qa": ["hotpotqa", "2wikimqa", "musique"],
+        "summarization": ["gov_report", "qmsum", "multi_news"],
+        "few_shot": ["trec", "triviaqa", "samsum"],
+        "code": ["lcc", "repobench-p"],
+        "synthetic": ["passage_count", "passage_retrieval_en", "passage_retrieval_zh"],
     }
 
     def __init__(
@@ -55,14 +60,14 @@ class LongBenchEvaluator(BaseEvaluator):
         dataset_path: str = "datasets/longbench",
         num_shots: int = 0,  # LongBench 通常use 0-shot
         max_samples: int | None = None,
-        seed: int = 42
+        seed: int = 42,
     ):
         super().__init__(
             dataset_name=dataset_name,
             dataset_path=dataset_path,
             num_shots=num_shots,
             max_samples=max_samples,
-            seed=seed
+            seed=seed,
         )
         random.seed(seed)
 
@@ -73,10 +78,13 @@ class LongBenchEvaluator(BaseEvaluator):
         # 1. Try DatasetManager (auto-download)
         try:
             from core.dataset_manager import get_dataset
-            dm_samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
+
+            dm_samples = get_dataset(
+                self.dataset_name, split="test", max_samples=None, seed=self.seed
+            )
             if dm_samples:
                 for s in dm_samples:
-                    s.setdefault('task', s.pop('_task', 'unknown'))
+                    s.setdefault("task", s.pop("_task", "unknown"))
                 samples = dm_samples
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for LongBench: {e}")
@@ -99,19 +107,19 @@ class LongBenchEvaluator(BaseEvaluator):
                 for filepath in possible_files:
                     if os.path.exists(filepath):
                         try:
-                            if filepath.endswith('.jsonl'):
-                                with open(filepath, encoding='utf-8') as f:
+                            if filepath.endswith(".jsonl"):
+                                with open(filepath, encoding="utf-8") as f:
                                     for line in f:
                                         if line.strip():
                                             item = json.loads(line)
-                                            item['task'] = task_name
+                                            item["task"] = task_name
                                             samples.append(item)
                             else:
-                                with open(filepath, encoding='utf-8') as f:
+                                with open(filepath, encoding="utf-8") as f:
                                     data = json.load(f)
                                 if isinstance(data, list):
                                     for item in data:
-                                        item['task'] = task_name
+                                        item["task"] = task_name
                                         samples.append(item)
                             break
                         except Exception as e:
@@ -123,16 +131,18 @@ class LongBenchEvaluator(BaseEvaluator):
         samples = self._normalize_samples(samples)
         random.shuffle(samples)
 
-        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
+        total_needed = self.num_shots + (
+            self.max_samples if self.max_samples else len(samples)
+        )
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
         if self.num_shots > 0:
-            self.few_shot_examples = samples[:self.num_shots]
-            samples = samples[self.num_shots:]
+            self.few_shot_examples = samples[: self.num_shots]
+            samples = samples[self.num_shots :]
 
         if self.max_samples and len(samples) > self.max_samples:
-            samples = samples[:self.max_samples]
+            samples = samples[: self.max_samples]
 
         self.samples = samples
         return samples
@@ -144,24 +154,26 @@ class LongBenchEvaluator(BaseEvaluator):
         for sample in samples:
             try:
                 # Get输入andonunder文
-                input_text = sample.get('input', '')
-                context = sample.get('context', '')
+                input_text = sample.get("input", "")
+                context = sample.get("context", "")
 
                 # Mergeis完整onunder文
                 full_context = f"{context}\n\n{input_text}" if context else input_text
 
                 # GetAnswer
-                answers = sample.get('answers', [])
+                answers = sample.get("answers", [])
                 if isinstance(answers, str):
                     answers = [answers]
 
-                normalized.append({
-                    'context': full_context,
-                    'answers': answers,
-                    'task': sample.get('task', sample.get('dataset', 'unknown')),
-                    'length': sample.get('length', len(full_context)),
-                    'language': sample.get('language', 'en')
-                })
+                normalized.append(
+                    {
+                        "context": full_context,
+                        "answers": answers,
+                        "task": sample.get("task", sample.get("dataset", "unknown")),
+                        "length": sample.get("length", len(full_context)),
+                        "language": sample.get("language", "en"),
+                    }
+                )
             except Exception as e:
                 continue
 
@@ -171,56 +183,60 @@ class LongBenchEvaluator(BaseEvaluator):
         """Create示例Data"""
         return [
             {
-                "context": "The quick brown fox jumps over the lazy dog. " * 100 +
-                          "\n\nQuestion: What animal jumps over the dog?",
+                "context": "The quick brown fox jumps over the lazy dog. " * 100
+                + "\n\nQuestion: What animal jumps over the dog?",
                 "answers": ["fox", "the fox", "brown fox"],
                 "task": "narrativeqa",
                 "length": 5000,
-                "language": "en"
+                "language": "en",
             },
             {
-                "context": "In a scientific study published in Nature, researchers found that " +
-                          "climate change affects biodiversity significantly. " * 50 +
-                          "\n\nQuestion: What does climate change affect?",
+                "context": "In a scientific study published in Nature, researchers found that "
+                + "climate change affects biodiversity significantly. " * 50
+                + "\n\nQuestion: What does climate change affect?",
                 "answers": ["biodiversity", "species diversity"],
                 "task": "qasper",
                 "length": 3000,
-                "language": "en"
+                "language": "en",
             },
             {
-                "context": "Document 1: Paris is the capital of France.\n" +
-                          "Document 2: Berlin is the capital of Germany.\n" +
-                          "Document 3: London is the capital of UK.\n" * 20 +
-                          "\n\nQuestion: What is the capital of France?",
+                "context": "Document 1: Paris is the capital of France.\n"
+                + "Document 2: Berlin is the capital of Germany.\n"
+                + "Document 3: London is the capital of UK.\n" * 20
+                + "\n\nQuestion: What is the capital of France?",
                 "answers": ["Paris"],
                 "task": "hotpotqa",
                 "length": 2000,
-                "language": "en"
-            }
+                "language": "en",
+            },
         ]
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """Format LongBench 样本"""
-        context = sample.get('context', '')
+        context = sample.get("context", "")
 
         if include_answer:
-            answers = sample.get('answers', [])
+            answers = sample.get("answers", [])
             answer = answers[0] if answers else ""
             return f"{context}\n\nAnswer: {answer}"
         else:
-            return context
+            return str(context)
 
     def build_full_prompt(self, sample: dict[str, Any]) -> str:
         """Build完整 prompt"""
-        task = sample.get('task', 'qa')
+        task = sample.get("task", "qa")
 
         # based on任务类型选择指令
-        if 'summary' in task or 'summarization' in task:
+        if "summary" in task or "summarization" in task:
             instruction = "Please summarize the following document:\n\n"
-        elif 'code' in task:
+        elif "code" in task:
             instruction = "Complete the following code:\n\n"
         else:
-            instruction = "Answer the following question based on the given context:\n\n"
+            instruction = (
+                "Answer the following question based on the given context:\n\n"
+            )
 
         return instruction + self.format_prompt(sample, include_answer=False)
 
@@ -236,21 +252,23 @@ class LongBenchEvaluator(BaseEvaluator):
         # correct 可能isAnswer列表字符串表示
         if isinstance(correct, str):
             try:
-                correct_list = eval(correct) if correct.startswith('[') else [correct]
-            except:
+                correct_list = eval(correct) if correct.startswith("[") else [correct]
+            except Exception:
                 correct_list = [correct]
         else:
             correct_list = correct if isinstance(correct, list) else [correct]
 
         predicted_lower = normalize_text(predicted.lower())
 
-        return any(normalize_text(ans.lower()) in predicted_lower for ans in correct_list)
+        return any(
+            normalize_text(ans.lower()) in predicted_lower for ans in correct_list
+        )
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
         """GetCorrect answer"""
-        answers = sample.get('answers', [])
+        answers = sample.get("answers", [])
         return str(answers)
 
     def get_sample_category(self, sample: dict[str, Any]) -> str:
         """Get任务类型"""
-        return sample.get('task', 'unknown')
+        return str(sample.get("task", "unknown"))
