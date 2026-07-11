@@ -23,5 +23,4 @@ raw_data/
 quality_results/
 .claude/
 bench_workspace/
-tokenizers_bundle/
 .zcode/
