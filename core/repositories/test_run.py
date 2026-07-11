@@ -13,14 +13,14 @@ from core.repositories.base import BaseRepository
 class TestRunRepository(BaseRepository[TestRun]):
     """Test运行 Repository"""
 
-    def __init__(self, database: Database = None):
+    def __init__(self, database: Database | None = None):
         super().__init__(database)
         self._table_name = "test_runs"
 
     def _from_row(self, row: dict[str, Any]) -> TestRun:
         return TestRun.from_row(row)
 
-    def insert(self, run: TestRun) -> int:
+    def insert(self, run: TestRun) -> int | None:
         """
         InsertTest运行
 
@@ -31,10 +31,10 @@ class TestRunRepository(BaseRepository[TestRun]):
             新记录 ID
         """
         data = run.to_dict()
-        columns = [k for k, v in data.items() if v is not None and k != 'id']
+        columns = [k for k, v in data.items() if v is not None and k != "id"]
         placeholders = ", ".join(["?" for _ in columns])
         columns_str = ", ".join(columns)
-        values = [v for k, v in data.items() if v is not None and k != 'id']
+        values = [v for k, v in data.items() if v is not None and k != "id"]
 
         sql = f"INSERT INTO test_runs ({columns_str}) VALUES ({placeholders})"
         cursor = self.db.execute(sql, tuple(values))
@@ -54,8 +54,8 @@ class TestRunRepository(BaseRepository[TestRun]):
             return False
 
         data = run.to_dict()
-        set_clause = ", ".join([f"{k} = ?" for k in data if k != 'id'])
-        values = [v for k, v in data.items() if k != 'id'] + [run.id]
+        set_clause = ", ".join([f"{k} = ?" for k in data if k != "id"])
+        values = [v for k, v in data.items() if k != "id"] + [run.id]
 
         sql = f"UPDATE test_runs SET {set_clause} WHERE id = ?"
         cursor = self.db.execute(sql, tuple(values))
@@ -77,17 +77,10 @@ class TestRunRepository(BaseRepository[TestRun]):
         """based onTest Type查找"""
         return self.find_by("test_type = ?", (test_type,), limit)
 
-    def find_by_date_range(
-        self,
-        start: datetime,
-        end: datetime,
-        limit: int = 100
-    ) -> list[TestRun]:
+    def find_by_date_range(self, start: datetime, end: datetime, limit: int = 100) -> list[TestRun]:
         """based on日期范围查找"""
         return self.find_by(
-            "created_at BETWEEN ? AND ?",
-            (start.isoformat(), end.isoformat()),
-            limit
+            "created_at BETWEEN ? AND ?", (start.isoformat(), end.isoformat()), limit
         )
 
     def find_running(self) -> list[TestRun]:
@@ -102,12 +95,7 @@ class TestRunRepository(BaseRepository[TestRun]):
         """查找最近Test"""
         return self.find_all(limit=limit, order_by="created_at DESC")
 
-    def update_status(
-        self,
-        run_id: int,
-        status: str,
-        progress: float = None
-    ) -> bool:
+    def update_status(self, run_id: int, status: str, progress: float | None = None) -> bool:
         """
         UpdateStatus（轻量级Update）
 
@@ -126,13 +114,7 @@ class TestRunRepository(BaseRepository[TestRun]):
 
         return self.update_by(data, "id = ?", (run_id,)) > 0
 
-    def update_progress(
-        self,
-        run_id: int,
-        completed: int,
-        total: int,
-        failed: int = 0
-    ) -> bool:
+    def update_progress(self, run_id: int, completed: int, total: int, failed: int = 0) -> bool:
         """
         Update进度
 
@@ -170,10 +152,17 @@ class TestRunRepository(BaseRepository[TestRun]):
             is否succeeded
         """
         allowed_fields = [
-            'avg_ttft', 'avg_tps', 'avg_tpot',
-            'p50_ttft', 'p95_ttft', 'p99_ttft',
-            'total_tokens', 'duration_seconds',
-            'success_rate', 'completed_requests', 'failed_requests'
+            "avg_ttft",
+            "avg_tps",
+            "avg_tpot",
+            "p50_ttft",
+            "p95_ttft",
+            "p99_ttft",
+            "total_tokens",
+            "duration_seconds",
+            "success_rate",
+            "completed_requests",
+            "failed_requests",
         ]
 
         data = {k: v for k, v in stats.items() if k in allowed_fields}
@@ -183,7 +172,7 @@ class TestRunRepository(BaseRepository[TestRun]):
 
         return self.update_by(data, "id = ?", (run_id,)) > 0
 
-    def complete(self, run_id: int, success: bool = True, stats: dict = None) -> bool:
+    def complete(self, run_id: int, success: bool = True, stats: dict | None = None) -> bool:
         """
         标记完成
 
@@ -221,10 +210,10 @@ class TestRunRepository(BaseRepository[TestRun]):
         return self.find_by(
             "model_id LIKE ? OR tags LIKE ? OR notes LIKE ?",
             (pattern, pattern, pattern),
-            limit
+            limit,
         )
 
-    def get_statistics_summary(self, model_id: str = None) -> dict[str, Any]:
+    def get_statistics_summary(self, model_id: str | None = None) -> dict[str, Any]:
         """
         GetStatistics摘要
 

@@ -11,6 +11,7 @@ from huggingface_hub import hf_hub_download
 
 DATASETS_DIR = "datasets/longbench"
 
+
 def download_and_extract():
     print("🚀 开始under载 LongBench data.zip...")
     os.makedirs(DATASETS_DIR, exist_ok=True)
@@ -21,13 +22,13 @@ def download_and_extract():
             repo_id="THUDM/LongBench",
             filename="data.zip",
             repo_type="dataset",
-            local_dir=DATASETS_DIR
+            local_dir=DATASETS_DIR,
         )
         print(f"✅ Download complete: {zip_path}")
 
         # 解压
         print("📦 currently解压...")
-        with zipfile.ZipFile(os.path.join(DATASETS_DIR, "data.zip"), 'r') as zip_ref:
+        with zipfile.ZipFile(os.path.join(DATASETS_DIR, "data.zip"), "r") as zip_ref:
             zip_ref.extractall(DATASETS_DIR)
 
         # 整理目录结构
@@ -57,6 +58,7 @@ def download_and_extract():
     except Exception as e:
         print(f"❌ under载or解压失败: {e}")
         return False
+
 
 if __name__ == "__main__":
     download_and_extract()

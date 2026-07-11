@@ -86,7 +86,7 @@ HF_MODEL_MAPPING = {
 }
 
 # --- Tokenizer 源配置 (统一维护，自动兼容) ---
-TOKENIZER_SOURCES = {
+TOKENIZER_SOURCES: dict[str, str | dict[str, str]] = {
     # 字符串值：MS 和 HF 地址相同
     "DeepSeek-V3.1-Terminus": "deepseek-ai/DeepSeek-V3.1-Terminus",
     "DeepSeek-V3.2": "deepseek-ai/DeepSeek-V3.2",
@@ -107,20 +107,21 @@ TOKENIZER_SOURCES = {
     "GLM-5": {"ms": "ZhipuAI/GLM-5", "hf": "zai-org/GLM-5"},
     "GLM-4.6": {"ms": "ZhipuAI/GLM-4.7", "hf": "zai-org/GLM-4.7"},
     "MiniMax-M2.5": {"ms": "MiniMax/MiniMax-M2.5", "hf": "MiniMaxAI/MiniMax-M2.5"},
-    "Llama-3.3-70B-Instruct": {"ms": "LLM-Research/Llama-3.3-70B-Instruct", "hf": "meta-llama/Llama-3.3-70B-Instruct"},
+    "Llama-3.3-70B-Instruct": {
+        "ms": "LLM-Research/Llama-3.3-70B-Instruct",
+        "hf": "meta-llama/Llama-3.3-70B-Instruct",
+    },
     "gpt-oss-120b": {"ms": "openai-mirror/gpt-oss-120b", "hf": "openai/gpt-oss-120b"},
     "MiniMax-M3": "MiniMax/MiniMax-M3",
 }
 
 # 兼容层：从 TOKENIZER_SOURCES 自动生成旧变量
 TOKENIZER_MODELSCOPE_MAPPING = {
-    k: (v if isinstance(v, str) else v["ms"])
-    for k, v in TOKENIZER_SOURCES.items()
+    k: (v if isinstance(v, str) else v["ms"]) for k, v in TOKENIZER_SOURCES.items()
 }
 
 TOKENIZER_HF_MAPPING = {
-    k: (v if isinstance(v, str) else v["hf"])
-    for k, v in TOKENIZER_SOURCES.items()
+    k: (v if isinstance(v, str) else v["hf"]) for k, v in TOKENIZER_SOURCES.items()
 }
 
 # --- Tokenizer本地目录 -> ModelScope 魔搭社区 Repo映射 (国内优先) ---

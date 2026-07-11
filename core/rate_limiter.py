@@ -6,7 +6,6 @@ Uses token bucket algorithm to prevent API abuse and rate limit errors.
 
 import time
 from threading import Lock
-from typing import Optional
 
 
 class RateLimiter:
@@ -34,7 +33,7 @@ class RateLimiter:
             pass
     """
 
-    def __init__(self, rate: float, burst: Optional[int] = None):
+    def __init__(self, rate: float, burst: int | None = None):
         """
         Initialize rate limiter.
 
@@ -48,7 +47,7 @@ class RateLimiter:
         self.last_update = time.monotonic()
         self._lock = Lock()
 
-    def acquire(self, blocking: bool = True, timeout: Optional[float] = None) -> bool:
+    def acquire(self, blocking: bool = True, timeout: float | None = None) -> bool:
         """
         Acquire a token from the rate limiter.
 
@@ -109,10 +108,10 @@ class RateLimiter:
 
 
 # Global rate limiter instance for API calls
-_global_limiter: Optional[RateLimiter] = None
+_global_limiter: RateLimiter | None = None
 
 
-def get_rate_limiter(rate: float = 10.0, burst: Optional[int] = None) -> RateLimiter:
+def get_rate_limiter(rate: float = 10.0, burst: int | None = None) -> RateLimiter:
     """
     Get or create the global rate limiter.
 
@@ -153,7 +152,7 @@ class PerEndpointLimiter:
         limiter.set_rate("/embeddings", 50)
     """
 
-    def __init__(self, default_rate: float = 10.0, default_burst: Optional[int] = None):
+    def __init__(self, default_rate: float = 10.0, default_burst: int | None = None):
         """
         Initialize per-endpoint limiter.
 
@@ -170,18 +169,15 @@ class PerEndpointLimiter:
         """Get or create limiter for an endpoint."""
         with self._lock:
             if endpoint not in self.limiters:
-                self.limiters[endpoint] = RateLimiter(
-                    self.default_rate,
-                    self.default_burst
-                )
+                self.limiters[endpoint] = RateLimiter(self.default_rate, self.default_burst)
             return self.limiters[endpoint]
 
-    def acquire(self, endpoint: str, blocking: bool = True, timeout: Optional[float] = None) -> bool:
+    def acquire(self, endpoint: str, blocking: bool = True, timeout: float | None = None) -> bool:
         """Acquire a token for a specific endpoint."""
         limiter = self.get_limiter(endpoint)
         return limiter.acquire(blocking=blocking, timeout=timeout)
 
-    def set_rate(self, endpoint: str, rate: float, burst: Optional[int] = None):
+    def set_rate(self, endpoint: str, rate: float, burst: int | None = None):
         """Set the rate for a specific endpoint."""
         with self._lock:
             if endpoint in self.limiters:

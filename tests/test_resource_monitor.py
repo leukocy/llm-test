@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import threading
 import time
 from unittest.mock import patch
 
@@ -13,13 +12,19 @@ import pytest
 
 from core.resource_monitor import ResourceMonitor
 
-
 # ---------- 汇总逻辑 ----------
 
+
 def _sample(t, cpu, mem, util=40.0, vram=10.0, power=200.0, temp=50.0):
-    return {"t": t, "cpu_percent": cpu, "system_memory_gb": mem,
-            "gpu_util_percent": util, "gpu_vram_gb": vram,
-            "gpu_power_w": power, "gpu_temp_c": temp}
+    return {
+        "t": t,
+        "cpu_percent": cpu,
+        "system_memory_gb": mem,
+        "gpu_util_percent": util,
+        "gpu_vram_gb": vram,
+        "gpu_power_w": power,
+        "gpu_temp_c": temp,
+    }
 
 
 def test_summarize_peaks_and_means():
@@ -37,8 +42,15 @@ def test_summarize_peaks_and_means():
 def test_summarize_handles_none_gpu_when_nvml_absent():
     mon = ResourceMonitor(interval=0.01)
     mon._samples = [
-        {"t": 0.0, "cpu_percent": 20, "system_memory_gb": 4,
-         "gpu_util_percent": None, "gpu_vram_gb": None, "gpu_power_w": None, "gpu_temp_c": None},
+        {
+            "t": 0.0,
+            "cpu_percent": 20,
+            "system_memory_gb": 4,
+            "gpu_util_percent": None,
+            "gpu_vram_gb": None,
+            "gpu_power_w": None,
+            "gpu_temp_c": None,
+        },
     ]
     summary = mon._summarize()
     assert summary["peaks"]["cpu_percent"] == 20
@@ -64,6 +76,7 @@ def test_downsample_caps_timeline():
 
 # ---------- 生命周期 + NVML 降级 ----------
 
+
 def test_start_stop_lifecycle_samples_cpu_mem():
     mon = ResourceMonitor(interval=0.05)
 
@@ -74,11 +87,13 @@ def test_start_stop_lifecycle_samples_cpu_mem():
         return float(counter["i"] * 10)
 
     class FakeMem:
-        used = 8 * 1024 ** 3
+        used = 8 * 1024**3
 
     # 强制 NVML 不可用 → 只采 CPU/内存
-    with patch("psutil.cpu_percent", side_effect=fake_cpu_percent), \
-         patch("psutil.virtual_memory", return_value=FakeMem()):
+    with (
+        patch("psutil.cpu_percent", side_effect=fake_cpu_percent),
+        patch("psutil.virtual_memory", return_value=FakeMem()),
+    ):
         mon._init_nvml = lambda: setattr(mon, "_nvml_ok", False)  # type: ignore[method-assign]
         mon.start()
         time.sleep(0.3)
@@ -95,9 +110,11 @@ def test_start_stop_lifecycle_samples_cpu_mem():
 def test_stop_returns_promptly_via_event():
     """停止信号应让 stop() 在 ~interval 内返回，而非阻塞。"""
     mon = ResourceMonitor(interval=1.0)
-    with patch("psutil.cpu_percent", return_value=5.0), \
-         patch("psutil.virtual_memory") as vm:
-        vm.return_value.used = 1 * 1024 ** 3
+    with (
+        patch("psutil.cpu_percent", return_value=5.0),
+        patch("psutil.virtual_memory") as vm,
+    ):
+        vm.return_value.used = 1 * 1024**3
         mon._init_nvml = lambda: setattr(mon, "_nvml_ok", False)  # type: ignore[method-assign]
         mon.start()
         t0 = time.monotonic()
@@ -108,6 +125,7 @@ def test_stop_returns_promptly_via_event():
 
 
 # ---------- 多卡 NVML 聚合（注入假 pynvml） ----------
+
 
 def test_gpu_aggregation_across_multiple_gpus():
     """假 pynvml 模拟 2 张卡，验证显存/功耗求和、利用率取均、温度取最大。"""
@@ -145,7 +163,7 @@ def test_gpu_aggregation_across_multiple_gpus():
 
         @staticmethod
         def nvmlDeviceGetMemoryInfo(h):
-            return FakeMemInfo(4 * 1024 ** 3 if h == 0 else 6 * 1024 ** 3)
+            return FakeMemInfo(4 * 1024**3 if h == 0 else 6 * 1024**3)
 
         @staticmethod
         def nvmlDeviceGetPowerUsage(h):
@@ -156,11 +174,14 @@ def test_gpu_aggregation_across_multiple_gpus():
             return 60 if h == 0 else 75
 
     import sys
+
     mon = ResourceMonitor(interval=0.05)
-    with patch.dict(sys.modules, {"pynvml": FakePynvml}), \
-         patch("psutil.cpu_percent", return_value=10.0), \
-         patch("psutil.virtual_memory") as vm:
-        vm.return_value.used = 1 * 1024 ** 3
+    with (
+        patch.dict(sys.modules, {"pynvml": FakePynvml}),
+        patch("psutil.cpu_percent", return_value=10.0),
+        patch("psutil.virtual_memory") as vm,
+    ):
+        vm.return_value.used = 1 * 1024**3
         mon.start()
         time.sleep(0.2)
         summary = mon.stop()
@@ -175,8 +196,10 @@ def test_gpu_aggregation_across_multiple_gpus():
 def test_thread_is_daemon():
     mon = ResourceMonitor(interval=0.5)
     mon._init_nvml = lambda: setattr(mon, "_nvml_ok", False)  # type: ignore[method-assign]
-    with patch("psutil.cpu_percent", return_value=1.0), \
-         patch("psutil.virtual_memory") as vm:
+    with (
+        patch("psutil.cpu_percent", return_value=1.0),
+        patch("psutil.virtual_memory") as vm,
+    ):
         vm.return_value.used = 1
         mon.start()
         try:

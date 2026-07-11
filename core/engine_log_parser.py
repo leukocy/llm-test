@@ -57,7 +57,16 @@ def parse_engine_log(text: str) -> dict[str, Any]:
     result: dict[str, Any] = {}
     low = (text or "").lower()
     # 引擎族探测：放宽到特征标记（真实日志可能不含字面 "vllm"）
-    if any(m in low for m in ("vllm", "llm_engine", "model_runner", "# gpu blocks", "kv cache size:")):
+    if any(
+        m in low
+        for m in (
+            "vllm",
+            "llm_engine",
+            "model_runner",
+            "# gpu blocks",
+            "kv cache size:",
+        )
+    ):
         result["engine"] = "vllm"
     elif any(m in low for m in ("sglang", "[sglang]", "mem pool size")):
         result["engine"] = "sglang"
@@ -83,7 +92,11 @@ def parse_engine_log(text: str) -> dict[str, Any]:
                 result[field] = _to_int(last_raw)
 
     # 派生：KV 容量（tokens）。优先显式 tokens，否则 num_gpu_blocks × block_size
-    if result.get("kv_cache_size_tokens") is None and result.get("num_gpu_blocks") and result.get("block_size"):
+    if (
+        result.get("kv_cache_size_tokens") is None
+        and result.get("num_gpu_blocks")
+        and result.get("block_size")
+    ):
         result["kv_cache_size_tokens"] = result["num_gpu_blocks"] * result["block_size"]
         result["kv_cache_tokens_derived"] = True
 

@@ -15,6 +15,7 @@ from core.llm_judge import JudgeCriteria, JudgeRequest, JudgeResult, LLMJudge
 @dataclass
 class EvaluationConfig:
     """评估Configure"""
+
     judge_model: str = "gpt-4o"
     judge_api_base: str = "https://api.openai.com/v1"
     judge_api_key: str = ""
@@ -49,7 +50,7 @@ class OpenEndedEvaluator:
                 JudgeCriteria.HELPFULNESS,
                 JudgeCriteria.RELEVANCE,
                 JudgeCriteria.ACCURACY,
-                JudgeCriteria.COHERENCE
+                JudgeCriteria.COHERENCE,
             ]
 
         # Create裁判
@@ -57,7 +58,7 @@ class OpenEndedEvaluator:
             judge_model=self.config.judge_model,
             judge_api_base=self.config.judge_api_base,
             judge_api_key=self.config.judge_api_key,
-            temperature=self.config.temperature
+            temperature=self.config.temperature,
         )
 
     async def evaluate_answer(
@@ -66,7 +67,7 @@ class OpenEndedEvaluator:
         answer: str,
         reference_answer: str | None = None,
         context: str | None = None,
-        log_callback: Callable | None = None
+        log_callback: Callable | None = None,
     ) -> JudgeResult:
         """
         评估单回答
@@ -87,7 +88,7 @@ class OpenEndedEvaluator:
             reference_answer=reference_answer,
             context=context,
             criteria=self.config.criteria,
-            max_score=self.config.max_score
+            max_score=self.config.max_score,
         )
 
         return await self.judge.evaluate(request, log_callback)
@@ -97,7 +98,7 @@ class OpenEndedEvaluator:
         questions: list[str],
         answers: list[str],
         reference_answers: list[str] | None = None,
-        log_callback: Callable | None = None
+        log_callback: Callable | None = None,
     ) -> list[JudgeResult]:
         """
         批量评估
@@ -124,7 +125,7 @@ class OpenEndedEvaluator:
                 answer=answer,
                 reference_answer=reference_answers[i] if reference_answers else None,
                 criteria=self.config.criteria,
-                max_score=self.config.max_score
+                max_score=self.config.max_score,
             )
             requests.append(request)
 
@@ -134,7 +135,7 @@ class OpenEndedEvaluator:
         self,
         questions: list[str],
         model_responses: dict[str, list[str]],
-        log_callback: Callable | None = None
+        log_callback: Callable | None = None,
     ) -> pd.DataFrame:
         """
         比较not同Model回答质量
@@ -158,16 +159,22 @@ class OpenEndedEvaluator:
             for i, (question, answer) in enumerate(zip(questions, answers, strict=True)):
                 result = await self.evaluate_answer(question, answer, log_callback=log_callback)
 
-                results.append({
-                    "model": model_name,
-                    "question_index": i,
-                    "question": question[:100] + "..." if len(question) > 100 else question,
-                    "answer": answer[:100] + "..." if len(answer) > 100 else answer,
-                    "score": result.score,
-                    "reasoning": result.reasoning[:200] + "..." if len(result.reasoning) > 200 else result.reasoning,
-                    "confidence": result.confidence,
-                    "category_scores": result.category_scores
-                })
+                results.append(
+                    {
+                        "model": model_name,
+                        "question_index": i,
+                        "question": (question[:100] + "..." if len(question) > 100 else question),
+                        "answer": answer[:100] + "..." if len(answer) > 100 else answer,
+                        "score": result.score,
+                        "reasoning": (
+                            result.reasoning[:200] + "..."
+                            if len(result.reasoning) > 200
+                            else result.reasoning
+                        ),
+                        "confidence": result.confidence,
+                        "category_scores": result.category_scores,
+                    }
+                )
 
         df = pd.DataFrame(results)
         return df
@@ -225,10 +232,7 @@ class OpenEndedEvaluator:
 
 # 便捷函数
 async def evaluate_open_ended(
-    question: str,
-    answer: str,
-    judge_api_key: str = "",
-    judge_model: str = "gpt-4o"
+    question: str, answer: str, judge_api_key: str = "", judge_model: str = "gpt-4o"
 ) -> JudgeResult:
     """
     便捷函数：评估开放式问题回答
@@ -242,10 +246,7 @@ async def evaluate_open_ended(
     Returns:
         Evaluation result
     """
-    config = EvaluationConfig(
-        judge_model=judge_model,
-        judge_api_key=judge_api_key
-    )
+    config = EvaluationConfig(judge_model=judge_model, judge_api_key=judge_api_key)
 
     evaluator = OpenEndedEvaluator(config)
 

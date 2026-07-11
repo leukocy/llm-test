@@ -18,6 +18,7 @@ from .smart_answer_parser import AnswerType, ParseResult, SmartAnswerParser, com
 @dataclass
 class EnhancedEvaluationResult:
     """增强型Evaluation result"""
+
     # 基础Result
     is_correct: bool
     predicted_answer: str
@@ -67,7 +68,7 @@ class EnhancedEvaluator:
         platform: str = "unknown",
         enable_reasoning_eval: bool = True,
         enable_llm_fallback: bool = False,
-        llm_fallback_threshold: float = 0.6
+        llm_fallback_threshold: float = 0.6,
     ):
         """
         Initialize增强型Evaluator
@@ -96,7 +97,7 @@ class EnhancedEvaluator:
         response_chunks: list = None,
         full_response: str = None,
         reasoning_content: str = None,
-        llm_func: Callable = None
+        llm_func: Callable = None,
     ) -> EnhancedEvaluationResult:
         """
         执行增强型评估
@@ -134,9 +135,7 @@ class EnhancedEvaluator:
 
         # 3. 比较Answer
         is_correct, similarity = compare_answers(
-            parse_result.normalized_value,
-            correct_answer,
-            answer_type
+            parse_result.normalized_value, correct_answer, answer_type
         )
 
         # 4. 评估推理质量
@@ -147,11 +146,15 @@ class EnhancedEvaluator:
                 reasoning=reasoning,
                 final_answer=parse_result.extracted_answer,
                 correct_answer=correct_answer,
-                is_answer_correct=is_correct
+                is_answer_correct=is_correct,
             )
 
         # 5. 收集Performance Metrics
-        metrics_result = self.metrics.calculate() if hasattr(self.metrics, '_request_start') and self.metrics._request_start else None
+        metrics_result = (
+            self.metrics.calculate()
+            if hasattr(self.metrics, "_request_start") and self.metrics._request_start
+            else None
+        )
 
         return EnhancedEvaluationResult(
             is_correct=is_correct,
@@ -161,7 +164,7 @@ class EnhancedEvaluator:
             reasoning_eval=reasoning_eval,
             metrics=metrics_result,
             reasoning_content=reasoning,
-            final_content=final_content
+            final_content=final_content,
         )
 
     def _parse_stream_response(self, chunks: list) -> ParsedResponse:
@@ -177,7 +180,7 @@ class EnhancedEvaluator:
         correct_answer: str,
         answer_type: AnswerType = AnswerType.NUMBER,
         full_response: str = None,
-        reasoning_content: str = None
+        reasoning_content: str = None,
     ) -> EnhancedEvaluationResult:
         """
         SyncVersion评估（notuse LLM 兜底）
@@ -199,11 +202,7 @@ class EnhancedEvaluator:
         parse_result = self.answer_parser.parse(final_content, answer_type, correct_answer)
 
         # 比较Answer
-        is_correct, _ = compare_answers(
-            parse_result.normalized_value,
-            correct_answer,
-            answer_type
-        )
+        is_correct, _ = compare_answers(parse_result.normalized_value, correct_answer, answer_type)
 
         # 评估推理质量
         reasoning_eval = None
@@ -213,7 +212,7 @@ class EnhancedEvaluator:
                 reasoning=reasoning,
                 final_answer=parse_result.extracted_answer,
                 correct_answer=correct_answer,
-                is_answer_correct=is_correct
+                is_answer_correct=is_correct,
             )
 
         return EnhancedEvaluationResult(
@@ -224,7 +223,7 @@ class EnhancedEvaluator:
             reasoning_eval=reasoning_eval,
             metrics=None,
             reasoning_content=reasoning,
-            final_content=final_content
+            final_content=final_content,
         )
 
     def record_request_start(self):
@@ -245,9 +244,7 @@ class EnhancedEvaluator:
 
 
 def create_enhanced_evaluator(
-    platform: str,
-    enable_reasoning_eval: bool = True,
-    enable_llm_fallback: bool = False
+    platform: str, enable_reasoning_eval: bool = True, enable_llm_fallback: bool = False
 ) -> EnhancedEvaluator:
     """
     Factory函数：Create增强型Evaluator
@@ -263,5 +260,5 @@ def create_enhanced_evaluator(
     return EnhancedEvaluator(
         platform=platform,
         enable_reasoning_eval=enable_reasoning_eval,
-        enable_llm_fallback=enable_llm_fallback
+        enable_llm_fallback=enable_llm_fallback,
     )

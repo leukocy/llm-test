@@ -19,7 +19,7 @@ from typing import Any
 
 # 匹配一行：metric_name 可含冒号；可选 {labels}；末尾数值
 _LINE_RE = re.compile(
-    r'^(?P<name>[a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{(?P<labels>[^}]*)\})?\s+(?P<value>[-+]?nan|[-+]?inf|[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*$'
+    r"^(?P<name>[a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{(?P<labels>[^}]*)\})?\s+(?P<value>[-+]?nan|[-+]?inf|[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*$"
 )
 _LABEL_RE = re.compile(r'(?P<k>[a-zA-Z_][a-zA-Z0-9_]*)="(?P<v>.*?)"')
 

@@ -1,6 +1,7 @@
+import os
+
 import requests
 
-import os
 base_url = os.getenv("API_BASE_URL", "http://localhost:8000/v1")
 model = "DeepSeek-V3.1"
 
@@ -20,7 +21,7 @@ except Exception as e:
 # 2. Check /chat/completions connectivity (404/405/200?)
 try:
     # Just a HEAD or dummy request
-    resp = requests.post(f"{base_url}/chat/completions", json={}, timeout=5) 
+    resp = requests.post(f"{base_url}/chat/completions", json={}, timeout=5)
     print(f"POST /chat/completions (empty json) status: {resp.status_code}")
 except Exception as e:
     print(f"POST /chat/completions failed: {e}")

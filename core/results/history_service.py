@@ -64,7 +64,9 @@ def _infer_model_id(csv_path: Path, base_dir: str | os.PathLike[str]) -> str:
 
 def _infer_test_type(csv_path: Path) -> str:
     filename = csv_path.stem
-    for raw, label in sorted(_KNOWN_TEST_TYPES.items(), key=lambda item: len(item[0]), reverse=True):
+    for raw, label in sorted(
+        _KNOWN_TEST_TYPES.items(), key=lambda item: len(item[0]), reverse=True
+    ):
         if raw in filename:
             return label
 
@@ -125,17 +127,24 @@ def _load_snapshot(
     if not fallback_to_latest_csv:
         return {}
 
-    csv_path = _newest_csv(base_dir)
-    if not csv_path:
+    newest_csv_path = _newest_csv(base_dir)
+    if not newest_csv_path:
         return {}
 
-    return _snapshot_for_csv(csv_path, base_dir)
+    return _snapshot_for_csv(newest_csv_path, base_dir)
 
 
-def _restore_snapshot_to_session(session_state: Any, snapshot: dict[str, Any], csv_path: Path) -> bool:
+def _restore_snapshot_to_session(
+    session_state: Any, snapshot: dict[str, Any], csv_path: Path
+) -> bool:
     try:
         df = pd.read_csv(csv_path)
-    except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError, UnicodeDecodeError):
+    except (
+        OSError,
+        pd.errors.EmptyDataError,
+        pd.errors.ParserError,
+        UnicodeDecodeError,
+    ):
         return False
 
     if df.empty:

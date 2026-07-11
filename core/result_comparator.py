@@ -162,7 +162,7 @@ class ComparisonEntry:
         if best is None or best == 0:
             return None
         return {
-            label: ((value - best) / best * 100) if isinstance(best, (int, float)) else 0
+            label: (((value - best) / best * 100) if isinstance(best, (int, float)) else 0)
             for label, value in self.values.items()
         }
 
@@ -659,7 +659,11 @@ class ResultComparator:
             import matplotlib.pyplot as plt
 
             # Setin文字体
-            plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS"]
+            plt.rcParams["font.sans-serif"] = [
+                "SimHei",
+                "Microsoft YaHei",
+                "Arial Unicode MS",
+            ]
             plt.rcParams["axes.unicode_minus"] = False
 
         except ImportError:
@@ -750,7 +754,8 @@ class ResultComparator:
         if output_path:
             # 确保目录存in
             os.makedirs(
-                os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True
+                os.path.dirname(output_path) if os.path.dirname(output_path) else ".",
+                exist_ok=True,
             )
             plt.savefig(output_path, dpi=dpi, bbox_inches="tight")
             self._log(f"图表Saved: {output_path}")
@@ -781,7 +786,8 @@ class ResultComparator:
 
         # 确保目录存in
         os.makedirs(
-            os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True
+            os.path.dirname(output_path) if os.path.dirname(output_path) else ".",
+            exist_ok=True,
         )
 
         if format == "json":
@@ -878,7 +884,8 @@ def load_comparison(filepath: str) -> ComparisonReport:
         data = json.load(f)
 
     report = ComparisonReport(
-        comparison_id=data.get("comparison_id", ""), created_at=data.get("created_at", "")
+        comparison_id=data.get("comparison_id", ""),
+        created_at=data.get("created_at", ""),
     )
 
     # 重建Result元Data

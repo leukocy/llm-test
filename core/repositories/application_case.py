@@ -17,14 +17,14 @@ from core.repositories.base import BaseRepository
 class ApplicationCaseRepository(BaseRepository[ApplicationCase]):
     """application_cases 表的 Repository。"""
 
-    def __init__(self, database: Database = None):
+    def __init__(self, database: Database | None = None):
         super().__init__(database)
         self._table_name = "application_cases"
 
     def _from_row(self, row: dict[str, Any]) -> ApplicationCase:
         return ApplicationCase.from_row(row)
 
-    def insert(self, case: ApplicationCase) -> int:
+    def insert(self, case: ApplicationCase) -> int | None:
         """插入一条用例（跳过 None，让 DB 默认值/NULL 生效）。返回新记录 id。"""
         data = case.to_dict()
         columns = [k for k, v in data.items() if v is not None and k != "id"]
@@ -35,7 +35,7 @@ class ApplicationCaseRepository(BaseRepository[ApplicationCase]):
         cursor = self.db.execute(sql, tuple(values))
         return cursor.lastrowid
 
-    def upsert(self, case: ApplicationCase) -> int:
+    def upsert(self, case: ApplicationCase) -> int | None:
         """按 case_id 去重写入：存在则更新，否则插入。返回记录 id。"""
         existing = self.find_one_by("case_id = ?", (case.case_id,))
         if existing is None:

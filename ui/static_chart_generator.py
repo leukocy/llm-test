@@ -217,7 +217,13 @@ class StaticChartGenerator:
         # Draw data points using scatter (avoids axis aspect ratio issues)
         # Outer ring: white fill, colored border
         ax.scatter(
-            x_positions, y_data, s=250, c="white", edgecolors=line_color, linewidths=2, zorder=3
+            x_positions,
+            y_data,
+            s=250,
+            c="white",
+            edgecolors=line_color,
+            linewidths=2,
+            zorder=3,
         )
         # Inner ring: solid fill
         ax.scatter(x_positions, y_data, s=60, c=line_color, zorder=4)
@@ -284,7 +290,10 @@ class StaticChartGenerator:
             else:
                 rotation_angle = 25
             plt.setp(
-                ax.get_xticklabels(), rotation=rotation_angle, ha="right", rotation_mode="anchor"
+                ax.get_xticklabels(),
+                rotation=rotation_angle,
+                ha="right",
+                rotation_mode="anchor",
             )
 
         # Use set_xlabel to add X-axis label
@@ -420,7 +429,13 @@ class StaticChartGenerator:
 
         # Outer ring: white fill, colored border
         ax.scatter(
-            x_positions, y_data, s=s_outer, c="white", edgecolors=line_color, linewidths=2, zorder=3
+            x_positions,
+            y_data,
+            s=s_outer,
+            c="white",
+            edgecolors=line_color,
+            linewidths=2,
+            zorder=3,
         )
         # Inner ring: solid fill
         ax.scatter(x_positions, y_data, s=s_inner, c=line_color, zorder=4)
@@ -493,7 +508,10 @@ class StaticChartGenerator:
             else:
                 rotation_angle = 25
             plt.setp(
-                ax.get_xticklabels(), rotation=rotation_angle, ha="right", rotation_mode="anchor"
+                ax.get_xticklabels(),
+                rotation=rotation_angle,
+                ha="right",
+                rotation_mode="anchor",
             )
 
         # Use set_xlabel to add X-axis label, leveraging matplotlib auto-avoidance of tick label overlap
@@ -588,7 +606,14 @@ class StaticChartGenerator:
                 x_pos = right_col_x
                 y_pos = info_y_start - (i - items_per_col) * 0.025
 
-            fig.text(x_pos, y_pos, line, fontsize=FONT_CONFIG["info_size"], ha="left", va="center")
+            fig.text(
+                x_pos,
+                y_pos,
+                line,
+                fontsize=FONT_CONFIG["info_size"],
+                ha="left",
+                va="center",
+            )
 
         # Add prefill speed chart
         # Move chart down, leave space at top
@@ -721,7 +746,14 @@ class StaticChartGenerator:
             line_color = ds.get("color", COLORS["primary"])
             label = ds.get("label", "")
 
-            ax.plot(x_positions, y_dataset, color=line_color, linewidth=2.5, zorder=2, label=label)
+            ax.plot(
+                x_positions,
+                y_dataset,
+                color=line_color,
+                linewidth=2.5,
+                zorder=2,
+                label=label,
+            )
             ax.scatter(
                 x_positions,
                 y_dataset,
@@ -791,7 +823,14 @@ class StaticChartGenerator:
                 else:
                     x = right_col_x
                     y = info_y_start - (i - items_per_col) * 0.025
-                fig.text(x, y, line, fontsize=FONT_CONFIG["info_size"], ha="left", va="center")
+                fig.text(
+                    x,
+                    y,
+                    line,
+                    fontsize=FONT_CONFIG["info_size"],
+                    ha="left",
+                    va="center",
+                )
 
             return 0.75  # After info display, chart start position moves down
 
@@ -864,9 +903,19 @@ class StaticChartGenerator:
         # Sub-chart positions: [left, bottom, width, height]
         positions = [
             [left_margin, chart_top - chart_h, chart_w, chart_h],  # Top-left
-            [left_margin + chart_w + h_gap, chart_top - chart_h, chart_w, chart_h],  # Top-right
+            [
+                left_margin + chart_w + h_gap,
+                chart_top - chart_h,
+                chart_w,
+                chart_h,
+            ],  # Top-right
             [left_margin, bottom_margin, chart_w, chart_h],  # Bottom-left
-            [left_margin + chart_w + h_gap, bottom_margin, chart_w, chart_h],  # Bottom-right
+            [
+                left_margin + chart_w + h_gap,
+                bottom_margin,
+                chart_w,
+                chart_h,
+            ],  # Bottom-right
         ]
 
         for i, chart_cfg in enumerate(charts):

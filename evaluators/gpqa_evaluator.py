@@ -39,7 +39,7 @@ class GPQAEvaluator(BaseEvaluator):
         "biology": "生物学",
         "organic_chemistry": "has机化学",
         "genetics": "遗传学",
-        "quantum_mechanics": "量子力学"
+        "quantum_mechanics": "量子力学",
     }
 
     def __init__(
@@ -48,14 +48,14 @@ class GPQAEvaluator(BaseEvaluator):
         dataset_path: str = "datasets/gpqa",
         num_shots: int = 3,  # GPQA 推荐较少 few-shot
         max_samples: int | None = None,
-        seed: int = 42
+        seed: int = 42,
     ):
         super().__init__(
             dataset_name=dataset_name,
             dataset_path=dataset_path,
             num_shots=num_shots,
             max_samples=max_samples,
-            seed=seed
+            seed=seed,
         )
         random.seed(seed)
 
@@ -74,13 +74,14 @@ class GPQAEvaluator(BaseEvaluator):
         # 1. Try DatasetManager (auto-download)
         try:
             from core.dataset_manager import get_dataset
+
             samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for GPQA: {e}")
 
         # 2. Fallback: manual file loading
         if not samples:
-            level = subset if subset in ['diamond', 'main', 'extended'] else 'diamond'
+            level = subset if subset in ["diamond", "main", "extended"] else "diamond"
             possible_files = [
                 os.path.join(self.dataset_path, f"gpqa_{level}.json"),
                 os.path.join(self.dataset_path, f"{level}.json"),
@@ -92,20 +93,20 @@ class GPQAEvaluator(BaseEvaluator):
             for filepath in possible_files:
                 if os.path.exists(filepath):
                     try:
-                        if filepath.endswith('.jsonl'):
-                            with open(filepath, encoding='utf-8') as f:
+                        if filepath.endswith(".jsonl"):
+                            with open(filepath, encoding="utf-8") as f:
                                 for line in f:
                                     if line.strip():
                                         samples.append(json.loads(line))
                         else:
-                            with open(filepath, encoding='utf-8') as f:
+                            with open(filepath, encoding="utf-8") as f:
                                 data = json.load(f)
                             if isinstance(data, list):
                                 samples = data
-                            elif isinstance(data, dict) and 'data' in data:
-                                samples = data['data']
-                            elif isinstance(data, dict) and 'examples' in data:
-                                samples = data['examples']
+                            elif isinstance(data, dict) and "data" in data:
+                                samples = data["data"]
+                            elif isinstance(data, dict) and "examples" in data:
+                                samples = data["examples"]
                         break
                     except Exception as e:
                         print(f"Load {filepath} 失败: {e}")
@@ -127,12 +128,12 @@ class GPQAEvaluator(BaseEvaluator):
 
         # Set few-shot 示例
         if self.num_shots > 0:
-            self.few_shot_examples = samples[:self.num_shots]
-            samples = samples[self.num_shots:]
+            self.few_shot_examples = samples[: self.num_shots]
+            samples = samples[self.num_shots :]
 
         # 限制TestSample count
         if self.max_samples and len(samples) > self.max_samples:
-            samples = samples[:self.max_samples]
+            samples = samples[: self.max_samples]
 
         self.samples = samples
         return samples
@@ -142,39 +143,43 @@ class GPQAEvaluator(BaseEvaluator):
         normalized = []
         for sample in samples:
             # Processnot同字段名
-            question = sample.get('question', sample.get('Question', ''))
+            question = sample.get("question", sample.get("Question", ""))
 
             # ProcessOptions - 可能is列表or单独字段
-            if 'choices' in sample:
-                choices = sample['choices']
-            elif 'options' in sample:
-                choices = sample['options']
+            if "choices" in sample:
+                choices = sample["choices"]
+            elif "options" in sample:
+                choices = sample["options"]
             else:
                 # GPQA 原始格式可能use A/B/C/D 字段
                 choices = [
-                    sample.get('A', sample.get('Incorrect Answer 1', '')),
-                    sample.get('B', sample.get('Incorrect Answer 2', '')),
-                    sample.get('C', sample.get('Incorrect Answer 3', '')),
-                    sample.get('D', sample.get('Correct Answer', ''))
+                    sample.get("A", sample.get("Incorrect Answer 1", "")),
+                    sample.get("B", sample.get("Incorrect Answer 2", "")),
+                    sample.get("C", sample.get("Incorrect Answer 3", "")),
+                    sample.get("D", sample.get("Correct Answer", "")),
                 ]
 
             # ProcessAnswer
-            answer = sample.get('answer', sample.get('Answer', 0))
+            answer = sample.get("answer", sample.get("Answer", 0))
             if isinstance(answer, str):
-                if answer.upper() in 'ABCD':
-                    answer = ord(answer.upper()) - ord('A')
+                if answer.upper() in "ABCD":
+                    answer = ord(answer.upper()) - ord("A")
                 elif answer.isdigit():
                     answer = int(answer)
 
             # Process领域
-            domain = sample.get('domain', sample.get('Domain', sample.get('subdomain', 'unknown')))
+            domain = sample.get("domain", sample.get("Domain", sample.get("subdomain", "unknown")))
 
-            normalized.append({
-                'question': question,
-                'choices': choices[:4] if len(choices) >= 4 else choices + [''] * (4 - len(choices)),
-                'answer': answer,
-                'domain': domain
-            })
+            normalized.append(
+                {
+                    "question": question,
+                    "choices": (
+                        choices[:4] if len(choices) >= 4 else choices + [""] * (4 - len(choices))
+                    ),
+                    "answer": answer,
+                    "domain": domain,
+                }
+            )
 
         return normalized
 
@@ -187,10 +192,10 @@ class GPQAEvaluator(BaseEvaluator):
                     "Position and velocity",
                     "Position and momentum",
                     "Energy and time",
-                    "Both B and C are correct"
+                    "Both B and C are correct",
                 ],
                 "answer": 3,  # D
-                "domain": "physics"
+                "domain": "physics",
             },
             {
                 "question": "Which of the following best describes the mechanism of CRISPR-Cas9 gene editing?",
@@ -198,21 +203,16 @@ class GPQAEvaluator(BaseEvaluator):
                     "It uses RNA interference to silence genes",
                     "It creates double-strand breaks guided by a complementary RNA sequence",
                     "It uses restriction enzymes to cut at specific sequences",
-                    "It modifies histones to change gene expression"
+                    "It modifies histones to change gene expression",
                 ],
                 "answer": 1,  # B
-                "domain": "biology"
+                "domain": "biology",
             },
             {
                 "question": "In organic chemistry, what is the main product when benzene undergoes Friedel-Crafts acylation with acetyl chloride in the presence of AlCl3?",
-                "choices": [
-                    "Toluene",
-                    "Acetophenone",
-                    "Phenol",
-                    "Anisole"
-                ],
+                "choices": ["Toluene", "Acetophenone", "Phenol", "Anisole"],
                 "answer": 1,  # B
-                "domain": "chemistry"
+                "domain": "chemistry",
             },
             {
                 "question": "The Hardy-Weinberg equilibrium in population genetics assumes which of the following conditions?",
@@ -220,10 +220,10 @@ class GPQAEvaluator(BaseEvaluator):
                     "Natural selection favors heterozygotes",
                     "Random mating, no mutation, no migration, large population, no selection",
                     "Genetic drift is the primary mechanism of evolution",
-                    "Inbreeding increases genetic diversity"
+                    "Inbreeding increases genetic diversity",
                 ],
                 "answer": 1,  # B
-                "domain": "biology"
+                "domain": "biology",
             },
             {
                 "question": "In thermodynamics, the Gibbs free energy change (ΔG) for a spontaneous process at constant temperature and pressure must be:",
@@ -231,38 +231,48 @@ class GPQAEvaluator(BaseEvaluator):
                     "Positive",
                     "Negative",
                     "Zero",
-                    "Equal to the enthalpy change"
+                    "Equal to the enthalpy change",
                 ],
                 "answer": 1,  # B
-                "domain": "chemistry"
-            }
+                "domain": "chemistry",
+            },
         ]
 
     def build_chat_messages(self, sample: dict[str, Any]) -> list[dict[str, str]]:
         """Build structured chat messages with system prompt, few-shot turns, and user question."""
         messages = []
 
-        domain = sample.get('domain', 'science')
-        domain_display = self.DOMAINS.get(domain, domain.replace('_', ' ').title())
+        domain = sample.get("domain", "science")
+        domain_display = self.DOMAINS.get(domain, domain.replace("_", " ").title())
         system_instruction = (
             f"The following are challenging {domain_display} questions that require graduate-level knowledge. "
             "Think carefully and choose the best answer."
         )
         messages.append({"role": "system", "content": system_instruction})
 
-        for ex in self.few_shot_examples[:self.num_shots]:
-            messages.append({"role": "user", "content": self.format_prompt(ex, include_answer=False)})
+        for ex in self.few_shot_examples[: self.num_shots]:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": self.format_prompt(ex, include_answer=False),
+                }
+            )
             messages.append({"role": "assistant", "content": self.get_correct_answer(ex)})
 
-        messages.append({"role": "user", "content": self.format_prompt(sample, include_answer=False)})
+        messages.append(
+            {
+                "role": "user",
+                "content": self.format_prompt(sample, include_answer=False),
+            }
+        )
         return messages
 
     def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """
         Format GPQA 样本is Prompt
         """
-        question = sample.get('question', '')
-        choices = sample.get('choices', [])
+        question = sample.get("question", "")
+        choices = sample.get("choices", [])
 
         # 确保has 4 Options
         while len(choices) < 4:
@@ -277,11 +287,11 @@ class GPQAEvaluator(BaseEvaluator):
         ]
 
         if include_answer:
-            answer_idx = sample.get('answer', 0)
+            answer_idx = sample.get("answer", 0)
             if isinstance(answer_idx, str):
                 answer_letter = answer_idx.upper()
             else:
-                answer_letter = chr(ord('A') + answer_idx)
+                answer_letter = chr(ord("A") + answer_idx)
             prompt_lines.append(f"Answer: {answer_letter}")
         else:
             prompt_lines.append("Answer:")
@@ -292,8 +302,8 @@ class GPQAEvaluator(BaseEvaluator):
         """
         Build完整 GPQA prompt
         """
-        domain = sample.get('domain', 'science')
-        domain_display = self.DOMAINS.get(domain, domain.replace('_', ' ').title())
+        domain = sample.get("domain", "science")
+        domain_display = self.DOMAINS.get(domain, domain.replace("_", " ").title())
 
         # 系统指令 - 强调need专业知识and推理
         instruction = (
@@ -303,7 +313,7 @@ class GPQAEvaluator(BaseEvaluator):
 
         # Few-shot 示例
         examples = []
-        for example in self.few_shot_examples[:self.num_shots]:
+        for example in self.few_shot_examples[: self.num_shots]:
             examples.append(self.format_prompt(example, include_answer=True))
 
         # 待评估问题
@@ -318,7 +328,7 @@ class GPQAEvaluator(BaseEvaluator):
 
     def parse_response(self, response: str) -> str:
         """ParseModel响应，提取Options字母"""
-        return extract_choice_answer(response, ['A', 'B', 'C', 'D'])
+        return extract_choice_answer(response, ["A", "B", "C", "D"])
 
     def check_answer(self, predicted: str, correct: str) -> bool:
         """CheckAnsweris否正确"""
@@ -327,17 +337,17 @@ class GPQAEvaluator(BaseEvaluator):
 
         # if correct is数字，Convertis字母
         if isinstance(correct, int) or (isinstance(correct, str) and correct.isdigit()):
-            correct = chr(ord('A') + int(correct))
+            correct = chr(ord("A") + int(correct))
 
         return predicted.upper() == correct.upper()
 
     def get_sample_category(self, sample: dict[str, Any]) -> str:
         """Get样本领域分类"""
-        return sample.get('domain', 'unknown')
+        return str(sample.get("domain", "unknown"))
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
         """GetCorrect answer (Convertis字母)"""
-        answer = sample.get('answer', 0)
+        answer = sample.get("answer", 0)
         if isinstance(answer, int):
-            return chr(ord('A') + answer)
+            return chr(ord("A") + answer)
         return str(answer).upper()

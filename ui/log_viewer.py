@@ -296,7 +296,11 @@ def _render_log_analytics(logger: BenchmarkLogger, filtered_entries=None):
                 with st.expander(f"❌ Error ({len(errors)})", expanded=True):
                     for e in errors[-5:]:  # last 5
                         # Use st.code to avoid Markdown/HTML parsing errors with raw log text
-                        st.code(e.to_text(include_metrics=False), language=None, wrap_lines=True)
+                        st.code(
+                            e.to_text(include_metrics=False),
+                            language=None,
+                            wrap_lines=True,
+                        )
 
         with col2:
             if stats["warnings"] > 0:
@@ -304,7 +308,11 @@ def _render_log_analytics(logger: BenchmarkLogger, filtered_entries=None):
                 with st.expander(f"⚠️ Warning ({len(warnings)})", expanded=False):
                     for w in warnings[-5:]:
                         # Use st.code to avoid Markdown/HTML parsing errors with raw log text
-                        st.code(w.to_text(include_metrics=False), language=None, wrap_lines=True)
+                        st.code(
+                            w.to_text(include_metrics=False),
+                            language=None,
+                            wrap_lines=True,
+                        )
 
     # Performance Metrics Summary
     metrics_list = [e.metrics for e in logger.entries if e.metrics]

@@ -63,7 +63,7 @@ class EngineMetricsPoller:
         self._cache_config: dict[str, Any] = {}
         self._engine_family: str = "unknown"
         self._preemption_first: float | None = None
-        self._client = None  # httpx.Client，惰性创建
+        self._client: Any = None  # httpx.Client，惰性创建
 
     # ------------------------------------------------------------------
     def start(self) -> None:
@@ -74,6 +74,7 @@ class EngineMetricsPoller:
             return
         try:
             import httpx
+
             self._client = httpx.Client(timeout=self.timeout)
         except Exception as e:  # noqa: BLE001
             logger.debug(f"httpx 不可用，引擎指标采集跳过: {e}")
@@ -165,7 +166,9 @@ class EngineMetricsPoller:
             return None
 
         # num_preemption 是累加 counter：取窗口内增量（需 ≥2 个样本才能算）
-        preemption_vals = [s["num_preemption"] for s in self._samples if s.get("num_preemption") is not None]
+        preemption_vals = [
+            s["num_preemption"] for s in self._samples if s.get("num_preemption") is not None
+        ]
         preemption_total = None
         if len(preemption_vals) >= 2:
             preemption_total = preemption_vals[-1] - preemption_vals[0]

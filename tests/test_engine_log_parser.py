@@ -6,7 +6,6 @@ import pytest
 
 from core.engine_log_parser import parse_engine_log, parse_engine_log_file
 
-
 VLLM_LOG = """INFO 06-13 12:00:01 model_runner.py:123] Loading model took 15.23 seconds
 INFO 06-13 12:00:02 weight_loader.py:45] Loading weights took 32.45 GiB and 12.34 seconds
 INFO 06-13 12:00:03 llm_engine.py:200] # GPU blocks: 91,750

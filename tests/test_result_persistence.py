@@ -6,7 +6,12 @@ import pandas as pd
 def test_save_and_restore_last_result_snapshot(tmp_path):
     from core.result_persistence import restore_last_results_to_session, save_last_result_snapshot
 
-    csv_path = tmp_path / "raw_data" / "model-a" / "benchmark_results_model-a_Prefill_Stress_Test_20260503_120000.csv"
+    csv_path = (
+        tmp_path
+        / "raw_data"
+        / "model-a"
+        / "benchmark_results_model-a_Prefill_Stress_Test_20260503_120000.csv"
+    )
     csv_path.parent.mkdir(parents=True)
     pd.DataFrame({"session_id": ["s1"], "ttft": [1.23], "tps": [45.6]}).to_csv(
         csv_path, index=False
@@ -43,8 +48,15 @@ def test_save_and_restore_last_result_snapshot(tmp_path):
 def test_restore_latest_csv_when_last_snapshot_is_missing(tmp_path):
     from core.result_persistence import restore_last_results_to_session
 
-    old_csv = tmp_path / "raw_data" / "old" / "benchmark_results_old_Concurrency_Test_20260503_110000.csv"
-    new_csv = tmp_path / "raw_data" / "model-b" / "benchmark_results_model-b_Long_Context_Test_20260503_120000.csv"
+    old_csv = (
+        tmp_path / "raw_data" / "old" / "benchmark_results_old_Concurrency_Test_20260503_110000.csv"
+    )
+    new_csv = (
+        tmp_path
+        / "raw_data"
+        / "model-b"
+        / "benchmark_results_model-b_Long_Context_Test_20260503_120000.csv"
+    )
     old_csv.parent.mkdir(parents=True)
     new_csv.parent.mkdir(parents=True)
     pd.DataFrame({"session_id": ["old"], "ttft": [9.9]}).to_csv(old_csv, index=False)
@@ -77,8 +89,14 @@ def test_list_and_restore_specific_saved_result_with_metadata(tmp_path):
     )
 
     base_dir = tmp_path / "raw_data"
-    first_csv = base_dir / "model-a" / "benchmark_results_model-a_Concurrency_Test_20260503_120000.csv"
-    second_csv = base_dir / "model-b" / "benchmark_results_model-b_Segmented_Context_Test_20260503_130000.csv"
+    first_csv = (
+        base_dir / "model-a" / "benchmark_results_model-a_Concurrency_Test_20260503_120000.csv"
+    )
+    second_csv = (
+        base_dir
+        / "model-b"
+        / "benchmark_results_model-b_Segmented_Context_Test_20260503_130000.csv"
+    )
     first_csv.parent.mkdir(parents=True)
     second_csv.parent.mkdir(parents=True)
     pd.DataFrame({"session_id": ["a"], "ttft": [1.0]}).to_csv(first_csv, index=False)
@@ -121,8 +139,12 @@ def test_delete_saved_result_removes_csv_metadata_and_repairs_last_pointer(tmp_p
     )
 
     base_dir = tmp_path / "raw_data"
-    first_csv = base_dir / "model-a" / "benchmark_results_model-a_Concurrency_Test_20260503_120000.csv"
-    second_csv = base_dir / "model-b" / "benchmark_results_model-b_Prefill_Stress_Test_20260503_130000.csv"
+    first_csv = (
+        base_dir / "model-a" / "benchmark_results_model-a_Concurrency_Test_20260503_120000.csv"
+    )
+    second_csv = (
+        base_dir / "model-b" / "benchmark_results_model-b_Prefill_Stress_Test_20260503_130000.csv"
+    )
     first_csv.parent.mkdir(parents=True)
     second_csv.parent.mkdir(parents=True)
     pd.DataFrame({"session_id": ["a"], "ttft": [1.0]}).to_csv(first_csv, index=False)
@@ -163,7 +185,9 @@ def test_delete_last_remaining_saved_result_removes_last_pointer(tmp_path):
     from core.result_persistence import delete_saved_result, restore_last_results_to_session
 
     base_dir = tmp_path / "raw_data"
-    csv_path = base_dir / "model-a" / "benchmark_results_model-a_Concurrency_Test_20260503_120000.csv"
+    csv_path = (
+        base_dir / "model-a" / "benchmark_results_model-a_Concurrency_Test_20260503_120000.csv"
+    )
     csv_path.parent.mkdir(parents=True)
     pd.DataFrame({"session_id": ["a"], "ttft": [1.0]}).to_csv(csv_path, index=False)
 

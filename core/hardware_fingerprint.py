@@ -74,7 +74,9 @@ _GPU_BANDWIDTH_GBPS: list[tuple[str, float]] = [
 ]
 
 
-def _run_cmd(args: list[str], timeout: float = 8.0, env: dict[str, str] | None = None) -> str | None:
+def _run_cmd(
+    args: list[str], timeout: float = 8.0, env: dict[str, str] | None = None
+) -> str | None:
     """运行外部命令，返回 stdout 文本；失败/超时返回 None（绝不抛异常）。
     env: 追加/覆盖的环境变量（与 os.environ 合并），如 {"LC_ALL": "C"} 强制英文 locale。
     """
@@ -126,12 +128,13 @@ def _query_gpus() -> list[dict[str, Any]]:
                pcie_gen, pcie_width}。
     """
     gpus: list[dict[str, Any]] = []
-    out = _run_cmd([
-        "nvidia-smi",
-        "--query-gpu=index,name,memory.total,"
-        "pcie.link.gen.max,pcie.link.width.max",
-        "--format=csv,noheader,nounits",
-    ])
+    out = _run_cmd(
+        [
+            "nvidia-smi",
+            "--query-gpu=index,name,memory.total,pcie.link.gen.max,pcie.link.width.max",
+            "--format=csv,noheader,nounits",
+        ]
+    )
     if out:
         for line in out.strip().splitlines():
             line = line.strip()
@@ -155,34 +158,39 @@ def _query_gpus() -> list[dict[str, Any]]:
             nominal = _lookup_gpu_bandwidth(name, vram_gb)
             if nominal is None:
                 nominal = _pcie_bandwidth_gbps(pcie_gen, pcie_width)
-            gpus.append({
-                "index": index,
-                "name": name,
-                "vram_gb": vram_gb,
-                "memory_type": memory_type,
-                "nominal_bandwidth_gbps": nominal,
-                "pcie_gen": pcie_gen,
-                "pcie_width": pcie_width,
-            })
+            gpus.append(
+                {
+                    "index": index,
+                    "name": name,
+                    "vram_gb": vram_gb,
+                    "memory_type": memory_type,
+                    "nominal_bandwidth_gbps": nominal,
+                    "pcie_gen": pcie_gen,
+                    "pcie_width": pcie_width,
+                }
+            )
 
     if not gpus:
         # torch.cuda 兜底（至少拿到名字与显存）
         try:
             import torch
+
             if torch.cuda.is_available():
                 for i in range(torch.cuda.device_count()):
                     props = torch.cuda.get_device_properties(i)
-                    vram_gb = round(props.total_memory / 1024 ** 3, 2)
+                    vram_gb = round(props.total_memory / 1024**3, 2)
                     name = props.name
-                    gpus.append({
-                        "index": i,
-                        "name": name,
-                        "vram_gb": vram_gb,
-                        "memory_type": None,
-                        "nominal_bandwidth_gbps": _lookup_gpu_bandwidth(name, vram_gb),
-                        "pcie_gen": None,
-                        "pcie_width": None,
-                    })
+                    gpus.append(
+                        {
+                            "index": i,
+                            "name": name,
+                            "vram_gb": vram_gb,
+                            "memory_type": None,
+                            "nominal_bandwidth_gbps": _lookup_gpu_bandwidth(name, vram_gb),
+                            "pcie_gen": None,
+                            "pcie_width": None,
+                        }
+                    )
         except Exception:  # noqa: BLE001  采集兜底，任何失败都不应中断
             pass
 
@@ -196,9 +204,9 @@ def _query_cuda_versions() -> dict[str, str | None]:
     # NVML（nvidia-ml-py / pynvml 接口一致）
     try:
         try:
-            import pynvml  # type: ignore
+            import pynvml
         except ImportError:
-            from nvidia_ml_py import pynvml  # type: ignore  # noqa: F401
+            from nvidia_ml_py import pynvml  # noqa: F401
         pynvml.nvmlInit()
         try:
             result["driver"] = pynvml.nvmlSystemGetDriverVersion()
@@ -312,7 +320,9 @@ def _platform_cpu_model() -> str | None:
 def _psutil_cpu_count(logical: bool) -> int | None:
     try:
         import psutil
-        return psutil.cpu_count(logical=logical)
+
+        count = psutil.cpu_count(logical=logical)
+        return int(count) if count is not None else None
     except Exception:  # noqa: BLE001
         return None
 
@@ -331,9 +341,10 @@ def _query_memory_details() -> dict[str, Any]:
     # psutil：总量 / 可用（总能拿到）
     try:
         import psutil
+
         mem = psutil.virtual_memory()
-        info["total_gb"] = round(mem.total / 1024 ** 3, 2)
-        info["available_gb"] = round(mem.available / 1024 ** 3, 2)
+        info["total_gb"] = round(mem.total / 1024**3, 2)
+        info["available_gb"] = round(mem.available / 1024**3, 2)
     except Exception:  # noqa: BLE001
         pass
 
@@ -348,10 +359,11 @@ def _query_memory_details() -> dict[str, Any]:
             # 故整块匹配（不能只看第一行）。
             dimms = [b for b in out.split("\n\n") if "Memory Device" in b]
             populated = [
-                d for d in dimms
+                d
+                for d in dimms
                 if "Size:" in d and "No Module" not in d and "No Module Installed" not in d
             ]
-            types = {_dmidecode_field(d, "Type:") for d in populated} - {None, "Unknown"}
+            types = {t for d in populated if (t := _dmidecode_field(d, "Type:")) and t != "Unknown"}
             speeds = {_dmidecode_field(d, "Speed:") for d in populated} - {None}
             if types:
                 info["type"] = "/".join(sorted(types))
@@ -366,9 +378,7 @@ def _query_memory_details() -> dict[str, Any]:
                         info["speed_mt_s"] = mt
                         break
             if "Error Correction" in out:
-                ecc_line = next(
-                    (l for l in out.splitlines() if "Error Correction" in l), ""
-                )
+                ecc_line = next((l for l in out.splitlines() if "Error Correction" in l), "")
                 info["ecc"] = ecc_line.split(":", 1)[-1].strip() or None
 
     return info
@@ -410,9 +420,7 @@ def compute_machine_id(fingerprint: dict[str, Any]) -> str:
     只纳入硬件本体属性，忽略可用内存、pstate、时间戳等易变值。
     """
     gpus = fingerprint.get("gpus") or []
-    gpu_sig = sorted(
-        f"{g.get('name')}|{g.get('vram_gb')}" for g in gpus if g.get("name")
-    )
+    gpu_sig = sorted(f"{g.get('name')}|{g.get('vram_gb')}" for g in gpus if g.get("name"))
     cpu = fingerprint.get("cpu") or {}
     mem = fingerprint.get("memory") or {}
     stable = {

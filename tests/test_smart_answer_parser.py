@@ -224,7 +224,7 @@ class TestParseResult:
             confidence=0.95,
             method="test",
             normalized_value=42,
-            raw_match="42"
+            raw_match="42",
         )
         assert result.extracted_answer == "42"
         assert result.confidence == 0.95
@@ -238,6 +238,6 @@ class TestParseResult:
             method="failed",
             normalized_value=None,
             raw_match="",
-            error="No answer found"
+            error="No answer found",
         )
         assert result.error == "No answer found"

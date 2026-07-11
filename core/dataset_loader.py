@@ -43,9 +43,7 @@ class DatasetLoader:
             # 跨盘符等无法比较的情况，一律拒绝
             inside = False
         if not inside:
-            raise ValueError(
-                "Path traversal detected: resolved path is outside datasets directory"
-            )
+            raise ValueError("Path traversal detected: resolved path is outside datasets directory")
 
         return full_path
 
@@ -56,15 +54,17 @@ class DatasetLoader:
             return []
 
         for f in os.listdir(self.datasets_dir):
-            if f.endswith(('.csv', '.json')):
+            if f.endswith((".csv", ".json")):
                 path = self._get_file_path(f)
                 try:
                     size_bytes = os.path.getsize(path)
-                    datasets.append({
-                        "filename": f,
-                        "size": f"{size_bytes / 1024:.1f} KB",
-                        "type": f.split('.')[-1].upper()
-                    })
+                    datasets.append(
+                        {
+                            "filename": f,
+                            "size": f"{size_bytes / 1024:.1f} KB",
+                            "type": f.split(".")[-1].upper(),
+                        }
+                    )
                 except OSError:
                     continue
         return datasets
@@ -74,7 +74,7 @@ class DatasetLoader:
         Validate that the dataset has the required structure.
         Must contain a 'prompt' column.
         """
-        return 'prompt' in df.columns
+        return "prompt" in df.columns
 
     def save_dataset(self, file_obj, filename: str) -> Union[str, None]:
         """
@@ -83,9 +83,9 @@ class DatasetLoader:
         """
         try:
             # Determine file type and load into DataFrame for validation
-            if filename.endswith('.csv'):
+            if filename.endswith(".csv"):
                 df = pd.read_csv(file_obj)
-            elif filename.endswith('.json'):
+            elif filename.endswith(".json"):
                 df = pd.read_json(file_obj)
             else:
                 return "Unsupported file format. Please upload .csv or .json."
@@ -96,12 +96,12 @@ class DatasetLoader:
 
             # Save to disk
             save_path = self._get_file_path(filename)
-            if filename.endswith('.csv'):
+            if filename.endswith(".csv"):
                 df.to_csv(save_path, index=False)
-            elif filename.endswith('.json'):
-                df.to_json(save_path, orient='records', indent=2)
+            elif filename.endswith(".json"):
+                df.to_json(save_path, orient="records", indent=2)
 
-            return None # Success
+            return None  # Success
 
         except Exception as e:
             return f"Error saving dataset: {str(e)}"
@@ -113,9 +113,9 @@ class DatasetLoader:
             return None
 
         try:
-            if filename.endswith('.csv'):
+            if filename.endswith(".csv"):
                 return pd.read_csv(path)
-            elif filename.endswith('.json'):
+            elif filename.endswith(".json"):
                 return pd.read_json(path)
         except Exception as e:
             print(f"Error loading dataset {filename}: {e}")

@@ -43,6 +43,7 @@ from typing import Any
 @dataclass
 class CacheEntry:
     """缓存条目"""
+
     prompt_hash: str
     model_id: str
     response: str
@@ -59,6 +60,7 @@ class CacheEntry:
 @dataclass
 class CacheStats:
     """缓存Statistics"""
+
     total_entries: int = 0
     total_hits: int = 0
     total_misses: int = 0
@@ -89,7 +91,7 @@ class ResponseCache:
         cache_dir: str = "cache",
         max_size_mb: int = 500,
         default_ttl_seconds: int = 86400 * 7,  # 7天
-        enable_compression: bool = True
+        enable_compression: bool = True,
     ):
         """
         Initialize缓存
@@ -123,7 +125,8 @@ class ResponseCache:
     def _init_db(self):
         """InitializeDatabase表"""
         with sqlite3.connect(str(self.db_path)) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS cache (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     prompt_hash TEXT NOT NULL,
@@ -136,21 +139,27 @@ class ResponseCache:
                     size_bytes INTEGER,
                     UNIQUE(prompt_hash, model_id)
                 )
-            """)
-            conn.execute("""
+            """
+            )
+            conn.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_prompt_model
                 ON cache(prompt_hash, model_id)
-            """)
-            conn.execute("""
+            """
+            )
+            conn.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_timestamp
                 ON cache(timestamp)
-            """)
+            """
+            )
             conn.commit()
 
     def _load_stats(self):
         """Load缓存Statistics"""
         with sqlite3.connect(str(self.db_path)) as conn:
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 SELECT
                     COUNT(*) as total,
                     SUM(hit_count) as hits,
@@ -158,7 +167,8 @@ class ResponseCache:
                     MIN(timestamp) as oldest,
                     MAX(timestamp) as newest
                 FROM cache
-            """)
+            """
+            )
             row = cursor.fetchone()
             if row:
                 self._stats.total_entries = row[0] or 0
@@ -170,29 +180,24 @@ class ResponseCache:
     def _compute_hash(self, prompt: str, model_id: str = "") -> str:
         """Calculate prompt 哈希值"""
         content = f"{model_id}:{prompt}"
-        return hashlib.sha256(content.encode('utf-8')).hexdigest()[:32]
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()[:32]
 
     def _compress(self, data: str) -> bytes:
         """压缩Data"""
         if self.enable_compression:
-            return gzip.compress(data.encode('utf-8'))
-        return data.encode('utf-8')
+            return gzip.compress(data.encode("utf-8"))
+        return data.encode("utf-8")
 
     def _decompress(self, data: bytes) -> str:
         """解压Data"""
         if self.enable_compression:
             try:
-                return gzip.decompress(data).decode('utf-8')
-            except:
-                return data.decode('utf-8')
-        return data.decode('utf-8')
+                return gzip.decompress(data).decode("utf-8")
+            except Exception:
+                return data.decode("utf-8")
+        return data.decode("utf-8")
 
-    def get(
-        self,
-        prompt: str,
-        model_id: str = "",
-        include_expired: bool = False
-    ) -> str | None:
+    def get(self, prompt: str, model_id: str = "", include_expired: bool = False) -> str | None:
         """
         Get缓存响应
 
@@ -207,11 +212,14 @@ class ResponseCache:
         prompt_hash = self._compute_hash(prompt, model_id)
 
         with self._lock, sqlite3.connect(str(self.db_path)) as conn:
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                     SELECT response, timestamp, ttl_seconds
                     FROM cache
                     WHERE prompt_hash = ? AND model_id = ?
-                """, (prompt_hash, model_id))
+                """,
+                (prompt_hash, model_id),
+            )
 
             row = cursor.fetchone()
             if row:
@@ -223,11 +231,14 @@ class ResponseCache:
                     return None
 
                 # Update命in计数
-                conn.execute("""
+                conn.execute(
+                    """
                         UPDATE cache
                         SET hit_count = hit_count + 1
                         WHERE prompt_hash = ? AND model_id = ?
-                    """, (prompt_hash, model_id))
+                    """,
+                    (prompt_hash, model_id),
+                )
                 conn.commit()
 
                 self._stats.total_hits += 1
@@ -242,7 +253,7 @@ class ResponseCache:
         response: str,
         model_id: str = "",
         ttl_seconds: int | None = None,
-        metadata: dict[str, Any] | None = None
+        metadata: dict[str, Any] | None = None,
     ) -> bool:
         """
         Set缓存
@@ -268,14 +279,22 @@ class ResponseCache:
 
             with sqlite3.connect(str(self.db_path)) as conn:
                 try:
-                    conn.execute("""
+                    conn.execute(
+                        """
                         INSERT OR REPLACE INTO cache
                         (prompt_hash, model_id, response, timestamp, ttl_seconds, metadata, size_bytes)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        prompt_hash, model_id, response_data,
-                        time.time(), ttl, metadata_json, len(response_data)
-                    ))
+                    """,
+                        (
+                            prompt_hash,
+                            model_id,
+                            response_data,
+                            time.time(),
+                            ttl,
+                            metadata_json,
+                            len(response_data),
+                        ),
+                    )
                     conn.commit()
 
                     self._stats.total_entries += 1
@@ -295,18 +314,23 @@ class ResponseCache:
 
         with sqlite3.connect(str(self.db_path)) as conn:
             # Delete过期条目
-            conn.execute("""
+            conn.execute(
+                """
                 DELETE FROM cache
                 WHERE timestamp + ttl_seconds < ?
-            """, (time.time(),))
+            """,
+                (time.time(),),
+            )
 
             # if还not够，按 LRU Delete
             while self._stats.total_bytes > target_bytes:
-                cursor = conn.execute("""
+                cursor = conn.execute(
+                    """
                     SELECT id, size_bytes FROM cache
                     ORDER BY hit_count ASC, timestamp ASC
                     LIMIT 100
-                """)
+                """
+                )
                 rows = cursor.fetchall()
                 if not rows:
                     break
@@ -323,16 +347,22 @@ class ResponseCache:
         prompt_hash = self._compute_hash(prompt, model_id)
 
         with self._lock, sqlite3.connect(str(self.db_path)) as conn:
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                     SELECT size_bytes FROM cache
                     WHERE prompt_hash = ? AND model_id = ?
-                """, (prompt_hash, model_id))
+                """,
+                (prompt_hash, model_id),
+            )
             row = cursor.fetchone()
             if row:
-                conn.execute("""
+                conn.execute(
+                    """
                         DELETE FROM cache
                         WHERE prompt_hash = ? AND model_id = ?
-                    """, (prompt_hash, model_id))
+                    """,
+                    (prompt_hash, model_id),
+                )
                 conn.commit()
                 self._stats.total_entries -= 1
                 self._stats.total_bytes -= row[0]
@@ -359,17 +389,23 @@ class ResponseCache:
     def cleanup_expired(self) -> int:
         """Cleanup过期条目，ReturnDelete数量"""
         with self._lock, sqlite3.connect(str(self.db_path)) as conn:
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                     SELECT COUNT(*) FROM cache
                     WHERE timestamp + ttl_seconds < ?
-                """, (time.time(),))
-            count = cursor.fetchone()[0]
+                """,
+                (time.time(),),
+            )
+            count = int(cursor.fetchone()[0])
 
             if count > 0:
-                conn.execute("""
+                conn.execute(
+                    """
                         DELETE FROM cache
                         WHERE timestamp + ttl_seconds < ?
-                    """, (time.time(),))
+                    """,
+                    (time.time(),),
+                )
                 conn.commit()
                 self._load_stats()
 
@@ -386,7 +422,7 @@ class ResponseCache:
         self,
         state: dict[str, Any],
         checkpoint_name: str,
-        metadata: dict[str, Any] | None = None
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """
         Save评估Check点
@@ -403,12 +439,12 @@ class ResponseCache:
             "state": state,
             "metadata": metadata or {},
             "timestamp": time.time(),
-            "created_at": datetime.now().isoformat()
+            "created_at": datetime.now().isoformat(),
         }
 
         filepath = self.checkpoint_dir / f"{checkpoint_name}.pkl.gz"
 
-        with gzip.open(filepath, 'wb') as f:
+        with gzip.open(filepath, "wb") as f:
             pickle.dump(checkpoint_data, f)
 
         return str(filepath)
@@ -429,8 +465,9 @@ class ResponseCache:
             return None
 
         try:
-            with gzip.open(filepath, 'rb') as f:
-                return pickle.load(f)
+            with gzip.open(filepath, "rb") as f:
+                data = pickle.load(f)
+            return data if isinstance(data, dict) else None
         except Exception as e:
             print(f"LoadCheck点失败: {e}")
             return None
@@ -441,16 +478,18 @@ class ResponseCache:
 
         for filepath in self.checkpoint_dir.glob("*.pkl.gz"):
             try:
-                with gzip.open(filepath, 'rb') as f:
+                with gzip.open(filepath, "rb") as f:
                     data = pickle.load(f)
-                    checkpoints.append({
-                        "name": filepath.stem.replace('.pkl', ''),
-                        "path": str(filepath),
-                        "timestamp": data.get("timestamp"),
-                        "created_at": data.get("created_at"),
-                        "metadata": data.get("metadata", {})
-                    })
-            except:
+                    checkpoints.append(
+                        {
+                            "name": filepath.stem.replace(".pkl", ""),
+                            "path": str(filepath),
+                            "timestamp": data.get("timestamp"),
+                            "created_at": data.get("created_at"),
+                            "metadata": data.get("metadata", {}),
+                        }
+                    )
+            except Exception:
                 pass
 
         return sorted(checkpoints, key=lambda x: x.get("timestamp", 0), reverse=True)
@@ -469,19 +508,11 @@ class ResponseCache:
 _global_cache: ResponseCache | None = None
 
 
-def get_cache(
-    cache_dir: str = "cache",
-    max_size_mb: int = 500,
-    **kwargs
-) -> ResponseCache:
+def get_cache(cache_dir: str = "cache", max_size_mb: int = 500, **kwargs) -> ResponseCache:
     """Get全局缓存实例"""
     global _global_cache
     if _global_cache is None:
-        _global_cache = ResponseCache(
-            cache_dir=cache_dir,
-            max_size_mb=max_size_mb,
-            **kwargs
-        )
+        _global_cache = ResponseCache(cache_dir=cache_dir, max_size_mb=max_size_mb, **kwargs)
     return _global_cache
 
 
@@ -493,7 +524,8 @@ def reset_cache():
 
 # ========== Decorator ==========
 
-def cached_response(model_id: str = "", ttl_seconds: int = None):
+
+def cached_response(model_id: str = "", ttl_seconds: int | None = None):
     """
     缓存Decorator
 
@@ -502,6 +534,7 @@ def cached_response(model_id: str = "", ttl_seconds: int = None):
         async def get_completion(prompt: str) -> str:
             return await api.complete(prompt)
     """
+
     def decorator(func):
         async def wrapper(prompt: str, *args, **kwargs):
             cache = get_cache()
@@ -520,4 +553,5 @@ def cached_response(model_id: str = "", ttl_seconds: int = None):
             return response
 
         return wrapper
+
     return decorator

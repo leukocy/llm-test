@@ -12,6 +12,7 @@ vLLM/SGLang/llama.cpp/ktransformers/fastllm 日志格式与参数名各不相同
 - 新增引擎:写个 Adapter 子类 + 进 _ADAPTERS 注册表即可,不动通用层。
 - 全防御:docker/日志/API 不可用优雅降级,永不抛异常。
 """
+
 from __future__ import annotations
 
 import re
@@ -22,7 +23,7 @@ from typing import Any
 try:
     import httpx
 except ImportError:  # pragma: no cover
-    httpx = None  # type: ignore
+    httpx = None
 
 
 def _run(args: list[str], timeout: float = 12.0) -> str | None:
@@ -61,22 +62,25 @@ def find_vllm_container(api_base_url: str, hint: str | None = None) -> str | Non
 # ---------------------------------------------------------------------------
 class EngineCaptureAdapter:
     """引擎采集适配器基类。子类实现 detect/parse_logs/normalize_params。"""
+
     name = "base"
     image_keywords: tuple[str, ...] = ()
     cmd_keywords: tuple[str, ...] = ()
 
     @classmethod
-    def detect(cls, image: str, launch_cmd: str, api_model: dict | None) -> bool:
+    def detect(cls, image: str, launch_cmd: str, api_model: dict | None) -> bool:  # noqa: ARG003
         s = f"{image} {launch_cmd}".lower()
         return any(k in s for k in cls.image_keywords) or any(k in s for k in cls.cmd_keywords)
 
     @classmethod
-    def parse_logs(cls, logs: str) -> dict[str, Any]:
+    def parse_logs(cls, logs: str) -> dict[str, Any]:  # noqa: ARG003
         """解析引擎日志 → {runtime{}, args{}}(引擎特有)。默认空。"""
         return {}
 
     @classmethod
-    def normalize_params(cls, launch_cmd: str, parsed: dict[str, Any]) -> dict[str, Any]:
+    def normalize_params(
+        cls, launch_cmd: str, parsed: dict[str, Any]
+    ) -> dict[str, Any]:  # noqa: ARG003
         """把引擎参数归一化到标准 schema:parallel/schedule/runtime。默认空。"""
         return {}
 
@@ -99,24 +103,40 @@ class VLLMAdapter(EngineCaptureAdapter):
         if matches:
             raw = matches[-1]
             args: dict[str, Any] = {}
-            for key in ("tensor_parallel_size", "decode_context_parallel_size", "enable_expert_parallel",
-                        "gpu_memory_utilization", "max_num_seqs", "enable_prefix_caching",
-                        "max_model_len", "pipeline_parallel_size", "data_parallel_size"):
+            for key in (
+                "tensor_parallel_size",
+                "decode_context_parallel_size",
+                "enable_expert_parallel",
+                "gpu_memory_utilization",
+                "max_num_seqs",
+                "enable_prefix_caching",
+                "max_model_len",
+                "pipeline_parallel_size",
+                "data_parallel_size",
+            ):
                 m = re.search(rf"'{key}':\s*([^,}}]+)", raw)
                 if m:
                     v = m.group(1).strip().strip("'\"")
                     try:
-                        args[key] = int(v) if re.fullmatch(r"-?\d+", v) else (
-                            float(v) if re.fullmatch(r"-?\d+\.\d+", v) else v)
+                        args[key] = (
+                            int(v)
+                            if re.fullmatch(r"-?\d+", v)
+                            else (float(v) if re.fullmatch(r"-?\d+\.\d+", v) else v)
+                        )
                     except ValueError:
                         args[key] = v
             out["args"] = args
         # runtime 分解
         runtime: dict[str, Any] = {}
-        for k, pat in (("weight_load_s", r"Loading weights took ([\d.]+) seconds"),
-                       ("model_load_s", r"Model loading took [0-9.]+ GiB memory and ([\d.]+) seconds"),
-                       ("init_engine_s", r"init engine .* took ([\d.]+) s"),
-                       ("graph_capture_s", r"Graph capturing finished in (\d+) secs")):
+        for k, pat in (
+            ("weight_load_s", r"Loading weights took ([\d.]+) seconds"),
+            (
+                "model_load_s",
+                r"Model loading took [0-9.]+ GiB memory and ([\d.]+) seconds",
+            ),
+            ("init_engine_s", r"init engine .* took ([\d.]+) s"),
+            ("graph_capture_s", r"Graph capturing finished in (\d+) secs"),
+        ):
             v = _last(logs, pat)
             if v:
                 runtime[k] = float(v) if "." in v else int(v)
@@ -124,21 +144,38 @@ class VLLMAdapter(EngineCaptureAdapter):
         if kv:
             runtime["kv_cache_tokens"] = int(kv.replace(",", ""))
         if runtime:
-            wl, ie, gc = runtime.get("weight_load_s", 0), runtime.get("init_engine_s", 0), runtime.get("graph_capture_s", 0)
+            wl, ie, gc = (
+                runtime.get("weight_load_s", 0),
+                runtime.get("init_engine_s", 0),
+                runtime.get("graph_capture_s", 0),
+            )
             if wl or ie or gc:
                 runtime["cold_start_s_est"] = round(wl + ie + gc, 1)
             out["runtime"] = runtime
         return out
 
     @classmethod
-    def normalize_params(cls, launch_cmd: str, parsed: dict[str, Any]) -> dict[str, Any]:
+    def normalize_params(
+        cls, launch_cmd: str, parsed: dict[str, Any]
+    ) -> dict[str, Any]:  # noqa: ARG003
         args = parsed.get("args") or {}
         out: dict[str, Any] = {}
         if args:
-            out["schedule"] = {k: args[k] for k in ("max_num_seqs", "gpu_memory_utilization",
-                                "enable_prefix_caching", "max_model_len") if k in args}
-            out["parallel"] = {"tp": args.get("tensor_parallel_size"), "dcp": args.get("decode_context_parallel_size"),
-                               "ep": args.get("enable_expert_parallel")}
+            out["schedule"] = {
+                k: args[k]
+                for k in (
+                    "max_num_seqs",
+                    "gpu_memory_utilization",
+                    "enable_prefix_caching",
+                    "max_model_len",
+                )
+                if k in args
+            }
+            out["parallel"] = {
+                "tp": args.get("tensor_parallel_size"),
+                "dcp": args.get("decode_context_parallel_size"),
+                "ep": args.get("enable_expert_parallel"),
+            }
         if parsed.get("runtime"):
             out["runtime"] = parsed["runtime"]
         return out
@@ -153,8 +190,10 @@ class SGLangAdapter(EngineCaptureAdapter):
     def parse_logs(cls, logs: str) -> dict[str, Any]:
         out: dict[str, Any] = {}
         runtime: dict[str, Any] = {}
-        for k, pat in (("init_s", r"model load took ([\d.]+) s"),
-                       ("graph_capture_s", r"Capture cudagraph.*?(\d+\.?\d*)\s*s")):
+        for k, pat in (
+            ("init_s", r"model load took ([\d.]+) s"),
+            ("graph_capture_s", r"Capture cudagraph.*?(\d+\.?\d*)\s*s"),
+        ):
             v = _last(logs, pat)
             if v:
                 runtime[k] = float(v) if "." in v else int(v)
@@ -171,12 +210,15 @@ class SGLangAdapter(EngineCaptureAdapter):
         def flag(name: str) -> str | None:
             m = re.search(rf"--{name}[ =](\S+)", launch_cmd)
             return m.group(1) if m else None
+
         out: dict[str, Any] = {}
         sched: dict[str, Any] = {}
-        if flag("max-running-requests"):
-            sched["max_running_requests"] = int(flag("max-running-requests"))
-        if flag("mem-fraction-static"):
-            sched["gpu_memory_utilization"] = float(flag("mem-fraction-static"))
+        max_running = flag("max-running-requests")
+        if max_running:
+            sched["max_running_requests"] = int(max_running)
+        mem_fraction = flag("mem-fraction-static")
+        if mem_fraction:
+            sched["gpu_memory_utilization"] = float(mem_fraction)
         if sched:
             out["schedule"] = sched
         tp = flag("tp")
@@ -188,6 +230,7 @@ class SGLangAdapter(EngineCaptureAdapter):
 
 class LlamaCppAdapter(EngineCaptureAdapter):
     """llama.cpp / llama-server。无 max_seqs 概念(同步/连续批),KV=-c 上下文。"""
+
     name = "llama.cpp"
     image_keywords = ("llama.cpp", "ggml", "ghcr.io/ggerganov")
     cmd_keywords = ("llama-server", "llama.cpp/server", "main -m")
@@ -195,7 +238,9 @@ class LlamaCppAdapter(EngineCaptureAdapter):
     @classmethod
     def parse_logs(cls, logs: str) -> dict[str, Any]:
         out: dict[str, Any] = {}
-        wl = _last(logs, r"load_model.*?([\d.]+)\s*(?:ms|s)") or _last(logs, r"model loaded in ([\d.]+) ms")
+        wl = _last(logs, r"load_model.*?([\d.]+)\s*(?:ms|s)") or _last(
+            logs, r"model loaded in ([\d.]+) ms"
+        )
         if wl:
             out["runtime"] = {"model_load_ms": float(wl)}
         return out
@@ -205,6 +250,7 @@ class LlamaCppAdapter(EngineCaptureAdapter):
         def flag(name: str) -> str | None:
             m = re.search(rf"-{name}\s+(\S+)", launch_cmd)
             return m.group(1) if m else None
+
         out: dict[str, Any] = {"schedule": {}}
         ctx = flag("c")
         if ctx and ctx.isdigit():
@@ -225,7 +271,9 @@ class KTransformersAdapter(EngineCaptureAdapter):
     cmd_keywords = ("ktransformers",)
 
     @classmethod
-    def normalize_params(cls, launch_cmd: str, parsed: dict[str, Any]) -> dict[str, Any]:
+    def normalize_params(
+        cls, launch_cmd: str, parsed: dict[str, Any]
+    ) -> dict[str, Any]:  # noqa: ARG003
         # ktransformers 配置在 yaml/gguf,API 暴露有限;记 launch_cmd 即可
         return {"parallel": {"note": "ktransformers 配置见 yaml(本采集仅记 launch_cmd)"}}
 
@@ -238,11 +286,17 @@ class FastLLMAdapter(EngineCaptureAdapter):
 
 # 注册表(顺序=探测优先级;vLLM 先,最常见)
 _ADAPTERS: list[type[EngineCaptureAdapter]] = [
-    VLLMAdapter, SGLangAdapter, LlamaCppAdapter, KTransformersAdapter, FastLLMAdapter,
+    VLLMAdapter,
+    SGLangAdapter,
+    LlamaCppAdapter,
+    KTransformersAdapter,
+    FastLLMAdapter,
 ]
 
 
-def detect_adapter(image: str, launch_cmd: str, api_model: dict | None) -> type[EngineCaptureAdapter] | None:
+def detect_adapter(
+    image: str, launch_cmd: str, api_model: dict | None
+) -> type[EngineCaptureAdapter] | None:
     for a in _ADAPTERS:
         try:
             if a.detect(image, launch_cmd, api_model):
@@ -262,7 +316,10 @@ def get_adapters() -> list[str]:
 # ---------------------------------------------------------------------------
 def capture_engine_config(api_base_url: str, container_name: str | None = None) -> dict[str, Any]:
     """自动采集推理引擎配置(docker inspect + 日志 + /v1/models + 引擎适配器)。永不抛异常。"""
-    result: dict[str, Any] = {"captured_at": datetime.now().isoformat(), "capture_source": []}
+    result: dict[str, Any] = {
+        "captured_at": datetime.now().isoformat(),
+        "capture_source": [],
+    }
 
     # 1. /v1/models(最可靠,OpenAI 兼容引擎通用)
     api_model: dict | None = None
@@ -272,7 +329,10 @@ def capture_engine_config(api_base_url: str, container_name: str | None = None) 
             if r.status_code == 200:
                 data = r.json().get("data", [])
                 if data:
-                    api_model = {"model_id": data[0].get("id"), "max_model_len": data[0].get("max_model_len")}
+                    api_model = {
+                        "model_id": data[0].get("id"),
+                        "max_model_len": data[0].get("max_model_len"),
+                    }
                     result["model"] = api_model
                     result["capture_source"].append("api")
         except Exception:  # noqa: BLE001
@@ -285,7 +345,15 @@ def capture_engine_config(api_base_url: str, container_name: str | None = None) 
         return result
     result["container"] = container
 
-    cmd = _run(["docker", "inspect", container, "--format", "{{.Config.Cmd}}|||{{.Config.Image}}"])
+    cmd = _run(
+        [
+            "docker",
+            "inspect",
+            container,
+            "--format",
+            "{{.Config.Cmd}}|||{{.Config.Image}}",
+        ]
+    )
     image = ""
     if cmd:
         parts = cmd.split("|||", 1)
@@ -297,10 +365,23 @@ def capture_engine_config(api_base_url: str, container_name: str | None = None) 
             result["engine_version"] = mv.group(1)
         result["capture_source"].append("docker_inspect")
 
-    env = _run(["docker", "inspect", container, "--format", "{{range .Config.Env}}{{println .}}{{end}}"])
+    env = _run(
+        [
+            "docker",
+            "inspect",
+            container,
+            "--format",
+            "{{range .Config.Env}}{{println .}}{{end}}",
+        ]
+    )
     if env:
-        envd = {k: v for line in env.splitlines() if "=" in line
-                for k, _, v in [line.partition("=")] if re.search(r"VLLM_|SGLANG_|PYTORCH_CUDA|CUDA_VERSION|KT_", k)}
+        envd = {
+            k: v
+            for line in env.splitlines()
+            if "=" in line
+            for k, _, v in [line.partition("=")]
+            if re.search(r"VLLM_|SGLANG_|PYTORCH_CUDA|CUDA_VERSION|KT_", k)
+        }
         if envd:
             result["env"] = envd
 
@@ -335,5 +416,12 @@ def capture_engine_config(api_base_url: str, container_name: str | None = None) 
 
 if __name__ == "__main__":  # 手动验证
     import json
+
     print("已注册适配器:", get_adapters())
-    print(json.dumps(capture_engine_config("http://localhost:10814/v1"), ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            capture_engine_config("http://localhost:10814/v1"),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )

@@ -16,11 +16,9 @@ Supports SymPy as an optional dependency for symbolic equivalence.
 """
 
 import importlib.util
-import math
 import re
 from difflib import SequenceMatcher
 from math import isclose
-
 
 # ---------------------------------------------------------------------------
 # Optional dependency availability
@@ -31,6 +29,7 @@ _sympy_available = importlib.util.find_spec("sympy") is not None
 # ===========================================================================
 # MultiChoiceParser  (ref: EvalScope multi_choices.py)
 # ===========================================================================
+
 
 class MultiChoiceParser:
     """Enhanced multiple-choice answer extraction.
@@ -48,33 +47,46 @@ class MultiChoiceParser:
         C = "A-Za-z"
         self._patterns: list[tuple[str, re.Pattern]] = [
             # --- EvalScope-style strict ANSWER: X (highest confidence) ---
-            ("strict_answer", re.compile(
-                rf'(?i)^ANSWER\s*:\s*([{C}])\s*(?:$|\n|\.)',
-                re.MULTILINE)),
+            (
+                "strict_answer",
+                re.compile(rf"(?i)^ANSWER\s*:\s*([{C}])\s*(?:$|\n|\.)", re.MULTILINE),
+            ),
             # Looser version for mid-text
-            ("answer_colon", re.compile(
-                rf'(?i)ANSWER\s*:\s*([{C}])(?:[^\w]|\n|$|\.)')),
+            ("answer_colon", re.compile(rf"(?i)ANSWER\s*:\s*([{C}])(?:[^\w]|\n|$|\.)")),
             # --- Chinese strict 答案：X ---
-            ("zh_answer", re.compile(
-                rf'答案\s*[:：]\s*([{C}])')),
+            ("zh_answer", re.compile(rf"答案\s*[:：]\s*([{C}])")),
             # --- English verbose ---
-            ("explicit_en", re.compile(
-                rf'(?:ANSWER|Answer|answer)\s*(?:is|:)\s*[<>"\']?\s*([{C}])\b',
-                re.IGNORECASE)),
-            ("choose", re.compile(
-                rf'(?:I\s+(?:choose|select|pick)|My answer is)\s*[（(]?\s*([{C}])\s*[）)]?',
-                re.IGNORECASE)),
-            ("the_answer_is", re.compile(
-                rf'(?:The answer is|the correct answer is)\s*[：: ]?\s*[（(]?\s*([{C}])\b',
-                re.IGNORECASE)),
+            (
+                "explicit_en",
+                re.compile(
+                    rf'(?:ANSWER|Answer|answer)\s*(?:is|:)\s*[<>"\']?\s*([{C}])\b',
+                    re.IGNORECASE,
+                ),
+            ),
+            (
+                "choose",
+                re.compile(
+                    rf"(?:I\s+(?:choose|select|pick)|My answer is)\s*[（(]?\s*([{C}])\s*[）)]?",
+                    re.IGNORECASE,
+                ),
+            ),
+            (
+                "the_answer_is",
+                re.compile(
+                    rf"(?:The answer is|the correct answer is)\s*[：: ]?\s*[（(]?\s*([{C}])\b",
+                    re.IGNORECASE,
+                ),
+            ),
             # --- Chinese verbose ---
-            ("explicit_cn", re.compile(
-                rf'(?:答案是|选择|选项|正确答案为|答案为)\s*[（(]?\s*([{C}])\s*[）)]?')),
+            (
+                "explicit_cn",
+                re.compile(rf"(?:答案是|选择|选项|正确答案为|答案为)\s*[（(]?\s*([{C}])\s*[）)]?"),
+            ),
             # --- Structured formats ---
-            ("paren_cn", re.compile(r'[（(]\s*([{C}])\s*[）)]')),
-            ("bracket", re.compile(r'[\[]\s*([{C}])\s*[\]]')),
-            ("dot_prefix", re.compile(rf'^([{C}])\s*[.。:：]', re.MULTILINE)),
-            ("dot_end", re.compile(rf'^([{C}])\s*[.。]?\s*$', re.MULTILINE)),
+            ("paren_cn", re.compile(r"[（(]\s*([{C}])\s*[）)]")),
+            ("bracket", re.compile(r"[\[]\s*([{C}])\s*[\]]")),
+            ("dot_prefix", re.compile(rf"^([{C}])\s*[.。:：]", re.MULTILINE)),
+            ("dot_end", re.compile(rf"^([{C}])\s*[.。]?\s*$", re.MULTILINE)),
         ]
 
     def parse(self, response: str, choices: list[str] | None = None) -> str:
@@ -106,6 +118,7 @@ class MultiChoiceParser:
 # MathAnswerParser  (ref: EvalScope math_parser.py)
 # ===========================================================================
 
+
 class MathAnswerParser:
     """Consolidated math answer extraction with symbolic equivalence.
 
@@ -121,8 +134,8 @@ class MathAnswerParser:
     3. Symbolic: SymPy ``simplify(a - b) == 0`` (EvalScope symbolic_equal)
     """
 
-    _BOXED_RE = re.compile(r'\\boxed\s*\{', re.DOTALL)
-    _HASH_RE = re.compile(r'####\s*([-+]?\$?[\d,]+(?:\.\d+)?)')
+    _BOXED_RE = re.compile(r"\\boxed\s*\{", re.DOTALL)
+    _HASH_RE = re.compile(r"####\s*([-+]?\$?[\d,]+(?:\.\d+)?)")
 
     def parse(self, response: str) -> str:
         """Extract a math answer string from *response*."""
@@ -142,10 +155,10 @@ class MathAnswerParser:
 
         # 3. EvalScope-style explicit patterns
         for pat, grp in [
-            (re.compile(r'he answer is\s*(.+?)(?:\n|$)', re.IGNORECASE), 1),
-            (re.compile(r'final answer is\s*\$?\s*(.+?)(?:\n|$)', re.IGNORECASE), 1),
-            (re.compile(r'答案是\s*(.+?)(?:\n|$)'), 1),
-            (re.compile(r'ANSWER:\s*(.+?)(?:\n|$)', re.IGNORECASE), 1),
+            (re.compile(r"he answer is\s*(.+?)(?:\n|$)", re.IGNORECASE), 1),
+            (re.compile(r"final answer is\s*\$?\s*(.+?)(?:\n|$)", re.IGNORECASE), 1),
+            (re.compile(r"答案是\s*(.+?)(?:\n|$)"), 1),
+            (re.compile(r"ANSWER:\s*(.+?)(?:\n|$)", re.IGNORECASE), 1),
         ]:
             m = pat.search(response)
             if m:
@@ -153,9 +166,17 @@ class MathAnswerParser:
 
         # 4. English / Chinese explicit declarations (broader)
         _explicit = [
-            re.compile(r'(?:final answer|answer|result|solution)\s*(?:is|=|:)\s*["\']?\s*([-+]?\$?[\d,]+(?:\.\d+)?)\b', re.IGNORECASE),
-            re.compile(r'(?:答案|结果|解)\s*(?:是|为|：|:|=)\s*["\']?\s*([-+]?\$?[\d,]+(?:\.\d+)?)\b'),
-            re.compile(r'(?:therefore|thus|hence|所以)\s*,?\s*(?:the answer is)?\s*([-+]?\$?[\d,]+(?:\.\d+)?)', re.IGNORECASE),
+            re.compile(
+                r'(?:final answer|answer|result|solution)\s*(?:is|=|:)\s*["\']?\s*([-+]?\$?[\d,]+(?:\.\d+)?)\b',
+                re.IGNORECASE,
+            ),
+            re.compile(
+                r'(?:答案|结果|解)\s*(?:是|为|：|:|=)\s*["\']?\s*([-+]?\$?[\d,]+(?:\.\d+)?)\b'
+            ),
+            re.compile(
+                r"(?:therefore|thus|hence|所以)\s*,?\s*(?:the answer is)?\s*([-+]?\$?[\d,]+(?:\.\d+)?)",
+                re.IGNORECASE,
+            ),
         ]
         for pat in _explicit:
             m = pat.search(response)
@@ -164,21 +185,21 @@ class MathAnswerParser:
 
         # 5. Last number on last line
         last_line = response.strip().split("\n")[-1]
-        nums = re.findall(r'[-+]?\$?[\d,]+(?:\.\d+)?', last_line)
+        nums = re.findall(r"[-+]?\$?[\d,]+(?:\.\d+)?", last_line)
         if nums:
-            return nums[-1].replace(",", "").replace("$", "")
+            return str(nums[-1]).replace(",", "").replace("$", "")
 
         # 6. Last number anywhere
-        all_nums = re.findall(r'[-+]?\$?[\d,]+(?:\.\d+)?', response)
+        all_nums = re.findall(r"[-+]?\$?[\d,]+(?:\.\d+)?", response)
         if all_nums:
-            return all_nums[-1].replace(",", "").replace("$", "")
+            return str(all_nums[-1]).replace(",", "").replace("$", "")
 
         return ""
 
     # -- comparison (ref: EvalScope math_equal) ------------------------------
 
     @staticmethod
-    def check_answer(predicted: str, correct: str, tolerance: float = 1e-6) -> bool:
+    def check_answer(predicted: str, correct: str, tolerance: float = 1e-6) -> bool:  # noqa: ARG004
         """Compare predicted and correct math answers.
 
         Strategy: exact string → float tolerance (+ percentage) → SymPy symbolic.
@@ -195,7 +216,14 @@ class MathAnswerParser:
 
         # 2. Normalized match
         def _norm(s: str) -> str:
-            return s.replace(",", "").replace(" ", "").replace("$", "").replace("−", "-").replace("\u043a\u0438", "").strip()
+            return (
+                s.replace(",", "")
+                .replace(" ", "")
+                .replace("$", "")
+                .replace("−", "-")
+                .replace("\u043a\u0438", "")
+                .strip()
+            )
 
         if _norm(pred) == _norm(exp):
             return True
@@ -228,6 +256,7 @@ class MathAnswerParser:
         if _sympy_available:
             try:
                 import sympy
+
                 pred_expr = sympy.sympify(_norm(pred).replace("^", "**"))
                 exp_expr = sympy.sympify(_norm(exp).replace("^", "**"))
                 if sympy.simplify(pred_expr - exp_expr) == 0:
@@ -255,13 +284,13 @@ class MathAnswerParser:
         depth = 1
         i = start
         while i < len(text) and depth > 0:
-            if text[i] == '{':
+            if text[i] == "{":
                 depth += 1
-            elif text[i] == '}':
+            elif text[i] == "}":
                 depth -= 1
             i += 1
         if depth == 0:
-            return text[start:i - 1].strip()
+            return text[start : i - 1].strip()
         return ""
 
     @staticmethod
@@ -273,24 +302,24 @@ class MathAnswerParser:
         if not string:
             return ""
         string = str(string).strip()
-        string = string.replace('\n', '')
-        string = string.rstrip('.')
-        string = string.replace('\\!', '')
-        string = string.replace('tfrac', 'frac').replace('dfrac', 'frac')
-        string = string.replace('\\left', '').replace('\\right', '')
-        string = string.replace('\\{', '{').replace('\\}', '}')
+        string = string.replace("\n", "")
+        string = string.rstrip(".")
+        string = string.replace("\\!", "")
+        string = string.replace("tfrac", "frac").replace("dfrac", "frac")
+        string = string.replace("\\left", "").replace("\\right", "")
+        string = string.replace("\\{", "{").replace("\\}", "}")
         # Remove units
-        string = re.sub(r'\\text\{.*?\}$', '', string).strip()
-        string = string.replace('^{\\circ}', '').replace('^\\circ', '')
-        string = string.replace('\\$', '').replace('$', '')
-        string = string.replace('\\%', '').replace('%', '')
-        string = string.replace(' .', ' 0.')
-        string = string.replace('{.', '{0.')
+        string = re.sub(r"\\text\{.*?\}$", "", string).strip()
+        string = string.replace("^{\\circ}", "").replace("^\\circ", "")
+        string = string.replace("\\$", "").replace("$", "")
+        string = string.replace("\\%", "").replace("%", "")
+        string = string.replace(" .", " 0.")
+        string = string.replace("{.", "{0.")
         # Remove unnecessary backslash before integers
-        string = re.sub(r'\\(?=\-?\d+(\\|\)|,|\]|$))', '', string)
+        string = re.sub(r"\\(?=\-?\d+(\\|\)|,|\]|$))", "", string)
         # Normalize thousands separators
-        if re.fullmatch(r'\s*-?\d{1,3}(?:,\d{3})+(?:\.\d+)?\s*', string):
-            string = string.replace(',', '')
+        if re.fullmatch(r"\s*-?\d{1,3}(?:,\d{3})+(?:\.\d+)?\s*", string):
+            string = string.replace(",", "")
         return string
 
 
@@ -298,10 +327,11 @@ class MathAnswerParser:
 # CodeAnswerParser
 # ===========================================================================
 
+
 class CodeAnswerParser:
     """Extract code from model responses."""
 
-    _FENCE_RE = re.compile(r'```(?:\w*)\n(.*?)```', re.DOTALL)
+    _FENCE_RE = re.compile(r"```(?:\w*)\n(.*?)```", re.DOTALL)
 
     def parse(self, response: str) -> str:
         """Extract code from *response*."""
@@ -310,7 +340,7 @@ class CodeAnswerParser:
 
         blocks = self._FENCE_RE.findall(response)
         if blocks:
-            return blocks[-1].strip()
+            return str(blocks[-1]).strip()
 
         lines = response.split("\n")
         code_lines = [l for l in lines if l.startswith("    ") or l.startswith("\t")]
@@ -323,6 +353,7 @@ class CodeAnswerParser:
 # ===========================================================================
 # TextAnswerParser
 # ===========================================================================
+
 
 class TextAnswerParser:
     """Text answer comparison for LongBench, Arena Hard, etc."""
@@ -338,8 +369,8 @@ class TextAnswerParser:
         if not text:
             return ""
         text = text.lower().strip()
-        text = re.sub(r'[^\w\s]', '', text)
-        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r"[^\w\s]", "", text)
+        text = re.sub(r"\s+", " ", text)
         return text
 
     @staticmethod
@@ -364,10 +395,26 @@ class TextAnswerParser:
 # Factory
 # ===========================================================================
 
-CHOICE_DATASETS = {"mmlu", "gpqa", "hellaswag", "truthfulqa", "winogrande", "arc", "ceval", "cmmlu"}
+CHOICE_DATASETS = {
+    "mmlu",
+    "gpqa",
+    "hellaswag",
+    "truthfulqa",
+    "winogrande",
+    "arc",
+    "ceval",
+    "cmmlu",
+}
 MATH_DATASETS = {"gsm8k", "math500", "aime2025", "aime"}
 CODE_DATASETS = {"humaneval", "mbpp"}
-TEXT_DATASETS = {"longbench", "arena_hard", "swebench_lite", "swebench", "piqa", "global_piqa"}
+TEXT_DATASETS = {
+    "longbench",
+    "arena_hard",
+    "swebench_lite",
+    "swebench",
+    "piqa",
+    "global_piqa",
+}
 
 
 def get_parser_for_dataset(dataset_name: str):

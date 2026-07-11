@@ -33,17 +33,14 @@ def sanitize_log_message(message: Any, max_length: int = 10000) -> str:
     message_str = str(message)
 
     # Remove newlines and carriage returns (log injection)
-    message_str = message_str.replace('\n', '\\n').replace('\r', '\\r')
+    message_str = message_str.replace("\n", "\\n").replace("\r", "\\r")
 
     # Remove ANSI escape codes
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    message_str = ansi_escape.sub('', message_str)
+    ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+    message_str = ansi_escape.sub("", message_str)
 
     # Remove other control characters (except tab)
-    message_str = ''.join(
-        char for char in message_str
-        if char == '\t' or char.isprintable()
-    )
+    message_str = "".join(char for char in message_str if char == "\t" or char.isprintable())
 
     # Limit length to prevent log flooding
     if len(message_str) > max_length:
@@ -73,19 +70,29 @@ def sanitize_api_key(message: str) -> str:
     result = message
 
     # Redact OpenAI-style keys (sk- followed by 20+ alphanumeric chars)
-    result = re.sub(r'sk-[a-zA-Z0-9]{20,}', 'sk-[REDACTED]', result)
+    result = re.sub(r"sk-[a-zA-Z0-9]{20,}", "sk-[REDACTED]", result)
 
     # Redact Gemini keys (AIza followed by 30+ alphanumeric chars)
-    result = re.sub(r'AIza[a-zA-Z0-9_-]{30,}', 'AIza[REDACTED]', result)
+    result = re.sub(r"AIza[a-zA-Z0-9_-]{30,}", "AIza[REDACTED]", result)
 
     # Redact Bearer tokens
-    result = re.sub(r'Bearer\s+[a-zA-Z0-9\-._~+/]{15,}', 'Bearer [REDACTED]', result)
+    result = re.sub(r"Bearer\s+[a-zA-Z0-9\-._~+/]{15,}", "Bearer [REDACTED]", result)
 
     # Redact api_key= patterns
-    result = re.sub(r'api[_-]?key["\']?\s*[:=]\s*["\']?[a-zA-Z0-9\-_]{10,}', 'api_key=[REDACTED]', result, flags=re.IGNORECASE)
+    result = re.sub(
+        r'api[_-]?key["\']?\s*[:=]\s*["\']?[a-zA-Z0-9\-_]{10,}',
+        "api_key=[REDACTED]",
+        result,
+        flags=re.IGNORECASE,
+    )
 
     # Redact token= patterns
-    result = re.sub(r'token["\']?\s*[:=]\s*["\']?[a-zA-Z0-9\-._~+/]{15,}', 'token=[REDACTED]', result, flags=re.IGNORECASE)
+    result = re.sub(
+        r'token["\']?\s*[:=]\s*["\']?[a-zA-Z0-9\-._~+/]{15,}',
+        "token=[REDACTED]",
+        result,
+        flags=re.IGNORECASE,
+    )
 
     return result
 
@@ -108,7 +115,7 @@ def sanitize_error_response(error_text: str, api_key: str = None) -> str:
 
     # Remove specific API key if provided
     if api_key and api_key in result:
-        result = result.replace(api_key, '***REDACTED***')
+        result = result.replace(api_key, "***REDACTED***")
 
     # Also redact common key patterns
     result = sanitize_api_key(result)
@@ -155,8 +162,7 @@ class SanitizingFormatter:
         # Sanitize args if present
         if record.args:
             sanitized_args = tuple(
-                sanitize_log_message(arg, self.max_length)
-                for arg in record.args
+                sanitize_log_message(arg, self.max_length) for arg in record.args
             )
             record.args = sanitized_args
 

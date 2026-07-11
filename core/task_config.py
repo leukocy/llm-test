@@ -19,30 +19,30 @@ class TaskConfig:
     """任务ConfigureData类"""
 
     # 基本信息
-    task: str                                    # 任务名称
-    task_alias: str | None = None             # 任务别名 (Display用)
-    tag: list[str] | None = None              # 任务Label
-    description: str = ""                        # 任务描述
+    task: str  # 任务名称
+    task_alias: str | None = None  # 任务别名 (Display用)
+    tag: list[str] | None = None  # 任务Label
+    description: str = ""  # 任务描述
 
     # Data集Configure
-    dataset_path: str = ""                       # HuggingFace Dataset路径
-    dataset_name: str | None = None           # Data集子集名称
-    dataset_local_path: str | None = None     # 本地Dataset路径
-    test_split: str = "test"                     # Test集 split
-    training_split: str | None = None         # 训练集 split
-    fewshot_split: str | None = None          # few-shot 示例 split
+    dataset_path: str = ""  # HuggingFace Dataset路径
+    dataset_name: str | None = None  # Data集子集名称
+    dataset_local_path: str | None = None  # 本地Dataset路径
+    test_split: str = "test"  # Test集 split
+    training_split: str | None = None  # 训练集 split
+    fewshot_split: str | None = None  # few-shot 示例 split
 
     # Prompt Configure
-    doc_to_text: str = ""                        # 输入模板 (Jinja2)
-    doc_to_target: str = ""                      # 目标Answer模板
-    doc_to_choice: list[str] | None = None    # Options列表 (选择题)
-    system_prompt: str | None = None          # 系统Tip
-    fewshot_delimiter: str = "\n\n"              # few-shot 分隔符
-    target_delimiter: str = " "                  # 输入与目标之间分隔符
+    doc_to_text: str = ""  # 输入模板 (Jinja2)
+    doc_to_target: str = ""  # 目标Answer模板
+    doc_to_choice: list[str] | None = None  # Options列表 (选择题)
+    system_prompt: str | None = None  # 系统Tip
+    fewshot_delimiter: str = "\n\n"  # few-shot 分隔符
+    target_delimiter: str = " "  # 输入与目标之间分隔符
 
     # 评估Configure
-    output_type: str = "generate_until"          # generate_until / multiple_choice
-    num_fewshot: int = 0                         # few-shot 数量
+    output_type: str = "generate_until"  # generate_until / multiple_choice
+    num_fewshot: int = 0  # few-shot 数量
     metric_list: list[dict] = field(default_factory=list)  # Score指标
 
     # GenerateConfigure
@@ -83,7 +83,7 @@ class TaskConfigLoader:
         """从目录Load所has YAML Configure"""
         for root, _, files in os.walk(directory):
             for file in files:
-                if file.endswith(('.yaml', '.yml')):
+                if file.endswith((".yaml", ".yml")):
                     filepath = os.path.join(root, file)
                     try:
                         config = self.load_config_file(filepath)
@@ -102,7 +102,7 @@ class TaskConfigLoader:
         Returns:
             TaskConfig 对象
         """
-        with open(filepath, encoding='utf-8') as f:
+        with open(filepath, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         if not data:
@@ -110,28 +110,32 @@ class TaskConfigLoader:
 
         # Convertis TaskConfig
         config = TaskConfig(
-            task=data.get('task', os.path.splitext(os.path.basename(filepath))[0]),
-            task_alias=data.get('task_alias'),
-            tag=data.get('tag', []) if isinstance(data.get('tag'), list) else [data.get('tag')] if data.get('tag') else None,
-            description=data.get('description', ''),
-            dataset_path=data.get('dataset_path', ''),
-            dataset_name=data.get('dataset_name'),
-            dataset_local_path=data.get('dataset_local_path'),
-            test_split=data.get('test_split', 'test'),
-            training_split=data.get('training_split'),
-            fewshot_split=data.get('fewshot_split'),
-            doc_to_text=data.get('doc_to_text', ''),
-            doc_to_target=data.get('doc_to_target', ''),
-            doc_to_choice=data.get('doc_to_choice'),
-            system_prompt=data.get('system_prompt'),
-            fewshot_delimiter=data.get('fewshot_delimiter', '\n\n'),
-            target_delimiter=data.get('target_delimiter', ' '),
-            output_type=data.get('output_type', 'generate_until'),
-            num_fewshot=data.get('num_fewshot', 0),
-            metric_list=data.get('metric_list', [{'metric': 'accuracy', 'aggregation': 'mean'}]),
-            generation_kwargs=data.get('generation_kwargs', {}),
-            filter_list=data.get('filter_list', []),
-            metadata=data.get('metadata', {})
+            task=data.get("task", os.path.splitext(os.path.basename(filepath))[0]),
+            task_alias=data.get("task_alias"),
+            tag=(
+                data.get("tag", [])
+                if isinstance(data.get("tag"), list)
+                else [data.get("tag")] if data.get("tag") else None
+            ),
+            description=data.get("description", ""),
+            dataset_path=data.get("dataset_path", ""),
+            dataset_name=data.get("dataset_name"),
+            dataset_local_path=data.get("dataset_local_path"),
+            test_split=data.get("test_split", "test"),
+            training_split=data.get("training_split"),
+            fewshot_split=data.get("fewshot_split"),
+            doc_to_text=data.get("doc_to_text", ""),
+            doc_to_target=data.get("doc_to_target", ""),
+            doc_to_choice=data.get("doc_to_choice"),
+            system_prompt=data.get("system_prompt"),
+            fewshot_delimiter=data.get("fewshot_delimiter", "\n\n"),
+            target_delimiter=data.get("target_delimiter", " "),
+            output_type=data.get("output_type", "generate_until"),
+            num_fewshot=data.get("num_fewshot", 0),
+            metric_list=data.get("metric_list", [{"metric": "accuracy", "aggregation": "mean"}]),
+            generation_kwargs=data.get("generation_kwargs", {}),
+            filter_list=data.get("filter_list", []),
+            metadata=data.get("metadata", {}),
         )
 
         return config
@@ -146,10 +150,7 @@ class TaskConfigLoader:
 
     def list_tasks_by_tag(self, tag: str) -> list[str]:
         """列出指定Label所has任务"""
-        return [
-            name for name, config in self.configs.items()
-            if config.tag and tag in config.tag
-        ]
+        return [name for name, config in self.configs.items() if config.tag and tag in config.tag]
 
 
 class PromptRenderer:
@@ -172,7 +173,7 @@ class PromptRenderer:
 
         try:
             jinja_template = Template(template)
-            return jinja_template.render(**doc)
+            return str(jinja_template.render(**doc))
         except Exception:
             # 回退到简单字符串替换
             result = template
@@ -185,7 +186,7 @@ class PromptRenderer:
         config: TaskConfig,
         doc: dict[str, Any],
         few_shot_docs: list[dict] | None = None,
-        include_target: bool = False
+        include_target: bool = False,
     ) -> str:
         """
         Build完整 prompt
@@ -209,7 +210,7 @@ class PromptRenderer:
 
         # 2. Few-shot 示例
         if few_shot_docs and config.num_fewshot > 0:
-            for example in few_shot_docs[:config.num_fewshot]:
+            for example in few_shot_docs[: config.num_fewshot]:
                 example_text = PromptRenderer.render(config.doc_to_text, example)
                 example_target = PromptRenderer.render(config.doc_to_target, example)
                 parts.append(f"{example_text}{config.target_delimiter}{example_target}")
@@ -246,36 +247,40 @@ class ResponseFilter:
             if not isinstance(filter_spec, dict):
                 continue
 
-            filters = filter_spec.get('filter', [])
+            filters = filter_spec.get("filter", [])
             for f in filters:
-                func = f.get('function', '')
+                func = f.get("function", "")
 
-                if func == 'regex':
-                    pattern = f.get('regex_pattern', '')
-                    group_select = f.get('group_select', 0)
+                if func == "regex":
+                    pattern = f.get("regex_pattern", "")
+                    group_select = f.get("group_select", 0)
                     if pattern:
                         match = re.search(pattern, result)
                         if match:
                             try:
-                                result = match.group(group_select if group_select >= 0 else len(match.groups()) + group_select + 1)
-                            except:
+                                result = match.group(
+                                    group_select
+                                    if group_select >= 0
+                                    else len(match.groups()) + group_select + 1
+                                )
+                            except Exception:
                                 result = match.group(0)
 
-                elif func == 'take_first':
+                elif func == "take_first":
                     # 取一Result (用于多次匹配)
                     pass
 
-                elif func == 'remove_whitespace':
+                elif func == "remove_whitespace":
                     result = result.strip()
 
-                elif func == 'lowercase':
+                elif func == "lowercase":
                     result = result.lower()
 
-                elif func == 'uppercase':
+                elif func == "uppercase":
                     result = result.upper()
 
-                elif func == 'strip_until':
-                    until = f.get('until', [])
+                elif func == "strip_until":
+                    until = f.get("until", [])
                     for u in until:
                         if u in result:
                             result = result.split(u)[0]
@@ -288,9 +293,7 @@ class MetricCalculator:
 
     @staticmethod
     def calculate(
-        predictions: list[str],
-        references: list[str],
-        metric_list: list[dict]
+        predictions: list[str], references: list[str], metric_list: list[dict]
     ) -> dict[str, float]:
         """
         CalculateScore指标
@@ -306,11 +309,11 @@ class MetricCalculator:
         results = {}
 
         for metric_spec in metric_list:
-            metric_name = metric_spec.get('metric', 'accuracy')
-            metric_spec.get('aggregation', 'mean')
-            metric_spec.get('higher_is_better', True)
-            ignore_case = metric_spec.get('ignore_case', False)
-            ignore_punctuation = metric_spec.get('ignore_punctuation', False)
+            metric_name = metric_spec.get("metric", "accuracy")
+            metric_spec.get("aggregation", "mean")
+            metric_spec.get("higher_is_better", True)
+            ignore_case = metric_spec.get("ignore_case", False)
+            ignore_punctuation = metric_spec.get("ignore_punctuation", False)
 
             # Preprocess
             preds = predictions.copy()
@@ -322,21 +325,25 @@ class MetricCalculator:
 
             if ignore_punctuation:
                 import string
-                preds = [p.translate(str.maketrans('', '', string.punctuation)) for p in preds]
-                refs = [r.translate(str.maketrans('', '', string.punctuation)) for r in refs]
+
+                preds = [p.translate(str.maketrans("", "", string.punctuation)) for p in preds]
+                refs = [r.translate(str.maketrans("", "", string.punctuation)) for r in refs]
 
             # Calculate
-            if metric_name in ['accuracy', 'acc', 'exact_match']:
-                correct = sum(1 for p, r in zip(preds, refs, strict=False) if p.strip() == r.strip())
+            if metric_name in ["accuracy", "acc", "exact_match"]:
+                correct = sum(
+                    1 for p, r in zip(preds, refs, strict=False) if p.strip() == r.strip()
+                )
                 value = correct / len(preds) if preds else 0.0
 
-            elif metric_name == 'contains':
+            elif metric_name == "contains":
                 correct = sum(1 for p, r in zip(preds, refs, strict=False) if r.strip() in p)
                 value = correct / len(preds) if preds else 0.0
 
-            elif metric_name == 'f1':
+            elif metric_name == "f1":
                 # 简化 F1 Calculate
                 from collections import Counter
+
                 scores = []
                 for p, r in zip(preds, refs, strict=False):
                     p_tokens = p.split()
@@ -348,7 +355,11 @@ class MetricCalculator:
                     else:
                         precision = num_common / len(p_tokens) if p_tokens else 0
                         recall = num_common / len(r_tokens) if r_tokens else 0
-                        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+                        f1 = (
+                            2 * precision * recall / (precision + recall)
+                            if (precision + recall) > 0
+                            else 0
+                        )
                         scores.append(f1)
                 value = sum(scores) / len(scores) if scores else 0.0
 
@@ -362,9 +373,9 @@ class MetricCalculator:
 
 # Export
 __all__ = [
-    'TaskConfig',
-    'TaskConfigLoader',
-    'PromptRenderer',
-    'ResponseFilter',
-    'MetricCalculator'
+    "TaskConfig",
+    "TaskConfigLoader",
+    "PromptRenderer",
+    "ResponseFilter",
+    "MetricCalculator",
 ]

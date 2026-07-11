@@ -38,10 +38,21 @@ from core.warehouse import (
 
 # 历史表展示的仓库列（顺序即展示顺序）
 _HISTORY_COLUMNS = [
-    "date", "machine_id", "model_name", "engine", "parallel_strategy",
-    "concurrency", "decode_tps", "ttft_s", "effective_bandwidth_gbps",
-    "bandwidth_utilization_pct", "gpu_vram_peak_gb", "bottleneck",
-    "status", "external_level", "tester",
+    "date",
+    "machine_id",
+    "model_name",
+    "engine",
+    "parallel_strategy",
+    "concurrency",
+    "decode_tps",
+    "ttft_s",
+    "effective_bandwidth_gbps",
+    "bandwidth_utilization_pct",
+    "gpu_vram_peak_gb",
+    "bottleneck",
+    "status",
+    "external_level",
+    "tester",
 ]
 
 
@@ -63,9 +74,24 @@ def render_warehouse_browser() -> None:
         st.info("当前筛选条件下无记录。松开筛选条件，或先跑一次测试再回来。")
         return
 
-    tab_history, tab_matrix, tab_scaling, tab_inventory, tab_cases, tab_capability, tab_export = st.tabs(
-        ["📋 运行历史", "🔲 透视矩阵", "📈 扩展效率", "🖥️ 硬件盘点", "🧪 应用用例",
-         "📊 客户能力表", "📤 模板导出"]
+    (
+        tab_history,
+        tab_matrix,
+        tab_scaling,
+        tab_inventory,
+        tab_cases,
+        tab_capability,
+        tab_export,
+    ) = st.tabs(
+        [
+            "📋 运行历史",
+            "🔲 透视矩阵",
+            "📈 扩展效率",
+            "🖥️ 硬件盘点",
+            "🧪 应用用例",
+            "📊 客户能力表",
+            "📤 模板导出",
+        ]
     )
 
     with tab_history:
@@ -78,6 +104,7 @@ def render_warehouse_browser() -> None:
         _render_inventory(runs)
     with tab_cases:
         from ui.application_case_form import render_application_case_manager
+
         render_application_case_manager()
     with tab_capability:
         _render_capability_sheet()
@@ -109,7 +136,9 @@ def _build_filter(db) -> WarehouseFilter:
     status = st.sidebar.selectbox("状态", _opts("status", "状态"), key="wh_status")
     tester = st.sidebar.selectbox("测试员", _opts("tester", "测试员"), key="wh_tester")
     cfg_hash = st.sidebar.selectbox(
-        "config_hash（同配置）", _opts("config_hash", "配置"), key="wh_cfg_hash",
+        "config_hash（同配置）",
+        _opts("config_hash", "配置"),
+        key="wh_cfg_hash",
         help="CASE 02：同配置才能承诺。按配置指纹过滤同模型/引擎/并行/量化的一组测试。",
     )
     search = st.sidebar.text_input("模糊搜索", placeholder="备注 / 模型 / 测试员…", key="wh_search")
@@ -173,23 +202,82 @@ def _render_history(runs) -> None:
 
 def _render_detail_drawer(run) -> None:
     row = project_run(run)
-    with st.expander("八维全集（machine_id/指纹 → 资源 → 模型规格 → 服务配置 → 性能 → 引擎运行时 → 归因 → 可对外）", expanded=True):
+    with st.expander(
+        "八维全集（machine_id/指纹 → 资源 → 模型规格 → 服务配置 → 性能 → 引擎运行时 → 归因 → 可对外）",
+        expanded=True,
+    ):
         # 分组展示，避免一长串
         groups = [
             ("标识", ["test_id", "date", "tester", "machine_id", "external_level"]),
-            ("模型 / 服务", ["model_name", "model_version", "model_type", "total_params",
-                          "active_params", "quantization", "dtype", "max_context",
-                          "engine", "engine_version", "parallel_strategy", "engine_params"]),
-            ("性能", ["concurrency", "decode_tps", "prefill_tps", "ttft_s",
-                    "p50_latency_s", "p95_latency_s", "p99_latency_s",
-                    "effective_bandwidth_gbps", "bandwidth_utilization_pct"]),
-            ("资源峰值", ["gpu_vram_peak_gb", "system_memory_peak_gb",
-                       "gpu_util_pct", "cpu_util_pct", "power_w", "temp_c"]),
-            ("硬件指纹", ["cpu_model", "cpu_sockets", "memory_type", "memory_capacity_gb",
-                       "gpu_model", "gpu_count", "gpu_vram_gb", "gpu_bandwidth_gbps",
-                       "cuda_or_rocm", "driver"]),
-            ("归因 / 下一步", ["status", "bottleneck", "error_type", "error_detail",
-                            "next_action", "supersedes_test_id", "log_path"]),
+            (
+                "模型 / 服务",
+                [
+                    "model_name",
+                    "model_version",
+                    "model_type",
+                    "total_params",
+                    "active_params",
+                    "quantization",
+                    "dtype",
+                    "max_context",
+                    "engine",
+                    "engine_version",
+                    "parallel_strategy",
+                    "engine_params",
+                ],
+            ),
+            (
+                "性能",
+                [
+                    "concurrency",
+                    "decode_tps",
+                    "prefill_tps",
+                    "ttft_s",
+                    "p50_latency_s",
+                    "p95_latency_s",
+                    "p99_latency_s",
+                    "effective_bandwidth_gbps",
+                    "bandwidth_utilization_pct",
+                ],
+            ),
+            (
+                "资源峰值",
+                [
+                    "gpu_vram_peak_gb",
+                    "system_memory_peak_gb",
+                    "gpu_util_pct",
+                    "cpu_util_pct",
+                    "power_w",
+                    "temp_c",
+                ],
+            ),
+            (
+                "硬件指纹",
+                [
+                    "cpu_model",
+                    "cpu_sockets",
+                    "memory_type",
+                    "memory_capacity_gb",
+                    "gpu_model",
+                    "gpu_count",
+                    "gpu_vram_gb",
+                    "gpu_bandwidth_gbps",
+                    "cuda_or_rocm",
+                    "driver",
+                ],
+            ),
+            (
+                "归因 / 下一步",
+                [
+                    "status",
+                    "bottleneck",
+                    "error_type",
+                    "error_detail",
+                    "next_action",
+                    "supersedes_test_id",
+                    "log_path",
+                ],
+            ),
         ]
         cols = st.columns(len(groups))
         for col, (title, keys) in zip(cols, groups, strict=False):
@@ -215,14 +303,14 @@ def _render_scaling_efficiency(runs) -> None:
         "（理想线性=1.0；<1 亚线性，疑似通信/调度瓶颈）。"
     )
 
-    metric = st.selectbox("指标", ["decode_tps", "effective_bandwidth_gbps"],
-                          key="se_metric")
+    metric = st.selectbox("指标", ["decode_tps", "effective_bandwidth_gbps"], key="se_metric")
     rows = build_scaling_efficiency(runs, metric=metric)
     if not rows:
         st.info("无可分析的多卡数据（需同模型在 tp1/tp2/tp4... 下各跑过测试）。")
         return
 
     import pandas as pd
+
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True, hide_index=True)
 
@@ -237,8 +325,13 @@ def _render_scaling_efficiency(runs) -> None:
         )
 
     csv_str = _sheet_to_csv(rows)
-    st.download_button("📥 导出 CSV", data=csv_str.encode("utf-8"),
-                       file_name="scaling_efficiency.csv", mime="text/csv", key="se_dl_csv")
+    st.download_button(
+        "📥 导出 CSV",
+        data=csv_str.encode("utf-8"),
+        file_name="scaling_efficiency.csv",
+        mime="text/csv",
+        key="se_dl_csv",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -259,8 +352,13 @@ def _render_cross_matrix(runs) -> None:
     with d3:
         metric = st.selectbox(
             "透视指标",
-            ["decode_tps", "ttft_s", "effective_bandwidth_gbps", "bandwidth_utilization_pct",
-             "gpu_vram_peak_gb"],
+            [
+                "decode_tps",
+                "ttft_s",
+                "effective_bandwidth_gbps",
+                "bandwidth_utilization_pct",
+                "gpu_vram_peak_gb",
+            ],
             key="wh_matrix_metric",
         )
     with d4:
@@ -274,8 +372,7 @@ def _render_cross_matrix(runs) -> None:
 
     # 构建 DataFrame：行=machine_id，列=model_name
     table = {
-        row: [mx.cells.get(row, {}).get(col) for col in mx.col_labels]
-        for row in mx.row_labels
+        row: [mx.cells.get(row, {}).get(col) for col in mx.col_labels] for row in mx.row_labels
     }
     df = pd.DataFrame(table, index=mx.row_labels, columns=mx.col_labels).T
     st.caption(f"行 = {mx.row_key}，列 = {mx.col_key}，值 = {metric}（{agg_code}）")
@@ -299,10 +396,24 @@ def _render_inventory(runs) -> None:
         st.info("无可用硬件指纹（记录缺 machine_id）。")
         return
     cols = [
-        "machine_id", "cpu_model", "cpu_sockets", "cpu_cores", "memory_type",
-        "memory_capacity_gb", "memory_channels_populated", "gpu_model", "gpu_count",
-        "gpu_vram_gb", "gpu_bandwidth_gbps", "pcie_gen", "pcie_width",
-        "cuda_or_rocm", "driver", "os", "owner", "location",
+        "machine_id",
+        "cpu_model",
+        "cpu_sockets",
+        "cpu_cores",
+        "memory_type",
+        "memory_capacity_gb",
+        "memory_channels_populated",
+        "gpu_model",
+        "gpu_count",
+        "gpu_vram_gb",
+        "gpu_bandwidth_gbps",
+        "pcie_gen",
+        "pcie_width",
+        "cuda_or_rocm",
+        "driver",
+        "os",
+        "owner",
+        "location",
     ]
     df = pd.DataFrame(rows)[cols].rename(columns=_COLUMN_LABELS)
     st.dataframe(df, use_container_width=True, hide_index=True)
@@ -323,13 +434,19 @@ def _render_capability_sheet() -> None:
 
     c1, c2 = st.columns(2)
     with c1:
-        min_level = st.selectbox("对外口径下限", ["internal", "review", "publishable"],
-                                 index=1, key="cap_min_level",
-                                 help="只保留该等级及以上（默认 review 起，即可对外讨论）")
+        min_level = st.selectbox(
+            "对外口径下限",
+            ["internal", "review", "publishable"],
+            index=1,
+            key="cap_min_level",
+            help="只保留该等级及以上（默认 review 起，即可对外讨论）",
+        )
     with c2:
         group_dim = st.multiselect(
-            "聚合维度", ["customer_type", "scenario", "model_name"],
-            default=["customer_type", "scenario", "model_name"], key="cap_group",
+            "聚合维度",
+            ["customer_type", "scenario", "model_name"],
+            default=["customer_type", "scenario", "model_name"],
+            key="cap_group",
         )
 
     cases = db_manager.list_application_cases(limit=2000)
@@ -345,6 +462,7 @@ def _render_capability_sheet() -> None:
         return
 
     import pandas as pd
+
     df = pd.DataFrame(sheet)
     st.dataframe(df, use_container_width=True, hide_index=True)
     st.caption(f"共 {len(sheet)} 个能力切片（来自 {len(cases)} 条应用用例）")
@@ -353,10 +471,20 @@ def _render_capability_sheet() -> None:
     e1, e2 = st.columns(2)
     csv_str = _sheet_to_csv(sheet)
     md_str = build_capability_markdown(sheet)
-    e1.download_button("📥 导出 CSV", data=csv_str.encode("utf-8"),
-                       file_name="capability_sheet.csv", mime="text/csv", key="cap_dl_csv")
-    e2.download_button("📥 导出对外 Markdown", data=md_str.encode("utf-8"),
-                       file_name="capability_sheet.md", mime="text/markdown", key="cap_dl_md")
+    e1.download_button(
+        "📥 导出 CSV",
+        data=csv_str.encode("utf-8"),
+        file_name="capability_sheet.csv",
+        mime="text/csv",
+        key="cap_dl_csv",
+    )
+    e2.download_button(
+        "📥 导出对外 Markdown",
+        data=md_str.encode("utf-8"),
+        file_name="capability_sheet.md",
+        mime="text/markdown",
+        key="cap_dl_md",
+    )
 
     with st.expander("预览对外 Markdown"):
         st.markdown(md_str)
@@ -366,17 +494,18 @@ def _sheet_to_csv(sheet: list[dict]) -> str:
     """客户能力表 → CSV 字符串（UTF-8 BOM）。"""
     import csv
     import io
+
     if not sheet:
         return ""
     # 取所有键的并集，但优先 CAPABILITY_COLUMNS 顺序
     from core.warehouse import CAPABILITY_COLUMNS
+
     fields = list(CAPABILITY_COLUMNS)
     extra = sorted({k for row in sheet for k in row} - set(fields))
     fields += extra
     buf = io.StringIO()
     buf.write("﻿")
-    writer = csv.DictWriter(buf, fieldnames=fields, lineterminator="\n",
-                            extrasaction="ignore")
+    writer = csv.DictWriter(buf, fieldnames=fields, lineterminator="\n", extrasaction="ignore")
     writer.writeheader()
     for row in sheet:
         writer.writerow({k: ("" if v is None else v) for k, v in row.items()})
@@ -396,6 +525,7 @@ def _render_export(runs) -> None:
     hm_rows = build_hm_test_rows(runs)
     # maTest 数据真源是 application_cases 表（自动采集 + 手动录入），不是 test_runs
     from core.warehouse import build_ma_test_rows_from_cases
+
     ma_rows = build_ma_test_rows_from_cases(db_manager)
     bundles = {"hwInventory": hw_rows, "hmTest": hm_rows, "maTest": ma_rows}
 
@@ -408,11 +538,17 @@ def _render_export(runs) -> None:
             csv_bytes = export_template_csv(name, bundles[name]).encode("utf-8")
             json_bytes = export_template_json(name, bundles[name]).encode("utf-8")
             c2.download_button(
-                "CSV", data=csv_bytes, file_name=f"{name}.csv", mime="text/csv",
+                "CSV",
+                data=csv_bytes,
+                file_name=f"{name}.csv",
+                mime="text/csv",
                 key=f"wh_dl_csv_{name}",
             )
             c3.download_button(
-                "JSON", data=json_bytes, file_name=f"{name}.json", mime="application/json",
+                "JSON",
+                data=json_bytes,
+                file_name=f"{name}.json",
+                mime="application/json",
                 key=f"wh_dl_json_{name}",
             )
             c4.caption("—" if rows_n == 0 else f"{rows_n} 行")
@@ -423,12 +559,18 @@ def _render_export(runs) -> None:
     zip_csv = export_all_templates_zip(bundles, fmt="csv")
     zip_json = export_all_templates_zip(bundles, fmt="json")
     zc.download_button(
-        "📥 全部 CSV (ZIP)", data=zip_csv, file_name="warehouse_templates_csv.zip",
-        mime="application/zip", key="wh_dl_zip_csv",
+        "📥 全部 CSV (ZIP)",
+        data=zip_csv,
+        file_name="warehouse_templates_csv.zip",
+        mime="application/zip",
+        key="wh_dl_zip_csv",
     )
     zj.download_button(
-        "📥 全部 JSON (ZIP)", data=zip_json, file_name="warehouse_templates_json.zip",
-        mime="application/zip", key="wh_dl_zip_json",
+        "📥 全部 JSON (ZIP)",
+        data=zip_json,
+        file_name="warehouse_templates_json.zip",
+        mime="application/zip",
+        key="wh_dl_zip_json",
     )
 
 
@@ -438,24 +580,62 @@ def _render_export(runs) -> None:
 
 
 _COLUMN_LABELS = {
-    "date": "日期", "machine_id": "machine_id", "model_name": "模型", "engine": "引擎",
-    "parallel_strategy": "并行", "concurrency": "并发", "decode_tps": "decode TPS",
-    "ttft_s": "TTFT(s)", "effective_bandwidth_gbps": "等效带宽(GB/s)",
-    "bandwidth_utilization_pct": "带宽利用率(%)", "gpu_vram_peak_gb": "显存峰值(GB)",
-    "bottleneck": "瓶颈", "status": "状态", "external_level": "可对外", "tester": "测试员",
-    "test_id": "test_id", "model_version": "版本", "model_type": "类型",
-    "total_params": "总参数(B)", "active_params": "激活参数(B)", "quantization": "量化",
-    "dtype": "精度", "max_context": "上下文", "engine_version": "引擎版本",
-    "engine_params": "引擎参数", "prefill_tps": "prefill TPS", "p50_latency_s": "p50(s)",
-    "p95_latency_s": "p95(s)", "p99_latency_s": "p99(s)", "system_memory_peak_gb": "内存峰值(GB)",
-    "gpu_util_pct": "GPU利用率(%)", "cpu_util_pct": "CPU利用率(%)", "power_w": "功耗(W)",
-    "temp_c": "温度(℃)", "cpu_model": "CPU", "cpu_sockets": "路数", "cpu_cores": "核/路",
-    "memory_type": "内存类型", "memory_capacity_gb": "内存(GB)",
-    "memory_channels_populated": "通道", "gpu_model": "GPU", "gpu_count": "卡数",
-    "gpu_vram_gb": "显存(GB)", "gpu_bandwidth_gbps": "显存带宽(GB/s)", "pcie_gen": "PCIe Gen",
-    "pcie_width": "PCIe 宽", "cuda_or_rocm": "CUDA/ROCm", "driver": "驱动", "os": "OS",
-    "owner": "负责人", "location": "位置", "error_type": "异常类型", "error_detail": "异常明细",
-    "next_action": "下一步", "supersedes_test_id": "复测指向", "log_path": "日志路径",
+    "date": "日期",
+    "machine_id": "machine_id",
+    "model_name": "模型",
+    "engine": "引擎",
+    "parallel_strategy": "并行",
+    "concurrency": "并发",
+    "decode_tps": "decode TPS",
+    "ttft_s": "TTFT(s)",
+    "effective_bandwidth_gbps": "等效带宽(GB/s)",
+    "bandwidth_utilization_pct": "带宽利用率(%)",
+    "gpu_vram_peak_gb": "显存峰值(GB)",
+    "bottleneck": "瓶颈",
+    "status": "状态",
+    "external_level": "可对外",
+    "tester": "测试员",
+    "test_id": "test_id",
+    "model_version": "版本",
+    "model_type": "类型",
+    "total_params": "总参数(B)",
+    "active_params": "激活参数(B)",
+    "quantization": "量化",
+    "dtype": "精度",
+    "max_context": "上下文",
+    "engine_version": "引擎版本",
+    "engine_params": "引擎参数",
+    "prefill_tps": "prefill TPS",
+    "p50_latency_s": "p50(s)",
+    "p95_latency_s": "p95(s)",
+    "p99_latency_s": "p99(s)",
+    "system_memory_peak_gb": "内存峰值(GB)",
+    "gpu_util_pct": "GPU利用率(%)",
+    "cpu_util_pct": "CPU利用率(%)",
+    "power_w": "功耗(W)",
+    "temp_c": "温度(℃)",
+    "cpu_model": "CPU",
+    "cpu_sockets": "路数",
+    "cpu_cores": "核/路",
+    "memory_type": "内存类型",
+    "memory_capacity_gb": "内存(GB)",
+    "memory_channels_populated": "通道",
+    "gpu_model": "GPU",
+    "gpu_count": "卡数",
+    "gpu_vram_gb": "显存(GB)",
+    "gpu_bandwidth_gbps": "显存带宽(GB/s)",
+    "pcie_gen": "PCIe Gen",
+    "pcie_width": "PCIe 宽",
+    "cuda_or_rocm": "CUDA/ROCm",
+    "driver": "驱动",
+    "os": "OS",
+    "owner": "负责人",
+    "location": "位置",
+    "error_type": "异常类型",
+    "error_detail": "异常明细",
+    "next_action": "下一步",
+    "supersedes_test_id": "复测指向",
+    "log_path": "日志路径",
 }
 
 

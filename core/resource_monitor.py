@@ -73,6 +73,7 @@ class ResourceMonitor:
         # 预热 CPU% 指标（psutil 首次调用返回 0.0，先喂一次基准）
         try:
             import psutil
+
             psutil.cpu_percent(interval=None)
         except Exception:  # noqa: BLE001
             pass
@@ -110,9 +111,10 @@ class ResourceMonitor:
         # CPU / 内存
         try:
             import psutil
+
             sample["cpu_percent"] = psutil.cpu_percent(interval=None)
             mem = psutil.virtual_memory()
-            sample["system_memory_gb"] = round(mem.used / 1024 ** 3, 3)
+            sample["system_memory_gb"] = round(mem.used / 1024**3, 3)
         except Exception:  # noqa: BLE001
             sample["cpu_percent"] = None
             sample["system_memory_gb"] = None
@@ -134,7 +136,8 @@ class ResourceMonitor:
         if not self._nvml_ok or not self._nvml_handles:
             return result
         try:
-            import pynvml  # type: ignore
+            import pynvml
+
             utils = []
             vram_used = 0.0
             power_w = 0.0
@@ -152,7 +155,7 @@ class ResourceMonitor:
                 try:
                     mi = pynvml.nvmlDeviceGetMemoryInfo(handle)
                     vram_used += mi.used
-                    g["vram_used_gb"] = round(mi.used / 1024 ** 3, 2)
+                    g["vram_used_gb"] = round(mi.used / 1024**3, 2)
                 except Exception:  # noqa: BLE001
                     pass
                 try:
@@ -168,11 +171,15 @@ class ResourceMonitor:
                 except Exception:  # noqa: BLE001
                     pass
                 try:
-                    g["sm_clock_mhz"] = int(pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM))
+                    g["sm_clock_mhz"] = int(
+                        pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
+                    )
                 except Exception:  # noqa: BLE001
                     pass
                 try:
-                    g["mem_clock_mhz"] = int(pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM))
+                    g["mem_clock_mhz"] = int(
+                        pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM)
+                    )
                 except Exception:  # noqa: BLE001
                     pass
                 try:
@@ -181,23 +188,30 @@ class ResourceMonitor:
                     pass
                 try:
                     g["pcie_rx_mbs"] = round(
-                        pynvml.nvmlDeviceGetPcieThroughput(handle, pynvml.NVML_PCIE_UTIL_RX_BYTES) / 1024.0, 2)
+                        pynvml.nvmlDeviceGetPcieThroughput(handle, pynvml.NVML_PCIE_UTIL_RX_BYTES)
+                        / 1024.0,
+                        2,
+                    )
                 except Exception:  # noqa: BLE001
                     pass
                 try:
                     g["pcie_tx_mbs"] = round(
-                        pynvml.nvmlDeviceGetPcieThroughput(handle, pynvml.NVML_PCIE_UTIL_TX_BYTES) / 1024.0, 2)
+                        pynvml.nvmlDeviceGetPcieThroughput(handle, pynvml.NVML_PCIE_UTIL_TX_BYTES)
+                        / 1024.0,
+                        2,
+                    )
                 except Exception:  # noqa: BLE001
                     pass
                 try:
                     g["throttle"] = _decode_throttle(
-                        pynvml.nvmlDeviceGetCurrentClocksThrottleReasons(handle))
+                        pynvml.nvmlDeviceGetCurrentClocksThrottleReasons(handle)
+                    )
                 except Exception:  # noqa: BLE001
                     pass
                 per_gpu.append(g)
             if utils:
                 result["gpu_util_percent"] = round(sum(utils) / len(utils), 1)
-            result["gpu_vram_gb"] = round(vram_used / 1024 ** 3, 3) if vram_used else None
+            result["gpu_vram_gb"] = round(vram_used / 1024**3, 3) if vram_used else None
             result["gpu_power_w"] = round(power_w, 1) if power_w else None
             result["gpu_temp_c"] = temp_c or None
             result["per_gpu"] = per_gpu
@@ -211,13 +225,15 @@ class ResourceMonitor:
     def _init_nvml(self) -> None:
         try:
             try:
-                import pynvml  # type: ignore
+                import pynvml
             except ImportError:
-                from nvidia_ml_py import pynvml  # type: ignore  # noqa: F401
+                from nvidia_ml_py import pynvml  # noqa: F401
             pynvml.nvmlInit()
             count = pynvml.nvmlDeviceGetCount()
             indices = self.gpu_indices if self.gpu_indices is not None else range(count)
-            self._nvml_handles = [pynvml.nvmlDeviceGetHandleByIndex(i) for i in indices if 0 <= i < count]
+            self._nvml_handles = [
+                pynvml.nvmlDeviceGetHandleByIndex(i) for i in indices if 0 <= i < count
+            ]
             self._nvml_ok = bool(self._nvml_handles)
         except Exception as e:  # noqa: BLE001
             # 无 GPU / 无驱动 / 无 nvidia-ml-py：降级为仅 CPU/内存
@@ -229,7 +245,8 @@ class ResourceMonitor:
         if not self._nvml_ok:
             return
         try:
-            import pynvml  # type: ignore
+            import pynvml
+
             pynvml.nvmlShutdown()
         except Exception:  # noqa: BLE001
             pass
@@ -237,8 +254,14 @@ class ResourceMonitor:
     # ------------------------------------------------------------------
     # 汇总
     # ------------------------------------------------------------------
-    METRIC_KEYS = ("cpu_percent", "system_memory_gb", "gpu_util_percent",
-                   "gpu_vram_gb", "gpu_power_w", "gpu_temp_c")
+    METRIC_KEYS = (
+        "cpu_percent",
+        "system_memory_gb",
+        "gpu_util_percent",
+        "gpu_vram_gb",
+        "gpu_power_w",
+        "gpu_temp_c",
+    )
 
     def _summarize(self) -> dict[str, Any]:
         samples = self._samples
@@ -262,9 +285,15 @@ class ResourceMonitor:
         # per-GPU 峰值(分卡归因:哪张卡最热/最耗电/PCIe 最忙/是否降频)
         per_gpu_peaks = self._per_gpu_peaks(samples)
         # 全局观测到的 throttle 原因(去重)
-        throttle_seen = sorted({t for s in samples for g in (s.get("per_gpu") or [])
-                                for t in ([g["throttle"]] if g.get("throttle") and g["throttle"] != "none" else [])
-                                if t})
+        throttle_seen = sorted(
+            {
+                t
+                for s in samples
+                for g in (s.get("per_gpu") or [])
+                for t in ([g["throttle"]] if g.get("throttle") and g["throttle"] != "none" else [])
+                if t
+            }
+        )
 
         timeline = self._downsample(samples)
         gpu_available = any(s.get("gpu_util_percent") is not None for s in samples)
@@ -284,10 +313,17 @@ class ResourceMonitor:
     def _per_gpu_peaks(self, samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """每张卡的峰值:最高温/最大功耗/最大利用率/PCIe 峰值/观测到的降频。"""
         by_idx: dict[int, dict[str, Any]] = {}
-        peak_keys = ("util", "power_w", "temp_c", "sm_clock_mhz", "mem_clock_mhz",
-                     "pcie_rx_mbs", "pcie_tx_mbs")
+        peak_keys = (
+            "util",
+            "power_w",
+            "temp_c",
+            "sm_clock_mhz",
+            "mem_clock_mhz",
+            "pcie_rx_mbs",
+            "pcie_tx_mbs",
+        )
         for s in samples:
-            for g in (s.get("per_gpu") or []):
+            for g in s.get("per_gpu") or []:
                 idx = g.get("index")
                 if idx is None:
                     continue

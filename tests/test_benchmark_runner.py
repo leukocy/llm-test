@@ -24,7 +24,7 @@ class TestBenchmarkRunner:
             csv_filename="test.csv",
             api_key="test-key",
             log_placeholder=log_placeholder,
-            provider="TestProvider"
+            provider="TestProvider",
         )
 
     def test_calculate_metrics_normal(self, runner):
@@ -33,7 +33,9 @@ class TestBenchmarkRunner:
         end_time = 102.0
         completion_tokens = 10
 
-        ttft, tps, tpot, p95, p99, gen_time = runner._calculate_metrics(start_time, first_token_time, end_time, completion_tokens)
+        ttft, tps, tpot, p95, p99, gen_time = runner._calculate_metrics(
+            start_time, first_token_time, end_time, completion_tokens
+        )
 
         expected_ttft_raw = 0.5
         expected_ttft = expected_ttft_raw
@@ -49,10 +51,12 @@ class TestBenchmarkRunner:
     def test_calculate_metrics_single_token(self, runner):
         start_time = 100.0
         first_token_time = 100.5
-        end_time = 100.5 # Instant finish after first token
+        end_time = 100.5  # Instant finish after first token
         completion_tokens = 1
 
-        ttft, tps, tpot, p95, p99, gen_time = runner._calculate_metrics(start_time, first_token_time, end_time, completion_tokens)
+        ttft, tps, tpot, p95, p99, gen_time = runner._calculate_metrics(
+            start_time, first_token_time, end_time, completion_tokens
+        )
 
         expected_ttft_raw = 0.5
         expected_ttft = expected_ttft_raw
@@ -72,11 +76,11 @@ class TestBenchmarkRunner:
 
     def test_get_empty_metrics(self, runner):
         metrics = runner._get_empty_metrics()
-        assert metrics['ttft'] == 0
-        assert metrics['tps'] == 0
-        assert metrics['error'] is None
+        assert metrics["ttft"] == 0
+        assert metrics["tps"] == 0
+        assert metrics["error"] is None
         # Checking implementation: return {"ttft": 0, ..., "token_calc_method": "Error"}
-        assert metrics['token_calc_method'] == "Error"
+        assert metrics["token_calc_method"] == "Error"
 
     @pytest.mark.asyncio
     async def test_get_completion_decode_time_uses_skip_first_token_window(self, runner):
@@ -103,7 +107,9 @@ class TestBenchmarkRunner:
         assert result["tps"] == pytest.approx(3 / 0.8)
 
     @pytest.mark.asyncio
-    async def test_long_context_system_output_throughput_uses_skip_adjusted_decode_tokens(self, runner, tmp_path):
+    async def test_long_context_system_output_throughput_uses_skip_adjusted_decode_tokens(
+        self, runner, tmp_path
+    ):
         runner.csv_file = str(tmp_path / "long_context.csv")
         runner._start_db_run = MagicMock()
         runner._batch_save_results_to_db = MagicMock()
@@ -156,7 +162,9 @@ class TestBenchmarkRunner:
         runner._calibrate_prompt = MagicMock(return_value="prompt")
         runner._run_concurrency_batch = AsyncMock(return_value=[])
 
-        await runner.run_concurrency_test([2], rounds_per_level=1, max_tokens=4, input_tokens_target=20)
+        await runner.run_concurrency_test(
+            [2], rounds_per_level=1, max_tokens=4, input_tokens_target=20
+        )
 
         calibrated_targets = [call.args[0] for call in runner._calibrate_prompt.call_args_list]
         assert calibrated_targets == [15, 15]
@@ -182,7 +190,7 @@ class TestBenchmarkRunnerSystemInfo:
             csv_filename="test.csv",
             api_key="test-key",
             log_placeholder=log_placeholder,
-            provider="TestProvider"
+            provider="TestProvider",
         )
 
     def test_get_system_info_returns_required_fields(self, runner):
@@ -190,44 +198,54 @@ class TestBenchmarkRunnerSystemInfo:
         info = runner.get_system_info()
 
         required_fields = [
-            "system", "processor", "python", "hostname",
-            "memory", "cpu_count", "gpu", "mainboard",
-            "model_name", "engine_name"
+            "system",
+            "processor",
+            "python",
+            "hostname",
+            "memory",
+            "cpu_count",
+            "gpu",
+            "mainboard",
+            "model_name",
+            "engine_name",
         ]
         for field in required_fields:
             assert field in info
 
     def test_get_system_info_with_custom_overrides(self, runner):
         """TestCustom系统信息覆盖（经 warehouse_context 注入，core 不再读 session_state）"""
-        runner.set_warehouse_context({
-            'custom_sys_info': {
-                'processor': 'Custom CPU',
-                'gpu': 'Custom GPU',
-                'memory': '64GB RAM',
-                'engine_name': 'vLLM'
+        runner.set_warehouse_context(
+            {
+                "custom_sys_info": {
+                    "processor": "Custom CPU",
+                    "gpu": "Custom GPU",
+                    "memory": "64GB RAM",
+                    "engine_name": "vLLM",
+                }
             }
-        })
+        )
 
         info = runner.get_system_info()
 
-        assert info['processor'] == 'Custom CPU'
-        assert info['gpu'] == 'Custom GPU'
-        assert info['memory'] == '64GB RAM'
-        assert info['engine_name'] == 'vLLM'
+        assert info["processor"] == "Custom CPU"
+        assert info["gpu"] == "Custom GPU"
+        assert info["memory"] == "64GB RAM"
+        assert info["engine_name"] == "vLLM"
 
     def test_get_system_info_model_name_from_config(self, runner):
         """TestModel name来自Configure"""
         info = runner.get_system_info()
-        assert info['model_name'] == 'test-model'
+        assert info["model_name"] == "test-model"
 
     def test_get_system_info_engine_name_empty_without_override(self, runner):
         """Test引擎名称来自 provider"""
         import streamlit as st
+
         st.session_state.custom_sys_info = {}
 
         info = runner.get_system_info()
         # Engine refers to the inference backend, so provider names are not a fallback.
-        assert info['engine_name'] == ''
+        assert info["engine_name"] == ""
 
     def test_update_ui_invokes_render_progress_callback(self, runner):
         """update_ui 把实时结果交给注入的 render_progress 回调，不直接调 st.*（模式 F）"""
@@ -239,9 +257,9 @@ class TestBenchmarkRunnerSystemInfo:
         runner.update_ui()
 
         assert len(captured) == 1
-        assert captured[0][0] == 1          # df 一行
-        assert captured[0][1] is None       # 无 latest_output
-        assert captured[0][2] == 7          # session_id 透传
+        assert captured[0][0] == 1  # df 一行
+        assert captured[0][1] is None  # 无 latest_output
+        assert captured[0][2] == 7  # session_id 透传
 
     def test_update_ui_skips_render_when_no_callback(self, runner):
         """未注入 render_progress（headless/测试默认）时不报错"""
@@ -270,10 +288,10 @@ class TestBenchmarkRunnerInitialization:
     @pytest.fixture
     def mock_dependencies(self):
         return {
-            'placeholder': MagicMock(),
-            'progress_bar': MagicMock(),
-            'status_text': MagicMock(),
-            'log_placeholder': MagicMock()
+            "placeholder": MagicMock(),
+            "progress_bar": MagicMock(),
+            "status_text": MagicMock(),
+            "log_placeholder": MagicMock(),
         }
 
     def test_initialization_basic_params(self, mock_dependencies):
@@ -285,7 +303,7 @@ class TestBenchmarkRunnerInitialization:
             csv_filename="test.csv",
             api_key="test-key",
             provider="openai",
-            **mock_dependencies
+            **mock_dependencies,
         )
 
         assert runner.api_base_url == "http://test.api"
@@ -306,7 +324,7 @@ class TestBenchmarkRunnerInitialization:
             thinking_enabled=True,
             thinking_budget=8192,
             reasoning_effort="high",
-            **mock_dependencies
+            **mock_dependencies,
         )
 
         assert runner.thinking_enabled == True
@@ -322,7 +340,7 @@ class TestBenchmarkRunnerInitialization:
             csv_filename="test.csv",
             api_key="test-key",
             provider="openai",
-            **mock_dependencies
+            **mock_dependencies,
         )
 
         assert runner.completed_requests == 0
@@ -339,18 +357,31 @@ class TestBenchmarkRunnerInitialization:
             csv_filename="test.csv",
             api_key="test-key",
             provider="openai",
-            **mock_dependencies
+            **mock_dependencies,
         )
 
         expected_columns = [
-            "test_type", "concurrency", "round",
+            "test_type",
+            "concurrency",
+            "round",
             "input_tokens_target",
             "context_length_target",
-            "session_id", "ttft", "tps", "prefill_speed",
-            "prefill_tokens", "decode_tokens", "api_prefill", "api_decode",
+            "session_id",
+            "ttft",
+            "tps",
+            "prefill_speed",
+            "prefill_tokens",
+            "decode_tokens",
+            "api_prefill",
+            "api_decode",
             "cache_hit_tokens",
-            "token_calc_method", "error", "system_output_throughput",
-            "system_input_throughput", "rps", "tpot_p95", "tpot_p99"
+            "token_calc_method",
+            "error",
+            "system_output_throughput",
+            "system_input_throughput",
+            "rps",
+            "tpot_p95",
+            "tpot_p99",
         ]
 
         assert runner.combined_csv_columns == expected_columns
@@ -376,7 +407,7 @@ class TestBenchmarkRunnerMetrics:
             csv_filename="test.csv",
             api_key="test-key",
             log_placeholder=log_placeholder,
-            provider="TestProvider"
+            provider="TestProvider",
         )
 
     def test_calculate_metrics_with_latency_offset(self, runner):
@@ -461,7 +492,7 @@ class TestBenchmarkRunnerEdgeCases:
             csv_filename="test.csv",
             api_key="test-key",
             log_placeholder=log_placeholder,
-            provider="TestProvider"
+            provider="TestProvider",
         )
 
     def test_concurrent_requests_tracking(self, runner):
@@ -500,7 +531,7 @@ class TestBenchmarkRunnerEdgeCases:
         runner.last_output = "Latest response"
         assert runner.last_output == "Latest response"
 
-    @patch('core.benchmark_runner.get_provider')
+    @patch("core.benchmark_runner.get_provider")
     def test_provider_initialization(self, mock_get_provider):
         """Test Provider Initialize"""
         mock_provider = MagicMock()
@@ -521,15 +552,12 @@ class TestBenchmarkRunnerEdgeCases:
             csv_filename="test.csv",
             api_key="custom-key",
             log_placeholder=log_placeholder,
-            provider="custom_provider"
+            provider="custom_provider",
         )
 
         # Verify get_provider was called with correct arguments
         mock_get_provider.assert_called_once_with(
-            "custom_provider",
-            "http://custom.api",
-            "custom-key",
-            "custom-model"
+            "custom_provider", "http://custom.api", "custom-key", "custom-model"
         )
         assert runner.provider == mock_provider
 
@@ -554,7 +582,7 @@ class TestBenchmarkRunnerResume:
             csv_filename=str(tmp_path / "resume.csv"),
             api_key="test-key",
             log_placeholder=log_placeholder,
-            provider="TestProvider"
+            provider="TestProvider",
         )
         return runner
 
@@ -562,14 +590,17 @@ class TestBenchmarkRunnerResume:
     async def test_resume_skips_completed_batches(self, runner, tmp_path):
         """resume时跳过已完成的批次，只运行剩余批次"""
 
-        runner.ui_state.set('is_resuming', True)
-        runner.ui_state.set('resume_data', {
-            "completed_results": [{"session_id": i} for i in range(4)],
-            "current_index": 4,
-            "total_samples": 6,
-            "test_id": "test_resume",
-            "test_type": "concurrency"
-        })
+        runner.ui_state.set("is_resuming", True)
+        runner.ui_state.set(
+            "resume_data",
+            {
+                "completed_results": [{"session_id": i} for i in range(4)],
+                "current_index": 4,
+                "total_samples": 6,
+                "test_id": "test_resume",
+                "test_type": "concurrency",
+            },
+        )
 
         runner._start_db_run = MagicMock()
         runner._batch_save_results_to_db = MagicMock()
@@ -578,10 +609,15 @@ class TestBenchmarkRunnerResume:
         runner._get_tokenizer = MagicMock(return_value=object())
         runner._calibrate_prompt = MagicMock(return_value="prompt")
         runner._run_concurrency_batch = AsyncMock(
-            return_value=[{"session_id": 5, "error": None}, {"session_id": 6, "error": None}]
+            return_value=[
+                {"session_id": 5, "error": None},
+                {"session_id": 6, "error": None},
+            ]
         )
 
-        await runner.run_concurrency_test([2], rounds_per_level=3, max_tokens=10, input_tokens_target=20)
+        await runner.run_concurrency_test(
+            [2], rounds_per_level=3, max_tokens=10, input_tokens_target=20
+        )
 
         # 总请求数 = 2 * 3 = 6，已做 4 个，应只运行最后 1 个 batch
         assert runner._run_concurrency_batch.call_count == 1
@@ -591,14 +627,17 @@ class TestBenchmarkRunnerResume:
         """resume时恢复已保存的结果列表"""
 
         saved_results = [{"session_id": i, "ttft": 0.5} for i in range(4)]
-        runner.ui_state.set('is_resuming', True)
-        runner.ui_state.set('resume_data', {
-            "completed_results": saved_results.copy(),
-            "current_index": 4,
-            "total_samples": 6,
-            "test_id": "test_resume",
-            "test_type": "concurrency"
-        })
+        runner.ui_state.set("is_resuming", True)
+        runner.ui_state.set(
+            "resume_data",
+            {
+                "completed_results": saved_results.copy(),
+                "current_index": 4,
+                "total_samples": 6,
+                "test_id": "test_resume",
+                "test_type": "concurrency",
+            },
+        )
 
         runner._start_db_run = MagicMock()
         runner._batch_save_results_to_db = MagicMock()
@@ -607,10 +646,15 @@ class TestBenchmarkRunnerResume:
         runner._get_tokenizer = MagicMock(return_value=object())
         runner._calibrate_prompt = MagicMock(return_value="prompt")
         runner._run_concurrency_batch = AsyncMock(
-            return_value=[{"session_id": 4, "error": None}, {"session_id": 5, "error": None}]
+            return_value=[
+                {"session_id": 4, "error": None},
+                {"session_id": 5, "error": None},
+            ]
         )
 
-        await runner.run_concurrency_test([2], rounds_per_level=3, max_tokens=10, input_tokens_target=20)
+        await runner.run_concurrency_test(
+            [2], rounds_per_level=3, max_tokens=10, input_tokens_target=20
+        )
 
         assert len(runner.results_list) == 6
         assert runner.results_list[0]["session_id"] == 0
@@ -621,14 +665,17 @@ class TestBenchmarkRunnerResume:
     async def test_resume_with_zero_current_index_fallback(self, runner, tmp_path):
         """current_index 为 0 时回退到 completed_requests"""
 
-        runner.ui_state.set('is_resuming', True)
-        runner.ui_state.set('resume_data', {
-            "completed_results": [{"session_id": i} for i in range(4)],
-            "current_index": 0,
-            "total_samples": 6,
-            "test_id": "test_resume",
-            "test_type": "concurrency"
-        })
+        runner.ui_state.set("is_resuming", True)
+        runner.ui_state.set(
+            "resume_data",
+            {
+                "completed_results": [{"session_id": i} for i in range(4)],
+                "current_index": 0,
+                "total_samples": 6,
+                "test_id": "test_resume",
+                "test_type": "concurrency",
+            },
+        )
 
         runner._start_db_run = MagicMock()
         runner._batch_save_results_to_db = MagicMock()
@@ -637,10 +684,15 @@ class TestBenchmarkRunnerResume:
         runner._get_tokenizer = MagicMock(return_value=object())
         runner._calibrate_prompt = MagicMock(return_value="prompt")
         runner._run_concurrency_batch = AsyncMock(
-            return_value=[{"session_id": 5, "error": None}, {"session_id": 6, "error": None}]
+            return_value=[
+                {"session_id": 5, "error": None},
+                {"session_id": 6, "error": None},
+            ]
         )
 
-        await runner.run_concurrency_test([2], rounds_per_level=3, max_tokens=10, input_tokens_target=20)
+        await runner.run_concurrency_test(
+            [2], rounds_per_level=3, max_tokens=10, input_tokens_target=20
+        )
 
         # current_index=0 应回退为 4，只运行最后 1 个 batch
         assert runner._run_concurrency_batch.call_count == 1
@@ -649,6 +701,7 @@ class TestBenchmarkRunnerResume:
     async def test_non_resume_runs_all_batches(self, runner, tmp_path):
         """非resume模式下从头运行所有批次"""
         import streamlit as st
+
         st.session_state.is_resuming = False
 
         runner._start_db_run = MagicMock()
@@ -665,7 +718,9 @@ class TestBenchmarkRunnerResume:
             ]
         )
 
-        await runner.run_concurrency_test([2], rounds_per_level=3, max_tokens=10, input_tokens_target=20)
+        await runner.run_concurrency_test(
+            [2], rounds_per_level=3, max_tokens=10, input_tokens_target=20
+        )
 
         # 非 resume 应运行全部 3 个 batch
         assert runner._run_concurrency_batch.call_count == 3
@@ -674,15 +729,18 @@ class TestBenchmarkRunnerResume:
     async def test_resume_across_multiple_concurrency_levels(self, runner, tmp_path):
         """resume跨越多个concurrency level时正确跳过"""
 
-        runner.ui_state.set('is_resuming', True)
+        runner.ui_state.set("is_resuming", True)
         # conc=2 时 2 rounds = 4 请求，从 conc=4 开始
-        runner.ui_state.set('resume_data', {
-            "completed_results": [{"session_id": i} for i in range(4)],
-            "current_index": 4,
-            "total_samples": 12,
-            "test_id": "test_resume",
-            "test_type": "concurrency"
-        })
+        runner.ui_state.set(
+            "resume_data",
+            {
+                "completed_results": [{"session_id": i} for i in range(4)],
+                "current_index": 4,
+                "total_samples": 12,
+                "test_id": "test_resume",
+                "test_type": "concurrency",
+            },
+        )
 
         runner._start_db_run = MagicMock()
         runner._batch_save_results_to_db = MagicMock()
@@ -697,7 +755,9 @@ class TestBenchmarkRunnerResume:
             ]
         )
 
-        await runner.run_concurrency_test([2, 4], rounds_per_level=2, max_tokens=10, input_tokens_target=20)
+        await runner.run_concurrency_test(
+            [2, 4], rounds_per_level=2, max_tokens=10, input_tokens_target=20
+        )
 
         # 跳过 conc=2 的 2 rounds (4 请求)，只运行 conc=4 的 2 rounds
         assert runner._run_concurrency_batch.call_count == 2
@@ -720,6 +780,7 @@ class TestBenchmarkRunnerResume:
         runner._save_progress = MagicMock(return_value=True)
 
         call_count = 0
+
         def side_effect(*args, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -729,6 +790,7 @@ class TestBenchmarkRunnerResume:
 
         # Mock _check_control_signal 让它在两次正常 check 后返回 pause
         signal_count = 0
+
         def mock_check_signal():
             nonlocal signal_count
             signal_count += 1
@@ -741,7 +803,9 @@ class TestBenchmarkRunnerResume:
 
         try:
             with patch("config.session_state.set_test_paused", MagicMock()):
-                df = await runner.run_concurrency_test([2], rounds_per_level=3, max_tokens=10, input_tokens_target=20)
+                df = await runner.run_concurrency_test(
+                    [2], rounds_per_level=3, max_tokens=10, input_tokens_target=20
+                )
         finally:
             runner._check_control_signal = original_check
 
@@ -749,4 +813,3 @@ class TestBenchmarkRunnerResume:
         runner._save_progress.assert_called_once()
         saved_current_index = runner._save_progress.call_args[0][1]
         assert saved_current_index == 4  # 2 batches * 2 = 4 completed requests
-

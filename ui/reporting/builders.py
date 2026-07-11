@@ -185,7 +185,9 @@ def build_prefill_summary(df_group: pd.DataFrame) -> pd.DataFrame:
 def build_long_context_summary(df_group: pd.DataFrame) -> pd.DataFrame:
     """Build the long-context report summary without Streamlit dependencies."""
     if "context_length_target" not in df_group.columns:
-        raise ValueError("Long context summary failed: missing 'context_length_target' column in data.")
+        raise ValueError(
+            "Long context summary failed: missing 'context_length_target' column in data."
+        )
 
     work = df_group.copy()
     if work.empty:

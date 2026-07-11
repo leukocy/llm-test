@@ -9,19 +9,20 @@ logger = get_logger(__name__)
 # LatencyImport transformers（重型库）
 _AutoTokenizer = None
 
+
 def _get_auto_tokenizer():
     """LatencyGet AutoTokenizer 类"""
     global _AutoTokenizer
     if _AutoTokenizer is None:
         from transformers import AutoTokenizer
+
         _AutoTokenizer = AutoTokenizer
     return _AutoTokenizer
 
 
 def _is_extra_special_tokens_list_error(error: Exception) -> bool:
-    return (
-        isinstance(error, AttributeError)
-        and "'list' object has no attribute 'keys'" in str(error)
+    return isinstance(error, AttributeError) and "'list' object has no attribute 'keys'" in str(
+        error
     )
 
 
@@ -35,8 +36,7 @@ def _from_pretrained_with_compat(AutoTokenizer, model_path, **kwargs):
         compat_kwargs = dict(kwargs)
         compat_kwargs.setdefault("extra_special_tokens", {})
         logger.info(
-            "Retrying tokenizer load with extra_special_tokens compatibility: "
-            f"{model_path}"
+            f"Retrying tokenizer load with extra_special_tokens compatibility: {model_path}"
         )
         return AutoTokenizer.from_pretrained(model_path, **compat_kwargs)
 
@@ -127,6 +127,7 @@ def _download_tokenizer_from_modelscope(repo_id: str, local_dir: str) -> bool:
 def _resolve_modelscope_id(local_dir_name: str) -> str | None:
     """Resolve a local tokenizer directory name to its ModelScope repo ID."""
     from config.settings import TOKENIZER_MODELSCOPE_MAPPING
+
     return TOKENIZER_MODELSCOPE_MAPPING.get(local_dir_name)
 
 
@@ -217,14 +218,24 @@ def ensure_tokenizer_available(model_path: str) -> str | None:
 
     # 1. Try ModelScope first (优先国内源)
     ms_repo_id = _resolve_modelscope_repo_id(local_dir_name)
-    if not ms_repo_id and "/" in model_path and not model_path.startswith(".") and not os.path.isabs(model_path):
+    if (
+        not ms_repo_id
+        and "/" in model_path
+        and not model_path.startswith(".")
+        and not os.path.isabs(model_path)
+    ):
         ms_repo_id = model_path
     if ms_repo_id and _download_tokenizer_from_modelscope(ms_repo_id, local_dir):
         return local_dir
 
     # 2. Fall back to HuggingFace Hub
     hf_repo_id = _resolve_hf_repo_id(local_dir_name)
-    if not hf_repo_id and "/" in model_path and not model_path.startswith(".") and not os.path.isabs(model_path):
+    if (
+        not hf_repo_id
+        and "/" in model_path
+        and not model_path.startswith(".")
+        and not os.path.isabs(model_path)
+    ):
         hf_repo_id = model_path
     if hf_repo_id and _download_tokenizer_from_hf(hf_repo_id, local_dir):
         return local_dir
@@ -255,7 +266,9 @@ def get_cached_tokenizer(model_path):
     tokenizers_dir = os.path.join(".", "tokenizers")
     if os.path.exists(tokenizers_dir):
         try:
-            target_name = model_path.split("/")[-1].lower() if "/" in model_path else model_path.lower()
+            target_name = (
+                model_path.split("/")[-1].lower() if "/" in model_path else model_path.lower()
+            )
             for item in os.listdir(tokenizers_dir):
                 if target_name in item.lower() or item.lower() in target_name:
                     candidates.append(os.path.join(tokenizers_dir, item))
@@ -275,7 +288,7 @@ def get_cached_tokenizer(model_path):
 
     # Try local loads first
     for candidate in unique_candidates:
-        if os.path.exists(candidate): # Only try if path exists
+        if os.path.exists(candidate):  # Only try if path exists
             try:
                 logger.debug(f"Trying local tokenizer: {candidate}")
                 return _from_pretrained_with_compat(
@@ -306,11 +319,11 @@ def get_cached_tokenizer(model_path):
     # Finally, try online load on the original path as last resort
     try:
         if "/" in model_path and not os.path.exists(model_path):
-             return _from_pretrained_with_compat(
-                 AutoTokenizer,
-                 model_path,
-                 trust_remote_code=True,
-             )
+            return _from_pretrained_with_compat(
+                AutoTokenizer,
+                model_path,
+                trust_remote_code=True,
+            )
     except Exception as e:
         last_error = e
 
@@ -338,9 +351,11 @@ def list_registered_tokenizers() -> list[dict]:
         if isinstance(source, str):
             ms_repo_id = source
             hf_repo_id = source
-        else:
+        elif isinstance(source, dict):
             ms_repo_id = source["ms"]
             hf_repo_id = source["hf"]
+        else:
+            continue
 
         local_path = os.path.join(tokenizers_dir, local_name)
         available = os.path.exists(local_path) and os.listdir(local_path)
@@ -356,13 +371,15 @@ def list_registered_tokenizers() -> list[dict]:
             except Exception:
                 pass
 
-        results.append({
-            "name": local_name,
-            "local_path": local_path,
-            "available": available,
-            "modelscope_repo_id": ms_repo_id,
-            "hf_repo_id": hf_repo_id,
-            "size_mb": size_mb,
-        })
+        results.append(
+            {
+                "name": local_name,
+                "local_path": local_path,
+                "available": available,
+                "modelscope_repo_id": ms_repo_id,
+                "hf_repo_id": hf_repo_id,
+                "size_mb": size_mb,
+            }
+        )
 
     return results

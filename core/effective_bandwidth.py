@@ -71,10 +71,16 @@ def summarize_gap(bw: dict[str, float | None]) -> str:
     if util is None:
         return f"实测等效带宽约 {eff:.0f} GB/s。"
     if util >= 85:
-        return (f"实测等效带宽 {eff:.0f} GB/s，已达标称带宽 {nom:.0f} GB/s 的 {util:.0f}%，"
-                f"decode 接近带宽上界，剩余提升空间有限。")
+        return (
+            f"实测等效带宽 {eff:.0f} GB/s，已达标称带宽 {nom:.0f} GB/s 的 {util:.0f}%，"
+            f"decode 接近带宽上界，剩余提升空间有限。"
+        )
     if util >= 50:
-        return (f"实测等效带宽 {eff:.0f} GB/s，为标称带宽 {nom:.0f} GB/s 的 {util:.0f}%，"
-                f"中等利用，损耗可能来自调度 / KV 访问 / 通信 / 引擎实现。")
-    return (f"实测等效带宽 {eff:.0f} GB/s，仅标称带宽 {nom:.0f} GB/s 的 {util:.0f}%，"
-            f"显著偏低，重点排查：通信(TP/EP)、CPU 侧调度/权重搬运、batch 不足、降频。")
+        return (
+            f"实测等效带宽 {eff:.0f} GB/s，为标称带宽 {nom:.0f} GB/s 的 {util:.0f}%，"
+            f"中等利用，损耗可能来自调度 / KV 访问 / 通信 / 引擎实现。"
+        )
+    return (
+        f"实测等效带宽 {eff:.0f} GB/s，仅标称带宽 {nom:.0f} GB/s 的 {util:.0f}%，"
+        f"显著偏低，重点排查：通信(TP/EP)、CPU 侧调度/权重搬运、batch 不足、降频。"
+    )

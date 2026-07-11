@@ -8,44 +8,43 @@ from urllib.parse import ParseResult, urlparse
 
 class SSRFError(Exception):
     """Raised when URL validation fails due to SSRF risk."""
+
     pass
 
 
 # Default allowlist of known safe API providers
 DEFAULT_SAFE_DOMAINS = {
-    'api.openai.com',
-    'api.deepseek.com',
-    'open.bigmodel.cn',
-    'dashscope.aliyuncs.com',
-    'api.minimax.chat',
-    'api.siliconflow.cn',
-    'openrouter.ai',
-    'ark.cn-beijing.volces.com',
-    'api.moonshot.cn',
-    'generativelanguage.googleapis.com',
-    'xiaomimimo.com',
+    "api.openai.com",
+    "api.deepseek.com",
+    "open.bigmodel.cn",
+    "dashscope.aliyuncs.com",
+    "api.minimax.chat",
+    "api.siliconflow.cn",
+    "openrouter.ai",
+    "ark.cn-beijing.volces.com",
+    "api.moonshot.cn",
+    "generativelanguage.googleapis.com",
+    "xiaomimimo.com",
     # Local development servers
-    'localhost',
-    '127.0.0.1',
+    "localhost",
+    "127.0.0.1",
 }
 
 # Blocklist of dangerous IP ranges (CIDR notation converted to regex)
 BLOCKED_IP_PATTERNS = [
-    r'192\.168\.\d+\.\d+',      # Private network (Class C)
-    r'10\.\d+\.\d+\.\d+',        # Private network (Class A)
-    r'172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+',  # Private network (Class B)
-    r'127\.\d+\.\d+\.\d+',       # Loopback (beyond localhost)
-    r'0\.\d+\.\d+\.\d+',         # Invalid
-    r'169\.254\.\d+\.\d+',       # Link-local
-    r'224\.\d+\.\d+\.\d+',       # Multicast
-    r'240\.\d+\.\d+\.\d+',       # Reserved
+    r"192\.168\.\d+\.\d+",  # Private network (Class C)
+    r"10\.\d+\.\d+\.\d+",  # Private network (Class A)
+    r"172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+",  # Private network (Class B)
+    r"127\.\d+\.\d+\.\d+",  # Loopback (beyond localhost)
+    r"0\.\d+\.\d+\.\d+",  # Invalid
+    r"169\.254\.\d+\.\d+",  # Link-local
+    r"224\.\d+\.\d+\.\d+",  # Multicast
+    r"240\.\d+\.\d+\.\d+",  # Reserved
 ]
 
 
 def is_safe_url(
-    url: str,
-    allow_private: bool = False,
-    custom_safe_domains: set[str] | None = None
+    url: str, allow_private: bool = False, custom_safe_domains: set[str] | None = None
 ) -> tuple[bool, str | None]:
     """
     Validate a URL to prevent SSRF attacks.
@@ -67,8 +66,11 @@ def is_safe_url(
         return False, f"Invalid URL format: {e}"
 
     # Check scheme (protocol)
-    if parsed.scheme not in ('http', 'https'):
-        return False, f"Unsupported protocol: {parsed.scheme}. Only http and https are allowed."
+    if parsed.scheme not in ("http", "https"):
+        return (
+            False,
+            f"Unsupported protocol: {parsed.scheme}. Only http and https are allowed.",
+        )
 
     # Check hostname exists
     if not parsed.hostname:
@@ -78,27 +80,30 @@ def is_safe_url(
 
     # Check for IP-based SSRF
     # First, check if it's an IP address
-    ip_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
+    ip_pattern = r"^(\d{1,3}\.){3}\d{1,3}$"
     if re.match(ip_pattern, hostname):
         # Check against blocked IP patterns
         for blocked_pattern in BLOCKED_IP_PATTERNS:
             if re.match(blocked_pattern, hostname):
                 if not allow_private:
-                    return False, f"Private/internal IP addresses are not allowed: {hostname}"
+                    return (
+                        False,
+                        f"Private/internal IP addresses are not allowed: {hostname}",
+                    )
 
         # Validate IP octets are all <= 255
-        octets = hostname.split('.')
+        octets = hostname.split(".")
         for octet in octets:
             if int(octet) > 255:
                 return False, f"Invalid IP address: {hostname}"
 
     # Check for private/internal hostnames
-    private_patterns = ['localhost', '127.0.0.1', '0.0.0.0', '::1']
+    private_patterns = ["localhost", "127.0.0.1", "0.0.0.0", "::1"]
     if hostname in private_patterns and not allow_private:
         return False, f"Local addresses are not allowed: {hostname}"
 
     # Check for metadata endpoints (AWS, GCP, Azure)
-    if 'metadata' in hostname.lower():
+    if "metadata" in hostname.lower():
         return False, "Metadata endpoints are not allowed"
 
     # Check against allowlist (if provided)
@@ -112,25 +117,24 @@ def is_safe_url(
 
     # Check if it's a subdomain of a safe domain
     for safe_domain in safe_domains:
-        if hostname.endswith('.' + safe_domain):
+        if hostname.endswith("." + safe_domain):
             return True, None
 
     # For unknown domains, warn but allow (with logging recommendation)
     # In production, you might want to be more strict
     import warnings
+
     warnings.warn(
         f"Unrecognized domain: {hostname}. Ensure this is a trusted API provider.",
         UserWarning,
-        stacklevel=2
+        stacklevel=2,
     )
 
     return True, None
 
 
 def validate_and_normalize_url(
-    url: str,
-    allow_private: bool = False,
-    require_https: bool = False
+    url: str, allow_private: bool = False, require_https: bool = False
 ) -> str:
     """
     Validate and normalize a URL.
@@ -153,14 +157,18 @@ def validate_and_normalize_url(
     parsed = urlparse(url)
 
     # Enforce HTTPS if required
-    if require_https and parsed.scheme != 'https':
+    if require_https and parsed.scheme != "https":
         raise SSRFError("HTTPS is required for API calls")
 
     # Normalize: ensure path doesn't end with duplicate slashes
-    normalized = url.rstrip('/')
-    if not normalized.endswith('/v1') and not normalized.endswith('/v1/') and '/' not in normalized.split('://', 1)[1]:
+    normalized = url.rstrip("/")
+    if (
+        not normalized.endswith("/v1")
+        and not normalized.endswith("/v1/")
+        and "/" not in normalized.split("://", 1)[1]
+    ):
         # Add trailing slash for consistency if no path
-        normalized = normalized + '/'
+        normalized = normalized + "/"
 
     return normalized
 
@@ -184,18 +192,18 @@ def is_port_safe(url: str) -> tuple[bool, str | None]:
 
         # Block dangerous ports
         dangerous_ports = {
-            22,    # SSH
-            23,    # Telnet
-            25,    # SMTP
-            53,    # DNS
-            135,   # Windows RPC
-            139,   # NetBIOS
-            445,   # SMB
+            22,  # SSH
+            23,  # Telnet
+            25,  # SMTP
+            53,  # DNS
+            135,  # Windows RPC
+            139,  # NetBIOS
+            445,  # SMB
             3389,  # RDP
             5432,  # PostgreSQL (unless explicitly allowed)
             3306,  # MySQL (unless explicitly allowed)
             6379,  # Redis
-            27017, # MongoDB
+            27017,  # MongoDB
         }
 
         if port in dangerous_ports:

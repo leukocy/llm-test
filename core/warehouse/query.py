@@ -21,11 +21,7 @@ from typing import Any
 
 from core.config_hash import compute_config_hash
 from core.models import TestRun
-from core.warehouse.templates import (
-    HARDWARE_INVENTORY_FIELDS,
-    HM_TEST_FIELDS,
-    MA_TEST_FIELDS,
-)
+from core.warehouse.templates import HARDWARE_INVENTORY_FIELDS, HM_TEST_FIELDS, MA_TEST_FIELDS
 
 # ---------------------------------------------------------------------------
 # WarehouseFilter
@@ -72,7 +68,14 @@ class WarehouseFilter:
         if self.search:
             haystack = " ".join(
                 str(row.get(k) or "")
-                for k in ("model_name", "tester", "machine_id", "engine", "next_action", "remark")
+                for k in (
+                    "model_name",
+                    "tester",
+                    "machine_id",
+                    "engine",
+                    "next_action",
+                    "remark",
+                )
             ).lower()
             if self.search.lower() not in haystack:
                 return False
@@ -97,7 +100,12 @@ def _num(value: Any) -> Any:
 
 def _parallel_strategy(serving: dict[str, Any]) -> str:
     parts = []
-    for key, label in (("tp_size", "tp"), ("dp_size", "dp"), ("ep_size", "ep"), ("pp_size", "pp")):
+    for key, label in (
+        ("tp_size", "tp"),
+        ("dp_size", "dp"),
+        ("ep_size", "ep"),
+        ("pp_size", "pp"),
+    ):
         v = serving.get(key)
         if v:
             parts.append(f"{label}{v}")
@@ -380,9 +388,14 @@ def build_hardware_inventory_rows(runs: list[TestRun]) -> list[dict[str, Any]]:
             continue
         prev = latest_per_machine.get(mid)
         # created_at 倒序传入时，首个即最新；否则取更晚的
-        if prev is None or (r.created_at and (not prev.created_at or r.created_at > prev.created_at)):
+        if prev is None or (
+            r.created_at and (not prev.created_at or r.created_at > prev.created_at)
+        ):
             latest_per_machine[mid] = r
-    return [_select_fields(project_run(r), HARDWARE_INVENTORY_FIELDS) for r in latest_per_machine.values()]
+    return [
+        _select_fields(project_run(r), HARDWARE_INVENTORY_FIELDS)
+        for r in latest_per_machine.values()
+    ]
 
 
 def build_ma_test_rows(runs: list[TestRun]) -> list[dict[str, Any]]:
@@ -483,9 +496,7 @@ def build_cross_matrix(
             chosen = max(numeric) if numeric else None
         else:
             # latest：按 created_at 取最新；None created_at 退化为列表最后一个
-            samples_sorted = sorted(
-                samples, key=lambda x: x[0] or datetime.min, reverse=True
-            )
+            samples_sorted = sorted(samples, key=lambda x: x[0] or datetime.min, reverse=True)
             chosen = samples_sorted[0][1] if samples_sorted else None
         cells.setdefault(rv, {})[cv] = chosen
 

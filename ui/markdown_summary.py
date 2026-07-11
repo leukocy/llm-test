@@ -37,7 +37,10 @@ def _generate_markdown_summary(df, test_type, duration):
         )
         if len(conc_levels) >= 2:
             lo, hi = conc_levels[0], conc_levels[-1]
-            lo_df, hi_df = df_ok[df_ok["concurrency"] == lo], df_ok[df_ok["concurrency"] == hi]
+            lo_df, hi_df = (
+                df_ok[df_ok["concurrency"] == lo],
+                df_ok[df_ok["concurrency"] == hi],
+            )
             ttft_lo = lo_df["ttft"].mean() if "ttft" in lo_df.columns else 0
             ttft_hi = hi_df["ttft"].mean() if "ttft" in hi_df.columns else 0
 
@@ -134,7 +137,7 @@ def _generate_markdown_summary(df, test_type, duration):
             ps_vals = [ps_by_level[lv] for lv in levels]
             if len(ps_vals) >= 3:
                 drops = [
-                    (ps_vals[i] - ps_vals[i + 1]) / ps_vals[i] * 100 if ps_vals[i] > 0 else 0
+                    ((ps_vals[i] - ps_vals[i + 1]) / ps_vals[i] * 100 if ps_vals[i] > 0 else 0)
                     for i in range(len(ps_vals) - 1)
                 ]
                 max_drop_idx = max(range(len(drops)), key=lambda i: drops[i])

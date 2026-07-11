@@ -33,16 +33,17 @@ from core.providers.openai import OpenAIProvider
 def reset_stop_flag():
     """Reset stop flag before each test to ensure clean state"""
     openai_provider.set_stop_requested(False)
-    st.session_state['stop_requested'] = False
+    st.session_state["stop_requested"] = False
     yield
     # Reset after test as well
     openai_provider.set_stop_requested(False)
-    st.session_state['stop_requested'] = False
+    st.session_state["stop_requested"] = False
 
 
 # ============================================================================
 # Test Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def mock_httpx_client():
@@ -125,7 +126,7 @@ def sample_openai_stream_response():
         'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
         'data: {"choices":[{"delta":{"content":" world"}}]}\n\n',
         'data: {"choices":[{"delta":{"content":"!"}}]}\n\n',
-        'data: [DONE]\n\n'
+        "data: [DONE]\n\n",
     ]
     return chunks
 
@@ -137,7 +138,7 @@ def sample_openai_stream_with_usage():
         'data: {"choices":[{"delta":{"reasoning_content":"Thinking..."}}]}\n\n',
         'data: {"choices":[{"delta":{"content":"Answer"}}]}\n\n',
         'data: {"usage":{"prompt_tokens":10,"completion_tokens":20,"total_tokens":30}}\n\n',
-        'data: [DONE]\n\n'
+        "data: [DONE]\n\n",
     ]
     return chunks
 
@@ -147,7 +148,7 @@ def sample_gemini_stream_response():
     """模拟 Gemini 流式响应Data"""
     chunks = [
         'data: {"candidates":[{"content":{"parts":[{"text":"Hello "}]}}]}\n\n',
-        'data: {"candidates":[{"content":{"parts":[{"text":"world!"}]}}]}\n\n'
+        'data: {"candidates":[{"content":{"parts":[{"text":"world!"}]}}]}\n\n',
     ]
     return chunks
 
@@ -156,17 +157,13 @@ def sample_gemini_stream_response():
 # Provider Factory Tests
 # ============================================================================
 
+
 class TestProviderFactory:
     """Test provider factory 函数"""
 
     def test_get_openai_provider(self):
         """TestGet OpenAI provider"""
-        provider = get_provider(
-            "OpenAI",
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+        provider = get_provider("OpenAI", "https://api.openai.com/v1", "test-key", "gpt-4")
         assert isinstance(provider, OpenAIProvider)
         assert provider.api_base_url == "https://api.openai.com/v1"
         assert provider.api_key == "test-key"
@@ -178,7 +175,7 @@ class TestProviderFactory:
             "Gemini (非兼容)",
             "https://generativelanguage.googleapis.com",
             "test-key",
-            "gemini-pro"
+            "gemini-pro",
         )
         assert isinstance(provider, GeminiProvider)
         assert provider.api_base_url == "https://generativelanguage.googleapis.com"
@@ -187,22 +184,12 @@ class TestProviderFactory:
 
     def test_get_provider_with_gemini_in_name(self):
         """Test带 Gemini 名称 provider 识别"""
-        provider = get_provider(
-            "Google Gemini",
-            "https://api.example.com",
-            "key",
-            "model"
-        )
+        provider = get_provider("Google Gemini", "https://api.example.com", "key", "model")
         assert isinstance(provider, GeminiProvider)
 
     def test_get_provider_defaults_to_openai(self):
         """TestdefaultReturn OpenAI provider"""
-        provider = get_provider(
-            "UnknownProvider",
-            "https://api.example.com/v1",
-            "key",
-            "model"
-        )
+        provider = get_provider("UnknownProvider", "https://api.example.com/v1", "key", "model")
         assert isinstance(provider, OpenAIProvider)
 
 
@@ -222,16 +209,13 @@ class TestRequestTimeout:
 # OpenAI Provider Tests
 # ============================================================================
 
+
 class TestOpenAIProvider:
     """Test OpenAI 兼容 provider"""
 
     def test_initialization(self):
         """Test OpenAI provider Initialize"""
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "gpt-4")
         assert provider.api_base_url == "https://api.openai.com/v1"
         assert provider.api_key == "test-key"
         assert provider.model_id == "gpt-4"
@@ -239,39 +223,29 @@ class TestOpenAIProvider:
 
     def test_initialization_mimo_platform(self):
         """Test MiMo 平台检测"""
-        provider = OpenAIProvider(
-            "https://api.mimo.pm/v1",
-            "mimo-key",
-            "mimo-v2-flash"
-        )
+        provider = OpenAIProvider("https://api.mimo.pm/v1", "mimo-key", "mimo-v2-flash")
         assert provider.platform == "mimo"
 
     def test_initialization_deepseek_platform(self):
         """Test DeepSeek 平台检测"""
-        provider = OpenAIProvider(
-            "https://api.deepseek.com/v1",
-            "deepseek-key",
-            "deepseek-chat"
-        )
+        provider = OpenAIProvider("https://api.deepseek.com/v1", "deepseek-key", "deepseek-chat")
         assert provider.platform == "deepseek"
 
     @pytest.mark.asyncio
     async def test_get_completion_basic_success(self, mock_requests_session):
         """Test基本成功响应"""
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "gpt-4")
 
         # Mock the response
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
-            b'data: {"choices":[{"delta":{"content":" world"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
+                b'data: {"choices":[{"delta":{"content":" world"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -281,10 +255,7 @@ class TestOpenAIProvider:
         mock_client = openai_client_from_session(mock_requests_session)
 
         result = await provider.get_completion(
-            mock_client,
-            session_id=1,
-            prompt="Say hello",
-            max_tokens=100
+            mock_client, session_id=1, prompt="Say hello", max_tokens=100
         )
 
         assert result["error"] is None
@@ -294,19 +265,19 @@ class TestOpenAIProvider:
         assert result["first_token_time"] is not None
 
     @pytest.mark.asyncio
-    async def test_get_completion_uses_longer_timeout_for_ultra_long_prompt(self, mock_requests_session):
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+    async def test_get_completion_uses_longer_timeout_for_ultra_long_prompt(
+        self, mock_requests_session
+    ):
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "gpt-4")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"content":"ok"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -316,10 +287,7 @@ class TestOpenAIProvider:
         mock_client = openai_client_from_session(mock_requests_session)
 
         await provider.get_completion(
-            mock_client,
-            session_id=1,
-            prompt="x" * 260_000,
-            max_tokens=10
+            mock_client, session_id=1, prompt="x" * 260_000, max_tokens=10
         )
 
         assert mock_requests_session.post.call_args.kwargs["timeout"] == 1800.0
@@ -327,20 +295,18 @@ class TestOpenAIProvider:
     @pytest.mark.asyncio
     async def test_get_completion_with_thinking_enabled(self, mock_requests_session):
         """Test启用Thinking mode参数传递"""
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "o1-preview"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "o1-preview")
 
         # Mock the response
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"reasoning_content":"Thinking..."}}]}\n\n',
-            b'data: {"choices":[{"delta":{"content":"Answer"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"reasoning_content":"Thinking..."}}]}\n\n',
+                b'data: {"choices":[{"delta":{"content":"Answer"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -355,7 +321,7 @@ class TestOpenAIProvider:
             prompt="Think and answer",
             max_tokens=1000,
             thinking_enabled=True,
-            reasoning_effort="high"
+            reasoning_effort="high",
         )
 
         # Verify the request was made with correct parameters
@@ -370,18 +336,16 @@ class TestOpenAIProvider:
     @pytest.mark.asyncio
     async def test_get_completion_with_mimo_thinking_params(self, mock_requests_session):
         """Test MiMo 平台Thinking parameters"""
-        provider = OpenAIProvider(
-            "https://api.mimo.pm/v1",
-            "mimo-key",
-            "mimo-v2-flash"
-        )
+        provider = OpenAIProvider("https://api.mimo.pm/v1", "mimo-key", "mimo-v2-flash")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -395,7 +359,7 @@ class TestOpenAIProvider:
             session_id=1,
             prompt="Test",
             max_tokens=100,
-            thinking_enabled=True
+            thinking_enabled=True,
         )
 
         # Check MiMo-specific headers and parameters
@@ -412,19 +376,17 @@ class TestOpenAIProvider:
     @pytest.mark.asyncio
     async def test_get_completion_with_usage_info(self, mock_requests_session):
         """Test带 usage 信息响应"""
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "gpt-4")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
-            b'data: {"usage":{"prompt_tokens":10,"completion_tokens":20,"total_tokens":30}}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
+                b'data: {"usage":{"prompt_tokens":10,"completion_tokens":20,"total_tokens":30}}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -434,10 +396,7 @@ class TestOpenAIProvider:
         mock_client = openai_client_from_session(mock_requests_session)
 
         result = await provider.get_completion(
-            mock_client,
-            session_id=1,
-            prompt="Test",
-            max_tokens=100
+            mock_client, session_id=1, prompt="Test", max_tokens=100
         )
 
         assert result["usage_info"]["total_tokens"] == 30
@@ -447,11 +406,7 @@ class TestOpenAIProvider:
     @pytest.mark.asyncio
     async def test_get_completion_http_error(self, mock_requests_session):
         """Test HTTP ErrorProcess"""
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "gpt-4")
 
         mock_response = MagicMock()
         mock_response.status_code = 401
@@ -465,10 +420,7 @@ class TestOpenAIProvider:
         mock_client = openai_client_from_session(mock_requests_session)
 
         result = await provider.get_completion(
-            mock_client,
-            session_id=1,
-            prompt="Test",
-            max_tokens=100
+            mock_client, session_id=1, prompt="Test", max_tokens=100
         )
 
         assert result["error"] is not None
@@ -482,11 +434,7 @@ class TestOpenAIProvider:
         # Ensure stop flag is not set
         openai_provider.set_stop_requested(False)
 
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "gpt-4")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -500,10 +448,7 @@ class TestOpenAIProvider:
         mock_client = openai_client_from_session(mock_requests_session)
 
         result = await provider.get_completion(
-            mock_client,
-            session_id=1,
-            prompt="Test",
-            max_tokens=100
+            mock_client, session_id=1, prompt="Test", max_tokens=100
         )
 
         assert result["error"] is not None
@@ -517,21 +462,16 @@ class TestOpenAIProvider:
         # Ensure stop flag is not set
         openai_provider.set_stop_requested(False)
 
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "gpt-4")
 
-        mock_requests_session.post.side_effect = requests.exceptions.ConnectionError("Network error")
+        mock_requests_session.post.side_effect = requests.exceptions.ConnectionError(
+            "Network error"
+        )
 
         mock_client = openai_client_from_session(mock_requests_session)
 
         result = await provider.get_completion(
-            mock_client,
-            session_id=1,
-            prompt="Test",
-            max_tokens=100
+            mock_client, session_id=1, prompt="Test", max_tokens=100
         )
 
         assert result["error"] is not None
@@ -540,18 +480,16 @@ class TestOpenAIProvider:
     @pytest.mark.asyncio
     async def test_get_completion_with_temperature(self, mock_requests_session):
         """Test temperature 参数传递"""
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "gpt-4")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -561,11 +499,7 @@ class TestOpenAIProvider:
         mock_client = openai_client_from_session(mock_requests_session)
 
         await provider.get_completion(
-            mock_client,
-            session_id=1,
-            prompt="Test",
-            max_tokens=100,
-            temperature=0.7
+            mock_client, session_id=1, prompt="Test", max_tokens=100, temperature=0.7
         )
 
         call_args = mock_requests_session.post.call_args
@@ -576,20 +510,18 @@ class TestOpenAIProvider:
     @pytest.mark.asyncio
     async def test_get_completion_token_timestamps(self, mock_requests_session):
         """Test token 时间戳记录"""
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "gpt-4")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"content":"A"}}]}\n\n',
-            b'data: {"choices":[{"delta":{"content":"B"}}]}\n\n',
-            b'data: {"choices":[{"delta":{"content":"C"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"content":"A"}}]}\n\n',
+                b'data: {"choices":[{"delta":{"content":"B"}}]}\n\n',
+                b'data: {"choices":[{"delta":{"content":"C"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -599,10 +531,7 @@ class TestOpenAIProvider:
         mock_client = openai_client_from_session(mock_requests_session)
 
         result = await provider.get_completion(
-            mock_client,
-            session_id=1,
-            prompt="Test",
-            max_tokens=100
+            mock_client, session_id=1, prompt="Test", max_tokens=100
         )
 
         assert "token_timestamps" in result
@@ -613,11 +542,7 @@ class TestOpenAIProvider:
         """Test用户Cancel操作"""
         from core.providers import openai as openai_provider
 
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "gpt-4")
 
         # Set stop flag
         openai_provider.set_stop_requested(True)
@@ -626,12 +551,7 @@ class TestOpenAIProvider:
 
         # The cancellation is checked at the beginning of the method
         with pytest.raises(asyncio.CancelledError):
-            await provider.get_completion(
-                mock_client,
-                session_id=1,
-                prompt="Test",
-                max_tokens=100
-            )
+            await provider.get_completion(mock_client, session_id=1, prompt="Test", max_tokens=100)
 
         # Reset stop flag
         openai_provider.set_stop_requested(False)
@@ -644,18 +564,16 @@ class TestOpenAIProvider:
         # Ensure stop flag is not set
         openai_provider.set_stop_requested(False)
 
-        provider = OpenAIProvider(
-            "https://api.deepseek.com/v1",
-            "test-key",
-            "deepseek-chat"
-        )
+        provider = OpenAIProvider("https://api.deepseek.com/v1", "test-key", "deepseek-chat")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -669,7 +587,7 @@ class TestOpenAIProvider:
             session_id=1,
             prompt="Test",
             max_tokens=100,
-            thinking_enabled=True
+            thinking_enabled=True,
         )
 
         call_args = mock_requests_session.post.call_args
@@ -690,15 +608,17 @@ class TestOpenAIProvider:
         provider = OpenAIProvider(
             "https://ark.cn-beijing.volces.com/api/v3",
             "test-key",
-            "doubao-model"  # Need doubao in model_id for platform detection
+            "doubao-model",  # Need doubao in model_id for platform detection
         )
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -713,7 +633,7 @@ class TestOpenAIProvider:
             prompt="Test",
             max_tokens=100,
             thinking_enabled=True,
-            reasoning_effort="high"
+            reasoning_effort="high",
         )
 
         call_args = mock_requests_session.post.call_args
@@ -733,17 +653,17 @@ class TestOpenAIProvider:
         openai_provider.set_stop_requested(False)
 
         provider = OpenAIProvider(
-            "https://dashscope.aliyuncs.com/compatible-mode/v1",
-            "test-key",
-            "qwen-plus"
+            "https://dashscope.aliyuncs.com/compatible-mode/v1", "test-key", "qwen-plus"
         )
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -758,7 +678,7 @@ class TestOpenAIProvider:
             prompt="Test",
             max_tokens=100,
             thinking_enabled=True,
-            thinking_budget=10000
+            thinking_budget=10000,
         )
 
         call_args = mock_requests_session.post.call_args
@@ -776,18 +696,16 @@ class TestOpenAIProvider:
         # Ensure stop flag is not set
         openai_provider.set_stop_requested(False)
 
-        provider = OpenAIProvider(
-            "https://api.minimax.chat/v1",
-            "test-key",
-            "minimax-m2"
-        )
+        provider = OpenAIProvider("https://api.minimax.chat/v1", "test-key", "minimax-m2")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -801,7 +719,7 @@ class TestOpenAIProvider:
             session_id=1,
             prompt="Test",
             max_tokens=100,
-            thinking_enabled=True
+            thinking_enabled=True,
         )
 
         call_args = mock_requests_session.post.call_args
@@ -819,17 +737,17 @@ class TestOpenAIProvider:
         openai_provider.set_stop_requested(False)
 
         provider = OpenAIProvider(
-            "https://api.siliconflow.cn/v1",
-            "test-key",
-            "deepseek-ai/DeepSeek-V3"
+            "https://api.siliconflow.cn/v1", "test-key", "deepseek-ai/DeepSeek-V3"
         )
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -844,7 +762,7 @@ class TestOpenAIProvider:
             prompt="Test",
             max_tokens=100,
             thinking_enabled=True,
-            thinking_budget=20000
+            thinking_budget=20000,
         )
 
         call_args = mock_requests_session.post.call_args
@@ -863,18 +781,16 @@ class TestOpenAIProvider:
         # Ensure stop flag is not set
         openai_provider.set_stop_requested(False)
 
-        provider = OpenAIProvider(
-            "https://openrouter.ai/api/v1",
-            "test-key",
-            "openai/o3"
-        )
+        provider = OpenAIProvider("https://openrouter.ai/api/v1", "test-key", "openai/o3")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -888,7 +804,7 @@ class TestOpenAIProvider:
             session_id=1,
             prompt="Test",
             max_tokens=100,
-            reasoning_effort="medium"
+            reasoning_effort="medium",
         )
 
         call_args = mock_requests_session.post.call_args
@@ -902,15 +818,14 @@ class TestOpenAIProvider:
 # Gemini Provider Tests
 # ============================================================================
 
+
 class TestGeminiProvider:
     """Test Gemini provider"""
 
     def test_initialization(self):
         """Test Gemini provider Initialize"""
         provider = GeminiProvider(
-            "https://generativelanguage.googleapis.com",
-            "test-key",
-            "gemini-pro"
+            "https://generativelanguage.googleapis.com", "test-key", "gemini-pro"
         )
         assert provider.api_base_url == "https://generativelanguage.googleapis.com"
         assert provider.api_key == "test-key"
@@ -921,9 +836,7 @@ class TestGeminiProvider:
     async def test_get_completion_basic_success(self, mock_httpx_client):
         """Test基本成功响应"""
         provider = GeminiProvider(
-            "https://generativelanguage.googleapis.com",
-            "test-key",
-            "gemini-pro"
+            "https://generativelanguage.googleapis.com", "test-key", "gemini-pro"
         )
 
         # Mock streaming response
@@ -945,10 +858,7 @@ class TestGeminiProvider:
         mock_httpx_client.stream.return_value = mock_stream_context
 
         result = await provider.get_completion(
-            mock_httpx_client,
-            session_id=1,
-            prompt="Say hello",
-            max_tokens=100
+            mock_httpx_client, session_id=1, prompt="Say hello", max_tokens=100
         )
 
         assert result["error"] is None
@@ -958,11 +868,11 @@ class TestGeminiProvider:
         assert result["first_token_time"] is not None
 
     @pytest.mark.asyncio
-    async def test_get_completion_uses_longer_timeout_for_ultra_long_prompt(self, mock_httpx_client):
+    async def test_get_completion_uses_longer_timeout_for_ultra_long_prompt(
+        self, mock_httpx_client
+    ):
         provider = GeminiProvider(
-            "https://generativelanguage.googleapis.com",
-            "test-key",
-            "gemini-pro"
+            "https://generativelanguage.googleapis.com", "test-key", "gemini-pro"
         )
 
         mock_stream_response = AsyncMock()
@@ -980,10 +890,7 @@ class TestGeminiProvider:
         mock_httpx_client.stream.return_value = mock_stream_context
 
         await provider.get_completion(
-            mock_httpx_client,
-            session_id=1,
-            prompt="x" * 520_000,
-            max_tokens=10
+            mock_httpx_client, session_id=1, prompt="x" * 520_000, max_tokens=10
         )
 
         assert mock_httpx_client.stream.call_args.kwargs["timeout"] == 3600.0
@@ -994,7 +901,7 @@ class TestGeminiProvider:
         provider = GeminiProvider(
             "https://generativelanguage.googleapis.com",
             "test-key",
-            "gemini-2.0-flash-thinking-exp"
+            "gemini-2.0-flash-thinking-exp",
         )
 
         mock_stream_response = AsyncMock()
@@ -1017,7 +924,7 @@ class TestGeminiProvider:
             prompt="Think and answer",
             max_tokens=1000,
             thinking_enabled=True,
-            reasoning_effort="high"
+            reasoning_effort="high",
         )
 
         # Verify the request payload
@@ -1032,9 +939,7 @@ class TestGeminiProvider:
     async def test_get_completion_with_thinking_budget(self, mock_httpx_client):
         """Test带 thinking budget 请求"""
         provider = GeminiProvider(
-            "https://generativelanguage.googleapis.com",
-            "test-key",
-            "gemini-pro"
+            "https://generativelanguage.googleapis.com", "test-key", "gemini-pro"
         )
 
         mock_stream_response = AsyncMock()
@@ -1056,7 +961,7 @@ class TestGeminiProvider:
             session_id=1,
             prompt="Test",
             max_tokens=100,
-            thinking_budget=5000
+            thinking_budget=5000,
         )
 
         call_args = mock_httpx_client.stream.call_args
@@ -1070,9 +975,7 @@ class TestGeminiProvider:
     async def test_get_completion_with_temperature(self, mock_httpx_client):
         """Test temperature 参数传递"""
         provider = GeminiProvider(
-            "https://generativelanguage.googleapis.com",
-            "test-key",
-            "gemini-pro"
+            "https://generativelanguage.googleapis.com", "test-key", "gemini-pro"
         )
 
         mock_stream_response = AsyncMock()
@@ -1094,7 +997,7 @@ class TestGeminiProvider:
             session_id=1,
             prompt="Test",
             max_tokens=100,
-            temperature=0.5
+            temperature=0.5,
         )
 
         call_args = mock_httpx_client.stream.call_args
@@ -1108,7 +1011,7 @@ class TestGeminiProvider:
         provider = GeminiProvider(
             "https://generativelanguage.googleapis.com",
             "test-key",
-            "gemini-2.0-flash-thinking-exp"
+            "gemini-2.0-flash-thinking-exp",
         )
 
         mock_stream_response = AsyncMock()
@@ -1127,10 +1030,7 @@ class TestGeminiProvider:
         mock_httpx_client.stream.return_value = mock_stream_context
 
         result = await provider.get_completion(
-            mock_httpx_client,
-            session_id=1,
-            prompt="Think",
-            max_tokens=100
+            mock_httpx_client, session_id=1, prompt="Think", max_tokens=100
         )
 
         assert "Thinking process" in result["full_response_content"]
@@ -1140,9 +1040,7 @@ class TestGeminiProvider:
     async def test_get_completion_http_error(self, mock_httpx_client):
         """Test HTTP ErrorProcess"""
         provider = GeminiProvider(
-            "https://generativelanguage.googleapis.com",
-            "test-key",
-            "gemini-pro"
+            "https://generativelanguage.googleapis.com", "test-key", "gemini-pro"
         )
 
         mock_stream_response = AsyncMock()
@@ -1157,10 +1055,7 @@ class TestGeminiProvider:
         mock_httpx_client.stream.return_value = mock_stream_context
 
         result = await provider.get_completion(
-            mock_httpx_client,
-            session_id=1,
-            prompt="Test",
-            max_tokens=100
+            mock_httpx_client, session_id=1, prompt="Test", max_tokens=100
         )
 
         assert result["error"] is not None
@@ -1169,18 +1064,13 @@ class TestGeminiProvider:
     async def test_get_completion_network_error(self, mock_httpx_client):
         """TestNetwork errorProcess"""
         provider = GeminiProvider(
-            "https://generativelanguage.googleapis.com",
-            "test-key",
-            "gemini-pro"
+            "https://generativelanguage.googleapis.com", "test-key", "gemini-pro"
         )
 
         mock_httpx_client.stream.side_effect = Exception("Connection error")
 
         result = await provider.get_completion(
-            mock_httpx_client,
-            session_id=1,
-            prompt="Test",
-            max_tokens=100
+            mock_httpx_client, session_id=1, prompt="Test", max_tokens=100
         )
 
         assert result["error"] is not None
@@ -1190,9 +1080,7 @@ class TestGeminiProvider:
     async def test_get_completion_with_log_callback(self, mock_httpx_client):
         """Test log Callback"""
         provider = GeminiProvider(
-            "https://generativelanguage.googleapis.com",
-            "test-key",
-            "gemini-pro"
+            "https://generativelanguage.googleapis.com", "test-key", "gemini-pro"
         )
 
         mock_stream_response = AsyncMock()
@@ -1219,7 +1107,7 @@ class TestGeminiProvider:
             session_id=1,
             prompt="Test prompt that is quite long and should be truncated",
             max_tokens=100,
-            log_callback=mock_log_callback
+            log_callback=mock_log_callback,
         )
 
         assert len(log_messages) > 0
@@ -1230,13 +1118,11 @@ class TestGeminiProvider:
     async def test_get_completion_cancelled_by_user(self, mock_httpx_client):
         """Test用户Cancel操作"""
         provider = GeminiProvider(
-            "https://generativelanguage.googleapis.com",
-            "test-key",
-            "gemini-pro"
+            "https://generativelanguage.googleapis.com", "test-key", "gemini-pro"
         )
 
         # Set stop flag AFTER the autouse fixture has reset it
-        st.session_state['stop_requested'] = True
+        st.session_state["stop_requested"] = True
 
         # The cancellation is checked during streaming
         # We need to mock the streaming to check the flag
@@ -1254,7 +1140,7 @@ class TestGeminiProvider:
             async def __anext__(self):
                 if not self.checked:
                     self.checked = True
-                    if st.session_state.get('stop_requested', False):
+                    if st.session_state.get("stop_requested", False):
                         raise asyncio.CancelledError("Test stopped by user.")
                     # If not stopped, would yield data here
                 raise StopAsyncIteration
@@ -1275,10 +1161,7 @@ class TestGeminiProvider:
         # We accept either behavior.
         try:
             result = await provider.get_completion(
-                mock_httpx_client,
-                session_id=1,
-                prompt="Test",
-                max_tokens=100
+                mock_httpx_client, session_id=1, prompt="Test", max_tokens=100
             )
             # If we get here, the provider caught the error and returned a result
             assert result["error"] == "UserCancelled"
@@ -1291,6 +1174,7 @@ class TestGeminiProvider:
 # Base Provider Tests
 # ============================================================================
 
+
 class TestLLMProviderBase:
     """Test LLMProvider 基类"""
 
@@ -1301,50 +1185,35 @@ class TestLLMProviderBase:
 
     def test_base_class_has_required_method(self):
         """Test基类定义必需抽象方法"""
-        assert hasattr(LLMProvider, 'get_completion')
+        assert hasattr(LLMProvider, "get_completion")
 
 
 # ============================================================================
 # Platform Detection Tests
 # ============================================================================
 
+
 class TestPlatformDetection:
     """Test平台检测逻辑"""
 
     def test_openai_platform_detection(self):
         """Test OpenAI 平台检测"""
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "key", "gpt-4")
         assert provider.platform == "openai"
 
     def test_mimo_platform_detection(self):
         """Test MiMo 平台检测"""
-        provider = OpenAIProvider(
-            "https://api.mimo.pm/v1",
-            "key",
-            "model"
-        )
+        provider = OpenAIProvider("https://api.mimo.pm/v1", "key", "model")
         assert provider.platform == "mimo"
 
     def test_deepseek_platform_detection(self):
         """Test DeepSeek 平台检测"""
-        provider = OpenAIProvider(
-            "https://api.deepseek.com/v1",
-            "key",
-            "deepseek-chat"
-        )
+        provider = OpenAIProvider("https://api.deepseek.com/v1", "key", "deepseek-chat")
         assert provider.platform == "deepseek"
 
     def test_siliconflow_platform_detection(self):
         """Test硅基流动平台检测"""
-        provider = OpenAIProvider(
-            "https://api.siliconflow.cn/v1",
-            "key",
-            "model"
-        )
+        provider = OpenAIProvider("https://api.siliconflow.cn/v1", "key", "model")
         assert provider.platform == "siliconflow"
 
     def test_volcano_platform_detection(self):
@@ -1352,68 +1221,47 @@ class TestPlatformDetection:
         provider = OpenAIProvider(
             "https://ark.cn-beijing.volces.com/api/v3",
             "key",
-            "doubao-model"  # Need doubao in model_id to match pattern
+            "doubao-model",  # Need doubao in model_id to match pattern
         )
         assert provider.platform == "volcano"
 
     def test_aliyun_platform_detection(self):
         """Test阿里云平台检测"""
         provider = OpenAIProvider(
-            "https://dashscope.aliyuncs.com/compatible-mode/v1",
-            "key",
-            "model"
+            "https://dashscope.aliyuncs.com/compatible-mode/v1", "key", "model"
         )
         assert provider.platform == "aliyun"
 
     def test_minimax_platform_detection(self):
         """Test MiniMax 平台检测"""
-        provider = OpenAIProvider(
-            "https://api.minimax.chat/v1",
-            "key",
-            "model"
-        )
+        provider = OpenAIProvider("https://api.minimax.chat/v1", "key", "model")
         assert provider.platform == "minimax"
 
     def test_zhipu_platform_detection(self):
         """Test智谱 AI 平台检测"""
-        provider = OpenAIProvider(
-            "https://open.bigmodel.cn/api/paas/v4",
-            "key",
-            "model"
-        )
+        provider = OpenAIProvider("https://open.bigmodel.cn/api/paas/v4", "key", "model")
         assert provider.platform == "zhipu"
 
     def test_openrouter_platform_detection(self):
         """Test OpenRouter 平台检测"""
-        provider = OpenAIProvider(
-            "https://openrouter.ai/api/v1",
-            "key",
-            "model"
-        )
+        provider = OpenAIProvider("https://openrouter.ai/api/v1", "key", "model")
         assert provider.platform == "openrouter"
 
     def test_gemini_platform_detection(self):
         """Test Gemini 平台检测"""
-        provider = GeminiProvider(
-            "https://generativelanguage.googleapis.com",
-            "key",
-            "model"
-        )
+        provider = GeminiProvider("https://generativelanguage.googleapis.com", "key", "model")
         assert provider.platform == "gemini"
 
     def test_unknown_platform_detection(self):
         """Test未知平台检测"""
-        provider = OpenAIProvider(
-            "https://api.unknown.com/v1",
-            "key",
-            "model"
-        )
+        provider = OpenAIProvider("https://api.unknown.com/v1", "key", "model")
         assert provider.platform == "unknown"
 
 
 # ============================================================================
 # Response Parsing Tests
 # ============================================================================
+
 
 class TestResponseParsing:
     """Test响应Parse"""
@@ -1426,21 +1274,19 @@ class TestResponseParsing:
         # Ensure stop flag is not set
         openai_provider.set_stop_requested(False)
 
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "gpt-4")
 
         # Test malformed JSON (should be skipped)
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"content":"Valid"}}]}\n\n',
-            b'data: invalid json\n\n',  # Should be skipped
-            b'data: {"choices":[{"delta":{"content":"Also valid"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"content":"Valid"}}]}\n\n',
+                b"data: invalid json\n\n",  # Should be skipped
+                b'data: {"choices":[{"delta":{"content":"Also valid"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -1450,10 +1296,7 @@ class TestResponseParsing:
         mock_client = openai_client_from_session(mock_requests_session)
 
         result = await provider.get_completion(
-            mock_client,
-            session_id=1,
-            prompt="Test",
-            max_tokens=100
+            mock_client, session_id=1, prompt="Test", max_tokens=100
         )
 
         # Should parse valid chunks and skip invalid ones
@@ -1468,17 +1311,15 @@ class TestResponseParsing:
         # Ensure stop flag is not set
         openai_provider.set_stop_requested(False)
 
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "gpt-4")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'{"choices":[{"delta":{"content":"Plain JSON"}}]}',
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'{"choices":[{"delta":{"content":"Plain JSON"}}]}',
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -1488,10 +1329,7 @@ class TestResponseParsing:
         mock_client = openai_client_from_session(mock_requests_session)
 
         result = await provider.get_completion(
-            mock_client,
-            session_id=1,
-            prompt="Test",
-            max_tokens=100
+            mock_client, session_id=1, prompt="Test", max_tokens=100
         )
 
         assert "Plain JSON" in result["full_response_content"]
@@ -1504,20 +1342,18 @@ class TestResponseParsing:
         # Ensure stop flag is not set
         openai_provider.set_stop_requested(False)
 
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "gpt-4")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'',
-            b'\n',
-            b'data: {"choices":[{"delta":{"content":"Content"}}]}\n\n',
-            b'',
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b"",
+                b"\n",
+                b'data: {"choices":[{"delta":{"content":"Content"}}]}\n\n',
+                b"",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -1527,10 +1363,7 @@ class TestResponseParsing:
         mock_client = openai_client_from_session(mock_requests_session)
 
         result = await provider.get_completion(
-            mock_client,
-            session_id=1,
-            prompt="Test",
-            max_tokens=100
+            mock_client, session_id=1, prompt="Test", max_tokens=100
         )
 
         assert "Content" in result["full_response_content"]
@@ -1539,6 +1372,7 @@ class TestResponseParsing:
 # ============================================================================
 # Additional Edge Cases
 # ============================================================================
+
 
 class TestEdgeCases:
     """Test边缘情况"""
@@ -1551,21 +1385,19 @@ class TestEdgeCases:
         # Ensure stop flag is not set
         openai_provider.set_stop_requested(False)
 
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "o1-preview"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "o1-preview")
 
         # Using the actual underscore character representation
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"reasoning_content":"_\n"}}]}\n\n',  # reasoning tag
-            b'data: {"choices":[{"delta":{"reasoning_content":"Actual thinking"}}]}\n\n',
-            b'data: {"choices":[{"delta":{"content":"Answer"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"reasoning_content":"_\n"}}]}\n\n',  # reasoning tag
+                b'data: {"choices":[{"delta":{"reasoning_content":"Actual thinking"}}]}\n\n',
+                b'data: {"choices":[{"delta":{"content":"Answer"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -1575,10 +1407,7 @@ class TestEdgeCases:
         mock_client = openai_client_from_session(mock_requests_session)
 
         result = await provider.get_completion(
-            mock_client,
-            session_id=1,
-            prompt="Test",
-            max_tokens=100
+            mock_client, session_id=1, prompt="Test", max_tokens=100
         )
 
         assert result["first_token_time"] is not None
@@ -1586,11 +1415,7 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_stop_flag_during_streaming(self, mock_requests_session):
         """Test流式传输过程in停止标志Check"""
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "gpt-4")
 
         # Create a generator that yields chunks then raises a regular Exception
         # (CancelledError raised inside thread becomes Exception when propagated)
@@ -1611,10 +1436,7 @@ class TestEdgeCases:
         mock_client = openai_client_from_session(mock_requests_session)
 
         result = await provider.get_completion(
-            mock_client,
-            session_id=1,
-            prompt="Test",
-            max_tokens=100
+            mock_client, session_id=1, prompt="Test", max_tokens=100
         )
 
         # Should handle the exception and return an error
@@ -1630,18 +1452,16 @@ class TestEdgeCases:
 
         # This tests a hypothetical scenario where multiple platforms
         # might try to set extra_body parameters
-        provider = OpenAIProvider(
-            "https://api.custom.com/v1",
-            "test-key",
-            "custom-model"
-        )
+        provider = OpenAIProvider("https://api.custom.com/v1", "test-key", "custom-model")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -1657,7 +1477,7 @@ class TestEdgeCases:
             prompt="Test",
             max_tokens=100,
             thinking_enabled=True,
-            thinking_budget=10000
+            thinking_budget=10000,
         )
 
         call_args = mock_requests_session.post.call_args
@@ -1668,11 +1488,7 @@ class TestEdgeCases:
 
     def test_provider_url_formatting(self):
         """Test URL Format"""
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1/",
-            "test-key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1/", "test-key", "gpt-4")
         # URL should be stored as provided
         assert provider.api_base_url == "https://api.openai.com/v1/"
 
@@ -1684,18 +1500,16 @@ class TestEdgeCases:
         # Ensure stop flag is not set
         openai_provider.set_stop_requested(False)
 
-        provider = OpenAIProvider(
-            "https://api.openai.com/v1",
-            "test-key",
-            "gpt-4"
-        )
+        provider = OpenAIProvider("https://api.openai.com/v1", "test-key", "gpt-4")
 
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.iter_lines = MagicMock(return_value=[
-            b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
-            b'data: [DONE]\n\n'
-        ])
+        mock_response.iter_lines = MagicMock(
+            return_value=[
+                b'data: {"choices":[{"delta":{"content":"Response"}}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
 
         mock_post_return = MagicMock()
         mock_post_return.__enter__ = Mock(return_value=mock_response)
@@ -1710,7 +1524,7 @@ class TestEdgeCases:
             prompt="Test",
             max_tokens=100,
             temperature=None,  # Should not be included
-            top_p=0.9
+            top_p=0.9,
         )
 
         call_args = mock_requests_session.post.call_args

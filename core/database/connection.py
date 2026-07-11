@@ -8,7 +8,7 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from .schema import create_tables
 
@@ -24,7 +24,7 @@ class Database:
     - 自动Initialize Schema
     """
 
-    _instance: Optional['Database'] = None
+    _instance: Optional["Database"] = None
     _lock: threading.Lock = threading.Lock()
 
     def __new__(cls, db_path: str = "data/benchmark.db"):
@@ -55,6 +55,7 @@ class Database:
             # 执行迁移：补齐历史从未运行的 1.1.0，以及本次 1.2.0（老库才能拿到新列）。
             # 此前 run_migrations 是死代码（无调用方），现在补上。
             from .migrations import run_migrations
+
             run_migrations(conn)
 
         self._initialized = True
@@ -76,7 +77,7 @@ class Database:
         Yields:
             sqlite3.Connection: DatabaseConnect
         """
-        if not hasattr(self._local, 'conn') or self._local.conn is None:
+        if not hasattr(self._local, "conn") or self._local.conn is None:
             self._local.conn = self._get_raw_connection()
             self._local.conn.row_factory = sqlite3.Row
 
@@ -105,7 +106,7 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.execute(sql, params)
             conn.commit()
-            return cursor
+            return cast(sqlite3.Cursor, cursor)
 
     def execute_many(self, sql: str, params_list: list[tuple]) -> int:
         """
@@ -121,7 +122,7 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.executemany(sql, params_list)
             conn.commit()
-            return cursor.rowcount
+            return cast(int, cursor.rowcount)
 
     def execute_script(self, script: str) -> None:
         """
@@ -196,7 +197,7 @@ class Database:
         placeholders = ", ".join(["?" for _ in data])
         sql = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
         cursor = self.execute(sql, tuple(data.values()))
-        return cursor.lastrowid
+        return cast(int, cursor.lastrowid)
 
     def update(self, table: str, data: dict[str, Any], where: str, where_params: tuple = ()) -> int:
         """
@@ -257,7 +258,7 @@ class Database:
     def get_schema_version(self) -> str:
         """Get Schema Version"""
         result = self.fetch_one("SELECT value FROM db_meta WHERE key = 'schema_version'")
-        return result['value'] if result else "unknown"
+        return str(result["value"]) if result else "unknown"
 
     def vacuum(self):
         """执行 VACUUM 优化Database"""
@@ -273,7 +274,7 @@ class Database:
 
     def close(self):
         """Close当前ThreadConnect"""
-        if hasattr(self._local, 'conn') and self._local.conn:
+        if hasattr(self._local, "conn") and self._local.conn:
             self._local.conn.close()
             self._local.conn = None
 

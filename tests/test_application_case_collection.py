@@ -8,16 +8,26 @@ from evaluators.base_evaluator import SampleResult
 
 def _sample(**kw):
     base = {
-        "sample_id": "q1", "question": "q", "correct_answer": "A", "model_response": "A",
-        "predicted_answer": "A", "is_correct": True,
+        "sample_id": "q1",
+        "question": "q",
+        "correct_answer": "A",
+        "model_response": "A",
+        "predicted_answer": "A",
+        "is_correct": True,
     }
     base.update(kw)
     return SampleResult(**base)
 
 
 def test_mapping_success_and_performance():
-    s = _sample(is_correct=True, ttft_ms=300.0, total_time_ms=1200.0, tps=42.0,
-                input_tokens=10, output_tokens=20)
+    s = _sample(
+        is_correct=True,
+        ttft_ms=300.0,
+        total_time_ms=1200.0,
+        tps=42.0,
+        input_tokens=10,
+        output_tokens=20,
+    )
     c = _build_case_from_sample(s, "humaneval", "M1", "2026-06-14")
     assert c.success is True
     assert c.ttft_s == 0.3
@@ -47,8 +57,16 @@ def test_scenario_mapping_per_evaluator():
 
 def test_case_id_format_and_metadata():
     s = _sample(sample_id="abc")
-    c = _build_case_from_sample(s, "humaneval", "DeepSeek-V3", "2026-06-14",
-                                tester="alice", machine_id="m1", engine="vllm", engine_version="0.6")
+    c = _build_case_from_sample(
+        s,
+        "humaneval",
+        "DeepSeek-V3",
+        "2026-06-14",
+        tester="alice",
+        machine_id="m1",
+        engine="vllm",
+        engine_version="0.6",
+    )
     assert c.case_id == "DeepSeek-V3:humaneval:abc"
     assert c.source == "auto"
     assert c.evaluator_name == "humaneval"

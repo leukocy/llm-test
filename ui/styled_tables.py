@@ -171,9 +171,15 @@ def create_styled_summary_table(df, highlight_cols=None, highlight_best=True):
                 ],
             },
             # Hover effect
-            {"selector": "tbody tr:hover", "props": [("background-color", "#f1f8ff !important")]},
+            {
+                "selector": "tbody tr:hover",
+                "props": [("background-color", "#f1f8ff !important")],
+            },
             # Alternating rows
-            {"selector": "tbody tr:nth-child(even)", "props": [("background-color", "#f8f9fa")]},
+            {
+                "selector": "tbody tr:nth-child(even)",
+                "props": [("background-color", "#f8f9fa")],
+            },
             # Table border
             {
                 "selector": "",
@@ -330,7 +336,12 @@ def create_comparison_table(df1, df2, labels=None, metrics=None):
 
     # Format columns
     styler = styler.format(
-        {labels[0]: "{:.2f}", labels[1]: "{:.2f}", "Difference": "{:+.2f}", "Change %": "{:+.1f}%"}
+        {
+            labels[0]: "{:.2f}",
+            labels[1]: "{:.2f}",
+            "Difference": "{:+.2f}",
+            "Change %": "{:+.1f}%",
+        }
     )
 
     # Apply table styles

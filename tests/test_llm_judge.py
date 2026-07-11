@@ -16,10 +16,7 @@ class TestJudgeRequest:
 
     def test_create_minimal_request(self):
         """Test creating a minimal judge request."""
-        request = JudgeRequest(
-            question="What is AI?",
-            answer="AI is artificial intelligence."
-        )
+        request = JudgeRequest(question="What is AI?", answer="AI is artificial intelligence.")
 
         assert request.question == "What is AI?"
         assert request.answer == "AI is artificial intelligence."
@@ -34,7 +31,7 @@ class TestJudgeRequest:
             reference_answer="Python is a high-level language.",
             context="In programming context.",
             criteria=[JudgeCriteria.ACCURACY, JudgeCriteria.CLARITY],
-            max_score=5
+            max_score=5,
         )
 
         assert request.criteria == [JudgeCriteria.ACCURACY, JudgeCriteria.CLARITY]
@@ -51,7 +48,7 @@ class TestJudgeResult:
             score=8.5,
             reasoning="Good answer",
             category_scores={"accuracy": 8.0, "clarity": 9.0},
-            confidence=0.9
+            confidence=0.9,
         )
 
         assert result.score == 8.5
@@ -79,7 +76,7 @@ class TestLLMJudge:
         return LLMJudge(
             judge_model="gpt-4o",
             judge_api_base="https://api.openai.com/v1",
-            judge_api_key="test-key"
+            judge_api_key="test-key",
         )
 
     def test_init(self, judge):
@@ -93,7 +90,7 @@ class TestLLMJudge:
         request = JudgeRequest(
             question="What is AI?",
             answer="AI is artificial intelligence.",
-            criteria=[JudgeCriteria.ACCURACY, JudgeCriteria.CLARITY]
+            criteria=[JudgeCriteria.ACCURACY, JudgeCriteria.CLARITY],
         )
 
         prompt = judge._build_judge_prompt(request)
@@ -107,7 +104,7 @@ class TestLLMJudge:
 
     def test_parse_valid_response(self, judge):
         """Test parsing a valid JSON response."""
-        response_text = '''```json
+        response_text = """```json
 {
   "total_score": 8.5,
   "reasoning": "Good answer",
@@ -118,7 +115,7 @@ class TestLLMJudge:
   "confidence": 0.9,
   "suggestion": "Add more examples"
 }
-```'''
+```"""
 
         result = judge._parse_judge_response(response_text, max_score=10)
 
@@ -130,7 +127,9 @@ class TestLLMJudge:
 
     def test_parse_response_without_code_block(self, judge):
         """Test parsing JSON without code block markers."""
-        response_text = '''{"total_score": 7.0, "reasoning": "OK", "category_scores": {}, "confidence": 0.8}'''
+        response_text = (
+            """{"total_score": 7.0, "reasoning": "OK", "category_scores": {}, "confidence": 0.8}"""
+        )
 
         result = judge._parse_judge_response(response_text, max_score=10)
 
@@ -150,7 +149,7 @@ class TestLLMJudge:
 
     def test_parse_response_with_extra_text(self, judge):
         """Test parsing JSON with surrounding text."""
-        response_text = '''Some text before...
+        response_text = """Some text before...
 
 ```json
 {
@@ -161,7 +160,7 @@ class TestLLMJudge:
 }
 ```
 
-Some text after...'''
+Some text after..."""
 
         result = judge._parse_judge_response(response_text, max_score=10)
 
@@ -171,19 +170,16 @@ Some text after...'''
     @pytest.mark.asyncio
     async def test_evaluate_mock(self, judge):
         """Test evaluate method with mocked provider."""
-        request = JudgeRequest(
-            question="Test question",
-            answer="Test answer"
-        )
+        request = JudgeRequest(question="Test question", answer="Test answer")
 
         # Mock the provider's get_completion method
         async def mock_get_completion(*args, **kwargs):
             return {
                 "full_response_content": '{"total_score": 8.0, "reasoning": "Good", "category_scores": {}, "confidence": 0.85}',
-                "error": None
+                "error": None,
             }
 
-        with patch.object(judge.provider, 'get_completion', side_effect=mock_get_completion):
+        with patch.object(judge.provider, "get_completion", side_effect=mock_get_completion):
             result = await judge.evaluate(request)
 
         assert result.score == 8.0
@@ -192,15 +188,12 @@ Some text after...'''
     @pytest.mark.asyncio
     async def test_evaluate_with_error(self, judge):
         """Test evaluate method when provider returns error."""
-        request = JudgeRequest(
-            question="Test question",
-            answer="Test answer"
-        )
+        request = JudgeRequest(question="Test question", answer="Test answer")
 
         async def mock_get_completion(*args, **kwargs):
             return {"error": "API Error"}
 
-        with patch.object(judge.provider, 'get_completion', side_effect=mock_get_completion):
+        with patch.object(judge.provider, "get_completion", side_effect=mock_get_completion):
             result = await judge.evaluate(request)
 
         assert result.score == 0.0
@@ -213,10 +206,7 @@ class TestOpenEndedEvaluator:
     @pytest.fixture
     def config(self):
         """Create a test configuration."""
-        return EvaluationConfig(
-            judge_model="gpt-4o",
-            judge_api_key="test-key"
-        )
+        return EvaluationConfig(judge_model="gpt-4o", judge_api_key="test-key")
 
     @pytest.fixture
     def evaluator(self, config):
@@ -230,9 +220,7 @@ class TestOpenEndedEvaluator:
 
     def test_init_with_default_criteria(self):
         """Test that default criteria are used if not specified."""
-        config = EvaluationConfig(
-            judge_api_key="test-key"
-        )
+        config = EvaluationConfig(judge_api_key="test-key")
         evaluator = OpenEndedEvaluator(config)
 
         assert len(evaluator.config.criteria) == 4
@@ -242,19 +230,13 @@ class TestOpenEndedEvaluator:
     async def test_evaluate_answer(self, evaluator):
         """Test evaluating a single answer."""
         # Mock the judge
-        mock_result = JudgeResult(
-            score=7.5,
-            reasoning="Good quality answer"
-        )
+        mock_result = JudgeResult(score=7.5, reasoning="Good quality answer")
 
         async def mock_evaluate(*args, **kwargs):
             return mock_result
 
-        with patch.object(evaluator.judge, 'evaluate', side_effect=mock_evaluate):
-            result = await evaluator.evaluate_answer(
-                question="What is AI?",
-                answer="AI is..."
-            )
+        with patch.object(evaluator.judge, "evaluate", side_effect=mock_evaluate):
+            result = await evaluator.evaluate_answer(question="What is AI?", answer="AI is...")
 
         assert result.score == 7.5
         assert result.reasoning == "Good quality answer"
@@ -267,13 +249,13 @@ class TestOpenEndedEvaluator:
 
         mock_results = [
             JudgeResult(score=8.0, reasoning="Good"),
-            JudgeResult(score=7.0, reasoning="OK")
+            JudgeResult(score=7.0, reasoning="OK"),
         ]
 
         async def mock_evaluate_batch(*args, **kwargs):
             return mock_results
 
-        with patch.object(evaluator.judge, 'evaluate_batch', side_effect=mock_evaluate_batch):
+        with patch.object(evaluator.judge, "evaluate_batch", side_effect=mock_evaluate_batch):
             results = await evaluator.evaluate_batch(questions, answers)
 
         assert len(results) == 2
@@ -283,23 +265,18 @@ class TestOpenEndedEvaluator:
     def test_evaluate_batch_mismatch_length(self, evaluator):
         """Test that batch evaluation raises error on length mismatch."""
         with pytest.raises(ValueError, match="数量not匹配"):
-            asyncio.run(evaluator.evaluate_batch(
-                questions=["Q1", "Q2"],
-                answers=["A1"]
-            ))
+            asyncio.run(evaluator.evaluate_batch(questions=["Q1", "Q2"], answers=["A1"]))
 
     def test_compare_models_empty(self, evaluator):
         """Test comparing models with no responses."""
-        df = asyncio.run(evaluator.compare_models(
-            questions=["Q1", "Q2"],
-            model_responses={}
-        ))
+        df = asyncio.run(evaluator.compare_models(questions=["Q1", "Q2"], model_responses={}))
 
         assert df.empty
 
     def test_generate_report_empty_results(self, evaluator):
         """Test report generation with empty results."""
         import pandas as pd
+
         report = evaluator.generate_report(pd.DataFrame())
 
         assert "No results" in report
@@ -330,15 +307,11 @@ class TestConvenienceFunctions:
         # Mock the LLMJudge
         mock_result = JudgeResult(score=8.0, reasoning="Good")
 
-        with patch('core.llm_judge.LLMJudge') as MockClass:
+        with patch("core.llm_judge.LLMJudge") as MockClass:
             mock_instance = MockClass.return_value
             mock_instance.evaluate = AsyncMock(return_value=mock_result)
 
-            result = await judge_answer(
-                question="Test?",
-                answer="Answer",
-                api_key="test-key"
-            )
+            result = await judge_answer(question="Test?", answer="Answer", api_key="test-key")
 
         assert result.score == 8.0
 
@@ -349,17 +322,15 @@ class TestConvenienceFunctions:
 
         mock_results = [
             JudgeResult(score=8.0, reasoning="Good"),
-            JudgeResult(score=7.0, reasoning="OK")
+            JudgeResult(score=7.0, reasoning="OK"),
         ]
 
-        with patch('core.llm_judge.LLMJudge') as MockClass:
+        with patch("core.llm_judge.LLMJudge") as MockClass:
             mock_instance = MockClass.return_value
             mock_instance.evaluate_batch = AsyncMock(return_value=mock_results)
 
             results = await judge_answers_batch(
-                question="Test?",
-                answers=["A1", "A2"],
-                api_key="test-key"
+                question="Test?", answers=["A1", "A2"], api_key="test-key"
             )
 
         assert len(results) == 2
@@ -377,6 +348,7 @@ class TestIntegration:
 
         # Skip if no API key
         import os
+
         if not os.getenv("OPENAI_API_KEY"):
             pytest.skip("No API key provided")
 
@@ -385,16 +357,13 @@ class TestIntegration:
         # Create evaluator
         config = EvaluationConfig(
             judge_model="gpt-4o-mini",  # Use cheaper model for testing
-            judge_api_key=os.getenv("OPENAI_API_KEY")
+            judge_api_key=os.getenv("OPENAI_API_KEY"),
         )
 
         evaluator = OpenEndedEvaluator(config)
 
         # Evaluate a simple answer
-        result = await evaluator.evaluate_answer(
-            question="What is 2+2?",
-            answer="2+2 equals 4."
-        )
+        result = await evaluator.evaluate_answer(question="What is 2+2?", answer="2+2 equals 4.")
 
         # Basic assertions
         assert isinstance(result.score, float)

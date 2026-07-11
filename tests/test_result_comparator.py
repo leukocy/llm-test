@@ -54,7 +54,7 @@ class TestResultMetadata(unittest.TestCase):
         result.compute_performance_stats()
 
         # Create临时文件
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             filepath = f.name
             result.save_to_json(filepath)
 
@@ -98,7 +98,7 @@ class TestComparisonEntry(unittest.TestCase):
         entry = ComparisonEntry(
             metric_name="Accuracy",
             values={"Model A": 0.85, "Model B": 0.90, "Model C": 0.80},
-            higher_is_better=True
+            higher_is_better=True,
         )
 
         self.assertEqual(entry.get_best(), 0.90)
@@ -110,7 +110,7 @@ class TestComparisonEntry(unittest.TestCase):
             metric_name="Latency",
             values={"Model A": 100, "Model B": 80, "Model C": 120},
             unit="ms",
-            higher_is_better=False
+            higher_is_better=False,
         )
 
         self.assertEqual(entry.get_best(), 80)
@@ -121,20 +121,20 @@ class TestComparisonEntry(unittest.TestCase):
         entry = ComparisonEntry(
             metric_name="Accuracy",
             values={"Model A": 0.80, "Model B": 0.90},
-            higher_is_better=True
+            higher_is_better=True,
         )
 
         diff = entry.get_difference_percent()
         self.assertIsNotNone(diff)
-        self.assertAlmostEqual(diff["Model A"], -11.11111111111111, places=10)  # (0.8 - 0.9) / 0.9 * 100
+        self.assertAlmostEqual(
+            diff["Model A"], -11.11111111111111, places=10
+        )  # (0.8 - 0.9) / 0.9 * 100
         self.assertEqual(diff["Model B"], 0.0)
 
     def test_to_dict(self):
         """TestConvertis字典"""
         entry = ComparisonEntry(
-            metric_name="Test",
-            values={"A": 1.0, "B": 2.0},
-            higher_is_better=True
+            metric_name="Test", values={"A": 1.0, "B": 2.0}, higher_is_better=True
         )
 
         data = entry.to_dict()
@@ -154,11 +154,13 @@ class TestResultComparator(unittest.TestCase):
 
         # CreateTestResult文件
         self.test_files = []
-        for i, (model, dataset, accuracy) in enumerate([
-            ("model_a", "mmlu", 0.75),
-            ("model_b", "mmlu", 0.82),
-            ("model_c", "mmlu", 0.68),
-        ]):
+        for i, (model, dataset, accuracy) in enumerate(
+            [
+                ("model_a", "mmlu", 0.75),
+                ("model_b", "mmlu", 0.82),
+                ("model_c", "mmlu", 0.68),
+            ]
+        ):
             result = self._create_test_result(model, dataset, accuracy)
             filepath = os.path.join(self.temp_dir, f"result_{i}.json")
             result.save_to_json(filepath)
@@ -167,9 +169,12 @@ class TestResultComparator(unittest.TestCase):
     def tearDown(self):
         """CleanupTest Environment"""
         import shutil
+
         shutil.rmtree(self.temp_dir)
 
-    def _create_test_result(self, model_id: str, dataset_name: str, accuracy: float) -> EvaluationResult:
+    def _create_test_result(
+        self, model_id: str, dataset_name: str, accuracy: float
+    ) -> EvaluationResult:
         """CreateTest用 EvaluationResult"""
         total_samples = 100
         correct_samples = int(total_samples * accuracy)
@@ -180,7 +185,9 @@ class TestResultComparator(unittest.TestCase):
             sample = SampleResult(
                 sample_id=str(i),
                 question=f"Question {i}",
-                correct_answer="A" if i % 4 == 0 else "B" if i % 4 == 1 else "C" if i % 4 == 2 else "D",
+                correct_answer=(
+                    "A" if i % 4 == 0 else "B" if i % 4 == 1 else "C" if i % 4 == 2 else "D"
+                ),
                 model_response="A" if is_correct else "B",
                 predicted_answer="A" if is_correct else "B",
                 is_correct=is_correct,
@@ -205,7 +212,7 @@ class TestResultComparator(unittest.TestCase):
                 "temperature": 0.0,
                 "max_tokens": 256,
                 "thinking_enabled": i % 2 == 0,  # 模拟not同Configure
-            }
+            },
         )
         result.compute_performance_stats()
         return result
@@ -314,7 +321,7 @@ class TestResultComparator(unittest.TestCase):
         self.assertTrue(os.path.exists(output_path))
 
         # ValidatecanLoad
-        with open(output_path, encoding='utf-8') as f:
+        with open(output_path, encoding="utf-8") as f:
             data = json.load(f)
         self.assertIn("comparison_id", data)
         self.assertIn("results", data)
@@ -337,7 +344,7 @@ class TestResultComparator(unittest.TestCase):
         self.assertTrue(os.path.exists(output_path))
 
         # Validate内容
-        with open(output_path, encoding='utf-8') as f:
+        with open(output_path, encoding="utf-8") as f:
             content = f.read()
         self.assertIn("Test Results对比报告", content)
 
@@ -364,6 +371,7 @@ class TestResultComparator(unittest.TestCase):
     def test_plot_comparison(self):
         """TestGenerate对比图表"""
         import importlib.util
+
         matplotlib_available = importlib.util.find_spec("matplotlib") is not None
 
         if not matplotlib_available:
@@ -386,6 +394,7 @@ class TestResultComparator(unittest.TestCase):
     def test_plot_comparison_without_saving(self):
         """TestGenerate图表butnotSave"""
         import importlib.util
+
         matplotlib_available = importlib.util.find_spec("matplotlib") is not None
 
         if not matplotlib_available:
@@ -428,10 +437,12 @@ class TestConvenienceFunctions(unittest.TestCase):
 
         # CreateTestResult文件
         self.test_files = []
-        for i, (model, dataset, accuracy) in enumerate([
-            ("model_a", "mmlu", 0.75),
-            ("model_b", "mmlu", 0.82),
-        ]):
+        for i, (model, dataset, accuracy) in enumerate(
+            [
+                ("model_a", "mmlu", 0.75),
+                ("model_b", "mmlu", 0.82),
+            ]
+        ):
             result = self._create_test_result(model, dataset, accuracy)
             filepath = os.path.join(self.temp_dir, f"result_{i}.json")
             result.save_to_json(filepath)
@@ -440,9 +451,12 @@ class TestConvenienceFunctions(unittest.TestCase):
     def tearDown(self):
         """CleanupTest Environment"""
         import shutil
+
         shutil.rmtree(self.temp_dir)
 
-    def _create_test_result(self, model_id: str, dataset_name: str, accuracy: float) -> EvaluationResult:
+    def _create_test_result(
+        self, model_id: str, dataset_name: str, accuracy: float
+    ) -> EvaluationResult:
         """CreateTest用 EvaluationResult"""
         total_samples = 100
         correct_samples = int(total_samples * accuracy)
@@ -477,10 +491,7 @@ class TestConvenienceFunctions(unittest.TestCase):
 
     def test_compare_files(self):
         """Test compare_files 函数"""
-        report = compare_files(
-            self.test_files,
-            labels=["Model A", "Model B"]
-        )
+        report = compare_files(self.test_files, labels=["Model A", "Model B"])
 
         self.assertIsNotNone(report)
         self.assertEqual(len(report.results), 2)
@@ -491,9 +502,7 @@ class TestConvenienceFunctions(unittest.TestCase):
         output_path = os.path.join(self.temp_dir, "report.json")
 
         report = compare_files(
-            self.test_files,
-            labels=["Model A", "Model B"],
-            output_path=output_path
+            self.test_files, labels=["Model A", "Model B"], output_path=output_path
         )
 
         self.assertTrue(os.path.exists(output_path))
@@ -519,6 +528,7 @@ class TestConvenienceFunctions(unittest.TestCase):
         # 打印摘要
         import io
         import sys
+
         old_stdout = sys.stdout
         sys.stdout = buffer = io.StringIO()
 
@@ -550,7 +560,7 @@ class TestEdgeCases(unittest.TestCase):
         entry = ComparisonEntry(
             metric_name="Thinking Mode",
             values={"Model A": "启用", "Model B": "Close"},
-            higher_is_better=None  # 字符串值没hashigher is better
+            higher_is_better=None,  # 字符串值没hashigher is better
         )
 
         # 字符串值Return一值作is"最佳"

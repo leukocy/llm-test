@@ -6,10 +6,22 @@ from core.config_hash import CONFIG_HASH_FIELDS, compute_config_hash
 
 
 def test_same_fields_same_hash():
-    a = compute_config_hash(model_name="M1", engine="vllm", parallel_strategy="tp8",
-                            quantization="fp8", dtype="bf16", max_context=128000)
-    b = compute_config_hash(model_name="M1", engine="vllm", parallel_strategy="tp8",
-                            quantization="fp8", dtype="bf16", max_context=128000)
+    a = compute_config_hash(
+        model_name="M1",
+        engine="vllm",
+        parallel_strategy="tp8",
+        quantization="fp8",
+        dtype="bf16",
+        max_context=128000,
+    )
+    b = compute_config_hash(
+        model_name="M1",
+        engine="vllm",
+        parallel_strategy="tp8",
+        quantization="fp8",
+        dtype="bf16",
+        max_context=128000,
+    )
     assert a == b
 
 

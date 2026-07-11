@@ -50,15 +50,34 @@ def _run(
         created_at=created or datetime(2026, 6, 1, 12, 0, 0),
         supersedes_test_id=supersedes_test_id,
         serving_config={"engine": engine, "engine_version": "0.6.3", "tp_size": 8},
-        model_spec={"architecture": "moe", "total_params_b": 671, "active_params_b": 37,
-                    "weight_dtype": "bf16", "max_position_embeddings": 128000},
+        model_spec={
+            "architecture": "moe",
+            "total_params_b": 671,
+            "active_params_b": 37,
+            "weight_dtype": "bf16",
+            "max_position_embeddings": 128000,
+        },
         system_info={
             "hardware_fingerprint": {
                 "machine_id": machine_id,
-                "cpu": {"model_name": "EPYC 9355", "sockets": 1, "cores_per_socket": 32},
-                "memory": {"type": "DDR5", "total_gb": 1133, "channels": 24, "ecc": True},
-                "gpus": [{"name": "RTX PRO 6000", "vram_gb": 96,
-                          "nominal_bandwidth_gbps": 1792}],
+                "cpu": {
+                    "model_name": "EPYC 9355",
+                    "sockets": 1,
+                    "cores_per_socket": 32,
+                },
+                "memory": {
+                    "type": "DDR5",
+                    "total_gb": 1133,
+                    "channels": 24,
+                    "ecc": True,
+                },
+                "gpus": [
+                    {
+                        "name": "RTX PRO 6000",
+                        "vram_gb": 96,
+                        "nominal_bandwidth_gbps": 1792,
+                    }
+                ],
                 "cuda": {"driver": "580.159.03", "cuda_version": "13.0"},
             }
         },
@@ -113,8 +132,12 @@ def test_project_run_falls_back_to_avg_tps_for_decode():
 
 
 def test_filter_by_machine_and_external_level():
-    db = _FakeDB([_run(test_id="t1", machine_id="m1", external_level="internal"),
-                  _run(test_id="t2", machine_id="m2", external_level="publishable")])
+    db = _FakeDB(
+        [
+            _run(test_id="t1", machine_id="m1", external_level="internal"),
+            _run(test_id="t2", machine_id="m2", external_level="publishable"),
+        ]
+    )
     flt = WarehouseFilter(machine_id="m2")
     runs = query_runs(db, flt)
     assert [r.test_id for r in runs] == ["t2"]
@@ -124,15 +147,23 @@ def test_filter_by_machine_and_external_level():
 
 
 def test_filter_by_engine_fuzzy_and_test_type():
-    db = _FakeDB([_run(test_id="t1", engine="vllm", test_type="concurrency"),
-                  _run(test_id="t2", engine="sglang", test_type="prefill")])
+    db = _FakeDB(
+        [
+            _run(test_id="t1", engine="vllm", test_type="concurrency"),
+            _run(test_id="t2", engine="sglang", test_type="prefill"),
+        ]
+    )
     assert {r.test_id for r in query_runs(db, WarehouseFilter(engine="sglang"))} == {"t2"}
     assert {r.test_id for r in query_runs(db, WarehouseFilter(test_type="prefill"))} == {"t2"}
 
 
 def test_filter_search_across_fields():
-    db = _FakeDB([_run(test_id="t1", model_id="DeepSeek-V3.1", tester="alice"),
-                  _run(test_id="t2", model_id="Qwen3", tester="bob")])
+    db = _FakeDB(
+        [
+            _run(test_id="t1", model_id="DeepSeek-V3.1", tester="alice"),
+            _run(test_id="t2", model_id="Qwen3", tester="bob"),
+        ]
+    )
     # search 命中 model_name
     assert {r.test_id for r in query_runs(db, WarehouseFilter(search="deepseek"))} == {"t1"}
     # search 命中 tester
@@ -140,10 +171,12 @@ def test_filter_search_across_fields():
 
 
 def test_supersedes_collapse_keeps_latest_only():
-    db = _FakeDB([
-        _run(test_id="old", created=datetime(2026, 6, 1)),
-        _run(test_id="new", created=datetime(2026, 6, 2), supersedes_test_id="old"),
-    ])
+    db = _FakeDB(
+        [
+            _run(test_id="old", created=datetime(2026, 6, 1)),
+            _run(test_id="new", created=datetime(2026, 6, 2), supersedes_test_id="old"),
+        ]
+    )
     runs = query_runs(db, WarehouseFilter(include_superseded=False))
     assert {r.test_id for r in runs} == {"new"}
 
@@ -157,9 +190,11 @@ def test_supersedes_collapse_keeps_latest_only():
 
 
 def test_hardware_inventory_dedups_by_machine_id():
-    runs = [_run(test_id="t1", machine_id="m1"),
-            _run(test_id="t2", machine_id="m1", created=datetime(2026, 7, 1)),
-            _run(test_id="t3", machine_id="m2")]
+    runs = [
+        _run(test_id="t1", machine_id="m1"),
+        _run(test_id="t2", machine_id="m1", created=datetime(2026, 7, 1)),
+        _run(test_id="t3", machine_id="m2"),
+    ]
     rows = build_hardware_inventory_rows(runs)
     assert len(rows) == 2  # m1 去重
     assert {r["machine_id"] for r in rows} == {"m1", "m2"}
@@ -170,6 +205,7 @@ def test_hardware_inventory_dedups_by_machine_id():
 
 def test_hm_test_rows_match_template_field_set():
     from core.warehouse.templates import HM_TEST_FIELDS
+
     rows = build_hm_test_rows([_run()])
     assert len(rows) == 1
     assert set(rows[0].keys()) == set(HM_TEST_FIELDS)
@@ -182,12 +218,27 @@ def test_hm_test_rows_match_template_field_set():
 
 def test_cross_matrix_latest_aggregation():
     runs = [
-        _run(test_id="t1", machine_id="m1", model_id="A", avg_tps=40.0,
-             created=datetime(2026, 6, 1)),
-        _run(test_id="t2", machine_id="m1", model_id="A", avg_tps=60.0,
-             created=datetime(2026, 6, 2)),
-        _run(test_id="t3", machine_id="m2", model_id="A", avg_tps=30.0,
-             created=datetime(2026, 6, 3)),
+        _run(
+            test_id="t1",
+            machine_id="m1",
+            model_id="A",
+            avg_tps=40.0,
+            created=datetime(2026, 6, 1),
+        ),
+        _run(
+            test_id="t2",
+            machine_id="m1",
+            model_id="A",
+            avg_tps=60.0,
+            created=datetime(2026, 6, 2),
+        ),
+        _run(
+            test_id="t3",
+            machine_id="m2",
+            model_id="A",
+            avg_tps=30.0,
+            created=datetime(2026, 6, 3),
+        ),
     ]
     mx = build_cross_matrix(runs, metric="decode_tps", agg="latest")
     assert mx.row_labels == ["m1", "m2"]
@@ -198,10 +249,20 @@ def test_cross_matrix_latest_aggregation():
 
 def test_cross_matrix_best_aggregation():
     runs = [
-        _run(test_id="t1", machine_id="m1", model_id="A", avg_tps=40.0,
-             created=datetime(2026, 6, 1)),
-        _run(test_id="t2", machine_id="m1", model_id="A", avg_tps=70.0,
-             created=datetime(2026, 6, 2)),
+        _run(
+            test_id="t1",
+            machine_id="m1",
+            model_id="A",
+            avg_tps=40.0,
+            created=datetime(2026, 6, 1),
+        ),
+        _run(
+            test_id="t2",
+            machine_id="m1",
+            model_id="A",
+            avg_tps=70.0,
+            created=datetime(2026, 6, 2),
+        ),
     ]
     mx = build_cross_matrix(runs, metric="decode_tps", agg="best")
     assert mx.cells["m1"]["A"] == 70.0
@@ -217,4 +278,5 @@ def test_cross_matrix_empty_when_no_matching_metric():
 def test_query_runs_no_get_recent_runs_returns_empty():
     class _NoMethod:
         pass
+
     assert query_runs(_NoMethod(), WarehouseFilter()) == []

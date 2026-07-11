@@ -1,13 +1,14 @@
+import os
+
 import requests
 
-import os
 base_url = os.getenv("API_BASE_URL", "http://localhost:8000/v1")
 model_name = "DeepSeek-V3.1"
 
 payload = {
     "model": model_name,
     "messages": [{"role": "user", "content": "hi"}],
-    "max_tokens": 10
+    "max_tokens": 10,
 }
 
 print(f"Testing model: {model_name}")

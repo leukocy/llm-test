@@ -4,6 +4,7 @@ Preset Manager for Test Configurations
 Manages saving, loading, and deleting test configuration presets.
 Presets are stored as JSON files in the presets/ directory.
 """
+
 import json
 import os
 from datetime import datetime
@@ -12,19 +13,21 @@ from datetime import datetime
 def get_presets_dir() -> str:
     """Get the presets directory path, creating it if it doesn't exist."""
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    presets_dir = os.path.join(project_root, 'presets')
+    presets_dir = os.path.join(project_root, "presets")
 
     if not os.path.exists(presets_dir):
         os.makedirs(presets_dir)
 
     return presets_dir
 
+
 def _sanitize_preset_name(name: str) -> str:
     """Sanitize preset name to be a valid filename."""
     # Remove special characters and spaces
-    safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_'))
-    safe_name = safe_name.strip().replace(' ', '_')
+    safe_name = "".join(c for c in name if c.isalnum() or c in (" ", "-", "_"))
+    safe_name = safe_name.strip().replace(" ", "_")
     return safe_name
+
 
 def save_preset(name: str, config: dict) -> bool:
     """
@@ -50,16 +53,17 @@ def save_preset(name: str, config: dict) -> bool:
     preset_data = {
         "name": name,
         "created_at": datetime.now().isoformat(),
-        "config": config
+        "config": config,
     }
 
     try:
-        with open(preset_path, 'w', encoding='utf-8') as f:
+        with open(preset_path, "w", encoding="utf-8") as f:
             json.dump(preset_data, f, indent=2, ensure_ascii=False)
         return True
     except Exception as e:
         print(f"Error saving preset: {e}")
         return False
+
 
 def load_preset(name: str) -> dict | None:
     """
@@ -79,11 +83,13 @@ def load_preset(name: str) -> dict | None:
         return None
 
     try:
-        with open(preset_path, encoding='utf-8') as f:
-            return json.load(f)
+        with open(preset_path, encoding="utf-8") as f:
+            data = json.load(f)
+        return dict(data)
     except Exception as e:
         print(f"Error loading preset: {e}")
         return None
+
 
 def list_presets() -> list[dict]:
     """
@@ -97,22 +103,25 @@ def list_presets() -> list[dict]:
 
     try:
         for filename in os.listdir(presets_dir):
-            if filename.endswith('.json'):
+            if filename.endswith(".json"):
                 filepath = os.path.join(presets_dir, filename)
                 try:
-                    with open(filepath, encoding='utf-8') as f:
+                    with open(filepath, encoding="utf-8") as f:
                         preset = json.load(f)
-                        presets.append({
-                            "name": preset.get("name", filename[:-5]),
-                            "created_at": preset.get("created_at", "Unknown"),
-                            "filename": filename
-                        })
+                        presets.append(
+                            {
+                                "name": preset.get("name", filename[:-5]),
+                                "created_at": preset.get("created_at", "Unknown"),
+                                "filename": filename,
+                            }
+                        )
                 except Exception as e:
                     print(f"Error reading preset {filename}: {e}")
     except Exception as e:
         print(f"Error listing presets: {e}")
 
-    return sorted(presets, key=lambda x: x['created_at'], reverse=True)
+    return sorted(presets, key=lambda x: x["created_at"], reverse=True)
+
 
 def delete_preset(name: str) -> bool:
     """

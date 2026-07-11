@@ -7,7 +7,6 @@ import os
 import tempfile
 from datetime import datetime
 
-
 from core.request_logger import (
     LogIndex,
     LogIndexEntry,
@@ -406,9 +405,7 @@ class TestRequestLogger:
         """Test带日期目录大小限制Cleanup"""
         with tempfile.TemporaryDirectory() as tmpdir:
             # Set非常小限制 (10KB)
-            logger = RequestLogger(
-                log_dir=tmpdir, enabled=True, max_total_size_mb=10 / 1024
-            )
+            logger = RequestLogger(log_dir=tmpdir, enabled=True, max_total_size_mb=10 / 1024)
 
             # Create多较大文件（分布innot同日期目录）
             for i in range(20):

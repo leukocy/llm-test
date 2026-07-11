@@ -7,7 +7,7 @@ from typing import Any, Generic, TypeVar
 
 from core.database.connection import Database, db
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class BaseRepository(ABC, Generic[T]):
@@ -17,7 +17,7 @@ class BaseRepository(ABC, Generic[T]):
     提供通用 CRUD 操作andQuery方法。
     """
 
-    def __init__(self, database: Database = None):
+    def __init__(self, database: Database | None = None):
         self.db = database or db
         self._table_name: str = ""
 
@@ -48,12 +48,7 @@ class BaseRepository(ABC, Generic[T]):
         row = self.db.fetch_one(sql, (id,))
         return self._from_row(row) if row else None
 
-    def find_all(
-        self,
-        limit: int = 100,
-        offset: int = 0,
-        order_by: str = "id DESC"
-    ) -> list[T]:
+    def find_all(self, limit: int = 100, offset: int = 0, order_by: str = "id DESC") -> list[T]:
         """
         查找所has记录
 
@@ -74,7 +69,7 @@ class BaseRepository(ABC, Generic[T]):
         where: str,
         params: tuple = (),
         limit: int = 100,
-        order_by: str = "id DESC"
+        order_by: str = "id DESC",
     ) -> list[T]:
         """
         条件Query
@@ -190,7 +185,7 @@ class BaseRepository(ABC, Generic[T]):
         page_size: int = 20,
         where: str = "",
         params: tuple = (),
-        order_by: str = "id DESC"
+        order_by: str = "id DESC",
     ) -> dict[str, Any]:
         """
         分页Query

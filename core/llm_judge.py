@@ -15,38 +15,43 @@ from core.providers.factory import get_provider
 
 class JudgeCriteria(Enum):
     """Evaluation Criteria"""
-    HELPFULNESS = "helpfulness"      # is否hasHelp
-    RELEVANCE = "relevance"          # is否相关
-    ACCURACY = "accuracy"            # 准确性
-    COHERENCE = "coherence"          # 连贯性
-    COMPLETENESS = "completeness"    # 完整性
-    CLARITY = "clarity"              # 清晰度
+
+    HELPFULNESS = "helpfulness"  # is否hasHelp
+    RELEVANCE = "relevance"  # is否相关
+    ACCURACY = "accuracy"  # 准确性
+    COHERENCE = "coherence"  # 连贯性
+    COMPLETENESS = "completeness"  # 完整性
+    CLARITY = "clarity"  # 清晰度
 
 
 @dataclass
 class JudgeRequest:
     """裁判请求"""
-    question: str                      # 问题
-    answer: str                         # 回答
+
+    question: str  # 问题
+    answer: str  # 回答
     reference_answer: str | None = None  # 参考Answer（optional）
-    criteria: list[JudgeCriteria] = field(default_factory=lambda: [
-        JudgeCriteria.HELPFULNESS,
-        JudgeCriteria.RELEVANCE,
-        JudgeCriteria.ACCURACY,
-        JudgeCriteria.COHERENCE
-    ])
-    context: str | None = None      # 额外onunder文
-    max_score: int = 10                 # 最大分数
+    criteria: list[JudgeCriteria] = field(
+        default_factory=lambda: [
+            JudgeCriteria.HELPFULNESS,
+            JudgeCriteria.RELEVANCE,
+            JudgeCriteria.ACCURACY,
+            JudgeCriteria.COHERENCE,
+        ]
+    )
+    context: str | None = None  # 额外onunder文
+    max_score: int = 10  # 最大分数
 
 
 @dataclass
 class JudgeResult:
     """裁判Result"""
-    score: float                        # 总分 (0-max_score)
-    reasoning: str                      # Score理由
+
+    score: float  # 总分 (0-max_score)
+    reasoning: str  # Score理由
     category_scores: dict[str, float] = field(default_factory=dict)  # 各维度分数
-    confidence: float = 0.8             # 置信度 (0-1)
-    suggestion: str | None = None     # 改进Suggestion
+    confidence: float = 0.8  # 置信度 (0-1)
+    suggestion: str | None = None  # 改进Suggestion
     timestamp: datetime = field(default_factory=datetime.now)
 
 
@@ -62,7 +67,7 @@ class LLMJudge:
         judge_model: str = "gpt-4o",
         judge_api_base: str = "https://api.openai.com/v1",
         judge_api_key: str = "",
-        temperature: float = 0.3  # 低温度以保持一致性
+        temperature: float = 0.3,  # 低温度以保持一致性
     ):
         """
         Initialize LLM 裁判器
@@ -83,7 +88,7 @@ class LLMJudge:
             "OpenAI",  # 假设use OpenAI 兼容接口
             judge_api_base,
             judge_api_key,
-            judge_model
+            judge_model,
         )
 
     def _build_judge_prompt(self, request: JudgeRequest) -> str:
@@ -102,14 +107,14 @@ class LLMJudge:
             JudgeCriteria.ACCURACY: "回答in事实信息is否准确no误",
             JudgeCriteria.COHERENCE: "回答is否逻辑连贯，前后一致",
             JudgeCriteria.COMPLETENESS: "回答is否完整，没has遗漏重要内容",
-            JudgeCriteria.CLARITY: "回答is否清晰易懂，表达准确"
+            JudgeCriteria.CLARITY: "回答is否清晰易懂，表达准确",
         }
 
         criteria_list = [c.value for c in request.criteria]
 
         prompt_parts = [
             "你is一专业内容Quality Assessment专家。请based on以under标准评估回答质量：\n",
-            "Evaluation Criteria：\n"
+            "Evaluation Criteria：\n",
         ]
 
         for criterion in request.criteria:
@@ -143,7 +148,7 @@ class LLMJudge:
                 prompt_parts.append(f'    "{criterion}": <分数>,')
             else:
                 prompt_parts.append(f'    "{criterion}": <分数>')
-        prompt_parts.append('  },')
+        prompt_parts.append("  },")
         prompt_parts.append('  "suggestion": "<改进Suggestion，optional>",')
         prompt_parts.append('  "confidence": <置信度 0-1>')
         prompt_parts.append("}")
@@ -184,7 +189,7 @@ class LLMJudge:
                     elif char == "}":
                         depth -= 1
                         if depth == 0:
-                            json_str = response_text[start:i+1]
+                            json_str = response_text[start : i + 1]
                             break
                 else:
                     # No matching braces found
@@ -197,11 +202,9 @@ class LLMJudge:
             return JudgeResult(
                 score=float(data.get("total_score", 0)),
                 reasoning=data.get("reasoning", ""),
-                category_scores={
-                    k: float(v) for k, v in data.get("category_scores", {}).items()
-                },
+                category_scores={k: float(v) for k, v in data.get("category_scores", {}).items()},
                 confidence=float(data.get("confidence", 0.8)),
-                suggestion=data.get("suggestion")
+                suggestion=data.get("suggestion"),
             )
 
         except (json.JSONDecodeError, ValueError, KeyError) as e:
@@ -210,13 +213,11 @@ class LLMJudge:
                 score=0.0,
                 reasoning=f"Parse failed: {str(e)}\nRaw response: {response_text[:200]}",
                 category_scores={},
-                confidence=0.0
+                confidence=0.0,
             )
 
     async def evaluate(
-        self,
-        request: JudgeRequest,
-        log_callback: Callable | None = None
+        self, request: JudgeRequest, log_callback: Callable | None = None
     ) -> JudgeResult:
         """
         评估回答质量
@@ -241,7 +242,7 @@ class LLMJudge:
                 session_id="judge",
                 prompt=prompt,
                 max_tokens=1000,
-                log_callback=log_callback
+                log_callback=log_callback,
             )
 
             if result.get("error"):
@@ -253,7 +254,9 @@ class LLMJudge:
             judge_result = self._parse_judge_response(response_content, request.max_score)
 
             if log_callback:
-                log_callback(f"LLM Judge: 评估完成，Score: {judge_result.score}/{request.max_score}")
+                log_callback(
+                    f"LLM Judge: 评估完成，Score: {judge_result.score}/{request.max_score}"
+                )
 
             return judge_result
 
@@ -266,13 +269,11 @@ class LLMJudge:
                 score=0.0,
                 reasoning=f"评估失败: {str(e)}",
                 category_scores={},
-                confidence=0.0
+                confidence=0.0,
             )
 
     async def evaluate_batch(
-        self,
-        requests: list[JudgeRequest],
-        log_callback: Callable | None = None
+        self, requests: list[JudgeRequest], log_callback: Callable | None = None
     ) -> list[JudgeResult]:
         """
         批量评估
@@ -288,7 +289,7 @@ class LLMJudge:
 
         for i, request in enumerate(requests):
             if log_callback:
-                log_callback(f"LLM Judge: 评估进度 {i+1}/{len(requests)}")
+                log_callback(f"LLM Judge: 评估进度 {i + 1}/{len(requests)}")
 
             result = await self.evaluate(request, log_callback)
             results.append(result)
@@ -299,7 +300,7 @@ class LLMJudge:
         self,
         question: str,
         answers: list[str],
-        criteria: list[JudgeCriteria] | None = None
+        criteria: list[JudgeCriteria] | None = None,
     ) -> list[tuple[int, str, JudgeResult]]:
         """
         比较多回答质量
@@ -317,7 +318,7 @@ class LLMJudge:
             JudgeRequest(
                 question=question,
                 answer=answer,
-                criteria=criteria or list(JudgeCriteria)[:4]
+                criteria=criteria or list(JudgeCriteria)[:4],
             )
             for answer in answers
         ]
@@ -328,10 +329,7 @@ class LLMJudge:
 
 # 便捷函数
 async def judge_answer(
-    question: str,
-    answer: str,
-    judge_model: str = "gpt-4o",
-    api_key: str = ""
+    question: str, answer: str, judge_model: str = "gpt-4o", api_key: str = ""
 ) -> JudgeResult:
     """
     便捷函数：评估单回答
@@ -345,24 +343,15 @@ async def judge_answer(
     Returns:
         Evaluation result
     """
-    judge = LLMJudge(
-        judge_model=judge_model,
-        judge_api_key=api_key
-    )
+    judge = LLMJudge(judge_model=judge_model, judge_api_key=api_key)
 
-    request = JudgeRequest(
-        question=question,
-        answer=answer
-    )
+    request = JudgeRequest(question=question, answer=answer)
 
     return await judge.evaluate(request)
 
 
 async def judge_answers_batch(
-    question: str,
-    answers: list[str],
-    judge_model: str = "gpt-4o",
-    api_key: str = ""
+    question: str, answers: list[str], judge_model: str = "gpt-4o", api_key: str = ""
 ) -> list[JudgeResult]:
     """
     便捷函数：批量评估多回答
@@ -376,14 +365,8 @@ async def judge_answers_batch(
     Returns:
         Evaluation result列表
     """
-    judge = LLMJudge(
-        judge_model=judge_model,
-        judge_api_key=api_key
-    )
+    judge = LLMJudge(judge_model=judge_model, judge_api_key=api_key)
 
-    requests = [
-        JudgeRequest(question=question, answer=answer)
-        for answer in answers
-    ]
+    requests = [JudgeRequest(question=question, answer=answer) for answer in answers]
 
     return await judge.evaluate_batch(requests)

@@ -35,12 +35,19 @@ def test_groups_by_customer_scenario_model():
     ]
     sheet = build_capability_sheet(cases)
     keys = {(r["customer_type"], r["scenario"], r["model_name"]) for r in sheet}
-    assert keys == {("金融", "coding", "M1"), ("金融", "retrieval", "M1"), ("制造", "coding", "M1")}
+    assert keys == {
+        ("金融", "coding", "M1"),
+        ("金融", "retrieval", "M1"),
+        ("制造", "coding", "M1"),
+    }
 
 
 def test_success_rate_aggregation():
     cases = [
-        _case(success=True), _case(success=True), _case(success=False), _case(success=None),
+        _case(success=True),
+        _case(success=True),
+        _case(success=False),
+        _case(success=None),
     ]
     sheet = build_capability_sheet(cases)
     assert len(sheet) == 1
@@ -50,7 +57,10 @@ def test_success_rate_aggregation():
 
 
 def test_avg_quality_and_decode_tps():
-    cases = [_case(quality_score=8.0, decode_tps=40.0), _case(quality_score=6.0, decode_tps=20.0)]
+    cases = [
+        _case(quality_score=8.0, decode_tps=40.0),
+        _case(quality_score=6.0, decode_tps=20.0),
+    ]
     sheet = build_capability_sheet(cases)
     assert sheet[0]["avg_quality_score"] == 7.0
     assert sheet[0]["avg_decode_tps"] == 30.0
@@ -111,6 +121,13 @@ def test_markdown_empty_message():
 
 
 def test_capability_columns_complete():
-    for col in ("customer_type", "scenario", "model_name", "success_rate",
-                "avg_quality_score", "external_level", "sales_summary"):
+    for col in (
+        "customer_type",
+        "scenario",
+        "model_name",
+        "success_rate",
+        "avg_quality_score",
+        "external_level",
+        "sales_summary",
+    ):
         assert col in CAPABILITY_COLUMNS
