@@ -41,12 +41,24 @@ _TEST_TYPE_ALIASES = {
     "all_tests": "All Tests",
     "stability": "Stability Test",
     "stability_test": "Stability Test",
+    "batch": "Batch Test",
+    "batch_test": "Batch Test",
+    "warehouse": "Data Warehouse",
+    "data_warehouse": "Data Warehouse",
+    "数据仓库": "Data Warehouse",
 }
 
 
 def _test_type_key(value):
     """Return a stable comparison key for a test type value."""
-    return str(value or "").strip().lower().replace("/", " ").replace("-", "_").replace(" ", "_")
+    return (
+        str(value or "")
+        .strip()
+        .lower()
+        .replace("/", " ")
+        .replace("-", "_")
+        .replace(" ", "_")
+    )
 
 
 def _match_allowed_test_type(label, allowed_options=None):
@@ -75,7 +87,11 @@ def _match_allowed_test_type(label, allowed_options=None):
         if "advanced" in label_lower and "advanced evaluation" in option_lower:
             return option
 
-    return DEFAULT_TEST_TYPE if DEFAULT_TEST_TYPE in allowed_options else allowed_options[0]
+    return (
+        DEFAULT_TEST_TYPE
+        if DEFAULT_TEST_TYPE in allowed_options
+        else allowed_options[0]
+    )
 
 
 def normalize_test_type(value, allowed_options=None):
@@ -96,6 +112,8 @@ def normalize_test_type(value, allowed_options=None):
             label = "A/B Model Comparison"
         elif "advanced evaluation" in lower_text:
             label = "Advanced Evaluation"
+        elif "warehouse" in lower_text or "数据仓库" in text:
+            label = "Data Warehouse"
         elif text:
             label = text
         else:
@@ -132,7 +150,9 @@ def init_session_state():
     if "test_paused" not in st.session_state:
         st.session_state.test_paused = False
     if "test_status" not in st.session_state:
-        st.session_state.test_status = "Idle"  # Idle | Running | Paused | Cancelled | Completed
+        st.session_state.test_status = (
+            "Idle"  # Idle | Running | Paused | Cancelled | Completed
+        )
 
     # Resume test related state
     if "is_resuming" not in st.session_state:
@@ -162,7 +182,9 @@ def init_session_state():
     if "latency_offset" not in st.session_state:
         st.session_state.latency_offset = 0.0  # Default: No calibration
     if "template_tokens" not in st.session_state:
-        st.session_state.template_tokens = 0  # Default: no provider/model template overhead
+        st.session_state.template_tokens = (
+            0  # Default: no provider/model template overhead
+        )
 
     # PD separation toggle: skip first token for TPS/TPOT
     if "skip_first_token_for_tps" not in st.session_state:
