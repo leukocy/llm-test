@@ -133,7 +133,9 @@ def _render_dataset_status_panel(available_datasets):
 
         manager = get_manager()
         managed_datasets = [
-            d for d in available_datasets if d in manager.configs and d not in _SYNTHETIC_DATASETS
+            d
+            for d in available_datasets
+            if d in manager.configs and d not in _SYNTHETIC_DATASETS
         ]
     except Exception:
         return
@@ -155,7 +157,11 @@ def _render_dataset_status_panel(available_datasets):
                 info = manager.get_info(ds_name)
                 size_mb = info.get("total_size_mb", 0)
                 if size_mb > 0:
-                    size_str = f"{size_mb:.1f} MB" if size_mb < 1024 else f"{size_mb/1024:.1f} GB"
+                    size_str = (
+                        f"{size_mb:.1f} MB"
+                        if size_mb < 1024
+                        else f"{size_mb/1024:.1f} GB"
+                    )
 
             status_data.append(
                 {
@@ -179,7 +185,9 @@ def _render_dataset_status_panel(available_datasets):
             st.caption(f"{len(missing_datasets)} dataset(s) need download")
 
             # Download All button
-            if st.button("Download All Missing", key="download_all_datasets", type="primary"):
+            if st.button(
+                "Download All Missing", key="download_all_datasets", type="primary"
+            ):
                 _download_datasets(manager, missing_datasets)
 
             # Per-dataset download buttons
@@ -232,7 +240,9 @@ def render_quality_test_panel(config, run_test_func):
         bool: Whether test was triggered
     """
     st.header("Model Quality Test")
-    st.info("Use public benchmarks (MMLU, GSM8K, etc.) to evaluate model reasoning and knowledge.")
+    st.info(
+        "Use public benchmarks (MMLU, GSM8K, etc.) to evaluate model reasoning and knowledge."
+    )
 
     # Lazy detect and load module
     if not _check_quality_eval():
@@ -299,7 +309,9 @@ def render_quality_test_panel(config, run_test_func):
             for i, (key, name, default, help_text) in enumerate(datasets_list):
                 if key in available_datasets:
                     with cols[i % 3]:
-                        if st.checkbox(name, value=default, key=f"ds_{key}", help=help_text):
+                        if st.checkbox(
+                            name, value=default, key=f"ds_{key}", help=help_text
+                        ):
                             selected_datasets.append(key)
 
         # Basic Datasets
@@ -378,7 +390,9 @@ def render_quality_test_panel(config, run_test_func):
                     DATASET_SAMPLE_COUNTS.get(ds, 10000) for ds in selected_datasets
                 )
                 max_allowed = min(min_dataset_size, 10000)
-                st.caption(f"Min sample count for selected datasets: {min_dataset_size}")
+                st.caption(
+                    f"Min sample count for selected datasets: {min_dataset_size}"
+                )
             else:
                 max_allowed = 10000
             max_samples = st.number_input(
@@ -394,7 +408,9 @@ def render_quality_test_panel(config, run_test_func):
 
         # Few-shot Set
         default_shots = 0 if model_type == "thinking" else 5
-        num_shots = st.slider("Few-shot examples", 0, 10, default_shots, key="quality_num_shots")
+        num_shots = st.slider(
+            "Few-shot examples", 0, 10, default_shots, key="quality_num_shots"
+        )
 
         # Detailed parameters
         with st.expander("Detailed Parameter Settings", expanded=True):
@@ -523,7 +539,9 @@ def _run_quality_test(
         ]
         if missing:
             missing_names = [_DATASET_DISPLAY_NAMES.get(d, d) for d in missing]
-            st.warning(f"Missing datasets: {', '.join(missing_names)}. Attempting auto-download...")
+            st.warning(
+                f"Missing datasets: {', '.join(missing_names)}. Attempting auto-download..."
+            )
             for ds_name in missing:
                 display_name = _DATASET_DISPLAY_NAMES.get(ds_name, ds_name)
                 with st.spinner(f"Downloading {display_name}..."):
@@ -535,7 +553,9 @@ def _run_quality_test(
             # Re-check and filter out still-missing datasets
             still_missing = [ds for ds in missing if not manager.is_available(ds)]
             if still_missing:
-                selected_datasets = [ds for ds in selected_datasets if ds not in still_missing]
+                selected_datasets = [
+                    ds for ds in selected_datasets if ds not in still_missing
+                ]
                 if not selected_datasets:
                     st.error("No datasets available after download attempts.")
                     return False
@@ -563,7 +583,9 @@ def _run_quality_test(
         progress_text.markdown("**0%**")
 
     status_text = st.empty()
-    status_text.info(f"Initializing quality assessment... Datasets: {', '.join(selected_datasets)}")
+    status_text.info(
+        f"Initializing quality assessment... Datasets: {', '.join(selected_datasets)}"
+    )
 
     try:
         # Build configuration
@@ -574,10 +596,14 @@ def _run_quality_test(
         # For thinking models, try intelligent preset first, fall back to UI values
         if thinking_enabled:
             try:
-                preset = get_intelligent_preset(config["api_base_url"], config["model_id"])
+                preset = get_intelligent_preset(
+                    config["api_base_url"], config["model_id"]
+                )
                 # Use UI values as override, preset as starting point
                 final_budget = thinking_budget or preset.get("thinking_budget", 4096)
-                final_effort = reasoning_effort or preset.get("reasoning_effort", "medium")
+                final_effort = reasoning_effort or preset.get(
+                    "reasoning_effort", "medium"
+                )
             except Exception:
                 final_budget = thinking_budget
                 final_effort = reasoning_effort
@@ -665,7 +691,9 @@ def _run_quality_test(
 def render_ab_comparison_panel(config):
     """Render A/B model comparison panel"""
     st.header("A/B Model Comparison")
-    st.info("Compare two models on the same test set with statistical significance analysis.")
+    st.info(
+        "Compare two models on the same test set with statistical significance analysis."
+    )
 
     if not _check_enhanced_eval():
         st.error("A/B comparison module failed to load.")
@@ -771,7 +799,9 @@ def _run_ab_comparison(
         ModelComparator = enhanced_module["ModelComparator"]
         ModelConfig = enhanced_module["ModelConfig"]
 
-        comparator = ModelComparator(output_dir=os.path.join("quality_results", "comparisons"))
+        comparator = ModelComparator(
+            output_dir=os.path.join("quality_results", "comparisons")
+        )
 
         # Configure Model A
         config_a = ModelConfig(
@@ -843,7 +873,9 @@ def _display_ab_comparison_results(result):
         if "model_a_vs_model_b" in ds_res.statistical_tests:
             test_res = ds_res.statistical_tests["model_a_vs_model_b"]
             sig = "Significant" if test_res.get("significant") else "Not significant"
-            row["Statistical Significance"] = f"{sig} (p={test_res.get('p_value', 1.0):.3f})"
+            row["Statistical Significance"] = (
+                f"{sig} (p={test_res.get('p_value', 1.0):.3f})"
+            )
         else:
             row["Statistical Significance"] = "N/A"
 
@@ -932,11 +964,15 @@ def render_advanced_eval_panel(config):
                 if demo_correct and extracted:
                     is_match = False
                     if isinstance(parser, MathAnswerParser):
-                        is_match = MathAnswerParser.check_answer(extracted, demo_correct)
+                        is_match = MathAnswerParser.check_answer(
+                            extracted, demo_correct
+                        )
                     else:
                         from evaluators.answer_parser import TextAnswerParser
 
-                        is_match = TextAnswerParser.check_answer(extracted, demo_correct)
+                        is_match = TextAnswerParser.check_answer(
+                            extracted, demo_correct
+                        )
 
                     if is_match:
                         st.success("Answer matches!")
@@ -957,7 +993,9 @@ def render_advanced_eval_panel(config):
         col1, col2 = st.columns(2)
         with col1:
             cons_runs = st.slider("Tests per question", 2, 10, 5, key="cons_runs")
-            cons_threshold = st.slider("Stability threshold", 0.5, 1.0, 0.8, key="cons_threshold")
+            cons_threshold = st.slider(
+                "Stability threshold", 0.5, 1.0, 0.8, key="cons_threshold"
+            )
         with col2:
             st.text_input("Test question", "What is 15 + 27?", key="cons_question")
             st.text_input("Correct answer", "42", key="cons_answer")
@@ -973,7 +1011,9 @@ def render_advanced_eval_panel(config):
 
     with adv_tabs[2]:
         st.subheader("Robustness Test")
-        st.info("Robustness testing evaluates model sensitivity to input perturbations.")
+        st.info(
+            "Robustness testing evaluates model sensitivity to input perturbations."
+        )
 
         from core.robustness_tester import PerturbationType, TextPerturber
 

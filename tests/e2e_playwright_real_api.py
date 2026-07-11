@@ -47,6 +47,7 @@ def start_streamlit():
         env=env,
     )
     import urllib.request
+
     for i in range(STREAMLIT_TIMEOUT * 2):
         try:
             urllib.request.urlopen("http://localhost:8502/healthz", timeout=2)
@@ -165,7 +166,9 @@ def test_real_api_flow(page):
     print("\n=== Step 5: Reduce Max Output Tokens to 1 ===")
     # Sidebar expander may need to be expanded first
     # Find "Parameter Settings" expander if closed
-    param_setting = page.locator("[data-testid='stExpander']").filter(has_text="Parameter Settings")
+    param_setting = page.locator("[data-testid='stExpander']").filter(
+        has_text="Parameter Settings"
+    )
     if param_setting.count() > 0:
         param_setting.first.click()
         time.sleep(0.3)
@@ -213,11 +216,16 @@ def test_real_api_flow(page):
     take_screenshot(page, "api_08_finished")
 
     # 3) Collect visible errors from UI
-    alerts = page.locator("[data-testid='stException'], [data-testid='stAlert'], [data-testid='stToast']")
+    alerts = page.locator(
+        "[data-testid='stException'], [data-testid='stAlert'], [data-testid='stToast']"
+    )
     found_errors = []
     for i in range(min(alerts.count(), 10)):
         txt = alerts.nth(i).text_content() or ""
-        if any(k in txt.lower() for k in ["error", "fail", "exception", "timeout", "unable"]):
+        if any(
+            k in txt.lower()
+            for k in ["error", "fail", "exception", "timeout", "unable"]
+        ):
             found_errors.append(txt[:250])
     if found_errors:
         print("FAIL: App/API errors detected")
@@ -226,7 +234,10 @@ def test_real_api_flow(page):
         return False
 
     # 4) Verify result table exists (TTFT/TPS columns)
-    if page.locator("text=TTFT").count() == 0 and page.locator("text=Idle").count() == 0:
+    if (
+        page.locator("text=TTFT").count() == 0
+        and page.locator("text=Idle").count() == 0
+    ):
         print("WARN: Neither result table (TTFT) nor Idle state detected after run")
         return False
 
@@ -249,7 +260,12 @@ def main():
 
             console_errors = []
             page.on("pageerror", lambda exc: console_errors.append(str(exc)))
-            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+            page.on(
+                "console",
+                lambda msg: (
+                    console_errors.append(msg.text) if msg.type == "error" else None
+                ),
+            )
 
             success = test_real_api_flow(page)
 

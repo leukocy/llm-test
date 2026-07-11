@@ -29,7 +29,9 @@ def run_dmidecode(password: str | None) -> str | None:
         (["dmidecode", "-t", "memory"], None),  # 已是 root
     ):
         try:
-            r = subprocess.run(args, capture_output=True, text=True, timeout=10, input=stdin)
+            r = subprocess.run(
+                args, capture_output=True, text=True, timeout=10, input=stdin
+            )
             if r.returncode == 0 and r.stdout:
                 return r.stdout
         except (OSError, subprocess.SubprocessError):
@@ -56,7 +58,9 @@ def parse_memory(raw: str) -> dict:
     info: dict = {"type": None, "channels": None, "speed_mt_s": None, "ecc": None}
     dimms = [b for b in raw.split("\n\n") if "Memory Device" in b]
     populated = [
-        d for d in dimms if "Size:" in d and "No Module" not in d and "No Module Installed" not in d
+        d
+        for d in dimms
+        if "Size:" in d and "No Module" not in d and "No Module Installed" not in d
     ]
 
     def field(block: str, name: str) -> str | None:
@@ -93,7 +97,9 @@ def main() -> int:
 
     raw = run_dmidecode(args.password)
     if not raw:
-        print("[ERROR] 无法运行 dmidecode（需 sudo 权限或 --password）", file=sys.stderr)
+        print(
+            "[ERROR] 无法运行 dmidecode（需 sudo 权限或 --password）", file=sys.stderr
+        )
         return 1
 
     info = parse_memory(raw)

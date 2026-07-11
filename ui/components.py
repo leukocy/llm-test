@@ -6,8 +6,8 @@ This module consolidates the patterns previously repeated across the UI:
 * **Status → icon mappings** were copy-pasted in 5 places
   (dashboard_components, history_browser x2, test_control_panel, batch_test)
   with inconsistent keys, values, and icon choices.
-* **Section headers** used ``st.header("\U0001F4CA Title")`` with ad-hoc emoji.
-* **Insight items** used ``"\u26A0\uFE0F **text**"`` with severity implied by emoji.
+* **Section headers** used ``st.header("<chart> Title")`` with ad-hoc emoji.
+* **Insight items** used ``"<warning> **text**"`` with severity implied by emoji.
 
 All components here render via :mod:`ui.icons` inline SVG (no emoji).
 """
@@ -27,7 +27,7 @@ from ui.icons import BADGE_LEVELS, SemanticColor, icon, status_badge
 # Semantic key → (icon_name, badge_level, human_label).
 # This unifies the 5 historically-inconsistent status dicts. "completed" is
 # always success-green, "running" is always info-blue, etc. — no more places
-# where completed was \U0001F7E2 in one view and \u2705 in another.
+# where completed was a green dot in one view and a checkmark in another.
 STATUS_MAP: dict[str, tuple[str, str, str]] = {
     "idle": ("circle", "muted", "Idle"),
     "waiting": ("hourglass", "muted", "Waiting"),
@@ -178,7 +178,7 @@ def insight_text(severity: str, text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Section headers (replaces st.header("\U0001F4CA Title"))
+# Section headers (replaces st.header("<chart-emoji> Title"))
 # ---------------------------------------------------------------------------
 
 
@@ -223,7 +223,7 @@ def section_header(
 
 
 # ---------------------------------------------------------------------------
-# Generic labeled metric (replaces st.metric("\u2705 Completed", ...))
+# Generic labeled metric (replaces st.metric("<check-emoji> Completed", ...))
 # ---------------------------------------------------------------------------
 
 

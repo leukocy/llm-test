@@ -141,7 +141,9 @@ class EngineMetricsPoller:
 
     _MAX_CONSECUTIVE_FAILURES = 3
 
-    def __init__(self, metrics_url: str | None, interval: float = 5.0, timeout: float = 2.0):
+    def __init__(
+        self, metrics_url: str | None, interval: float = 5.0, timeout: float = 2.0
+    ):
         self.metrics_url = metrics_url
         self.interval = max(0.2, float(interval))
         self.timeout = timeout
@@ -173,7 +175,9 @@ class EngineMetricsPoller:
         self._stop_event.clear()
         self._samples = []
         self._start_ts = time.monotonic()
-        self._thread = threading.Thread(target=self._run, name="EngineMetricsPoller", daemon=True)
+        self._thread = threading.Thread(
+            target=self._run, name="EngineMetricsPoller", daemon=True
+        )
         self._thread.start()
 
     def stop(self) -> dict[str, Any]:
@@ -249,14 +253,17 @@ class EngineMetricsPoller:
 
     def _extract(self, parsed: dict[str, Any]) -> dict[str, Any]:
         if self._engine_family == "sglang" or (
-            self._engine_family == "unknown" and detect_engine_family(parsed) == "sglang"
+            self._engine_family == "unknown"
+            and detect_engine_family(parsed) == "sglang"
         ):
             return extract_sglang_runtime(parsed)
         return extract_vllm_runtime(parsed)
 
     # ------------------------------------------------------------------
     def _summarize(self) -> dict[str, Any]:
-        duration = (self._end_ts or time.monotonic()) - (self._start_ts or time.monotonic())
+        duration = (self._end_ts or time.monotonic()) - (
+            self._start_ts or time.monotonic()
+        )
         if not self._samples:
             return self._empty_summary(duration)
 
@@ -273,7 +280,9 @@ class EngineMetricsPoller:
 
         # num_preemption 是累加 counter：取窗口内增量（需 ≥2 个样本才能算）
         preemption_vals = [
-            s["num_preemption"] for s in self._samples if s.get("num_preemption") is not None
+            s["num_preemption"]
+            for s in self._samples
+            if s.get("num_preemption") is not None
         ]
         preemption_total = None
         if len(preemption_vals) >= 2:

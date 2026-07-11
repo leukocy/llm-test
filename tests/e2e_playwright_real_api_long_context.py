@@ -47,6 +47,7 @@ def start_streamlit():
         env=env,
     )
     import urllib.request
+
     for i in range(STREAMLIT_TIMEOUT * 2):
         try:
             urllib.request.urlopen("http://localhost:8503/healthz", timeout=2)
@@ -93,7 +94,14 @@ def find_test_type_selectbox(page) -> int | None:
     """Locate the selectbox that contains test types by inspecting dropdown options."""
     boxes = page.locator("[data-testid='stSelectbox']")
     count = boxes.count()
-    test_keywords = ["Concurrency", "Context", "Custom Text", "Prefill", "Stability", "Batch"]
+    test_keywords = [
+        "Concurrency",
+        "Context",
+        "Custom Text",
+        "Prefill",
+        "Stability",
+        "Batch",
+    ]
     for i in range(count):
         boxes.nth(i).click()
         time.sleep(0.3)
@@ -166,7 +174,9 @@ def test_real_api_flow(page):
     print("PASS: Long Context Test panel open")
 
     print("\n=== Step 5: Set only 1024 context length ===")
-    chips = page.locator("[data-testid='stMultiSelect'] [data-testid='stMultiSelectTag']")
+    chips = page.locator(
+        "[data-testid='stMultiSelect'] [data-testid='stMultiSelectTag']"
+    )
     total = chips.count()
     for _ in range(total):
         first_x = chips.locator("[data-testid='stMultiSelectTagCloseButton']").first
@@ -228,11 +238,16 @@ def test_real_api_flow(page):
     time.sleep(1)
     take_screenshot(page, "lc_09_finished")
 
-    alerts = page.locator("[data-testid='stException'], [data-testid='stAlert'], [data-testid='stToast']")
+    alerts = page.locator(
+        "[data-testid='stException'], [data-testid='stAlert'], [data-testid='stToast']"
+    )
     found_errors = []
     for i in range(min(alerts.count(), 10)):
         txt = alerts.nth(i).text_content() or ""
-        if any(k in txt.lower() for k in ["error", "fail", "exception", "timeout", "unable"]):
+        if any(
+            k in txt.lower()
+            for k in ["error", "fail", "exception", "timeout", "unable"]
+        ):
             found_errors.append(txt[:250])
     if found_errors:
         print("FAIL: App/API errors detected")
@@ -264,7 +279,12 @@ def main():
 
             console_errors = []
             page.on("pageerror", lambda exc: console_errors.append(str(exc)))
-            page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+            page.on(
+                "console",
+                lambda msg: (
+                    console_errors.append(msg.text) if msg.type == "error" else None
+                ),
+            )
 
             success = test_real_api_flow(page)
 

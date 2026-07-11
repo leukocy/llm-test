@@ -893,7 +893,7 @@ class QualityEvaluator:
                 misses = cache_stats.get("session_misses", 0)
                 hit_rate = cache_stats.get("session_hit_rate", 0)
                 self._log(
-                    f"缓存Statistics: 命in {hits}, 未命in {misses}, 命in率 {hit_rate * 100:.1f}%"
+                    f"缓存Statistics: 命in {hits}, 未命in {misses}, 命中率 {hit_rate * 100:.1f}%"
                 )
 
             return self.results

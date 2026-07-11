@@ -77,7 +77,9 @@ def test_password_never_in_argv():
     fake_run, seen_argv = _spy_subprocess(sudo_s_stdout=_DMIDECODE_MEMORY)
     with (
         patch("core.hardware_fingerprint.subprocess.run", side_effect=fake_run),
-        patch("core.hardware_fingerprint.shutil.which", return_value="/usr/sbin/dmidecode"),
+        patch(
+            "core.hardware_fingerprint.shutil.which", return_value="/usr/sbin/dmidecode"
+        ),
     ):
         hf._query_memory_details(sudo_password="SECRET_PASS_xyz789")
 
@@ -100,7 +102,9 @@ def test_password_passed_via_stdin_not_argv():
 
     with (
         patch("core.hardware_fingerprint.subprocess.run", side_effect=recording_run),
-        patch("core.hardware_fingerprint.shutil.which", return_value="/usr/sbin/dmidecode"),
+        patch(
+            "core.hardware_fingerprint.shutil.which", return_value="/usr/sbin/dmidecode"
+        ),
     ):
         hf._query_memory_details(sudo_password="mypw")
 
@@ -126,7 +130,9 @@ def test_password_not_in_snapshot_json(tmp_path):
     }
     with (
         patch("core.hardware_fingerprint.subprocess.run", side_effect=fake_run),
-        patch("core.hardware_fingerprint.shutil.which", return_value="/usr/sbin/dmidecode"),
+        patch(
+            "core.hardware_fingerprint.shutil.which", return_value="/usr/sbin/dmidecode"
+        ),
         patch.object(hws, "capture_hardware_fingerprint", return_value=fake_fp),
         patch.object(hws, "capture_system_info", return_value={"hostname": "h"}),
     ):
@@ -146,7 +152,9 @@ def test_fallback_chain_dmidecode_then_sudo_n_then_sudo_s():
     )
     with (
         patch("core.hardware_fingerprint.subprocess.run", side_effect=fake_run),
-        patch("core.hardware_fingerprint.shutil.which", return_value="/usr/sbin/dmidecode"),
+        patch(
+            "core.hardware_fingerprint.shutil.which", return_value="/usr/sbin/dmidecode"
+        ),
     ):
         info = hf._query_memory_details(sudo_password="pw")
     assert info["type"] == "DDR5"
@@ -165,7 +173,9 @@ def test_sudo_n_success_skips_sudo_s():
     )
     with (
         patch("core.hardware_fingerprint.subprocess.run", side_effect=fake_run),
-        patch("core.hardware_fingerprint.shutil.which", return_value="/usr/sbin/dmidecode"),
+        patch(
+            "core.hardware_fingerprint.shutil.which", return_value="/usr/sbin/dmidecode"
+        ),
     ):
         hf._query_memory_details(sudo_password="pw")
     sudo_s_calls = [a for a in seen_argv if "-S" in a]
@@ -182,7 +192,9 @@ def test_no_password_degrades_gracefully():
     )
     with (
         patch("core.hardware_fingerprint.subprocess.run", side_effect=fake_run),
-        patch("core.hardware_fingerprint.shutil.which", return_value="/usr/sbin/dmidecode"),
+        patch(
+            "core.hardware_fingerprint.shutil.which", return_value="/usr/sbin/dmidecode"
+        ),
         patch("core.hardware_fingerprint._merge_hw_memory_file"),
     ):
         info = hf._query_memory_details(sudo_password=None)
@@ -199,7 +211,9 @@ def test_capture_hardware_fingerprint_accepts_sudo_password():
     fake_run, _ = _spy_subprocess(sudo_s_stdout=_DMIDECODE_MEMORY)
     with (
         patch("core.hardware_fingerprint.subprocess.run", side_effect=fake_run),
-        patch("core.hardware_fingerprint.shutil.which", return_value="/usr/sbin/dmidecode"),
+        patch(
+            "core.hardware_fingerprint.shutil.which", return_value="/usr/sbin/dmidecode"
+        ),
         patch("core.hardware_fingerprint._query_cpu_topology", return_value={}),
         patch("core.hardware_fingerprint._query_gpus", return_value=[]),
         patch("core.hardware_fingerprint._query_cuda_versions", return_value={}),

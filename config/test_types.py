@@ -46,7 +46,9 @@ TEST_TYPE_SPECS = (
             "concurrency_context_matrix_test",
         ),
     ),
-    TestTypeSpec("custom", "Custom Text Test", "edit_note", ("custom_text", "custom_text_test")),
+    TestTypeSpec(
+        "custom", "Custom Text Test", "edit_note", ("custom_text", "custom_text_test")
+    ),
     TestTypeSpec("all", "All Tests", "select_all", ("all_tests",)),
     TestTypeSpec("stability", "Stability Test", "monitor_heart", ("stability_test",)),
     TestTypeSpec(
@@ -57,9 +59,18 @@ TEST_TYPE_SPECS = (
     ),
     TestTypeSpec("batch", "Batch Test", "stacks"),
     TestTypeSpec("quality", "Model Quality Test", "fact_check", ("dataset",)),
-    TestTypeSpec("comparison", "A/B Model Comparison", "compare_arrows", ("ab_comparison",)),
-    TestTypeSpec("advanced", "Advanced Evaluation", "science", ("advanced_evaluation",)),
-    TestTypeSpec("data_warehouse", "Data Warehouse", "database", ("warehouse", "data_warehouse_test")),
+    TestTypeSpec(
+        "comparison", "A/B Model Comparison", "compare_arrows", ("ab_comparison",)
+    ),
+    TestTypeSpec(
+        "advanced", "Advanced Evaluation", "science", ("advanced_evaluation",)
+    ),
+    TestTypeSpec(
+        "data_warehouse",
+        "Data Warehouse",
+        "database",
+        ("warehouse", "data_warehouse_test"),
+    ),
 )
 
 TEST_TYPE_IDS = tuple(spec.id for spec in TEST_TYPE_SPECS)
@@ -67,9 +78,7 @@ DEFAULT_TEST_TYPE = "concurrency"
 
 _SPECS_BY_ID = {spec.id: spec for spec in TEST_TYPE_SPECS}
 _ALIASES = {
-    alias: spec.id
-    for spec in TEST_TYPE_SPECS
-    for alias in (spec.id, *spec.aliases)
+    alias: spec.id for spec in TEST_TYPE_SPECS for alias in (spec.id, *spec.aliases)
 }
 
 

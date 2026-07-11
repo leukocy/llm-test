@@ -84,7 +84,9 @@ LOCAL_TOKENIZER_ALIASES = {
 def is_tokenizer_file(filename: str) -> bool:
     """Match filename against tokenizer whitelist patterns."""
     name = filename.lower()
-    return any(fnmatch.fnmatch(name, pat.lower()) for pat in TOKENIZER_FILENAME_PATTERNS)
+    return any(
+        fnmatch.fnmatch(name, pat.lower()) for pat in TOKENIZER_FILENAME_PATTERNS
+    )
 
 
 def collect_tokenizer_files(src_dir: Path) -> list[Path]:
@@ -182,8 +184,12 @@ def download_from_modelscope(name: str, dst: Path) -> tuple[bool, str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Materialize tokenizers for offline image build")
-    parser.add_argument("--check", action="store_true", help="report status without writing")
+    parser = argparse.ArgumentParser(
+        description="Materialize tokenizers for offline image build"
+    )
+    parser.add_argument(
+        "--check", action="store_true", help="report status without writing"
+    )
     parser.add_argument(
         "--out",
         type=Path,

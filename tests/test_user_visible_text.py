@@ -51,6 +51,14 @@ RUNTIME_SOURCE_ROOTS = (
     "utils",
 )
 
+# Modules that intentionally retain emoji as data (never rendered to users):
+#   ui/icons.py — EMOJI_TO_ICON is a legacy-emoji → SVG-icon migration map whose
+#   keys are the historical emoji characters. These are dictionary keys, not
+#   rendered output, and the registry is covered by tests/test_ui_icons.py and
+#   consumed by ui.components._strip_emoji. Excluding it keeps the policy focused
+#   on user-visible text rather than migration metadata.
+RUNTIME_EMOJI_EXEMPT = frozenset({"ui/icons.py"})
+
 USER_DOCUMENTATION = (
     "ARCHITECTURE.md",
     "README.md",
@@ -104,13 +112,17 @@ def _emoji_occurrences(relative_paths: tuple[str, ...]) -> list[str]:
 def test_primary_surfaces_have_no_emoji():
     occurrences = _emoji_occurrences(PRIMARY_SURFACES)
 
-    assert not occurrences, "Emoji found in primary UI sources:\n" + "\n".join(occurrences)
+    assert not occurrences, "Emoji found in primary UI sources:\n" + "\n".join(
+        occurrences
+    )
 
 
 def test_reporting_surfaces_have_no_emoji():
     occurrences = _emoji_occurrences(REPORTING_SURFACES)
 
-    assert not occurrences, "Emoji found in reporting UI sources:\n" + "\n".join(occurrences)
+    assert not occurrences, "Emoji found in reporting UI sources:\n" + "\n".join(
+        occurrences
+    )
 
 
 def test_runtime_sources_have_no_emoji():
@@ -120,6 +132,7 @@ def test_runtime_sources_have_no_emoji():
             str(path.relative_to(PROJECT_ROOT)).replace("\\", "/")
             for path in sorted((PROJECT_ROOT / source_root).rglob("*.py"))
         )
+    runtime_paths = [p for p in runtime_paths if p not in RUNTIME_EMOJI_EXEMPT]
 
     occurrences = _emoji_occurrences(tuple(runtime_paths))
 
@@ -129,19 +142,25 @@ def test_runtime_sources_have_no_emoji():
 def test_user_documentation_has_no_emoji():
     occurrences = _emoji_occurrences(USER_DOCUMENTATION)
 
-    assert not occurrences, "Emoji found in user documentation:\n" + "\n".join(occurrences)
+    assert not occurrences, "Emoji found in user documentation:\n" + "\n".join(
+        occurrences
+    )
 
 
 def test_user_visible_shell_scripts_have_no_emoji():
     occurrences = _emoji_occurrences(USER_VISIBLE_SHELL_SCRIPTS)
 
-    assert not occurrences, "Emoji found in shell-script output:\n" + "\n".join(occurrences)
+    assert not occurrences, "Emoji found in shell-script output:\n" + "\n".join(
+        occurrences
+    )
 
 
 def test_repository_visible_files_have_no_emoji():
     occurrences = _emoji_occurrences(REPOSITORY_VISIBLE_FILES)
 
-    assert not occurrences, "Emoji found in repository-visible files:\n" + "\n".join(occurrences)
+    assert not occurrences, "Emoji found in repository-visible files:\n" + "\n".join(
+        occurrences
+    )
 
 
 def test_production_copy_has_no_debug_or_corrupted_markers():
