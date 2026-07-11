@@ -364,18 +364,6 @@ def render_sidebar():
         if "fetched_models" not in st.session_state:
             st.session_state.fetched_models = []
 
-        options = st.session_state.fetched_models or get_all_models()
-
-        if not isinstance(options, list):
-            options = list(options)
-
-        model_id_selected = st.selectbox(
-            "Model ID (Quick Select)",
-            options=options,
-            key="model_id_selector",
-            on_change=_on_model_change,
-        )
-
         if st.button(
             "Refresh models",
             key="fetch_models_btn",
@@ -391,6 +379,18 @@ def render_sidebar():
                         st.session_state.model_id_selector = models[0]
                         _on_model_change()
                     st.success(f"Fetched {len(models)} models")
+
+        options = st.session_state.fetched_models or get_all_models()
+
+        if not isinstance(options, list):
+            options = list(options)
+
+        model_id_selected = st.selectbox(
+            "Model ID (Quick Select)",
+            options=options,
+            key="model_id_selector",
+            on_change=_on_model_change,
+        )
 
         model_id_custom = st.text_input(
             "Custom Model ID (Overrides above)",

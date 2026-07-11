@@ -180,8 +180,9 @@ def main():
     # 3. Initialize onboarding state
     init_onboarding_state()
 
-    # 4. Render compact welcome banner (non-blocking)
-    render_compact_welcome_banner()
+    # 4. Render onboarding welcome or the persistent product title.
+    if not render_compact_welcome_banner():
+        st.title("LLM Benchmark Platform")
 
     # 5. Render inline onboarding guide when user chooses
     render_onboarding_guide()

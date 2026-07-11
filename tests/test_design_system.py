@@ -72,6 +72,19 @@ def test_sidebar_model_refresh_action_uses_full_width_layout():
     assert "st.columns(" not in model_controls
 
 
+def test_sidebar_model_refresh_updates_state_before_selector_is_created():
+    from ui.sidebar import render_sidebar
+
+    source = inspect.getsource(render_sidebar)
+    model_controls = source[
+        source.index("# Dynamically fetch model list"):source.index("model_id_custom")
+    ]
+
+    assert model_controls.index('"Refresh models"') < model_controls.index(
+        'model_id_selected = st.selectbox'
+    )
+
+
 def test_sidebar_latency_probe_uses_full_width_layout():
     from ui.sidebar import render_sidebar
 
