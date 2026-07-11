@@ -73,6 +73,48 @@ _GPU_BANDWIDTH_GBPS: list[tuple[str, float]] = [
     ("tesla p100", 720.0),
 ]
 
+# GPU 名称 → 显存类型(按子串长度降序匹配,与带宽表共用同一匹配逻辑)
+_GPU_MEMORY_TYPE: list[tuple[str, str]] = [
+    # HBM3e / HBM3 (数据中心卡)
+    ("b200", "HBM3e"),
+    ("b100", "HBM3e"),
+    ("gb200", "HBM3e"),
+    ("h200", "HBM3e"),
+    ("h100", "HBM3"),
+    ("gh200", "HBM3"),
+    ("a100", "HBM2e"),
+    ("a30", "HBM2"),
+    # AMD Instinct (HBM)
+    ("mi300", "HBM3"),
+    ("mi325", "HBM3"),
+    ("mi250", "HBM2e"),
+    ("mi210", "HBM2"),
+    # GDDR7 (Blackwell / RTX 50 系)
+    ("rtx pro 6000 blackwell", "GDDR7"),
+    ("rtx 5090", "GDDR7"),
+    ("rtx 5080", "GDDR7"),
+    ("rtx 5070", "GDDR7"),
+    # GDDR6X (Ada / RTX 40 系)
+    ("rtx 4090", "GDDR6X"),
+    ("rtx 4080", "GDDR6X"),
+    ("rtx 4070", "GDDR6X"),
+    ("rtx pro 6000", "GDDR6X"),  # Ada 默认 GDDR6X
+    ("rtx 6000 ada", "GDDR6X"),
+    ("pro 6000", "GDDR6"),
+    # GDDR6 (Ampere 消费卡 / 专业卡)
+    ("l40s", "GDDR6"),
+    ("l40", "GDDR6"),
+    ("l4", "GDDR6"),
+    ("a10", "GDDR6"),
+    ("a10g", "GDDR6"),
+    ("rtx 3090", "GDDR6X"),
+    ("rtx 3080", "GDDR6X"),
+    # GDDR6 / HBM2 (老 Tesla)
+    ("tesla t4", "GDDR6"),
+    ("tesla v100", "HBM2"),
+    ("tesla p100", "HBM2"),
+]
+
 
 def _run_cmd(
     args: list[str],
@@ -117,6 +159,17 @@ def _lookup_gpu_bandwidth(gpu_name: str, vram_gb: float | None) -> float | None:
     return None
 
 
+def _lookup_gpu_memory_type(gpu_name: str) -> str | None:
+    """按 GPU 名称子串查显存类型(HBM3e/GDDR7 等)；查不到返回 None。"""
+    name = (gpu_name or "").lower()
+    for key, mem_type in sorted(
+        _GPU_MEMORY_TYPE, key=lambda kv: len(kv[0]), reverse=True
+    ):
+        if key in name:
+            return mem_type
+    return None
+
+
 def _pcie_bandwidth_gbps(pcie_gen: int | None, pcie_width: int | None) -> float | None:
     """由 PCIe Gen × 宽度估算单向峰值带宽(GB/s)。
     PCIe 每通道每方向：Gen4≈1.97 GB/s、Gen5≈3.94 GB/s、Gen3≈0.985 GB/s。
@@ -156,8 +209,8 @@ def _query_gpus() -> list[dict[str, Any]]:
                 index = len(gpus)
             name = parts[1]
             vram_mb = _to_float(parts[2])
-            # nvidia-smi 无有效字段报显存类型（memory.type 无效）→ 留空
-            memory_type = None
+            # nvidia-smi 无显存类型字段 → 按 GPU 名称查表推断(HBM3e/GDDR7 等)
+            memory_type = _lookup_gpu_memory_type(name)
             pcie_gen = _to_int(parts[3]) if len(parts) > 3 else None
             pcie_width = _to_int(parts[4]) if len(parts) > 4 else None
             vram_gb = round(vram_mb / 1024.0, 2) if vram_mb is not None else None
@@ -192,7 +245,7 @@ def _query_gpus() -> list[dict[str, Any]]:
                             "index": i,
                             "name": name,
                             "vram_gb": vram_gb,
-                            "memory_type": None,
+                            "memory_type": _lookup_gpu_memory_type(name),
                             "nominal_bandwidth_gbps": _lookup_gpu_bandwidth(
                                 name, vram_gb
                             ),

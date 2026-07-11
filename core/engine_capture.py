@@ -39,27 +39,53 @@ def _run(args: list[str], timeout: float = 12.0) -> str | None:
 def find_vllm_container(api_base_url: str, hint: str | None = None) -> str | None:
     """按服务端口(从 api_base_url 解析)在 docker ps 里找容器名。
 
-    三级匹配(逐级降级):
+    四级匹配(逐级降级):
     1. 端口映射:`docker ps` 的 Ports 列含 `:PORT->`(bridge 网络模式);
     2. host 网络:容器无端口映射但 Cmd/Env 里含 `--port PORT`(host 网络模式);
-    3. 名称子串:hint 匹配容器名。
+    3. 引擎特征:api_base 端口经 proxy 转发(端口不直接匹配)时,通过 image/cmd
+       识别推理引擎容器(vllm/sglang/tgi 等关键词 + 有 PORT= 环境变量);
+    4. 名称子串:hint 匹配容器名。
     """
-    out = _run(["docker", "ps", "--format", "{{.Names}}\t{{.Ports}}"])
+    out = _run(["docker", "ps", "--format", "{{.Names}}\t{{.Ports}}\t{{.Image}}"])
     if not out:
         return None
     m = re.search(r":(\d+)/?", api_base_url or "")
     port = m.group(1) if m else None
     names = []
+    _engine_image_keywords = (
+        "vllm",
+        "sglang",
+        "tgi",
+        "text-generation-inference",
+        "triton",
+        "tensorrt-llm",
+        "lmdeploy",
+    )
+    port_match_candidates: list[str] = []
     for line in out.splitlines():
         parts = line.split("\t")
-        if len(parts) != 2:
+        if len(parts) < 2:
             continue
         names.append(parts[0])
-        name, ports = parts
-        # 1. 端口映射(bridge 网络)
+        name, ports = parts[0], parts[1]
+        # 1. 端口映射(bridge 网络)——收集候选,优先返回引擎容器
         if port and f":{port}->" in ports:
-            return name
+            image = parts[2].lower() if len(parts) >= 3 else ""
+            if any(k in image for k in _engine_image_keywords):
+                return name  # 引擎容器直接命中
+            port_match_candidates.append(name)
+    # 端口命中了但非引擎容器(proxy/gateway),不直接返回,继续降级尝试
     # 2. host 网络:容器无端口映射,但启动命令/env 含 --port PORT
+    _engine_image_keywords = (
+        "vllm",
+        "sglang",
+        "tgi",
+        "text-generation-inference",
+        "triton",
+        "tensorrt-llm",
+        "lmdeploy",
+    )
+    host_port_candidates: list[str] = []
     if port and names:
         for name in names:
             cmd = _run(
@@ -77,11 +103,50 @@ def find_vllm_container(api_base_url: str, hint: str | None = None) -> str | Non
                 or f"--port={port}" in cmd
                 or f"PORT={port}" in cmd
             ):
+                # 优先返回引擎容器;非引擎(如 Open-WebUI)降级为候选
+                image = ""
+                for line in out.splitlines():
+                    cols = line.split("\t")
+                    if len(cols) >= 3 and cols[0] == name:
+                        image = cols[2].lower()
+                        break
+                if any(k in image for k in _engine_image_keywords):
+                    return name
+                host_port_candidates.append(name)
+    # 3. 引擎特征:端口不直接匹配(可能经 proxy 转发),按 image/cmd 识别推理引擎容器
+    for name in names:
+        image = ""
+        for line in out.splitlines():
+            cols = line.split("\t")
+            if len(cols) >= 3 and cols[0] == name:
+                image = cols[2].lower()
+                break
+        if not image:
+            continue
+        # image 名含引擎关键词 + 无端口映射(host 网络)→ 推理引擎候选
+        if any(k in image for k in _engine_image_keywords):
+            ports_check = _run(
+                [
+                    "docker",
+                    "inspect",
+                    name,
+                    "--format",
+                    "{{json .NetworkSettings.Ports}}",
+                ],
+                timeout=5.0,
+            )
+            # host 网络模式(空端口映射)或 PORT= 环境变量 → 高置信度
+            if ports_check and (ports_check.strip() in ("{}", "null", '""')):
                 return name
-    # 3. 名称子串
+    # 4. 名称子串
     for name in names:
         if hint and hint in name:
             return name
+    # 5. 回退:端口命中的非引擎候选(proxy/gateway 转发到引擎)
+    if port_match_candidates:
+        return port_match_candidates[0]
+    if host_port_candidates:
+        return host_port_candidates[0]
     return None
 
 

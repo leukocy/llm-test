@@ -83,7 +83,7 @@ def test_query_gpus_parses_nvidia_smi_and_uses_bandwidth_table():
     h100 = gpus[0]
     assert h100["name"] == "NVIDIA H100 80GB HBM3"
     assert h100["vram_gb"] == pytest.approx(80.0, abs=0.1)
-    assert h100["memory_type"] is None  # nvidia-smi 无有效字段报显存类型
+    assert h100["memory_type"] == "HBM3"  # 按 GPU 名称查表推断显存类型
     assert h100["pcie_gen"] == 5
     assert h100["pcie_width"] == 16
     # H100 命中查表 → 3350 GB/s（而非 PCIe 公式）
