@@ -45,7 +45,7 @@ def test_static_chart():
     generator = StaticChartGenerator(dpi=150)
 
     # 1. Test单Line Chart
-    print("🎨 Generate预Pad速度图...")
+    print(" Generate预Pad速度图...")
     input_lengths = [r['input_length'] for r in test_results]
     prefill_speeds = [r['prefill_speed'] for r in test_results]
 
@@ -57,10 +57,10 @@ def test_static_chart():
         line_color='#4bc0c0'
     )
     generator.save_figure_to_file(fig1, 'test_prefill_chart.png')
-    print("✅ Saved: test_prefill_chart.png")
+    print("[OK] Saved: test_prefill_chart.png")
 
     # 2. Test输出速度图
-    print("🎨 Generate输出速度图...")
+    print(" Generate输出速度图...")
     output_speeds = [r['output_speed'] for r in test_results]
 
     fig2 = generator.draw_line_chart(
@@ -71,24 +71,24 @@ def test_static_chart():
         line_color='#ff6384'
     )
     generator.save_figure_to_file(fig2, 'test_output_chart.png')
-    print("✅ Saved: test_output_chart.png")
+    print("[OK] Saved: test_output_chart.png")
 
     # 3. Test完整报告图片
-    print("🎨 Generate完整性能报告图片...")
+    print(" Generate完整性能报告图片...")
     fig3 = generator.create_performance_report_image(
         test_results, system_info, test_time
     )
     generator.save_figure_to_file(fig3, 'test_performance_report.png')
-    print("✅ Saved: test_performance_report.png")
+    print("[OK] Saved: test_performance_report.png")
 
     # 4. Generate HTML 报告
-    print("🌐 Generate HTML 报告...")
+    print(" Generate HTML 报告...")
     html_content = generate_static_html_report(test_results, system_info, test_time)
     with open('test_performance_report.html', 'w', encoding='utf-8') as f:
         f.write(html_content)
-    print("✅ Saved: test_performance_report.html")
+    print("[OK] Saved: test_performance_report.html")
 
-    print("\n🎉 全部Test完成！请查看Generate文件：")
+    print("\n 全部Test完成！请查看Generate文件：")
     print("   - test_prefill_chart.png")
     print("   - test_output_chart.png")
     print("   - test_performance_report.png")

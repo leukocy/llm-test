@@ -25,18 +25,18 @@ def ensure_datasets_installed():
     import importlib.util
     if importlib.util.find_spec("datasets") is not None:
         return True
-    print("📦 currently安装 datasets 库...")
+    print("currently安装 datasets 库...")
     os.system(f"{sys.executable} -m pip install datasets -q")
     if importlib.util.find_spec("datasets") is not None:
         return True
-    print("❌ datasets 库安装失败，请手动运行: pip install datasets")
+    print("datasets 库安装失败，请手动运行: pip install datasets")
     return False
 
 
 def download_gpqa():
     """under载 GPQA Diamond Dataset"""
     print("\n" + "=" * 50)
-    print("📥 under载 GPQA Diamond (研究生级别科学推理)")
+    print("under载 GPQA Diamond (研究生级别科学推理)")
     print("=" * 50)
 
     try:
@@ -45,7 +45,7 @@ def download_gpqa():
         output_dir = os.path.join(DATASETS_DIR, "gpqa")
         os.makedirs(output_dir, exist_ok=True)
 
-        print("🔄 currently从 HuggingFace under载...")
+        print("currently从 HuggingFace under载...")
 
         # GPQA need同意use条款，尝试多种方式
         try:
@@ -53,7 +53,7 @@ def download_gpqa():
             split = 'train' if 'train' in ds else list(ds.keys())[0]
         except Exception:
             # 备选方案
-            print("⚠️ 官方Datasetneed授权，尝试备选来源...")
+            print("官方Datasetneed授权，尝试备选来源...")
             ds = load_dataset('fingertap/GPQA-Diamond', trust_remote_code=True)
             split = list(ds.keys())[0]
 
@@ -102,19 +102,19 @@ def download_gpqa():
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(samples, f, ensure_ascii=False, indent=2)
 
-        print(f"✅ GPQA Download complete: {len(samples)}  samples")
+        print(f"GPQA Download complete: {len(samples)}  samples")
         print(f"   Save位置: {output_file}")
         return True
 
     except Exception as e:
-        print(f"❌ GPQA Download failed: {e}")
+        print(f"GPQA Download failed: {e}")
         return False
 
 
 def download_arc():
     """under载 ARC-Challenge Dataset"""
     print("\n" + "=" * 50)
-    print("📥 under载 ARC-Challenge (科学常识推理)")
+    print("under载 ARC-Challenge (科学常识推理)")
     print("=" * 50)
 
     try:
@@ -123,7 +123,7 @@ def download_arc():
         output_dir = os.path.join(DATASETS_DIR, "arc")
         os.makedirs(output_dir, exist_ok=True)
 
-        print("🔄 currently从 HuggingFace under载...")
+        print("currently从 HuggingFace under载...")
         ds = load_dataset('allenai/ai2_arc', 'ARC-Challenge')
 
         # Saveis JSONL 格式
@@ -133,19 +133,19 @@ def download_arc():
             for item in ds['test']:
                 f.write(json.dumps(item, ensure_ascii=False) + '\n')
 
-        print(f"✅ ARC-Challenge Download complete: {len(ds['test'])}  samples")
+        print(f"ARC-Challenge Download complete: {len(ds['test'])}  samples")
         print(f"   Save位置: {output_file}")
         return True
 
     except Exception as e:
-        print(f"❌ ARC Download failed: {e}")
+        print(f"ARC Download failed: {e}")
         return False
 
 
 def download_truthfulqa():
     """under载 TruthfulQA Dataset"""
     print("\n" + "=" * 50)
-    print("📥 under载 TruthfulQA (真实性Test)")
+    print("under载 TruthfulQA (真实性Test)")
     print("=" * 50)
 
     try:
@@ -154,7 +154,7 @@ def download_truthfulqa():
         output_dir = os.path.join(DATASETS_DIR, "truthfulqa")
         os.makedirs(output_dir, exist_ok=True)
 
-        print("🔄 currently从 HuggingFace under载...")
+        print("currently从 HuggingFace under载...")
         ds = load_dataset('truthfulqa/truthful_qa', 'multiple_choice')
 
         # Convertis标准格式
@@ -172,19 +172,19 @@ def download_truthfulqa():
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(samples, f, ensure_ascii=False, indent=2)
 
-        print(f"✅ TruthfulQA Download complete: {len(samples)}  samples")
+        print(f"TruthfulQA Download complete: {len(samples)}  samples")
         print(f"   Save位置: {output_file}")
         return True
 
     except Exception as e:
-        print(f"❌ TruthfulQA Download failed: {e}")
+        print(f"TruthfulQA Download failed: {e}")
         return False
 
 
 def download_longbench():
     """under载 LongBench Dataset"""
     print("\n" + "=" * 50)
-    print("📥 under载 LongBench (长onunder文理解)")
+    print("under载 LongBench (长onunder文理解)")
     print("=" * 50)
 
     try:
@@ -193,7 +193,7 @@ def download_longbench():
         output_dir = os.path.join(DATASETS_DIR, "longbench")
         os.makedirs(output_dir, exist_ok=True)
 
-        print("🔄 currently从 HuggingFace under载 (这可能need一些时间)...")
+        print("currently从 HuggingFace under载 (这可能need一些时间)...")
         # LongBench has多子任务，我们先under载 narrativeqa 作is示例
         try:
             ds = load_dataset('THUDM/LongBench', 'narrativeqa', split='test', trust_remote_code=True)
@@ -203,23 +203,23 @@ def download_longbench():
                 for item in ds:
                     f.write(json.dumps(item, ensure_ascii=False) + '\n')
 
-            print(f"✅ LongBench (narrativeqa) Download complete: {len(ds)}  samples")
+            print(f"LongBench (narrativeqa) Download complete: {len(ds)}  samples")
             print(f"   Save位置: {output_file}")
             print("   注意: LongBench 包含多子任务，这里仅under载 narrativeqa 示例")
             return True
         except Exception as e:
-            print(f"⚠️ LongBench 官方源Download failed: {e}")
+            print(f"LongBench 官方源Download failed: {e}")
             return False
 
     except Exception as e:
-        print(f"❌ LongBench Download failed: {e}")
+        print(f"LongBench Download failed: {e}")
         return False
 
 
 def download_swebench_lite():
     """under载 SWE-Bench Lite Dataset"""
     print("\n" + "=" * 50)
-    print("📥 under载 SWE-Bench Lite (软件工程问题)")
+    print("under载 SWE-Bench Lite (软件工程问题)")
     print("=" * 50)
 
     try:
@@ -228,7 +228,7 @@ def download_swebench_lite():
         output_dir = os.path.join(DATASETS_DIR, "swebench_lite")
         os.makedirs(output_dir, exist_ok=True)
 
-        print("🔄 currently从 HuggingFace under载...")
+        print("currently从 HuggingFace under载...")
         try:
             ds = load_dataset('princeton-nlp/SWE-bench_Lite', split='test', trust_remote_code=True)
 
@@ -237,34 +237,34 @@ def download_swebench_lite():
                 for item in ds:
                     f.write(json.dumps(item, ensure_ascii=False) + '\n')
 
-            print(f"✅ SWE-Bench Lite Download complete: {len(ds)}  samples")
+            print(f"SWE-Bench Lite Download complete: {len(ds)}  samples")
             print(f"   Save位置: {output_file}")
             return True
         except Exception as e:
-            print(f"⚠️ SWE-Bench Lite Download failed: {e}")
+            print(f"SWE-Bench Lite Download failed: {e}")
             return False
 
     except Exception as e:
-        print(f"❌ SWE-Bench Lite Download failed: {e}")
+        print(f"SWE-Bench Lite Download failed: {e}")
         return False
 
 
 def download_needle_haystack():
     """Generate/under载 Needle-in-a-Haystack test data"""
     print("\n" + "=" * 50)
-    print("📥 准备 Needle-in-a-Haystack (大海捞针Test)")
+    print("准备 Needle-in-a-Haystack (大海捞针Test)")
     print("=" * 50)
 
     try:
         output_dir = os.path.join(DATASETS_DIR, "needle_haystack")
         os.makedirs(output_dir, exist_ok=True)
 
-        print("ℹ️ Needle-in-a-Haystack test data通常is动态Generate")
-        print("✅ 目录已准备就绪，Evaluatorwill自动Generatetest data")
+        print("Needle-in-a-Haystack test data通常is动态Generate")
+        print("目录已准备就绪，Evaluatorwill自动Generatetest data")
         return True
 
     except Exception as e:
-        print(f"❌ 准备目录失败: {e}")
+        print(f"准备目录失败: {e}")
         return False
 
 
@@ -279,9 +279,9 @@ def main():
 
     args = parser.parse_args()
 
-    print("\n" + "🚀" * 20)
+    print("\n" + "=" * 40)
     print("    LLM Quality Assessment - 新增Test setunder载工具")
-    print("🚀" * 20)
+    print("=" * 40)
 
     # Check datasets 库
     if not ensure_datasets_installed():
@@ -311,20 +311,20 @@ def main():
 
     # 打印汇总
     print("\n" + "=" * 50)
-    print("📊 under载汇总")
+    print("under载汇总")
     print("=" * 50)
 
     for name, success in results.items():
-        status = "✅ succeeded" if success else "❌ 失败"
+        status = "[OK]" if success else "[FAILED]"
         print(f"  {name.upper()}: {status}")
 
     success_count = sum(results.values())
     total_count = len(results)
 
     if success_count == total_count:
-        print(f"\n✨ 全部Download complete! ({success_count}/{total_count})")
+        print(f"\n全部Download complete! ({success_count}/{total_count})")
     else:
-        print(f"\n⚠️ 部分Download failed ({success_count}/{total_count})")
+        print(f"\n部分Download failed ({success_count}/{total_count})")
         print("   Please check网络Connector手动Download failedDataset")
 
 

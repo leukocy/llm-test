@@ -15,8 +15,8 @@ from core.test_attribution import TestStatusDetail
 
 
 def render_engine_runtime_panel(api_base_url: str) -> None:
-    """🔌 推理引擎接入面板——记录引擎自身的运行（/metrics 轮询 + 启动日志 KV 容量）。"""
-    with st.sidebar.expander("🔌 推理引擎接入（记录引擎运行）", expanded=False):
+    """Inference Engine: 推理引擎接入面板——记录引擎自身的运行（/metrics 轮询 + 启动日志 KV 容量）。"""
+    with st.sidebar.expander("Inference Engine: 推理引擎接入（记录引擎运行）", expanded=False):
         st.caption(
             "测试期间轮询 vLLM/SGLang 的 Prometheus `/metrics`，记录引擎 KV cache 占用、"
             "调度队列、抢救数；并解析启动日志拿 KV 容量。留空则按 api_base 自动推导端点。"
@@ -44,8 +44,8 @@ def render_engine_runtime_panel(api_base_url: str) -> None:
 
 
 def render_model_spec_panel(model_id: str) -> None:
-    """📐 模型架构规格面板（自动从注册表预填，可覆盖；用于等效带宽与模型身份证）。"""
-    with st.sidebar.expander("📐 模型架构规格（等效带宽）", expanded=False):
+    """Model Architecture: 模型架构规格面板（自动从注册表预填，可覆盖；用于等效带宽与模型身份证）。"""
+    with st.sidebar.expander("Model Architecture: 模型架构规格（等效带宽）", expanded=False):
         st.caption("自动从注册表预填；覆盖后用于等效带宽计算与模型身份证。留空则用注册表默认。")
 
         spec = resolve_spec(model_id)
@@ -115,8 +115,8 @@ def render_model_spec_panel(model_id: str) -> None:
 
 
 def render_serving_config_panel() -> None:
-    """⚙️ 服务/启动配置面板（引擎/并行/后端/调度/MTP）。"""
-    with st.sidebar.expander("⚙️ 服务/启动配置（引擎/并行/后端）", expanded=False):
+    """Service Config: 服务/启动配置面板（引擎/并行/后端/调度/MTP）。"""
+    with st.sidebar.expander("Service Config: 服务/启动配置（引擎/并行/后端）", expanded=False):
         st.caption("记录模型是怎么被服务起来的：引擎版本、TP/DP/EP/PP、注意力/MoE 后端等。")
 
         sc = st.session_state.get("serving_config", {})
@@ -189,8 +189,8 @@ def render_serving_config_panel() -> None:
 
 
 def render_test_metadata_panel() -> None:
-    """🏷️ 测试元数据 & 可对外等级面板（tester/notes/状态/可对外）。"""
-    with st.sidebar.expander("🏷️ 测试元数据 & 可对外等级", expanded=False):
+    """Test Metadata: 测试元数据 & 可对外等级面板（tester/notes/状态/可对外）。"""
+    with st.sidebar.expander("Test Metadata: 测试元数据 & 可对外等级", expanded=False):
         st.caption("测试人、备注、状态、可对外等级与下一步动作（数据仓库可筛选/可追溯字段）。")
 
         tm = st.session_state.get("test_metadata", {})

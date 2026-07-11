@@ -128,18 +128,8 @@ class ExecLog:
 
     def to_text(self) -> str:
         """Convertis可读文本"""
-        level_emoji = {
-            LogLevel.DEBUG.value: "🔍",
-            LogLevel.INFO.value: "ℹ️",
-            LogLevel.SUCCESS.value: "✅",
-            LogLevel.WARNING.value: "⚠️",
-            LogLevel.ERROR.value: "❌",
-            LogLevel.CRITICAL.value: "🔥",
-        }
-
         time_str = self.timestamp.strftime("%H:%M:%S") if self.timestamp else ""
-        emoji = level_emoji.get(self.level, "📝")
-        parts = [f"[{time_str}] {emoji}"]
+        parts = [f"[{time_str}] [{self.level.upper()}]"]
 
         if self.session_id:
             parts.append(f"[{self.session_id}]")

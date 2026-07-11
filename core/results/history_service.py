@@ -11,17 +11,19 @@ from typing import Any
 
 import pandas as pd
 
+from config.test_types import DEFAULT_TEST_TYPE, normalize_test_type
+
 LAST_RESULT_FILENAME = ".last_result.json"
 
 _KNOWN_TEST_TYPES = {
-    "Concurrency_Test": "Concurrency Test",
-    "Prefill_Stress_Test": "Prefill Stress Test",
-    "Segmented_Context_Test": "Segmented Context Test",
-    "Long_Context_Test": "Long Context Test",
-    "Concurrency_Context_Matrix_Test": "Concurrency-Context Matrix Test",
-    "Custom_Text_Test": "Custom Text Test",
-    "All_Tests": "All Tests",
-    "Stability_Test": "Stability Test",
+    "Concurrency_Test": "concurrency",
+    "Prefill_Stress_Test": "prefill",
+    "Segmented_Context_Test": "segmented",
+    "Long_Context_Test": "long_context",
+    "Concurrency_Context_Matrix_Test": "matrix",
+    "Custom_Text_Test": "custom",
+    "All_Tests": "all",
+    "Stability_Test": "stability",
 }
 
 
@@ -71,9 +73,9 @@ def _infer_test_type(csv_path: Path) -> str:
     match = re.search(r"benchmark_results_.+?_(.+)_\d{8}_\d{6}$", filename)
     if match:
         raw_type = match.group(1).replace("_", " ")
-        return raw_type.strip().title()
+        return normalize_test_type(raw_type)
 
-    return "Concurrency Test"
+    return DEFAULT_TEST_TYPE
 
 
 def _build_inferred_snapshot(
@@ -107,6 +109,7 @@ def _snapshot_for_csv(
     snapshot.setdefault("duration", 0.0)
     snapshot.setdefault("test_config", {})
     snapshot.setdefault("system_info", {})
+    snapshot["test_type"] = normalize_test_type(snapshot.get("test_type"))
     return snapshot
 
 
@@ -143,7 +146,9 @@ def _restore_snapshot_to_session(session_state: Any, snapshot: dict[str, Any], c
 
     session_state["results_df"] = df
     session_state["current_csv_file"] = str(csv_path)
-    session_state["current_test_type"] = snapshot.get("test_type") or _infer_test_type(csv_path)
+    session_state["current_test_type"] = normalize_test_type(
+        snapshot.get("test_type") or _infer_test_type(csv_path)
+    )
     session_state["current_model_id"] = snapshot.get("model_id") or ""
     session_state["current_provider"] = snapshot.get("provider") or "Unknown"
     session_state["test_duration"] = float(snapshot.get("duration") or 0)
@@ -177,7 +182,7 @@ def save_last_result_snapshot(
     base.mkdir(parents=True, exist_ok=True)
     payload = {
         "csv_path": str(Path(csv_path)),
-        "test_type": test_type,
+        "test_type": normalize_test_type(test_type),
         "model_id": model_id,
         "provider": provider,
         "duration": float(duration or 0),

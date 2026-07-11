@@ -20,26 +20,26 @@
 
 | 选项 | 状态 | 说明 |
 |------|------|------|
-| ✅ Require a pull request before merging | **启用** | 禁止直接推送 |
-| ✅ Require approvals | **启用** | 需要至少 1 个审查 |
-| ✅ Dismiss stale reviews when new commits are pushed | **启用** | 新提交需重新审查 |
-| ✅ Require review from CODEOWNERS | **启用** | 按文件指定审查者 |
-| ✅ Require status checks to pass before merging | **启用** | CI 必须通过 |
-| ✅ Require branches to be up to date before merging | **启用** | 必须是最新的 |
-| ❌ Do not allow bypassing the above settings | **禁用** | 管理员可绕过 |
+| [OK] Require a pull request before merging | **启用** | 禁止直接推送 |
+| [OK] Require approvals | **启用** | 需要至少 1 个审查 |
+| [OK] Dismiss stale reviews when new commits are pushed | **启用** | 新提交需重新审查 |
+| [OK] Require review from CODEOWNERS | **启用** | 按文件指定审查者 |
+| [OK] Require status checks to pass before merging | **启用** | CI 必须通过 |
+| [OK] Require branches to be up to date before merging | **启用** | 必须是最新的 |
+| [Disabled] Do not allow bypassing the above settings | **禁用** | 管理员可绕过 |
 
 ### 必需的状态检查
 
 选择以下检查项为**必需**：
 
 ```
-✓ lint
-✓ security-tests
-✓ unit-tests (Python 3.10)
-✓ unit-tests (Python 3.11)
-✓ unit-tests (Python 3.12)
-✓ import-check
-✓ dependency-check
+[OK] lint
+[OK] security-tests
+[OK] unit-tests (Python 3.10)
+[OK] unit-tests (Python 3.11)
+[OK] unit-tests (Python 3.12)
+[OK] import-check
+[OK] dependency-check
 ```
 
 ### 其他选项
@@ -60,16 +60,16 @@
 
 | 选项 | 状态 | 说明 |
 |------|------|------|
-| ✅ Require a pull request before merging | **启用** | 禁止直接推送 |
-| ✅ Require approvals | **启用** | 需要至少 1 个审查 |
-| ✅ Require status checks to pass | **启用** | CI 必须通过 |
+| [OK] Require a pull request before merging | **启用** | 禁止直接推送 |
+| [OK] Require approvals | **启用** | 需要至少 1 个审查 |
+| [OK] Require status checks to pass | **启用** | CI 必须通过 |
 
 ### 必需的状态检查
 
 ```
-✓ lint
-✓ security-tests
-✓ unit-tests
+[OK] lint
+[OK] security-tests
+[OK] unit-tests
 ```
 
 ---

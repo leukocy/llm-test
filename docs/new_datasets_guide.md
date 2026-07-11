@@ -4,11 +4,11 @@
 
 ---
 
-## 🆕 新增测试集
+## (New) 新增测试集
 
 ### 1. GPQA (Graduate-Level Google-Proof Q&A)
 
-**难度**: ⭐⭐⭐⭐⭐ (研究生级别)  
+**难度**: 5/5 (研究生级别)
 **领域**: 物理、化学、生物  
 **数据量**: ~450 题 (Diamond 子集)
 
@@ -41,7 +41,7 @@ ds['train'].to_json('datasets/gpqa/gpqa_diamond.json')
 
 ### 2. ARC-Challenge (AI2 Reasoning Challenge)
 
-**难度**: ⭐⭐⭐⭐ (中学科学)  
+**难度**: 4/5 (中学科学)
 **领域**: 科学常识推理  
 **数据量**: ~2,500 题 (Challenge 子集)
 
@@ -79,7 +79,7 @@ ds['test'].to_json('datasets/arc/ARC-Challenge-Test.jsonl', orient='records', li
 
 ### 3. TruthfulQA (真实性测试)
 
-**难度**: ⭐⭐⭐⭐ (常见误解)  
+**难度**: 4/5 (常见误解)
 **领域**: 迷信、阴谋论、健康、法律等  
 **数据量**: 817 题
 
@@ -112,7 +112,7 @@ ds['validation'].to_json('datasets/truthfulqa/truthfulqa_mc.json')
 
 ---
 
-## 📁 目录结构
+##  目录结构
 
 ```
 datasets/
@@ -120,17 +120,17 @@ datasets/
 ├── gsm8k/          # GSM8K 小学数学
 ├── math500/        # MATH-500 高等数学
 ├── humaneval/      # HumanEval 代码生成
-├── gpqa/           # 🆕 GPQA 高级推理
+├── gpqa/           # (New) GPQA 高级推理
 │   └── gpqa_diamond.json
-├── arc/            # 🆕 ARC 科学推理
+├── arc/            # (New) ARC 科学推理
 │   └── ARC-Challenge-Test.jsonl
-└── truthfulqa/     # 🆕 TruthfulQA 真实性
+└── truthfulqa/     # (New) TruthfulQA 真实性
     └── truthfulqa_mc.json
 ```
 
 ---
 
-## 🔧 一键下载脚本
+##  一键下载脚本
 
 将以下脚本保存为 `download_datasets.py` 并运行:
 
@@ -146,34 +146,34 @@ except ImportError:
     from datasets import load_dataset
 
 def download_gpqa():
-    print("📥 下载 GPQA Diamond...")
+    print(" 下载 GPQA Diamond...")
     try:
         ds = load_dataset('Idavidrein/gpqa', 'gpqa_diamond', trust_remote_code=True)
         os.makedirs('datasets/gpqa', exist_ok=True)
         ds['train'].to_json('datasets/gpqa/gpqa_diamond.json')
-        print("✅ GPQA 下载完成")
+        print("[OK] GPQA 下载完成")
     except Exception as e:
-        print(f"❌ GPQA 下载失败: {e}")
+        print(f"[ERROR] GPQA 下载失败: {e}")
 
 def download_arc():
-    print("📥 下载 ARC-Challenge...")
+    print(" 下载 ARC-Challenge...")
     try:
         ds = load_dataset('allenai/ai2_arc', 'ARC-Challenge')
         os.makedirs('datasets/arc', exist_ok=True)
         ds['test'].to_json('datasets/arc/ARC-Challenge-Test.jsonl', orient='records', lines=True)
-        print("✅ ARC 下载完成")
+        print("[OK] ARC 下载完成")
     except Exception as e:
-        print(f"❌ ARC 下载失败: {e}")
+        print(f"[ERROR] ARC 下载失败: {e}")
 
 def download_truthfulqa():
-    print("📥 下载 TruthfulQA...")
+    print(" 下载 TruthfulQA...")
     try:
         ds = load_dataset('truthfulqa/truthful_qa', 'multiple_choice')
         os.makedirs('datasets/truthfulqa', exist_ok=True)
         ds['validation'].to_json('datasets/truthfulqa/truthfulqa_mc.json')
-        print("✅ TruthfulQA 下载完成")
+        print("[OK] TruthfulQA 下载完成")
     except Exception as e:
-        print(f"❌ TruthfulQA 下载失败: {e}")
+        print(f"[ERROR] TruthfulQA 下载失败: {e}")
 
 if __name__ == "__main__":
     print("=" * 50)
@@ -184,26 +184,26 @@ if __name__ == "__main__":
     download_arc()
     download_truthfulqa()
     
-    print("\n✨ 下载完成!")
+    print("\n 下载完成!")
 ```
 
 ---
 
-## 📊 测试集对比
+##  测试集对比
 
 | 数据集 | 难度 | 题量 | 类型 | 用途 |
 |--------|------|------|------|------|
-| MMLU | ⭐⭐⭐ | 14,042 | 选择题 | 通用知识 |
-| GSM8K | ⭐⭐⭐ | 8,500 | 数学题 | 数学推理 |
-| MATH-500 | ⭐⭐⭐⭐ | 500 | 数学题 | 竞赛数学 |
-| HumanEval | ⭐⭐⭐ | 164 | 代码 | 代码生成 |
-| **GPQA** 🆕 | ⭐⭐⭐⭐⭐ | ~450 | 选择题 | 高级推理 |
-| **ARC** 🆕 | ⭐⭐⭐⭐ | ~2,500 | 选择题 | 科学常识 |
-| **TruthfulQA** 🆕 | ⭐⭐⭐⭐ | 817 | 选择题 | 真实性 |
+| MMLU | 3/5 | 14,042 | 选择题 | 通用知识 |
+| GSM8K | 3/5 | 8,500 | 数学题 | 数学推理 |
+| MATH-500 | 4/5 | 500 | 数学题 | 竞赛数学 |
+| HumanEval | 3/5 | 164 | 代码 | 代码生成 |
+| **GPQA** (New) | 5/5 | ~450 | 选择题 | 高级推理 |
+| **ARC** (New) | 4/5 | ~2,500 | 选择题 | 科学常识 |
+| **TruthfulQA** (New) | 4/5 | 817 | 选择题 | 真实性 |
 
 ---
 
-## ⚠️ 注意事项
+## [WARNING] 注意事项
 
 1. **网络要求**: 下载需要访问 HuggingFace，如有网络问题可使用代理
 2. **API 消耗**: 完整测试会消耗大量 API 调用，建议先使用快速抽样 (100题)

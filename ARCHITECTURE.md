@@ -82,14 +82,14 @@ llm-test/
 │  │ Config   │  │  Panels  │  │   Insights       │  │
 │  └────┬─────┘  └────┬─────┘  └──────────────────┘  │
 │       │              │                               │
-│       ▼              ▼                               │
+│       v              v                               │
 │  ┌──────────────────────────────────────────────┐   │
 │  │           TestExecutor                        │   │
 │  │  Config validation → Runner creation → Async  │   │
 │  └────────────────────┬─────────────────────────┘   │
 └───────────────────────┼─────────────────────────────┘
                         │
-                        ▼
+                        v
 ┌───────────────────────────────────────────────────────┐
 │                  Core Engine                           │
 │  ┌────────────┐  ┌──────────────┐  ┌──────────────┐  │
@@ -137,13 +137,13 @@ Select config ──→ Validate config
                    Create runner ──→ __init__(provider, tokenizer)
 Run test ────────→ Execute async ──→ run_concurrency_test()
                                        │
-                                       ▼
+                                       v
                                    Provider.get_completion()
                                        │
-                                       ▼
+                                       v
                                    Parse metrics (TTFT, TPS, etc.)
                                        │
-                                       ▼
+                                       v
 Display results ←── Collect results ←── DataFrame
 ```
 
@@ -154,14 +154,14 @@ User (UI)                   Evaluator System
 ─────────                   ─────────────────
 Select dataset ──→ BaseEvaluator.evaluate_batch()
                        │
-                       ▼
+                       v
                    Load dataset samples
                        │
-                       ▼
+                       v
                    For each sample:
                      LLM call → parse answer → compare
                        │
-                       ▼
+                       v
                    EvaluationResult (accuracy, details)
 ```
 

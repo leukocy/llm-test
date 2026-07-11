@@ -19,35 +19,35 @@ FAILED=0
 
 echo -e "${YELLOW}[1/4] Running Ruff (linting)...${NC}"
 if ruff check .; then
-    echo -e "${GREEN}✓ Ruff checks passed${NC}"
+    echo -e "${GREEN}[OK] Ruff checks passed${NC}"
 else
-    echo -e "${RED}✗ Ruff checks failed${NC}"
+    echo -e "${RED}[ERROR] Ruff checks failed${NC}"
     FAILED=1
 fi
 echo ""
 
 echo -e "${YELLOW}[2/4] Running Ruff (formatting check)...${NC}"
 if ruff format --check .; then
-    echo -e "${GREEN}✓ Ruff format checks passed${NC}"
+    echo -e "${GREEN}[OK] Ruff format checks passed${NC}"
 else
-    echo -e "${YELLOW}⚠ Ruff format issues found. Run 'ruff format .' to fix${NC}"
+    echo -e "${YELLOW}[WARNING] Ruff format issues found. Run 'ruff format .' to fix${NC}"
     FAILED=1
 fi
 echo ""
 
 echo -e "${YELLOW}[3/4] Running Mypy (type checking)...${NC}"
 if mypy ui/ config/ core/*.py 2>/dev/null; then
-    echo -e "${GREEN}✓ Mypy checks passed${NC}"
+    echo -e "${GREEN}[OK] Mypy checks passed${NC}"
 else
-    echo -e "${YELLOW}⚠ Mypy found type issues (non-blocking)${NC}"
+    echo -e "${YELLOW}[WARNING] Mypy found type issues (non-blocking)${NC}"
 fi
 echo ""
 
 echo -e "${YELLOW}[4/4] Running Pytest (unit tests)...${NC}"
 if pytest tests/ -q --tb=no; then
-    echo -e "${GREEN}✓ All tests passed${NC}"
+    echo -e "${GREEN}[OK] All tests passed${NC}"
 else
-    echo -e "${RED}✗ Tests failed${NC}"
+    echo -e "${RED}[ERROR] Tests failed${NC}"
     FAILED=1
 fi
 echo ""

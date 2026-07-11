@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+# ruff: noqa: F601
 """Final sweep: fix all remaining Chinese characters and punctuation in all UI files."""
-import re
 import os
+import re
 
 ui_dir = 'ui'
 
@@ -52,7 +53,7 @@ for fn in sorted(os.listdir(ui_dir)):
         continue
 
     fp = os.path.join(ui_dir, fn)
-    with open(fp, 'r', encoding='utf-8') as f:
+    with open(fp, encoding='utf-8') as f:
         content = f.read()
 
     original = content
@@ -73,21 +74,21 @@ for fn in sorted(os.listdir(ui_dir)):
         remaining = re.findall(r'[\u4e00-\u9fff]', content)
         cn_segs = re.findall(r'[\u4e00-\u9fff]+', content)
         fixes = len(original) - len(content) + sum(1 for c in original if c != content[0])  # rough
-        print(f"📝 {fn}: fixed punctuation/words, {len(cn_segs)} Chinese segments remaining")
+        print(f" {fn}: fixed punctuation/words, {len(cn_segs)} Chinese segments remaining")
         total_fixes += 1
     else:
         cn_segs = re.findall(r'[\u4e00-\u9fff]+', content)
         if cn_segs:
-            print(f"⚠️  {fn}: {len(cn_segs)} Chinese segments (no changes applied)")
+            print(f"[WARNING]  {fn}: {len(cn_segs)} Chinese segments (no changes applied)")
 
-print(f"\n--- Final verification ---")
+print("\n--- Final verification ---")
 for fn in sorted(os.listdir(ui_dir)):
     if not fn.endswith('.py') or fn in SKIP_FILES:
         continue
     fp = os.path.join(ui_dir, fn)
-    with open(fp, 'r', encoding='utf-8') as f:
+    with open(fp, encoding='utf-8') as f:
         content = f.read()
     cn_segs = re.findall(r'[\u4e00-\u9fff]+', content)
     cn_punct = re.findall(r'[\u3000-\u303f\uff01-\uff5e]', content)
-    status = "✅" if not cn_segs and not cn_punct else f"⚠️  chars:{len(cn_segs)} punct:{len(cn_punct)}"
+    status = "[OK]" if not cn_segs and not cn_punct else f"[WARNING]  chars:{len(cn_segs)} punct:{len(cn_punct)}"
     print(f"  {status} {fn}")

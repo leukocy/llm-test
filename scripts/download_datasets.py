@@ -51,10 +51,10 @@ def download_math500(output_dir="datasets/math500", force=False):
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(samples, f, ensure_ascii=False, indent=2)
 
-        print(f"✅ MATH-500 Download complete: {len(samples)} 样本")
+        print(f"[OK] MATH-500 Download complete: {len(samples)} 样本")
         return True
     except Exception as e:
-        print(f"❌ MATH-500 Download failed: {e}")
+        print(f"[ERROR] MATH-500 Download failed: {e}")
         return False
 
 def download_gsm8k(output_dir="datasets/gsm8k", force=False):
@@ -84,10 +84,10 @@ def download_gsm8k(output_dir="datasets/gsm8k", force=False):
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(samples, f, ensure_ascii=False, indent=2)
 
-        print(f"✅ GSM8K Download complete: {len(samples)} 样本")
+        print(f"[OK] GSM8K Download complete: {len(samples)} 样本")
         return True
     except Exception as e:
-        print(f"❌ GSM8K Download failed: {e}")
+        print(f"[ERROR] GSM8K Download failed: {e}")
         return False
 
 def download_mmlu(output_dir="datasets/mmlu", force=False, subset="all"):
@@ -119,10 +119,10 @@ def download_mmlu(output_dir="datasets/mmlu", force=False, subset="all"):
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(samples, f, ensure_ascii=False, indent=2)
 
-        print(f"✅ MMLU Download complete: {len(samples)} 样本")
+        print(f"[OK] MMLU Download complete: {len(samples)} 样本")
         return True
     except Exception as e:
-        print(f"❌ MMLU Download failed: {e}")
+        print(f"[ERROR] MMLU Download failed: {e}")
         return False
 
 def download_humaneval(output_dir="datasets/humaneval", force=False):
@@ -155,16 +155,16 @@ def download_humaneval(output_dir="datasets/humaneval", force=False):
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(samples, f, ensure_ascii=False, indent=2)
 
-        print(f"✅ HumanEval Download complete: {len(samples)} 样本")
+        print(f"[OK] HumanEval Download complete: {len(samples)} 样本")
         return True
     except Exception as e:
-        print(f"❌ HumanEval Download failed: {e}")
+        print(f"[ERROR] HumanEval Download failed: {e}")
         return False
 
 def download_all(force=False):
     """under载所hasDataset"""
     print("=" * 60)
-    print("📥 开始under载所hasQuality AssessmentDataset")
+    print(" 开始under载所hasQuality AssessmentDataset")
     print("=" * 60)
 
     results = {}
@@ -180,11 +180,11 @@ def download_all(force=False):
     results['swebench_lite'] = download_swebench_lite(force=force)
 
     print("\n" + "=" * 60)
-    print("📊 Download Results汇总")
+    print(" Download Results汇总")
     print("=" * 60)
 
     for name, success in results.items():
-        status = "✅ 成功" if success else "❌ 失败"
+        status = "[OK] 成功" if success else "[ERROR] 失败"
         print(f"  {name}: {status}")
 
     return results
@@ -217,10 +217,10 @@ def download_gpqa(output_dir="datasets/gpqa", force=False):
         os.makedirs(output_dir, exist_ok=True)
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(samples, f, ensure_ascii=False, indent=2)
-        print(f"✅ GPQA Diamond Download complete: {len(samples)} 样本")
+        print(f"OK: GPQA Diamond Download complete: {len(samples)} 样本")
         return True
     except Exception as e:
-        print(f"❌ GPQA Download failed: {e}")
+        print(f"Error: GPQA Download failed: {e}")
         print("   GPQA is gated — accept the license at "
               "https://huggingface.co/datasets/Idavidrein/gpqa then `huggingface-cli login`.")
         return False
@@ -247,10 +247,10 @@ def download_mbpp(output_dir="datasets/mbpp", force=False):
         os.makedirs(output_dir, exist_ok=True)
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(samples, f, ensure_ascii=False, indent=2)
-        print(f"✅ MBPP Download complete: {len(samples)} 样本")
+        print(f"OK: MBPP Download complete: {len(samples)} 样本")
         return True
     except Exception as e:
-        print(f"❌ MBPP Download failed: {e}")
+        print(f"Error: MBPP Download failed: {e}")
         return False
 
 
@@ -271,9 +271,9 @@ def download_longbench(output_dir="datasets/longbench", force=False):
             with open(out, "w", encoding="utf-8") as f:
                 for item in ds:
                     f.write(json.dumps(item, ensure_ascii=False) + "\n")
-            print(f"✅ LongBench/{sub} complete: {len(ds)} 行")
+            print(f"OK: LongBench/{sub} complete: {len(ds)} 行")
         except Exception as e:
-            print(f"❌ LongBench/{sub} failed: {e}")
+            print(f"Error: LongBench/{sub} failed: {e}")
             all_ok = False
     return all_ok
 
@@ -292,10 +292,10 @@ def download_swebench_lite(output_dir="datasets/swebench_lite", force=False):
         with open(output_file, "w", encoding="utf-8") as f:
             for item in ds:
                 f.write(json.dumps(item, ensure_ascii=False) + "\n")
-        print(f"✅ SWE-Bench Lite complete: {len(ds)} 行")
+        print(f"OK: SWE-Bench Lite complete: {len(ds)} 行")
         return True
     except Exception as e:
-        print(f"❌ SWE-Bench Lite failed: {e}")
+        print(f"Error: SWE-Bench Lite failed: {e}")
         return False
 
 def check_status():
@@ -312,7 +312,7 @@ def check_status():
     }
 
     print("\n" + "=" * 60)
-    print("📊 DatasetStatus")
+    print(" DatasetStatus")
     print("=" * 60)
     print(f"{'Dataset':<15} {'Status':<10} {'Sample count':<10} {'期望':<10}")
     print("-" * 60)
@@ -324,14 +324,14 @@ def check_status():
                     data = json.load(f)
                 count = len(data)
                 if count >= expected * 0.9:  # 允许 10% 误差
-                    status = "✅ 完整"
+                    status = "[OK] 完整"
                 else:
-                    status = "⚠️ not完整"
-            except:
-                status = "❌ 损坏"
+                    status = "[WARNING] not完整"
+            except (OSError, json.JSONDecodeError, TypeError):
+                status = "[ERROR] 损坏"
                 count = 0
         else:
-            status = "❌ 缺失"
+            status = "[ERROR] 缺失"
             count = 0
 
         print(f"{name:<15} {status:<10} {count:<10} {expected:<10}")
@@ -358,7 +358,7 @@ if __name__ == "__main__":
 
     # Check datasets 库
     if not check_datasets_installed():
-        print("⚠️ datasets 库未安装")
+        print("[WARNING] datasets 库未安装")
         install_datasets()
 
     if args.status:

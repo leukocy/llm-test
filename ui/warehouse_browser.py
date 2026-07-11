@@ -47,7 +47,7 @@ _HISTORY_COLUMNS = [
 
 def render_warehouse_browser() -> None:
     """渲染数据仓库浏览页主入口。"""
-    st.title("🗄️ 数据仓库")
+    st.title("Data Warehouse: 数据仓库")
     st.caption(
         "报告是切片，仓库是全集 —— 这里筛选、透视、导出历史测试的全集行。"
         "（口径：test-standard/端侧AI硬件与模型.html #templates）"
@@ -64,8 +64,8 @@ def render_warehouse_browser() -> None:
         return
 
     tab_history, tab_matrix, tab_scaling, tab_inventory, tab_cases, tab_capability, tab_export = st.tabs(
-        ["📋 运行历史", "🔲 透视矩阵", "📈 扩展效率", "🖥️ 硬件盘点", "🧪 应用用例",
-         "📊 客户能力表", "📤 模板导出"]
+        ["List: 运行历史", "Matrix: 透视矩阵", "Scaling: 扩展效率", "Hardware: 硬件盘点", "Application: 应用用例",
+         "Capability: 客户能力表", "Export: 模板导出"]
     )
 
     with tab_history:
@@ -92,7 +92,7 @@ def render_warehouse_browser() -> None:
 
 def _build_filter(db) -> WarehouseFilter:
     st.sidebar.markdown("---")
-    st.sidebar.subheader("🗄️ 仓库筛选")
+    st.sidebar.subheader("Data Warehouse: 仓库筛选")
 
     def _opts(field: str, label: str) -> list:
         vals = ["全部"] + distinct_values(db, field)
@@ -209,7 +209,7 @@ def _render_detail_drawer(run) -> None:
 
 def _render_scaling_efficiency(runs) -> None:
     """同模型 tp1→tpN 的扩展效率（手册诊断树 B：能跑但多卡没线性变快）。"""
-    st.subheader("📈 多卡扩展效率")
+    st.subheader("Scaling: 多卡扩展效率")
     st.caption(
         "手册：「4 卡只比 1 卡快 2 倍？」以 tp1 为基线，算 speedup 与 efficiency"
         "（理想线性=1.0；<1 亚线性，疑似通信/调度瓶颈）。"
@@ -237,7 +237,7 @@ def _render_scaling_efficiency(runs) -> None:
         )
 
     csv_str = _sheet_to_csv(rows)
-    st.download_button("📥 导出 CSV", data=csv_str.encode("utf-8"),
+    st.download_button("Download: 导出 CSV", data=csv_str.encode("utf-8"),
                        file_name="scaling_efficiency.csv", mime="text/csv", key="se_dl_csv")
 
 
@@ -315,7 +315,7 @@ def _render_inventory(runs) -> None:
 
 def _render_capability_sheet() -> None:
     """按 customer_type × scenario 聚合应用用例，生成对外客户能力表。"""
-    st.subheader("📊 客户能力表")
+    st.subheader("Capability: 客户能力表")
     st.caption(
         "手册核心产出：「销售可以自动生成客户能力表」。按客户类型 × 场景聚合应用用例，"
         "10 分钟内从仓库抽出对外材料。"
@@ -353,9 +353,9 @@ def _render_capability_sheet() -> None:
     e1, e2 = st.columns(2)
     csv_str = _sheet_to_csv(sheet)
     md_str = build_capability_markdown(sheet)
-    e1.download_button("📥 导出 CSV", data=csv_str.encode("utf-8"),
+    e1.download_button("Download: 导出 CSV", data=csv_str.encode("utf-8"),
                        file_name="capability_sheet.csv", mime="text/csv", key="cap_dl_csv")
-    e2.download_button("📥 导出对外 Markdown", data=md_str.encode("utf-8"),
+    e2.download_button("Download: 导出对外 Markdown", data=md_str.encode("utf-8"),
                        file_name="capability_sheet.md", mime="text/markdown", key="cap_dl_md")
 
     with st.expander("预览对外 Markdown"):
@@ -423,11 +423,11 @@ def _render_export(runs) -> None:
     zip_csv = export_all_templates_zip(bundles, fmt="csv")
     zip_json = export_all_templates_zip(bundles, fmt="json")
     zc.download_button(
-        "📥 全部 CSV (ZIP)", data=zip_csv, file_name="warehouse_templates_csv.zip",
+        "Download: 全部 CSV (ZIP)", data=zip_csv, file_name="warehouse_templates_csv.zip",
         mime="application/zip", key="wh_dl_zip_csv",
     )
     zj.download_button(
-        "📥 全部 JSON (ZIP)", data=zip_json, file_name="warehouse_templates_json.zip",
+        "Download: 全部 JSON (ZIP)", data=zip_json, file_name="warehouse_templates_json.zip",
         mime="application/zip", key="wh_dl_zip_json",
     )
 
