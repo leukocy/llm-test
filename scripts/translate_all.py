@@ -305,9 +305,9 @@ ONBOARDING = [
     ("开始使用", "Get Started"),
     ("跳过引导", "Skip Onboarding"),
     ("帮助与引导", "Help & Guide"),
-    ("✅ 已完成引导", "✅ Onboarding completed"),
-    ("🔄 重新引导", "🔄 Restart Onboarding"),
-    ("📖 使用帮助", "📖 Help"),
+    ("已完成引导", "Onboarding completed"),
+    ("重新引导", "Restart Onboarding"),
+    ("使用帮助", "Help"),
     ("步骤", "Step"),
     ("配置 API", "Configure API"),
     ("选择测试", "Select Test"),
@@ -540,7 +540,11 @@ for filepath, reps in files_to_translate.items():
         if remaining >= 0:
             translated += 1
             remaining_total += remaining
-            status = f"({remaining} Chinese segments remaining)" if remaining > 0 else "(clean)"
+            status = (
+                f"({remaining} Chinese segments remaining)"
+                if remaining > 0
+                else "(clean)"
+            )
             print(f"  Translated: {filepath} {status}")
         else:
             print(f"  No changes: {filepath}")

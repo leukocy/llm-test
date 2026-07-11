@@ -510,4 +510,6 @@ for root, _, files in os.walk("."):
                 if remaining > 0:
                     print(f"  {remaining:4d} | {path}")
 
-print(f"\nPhase 3 translated {total_translated} files. {total_remaining} segments still remaining.")
+print(
+    f"\nPhase 3 translated {total_translated} files. {total_remaining} segments still remaining."
+)

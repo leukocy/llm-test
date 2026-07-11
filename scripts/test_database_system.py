@@ -43,7 +43,7 @@ def test_database_connection():
     ]
     for table in tables:
         exists = db.table_exists(table)
-        print(f"  表 {table}: {'✓' if exists else '✗'}")
+        print(f"  表 {table}: {'[OK]' if exists else '[MISSING]'}")
 
     print("DatabaseConnectTest: via")
     return True
@@ -334,7 +334,10 @@ def test_data_export():
     run = TestRun.create(test_type="export-test", model_id="export-model")
     run_id = run_repo.insert(run)
 
-    results = [TestResult(run_id=run_id, session_id=i, ttft=0.1 * i, tps=50 + i) for i in range(5)]
+    results = [
+        TestResult(run_id=run_id, session_id=i, ttft=0.1 * i, tps=50 + i)
+        for i in range(5)
+    ]
     result_repo.insert_batch(results)
 
     # Export服务
@@ -385,7 +388,7 @@ def run_all_tests():
             test_func()
             passed += 1
         except Exception as e:
-            print(f"\n❌ Test失败: {name}")
+            print(f"\nTest失败: {name}")
             print(f"   Error: {e}")
             import traceback
 

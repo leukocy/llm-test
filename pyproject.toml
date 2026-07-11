@@ -110,7 +110,8 @@ skips = [
   "B301",
   "B403",
   "B701",
-  "B104"
+  "B104",
+  "B108"  # hardcoded /tmp paths in debug scripts
 ]
 
 [tool.coverage]

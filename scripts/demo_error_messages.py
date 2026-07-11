@@ -57,7 +57,9 @@ def demo_error_messages():
     try:
         raise Exception("HTTP 500: Internal server error")
     except Exception as e:
-        error_msg = get_enhanced_error(e, context="API URL: https://api.example.com", language="zh")
+        error_msg = get_enhanced_error(
+            e, context="API URL: https://api.example.com", language="zh"
+        )
         print(error_msg)
     print()
 
@@ -67,7 +69,9 @@ def demo_error_messages():
     try:
         raise Exception("Connection refused - Network unreachable")
     except Exception as e:
-        error_msg = get_enhanced_error(e, context="API URL: https://api.example.com", language="zh")
+        error_msg = get_enhanced_error(
+            e, context="API URL: https://api.example.com", language="zh"
+        )
         print(error_msg)
     print()
 

@@ -10,7 +10,9 @@ from ui.reports import generate_concurrency_report
 
 
 def test_concurrency_report_missing_columns():
-    print("Testing generate_concurrency_report with missing system_output_throughput...")
+    print(
+        "Testing generate_concurrency_report with missing system_output_throughput..."
+    )
 
     # Mock data without system_output_throughput
     data = {

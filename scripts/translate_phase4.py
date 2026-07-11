@@ -71,7 +71,7 @@ CHARTS = [
 # =====================================================================
 ONBOARDING = [
     # ONBOARDING_CONTENT - welcome
-    ("👋 Welcome to LLM 基准Test平台", "👋 Welcome to the LLM Benchmark Platform"),
+    ("Welcome to LLM 基准Test平台", "Welcome to the LLM Benchmark Platform"),
     (
         "这is一专业 LLM 性能Test工具",
         "This is a professional LLM performance testing tool",
@@ -174,7 +174,7 @@ ONBOARDING = [
         "查看Configure摘要确保参数正确",
         "Review configuration summary to ensure correct parameters",
     ),
-    ("点击 '🚀 启动Test' 按钮", "Click the '🚀 Start Test' button"),
+    ("点击 '启动Test' 按钮", "Click the 'Start Test' button"),
     ("监控进度", "Monitor progress"),
     ("实时查看Test进度andStatus", "View test progress and status in real-time"),
     ("Test控制：", "Test control:"),
@@ -229,7 +229,7 @@ ONBOARDING = [
         "History is automatically saved in the project directory",
     ),
     # complete
-    ("🎉 恭喜！", "🎉 Congratulations!"),
+    ("恭喜！", "Congratulations!"),
     ("您CompletedOnboarding！", "You have completed the onboarding!"),
     ("您already学will：", "You have learned:"),
     ("查看andAnalyze results", "View and analyze results"),
@@ -261,7 +261,7 @@ ONBOARDING = [
     ("当前Step内容", "Current step content"),
     ("标题and内容", "Title and content"),
     ("导航按钮", "Navigation buttons"),
-    ("完成 ✅", "Done ✅"),
+    ("完成 ", "Done "),
     ("Render引导Trigger器（侧边栏）", "Render onboarding trigger (sidebar)"),
     ("DisplayTrigger按钮", "Display trigger button"),
     ("Reset引导Status", "Reset onboarding state"),
@@ -385,7 +385,7 @@ CONTROL_PANEL = [
     ("Configure摘要", "Configuration Summary"),
     ("Display关键Configure", "Display key configuration"),
     ("温度", "Temperature"),
-    ("Thinking mode: ✅ (预算:", "Thinking mode: ✅ (budget:"),
+    ("Thinking mode: (预算:", "Thinking mode: (budget:"),
     ("GetCurrent Status", "Get current status"),
     (
         "控制按钮组 - 4按钮：开始、暂停、继续、停止",

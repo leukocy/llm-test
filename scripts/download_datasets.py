@@ -58,10 +58,10 @@ def download_math500(output_dir="datasets/math500", force=False):
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(samples, f, ensure_ascii=False, indent=2)
 
-        print(f"✅ MATH-500 Download complete: {len(samples)} 样本")
+        print(f"MATH-500 Download complete: {len(samples)} 样本")
         return True
     except Exception as e:
-        print(f"❌ MATH-500 Download failed: {e}")
+        print(f"MATH-500 Download failed: {e}")
         return False
 
 
@@ -84,16 +84,18 @@ def download_gsm8k(output_dir="datasets/gsm8k", force=False):
 
         samples = []
         for item in ds:
-            samples.append({"question": item.get("question", ""), "answer": item.get("answer", "")})
+            samples.append(
+                {"question": item.get("question", ""), "answer": item.get("answer", "")}
+            )
 
         os.makedirs(output_dir, exist_ok=True)
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(samples, f, ensure_ascii=False, indent=2)
 
-        print(f"✅ GSM8K Download complete: {len(samples)} 样本")
+        print(f"GSM8K Download complete: {len(samples)} 样本")
         return True
     except Exception as e:
-        print(f"❌ GSM8K Download failed: {e}")
+        print(f"GSM8K Download failed: {e}")
         return False
 
 
@@ -129,10 +131,10 @@ def download_mmlu(output_dir="datasets/mmlu", force=False, subset="all"):
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(samples, f, ensure_ascii=False, indent=2)
 
-        print(f"✅ MMLU Download complete: {len(samples)} 样本")
+        print(f"MMLU Download complete: {len(samples)} 样本")
         return True
     except Exception as e:
-        print(f"❌ MMLU Download failed: {e}")
+        print(f"MMLU Download failed: {e}")
         return False
 
 
@@ -169,17 +171,17 @@ def download_humaneval(output_dir="datasets/humaneval", force=False):
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(samples, f, ensure_ascii=False, indent=2)
 
-        print(f"✅ HumanEval Download complete: {len(samples)} 样本")
+        print(f"HumanEval Download complete: {len(samples)} 样本")
         return True
     except Exception as e:
-        print(f"❌ HumanEval Download failed: {e}")
+        print(f"HumanEval Download failed: {e}")
         return False
 
 
 def download_all(force=False):
     """under载所hasDataset"""
     print("=" * 60)
-    print("📥 开始under载所hasQuality AssessmentDataset")
+    print("开始under载所hasQuality AssessmentDataset")
     print("=" * 60)
 
     results = {}
@@ -190,11 +192,11 @@ def download_all(force=False):
     results["humaneval"] = download_humaneval(force=force)
 
     print("\n" + "=" * 60)
-    print("📊 Download Results汇总")
+    print("Download Results汇总")
     print("=" * 60)
 
     for name, success in results.items():
-        status = "✅ 成功" if success else "❌ 失败"
+        status = "成功" if success else "失败"
         print(f"  {name}: {status}")
 
     return results
@@ -210,7 +212,7 @@ def check_status():
     }
 
     print("\n" + "=" * 60)
-    print("📊 DatasetStatus")
+    print("DatasetStatus")
     print("=" * 60)
     print(f"{'Dataset':<15} {'Status':<10} {'Sample count':<10} {'期望':<10}")
     print("-" * 60)
@@ -222,14 +224,14 @@ def check_status():
                     data = json.load(f)
                 count = len(data)
                 if count >= expected * 0.9:  # 允许 10% 误差
-                    status = "✅ 完整"
+                    status = "完整"
                 else:
-                    status = "⚠️ not完整"
+                    status = "not完整"
             except:
-                status = "❌ 损坏"
+                status = "损坏"
                 count = 0
         else:
-            status = "❌ 缺失"
+            status = "缺失"
             count = 0
 
         print(f"{name:<15} {status:<10} {count:<10} {expected:<10}")
@@ -240,20 +242,24 @@ def check_status():
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Datasetunder载工具 (use HuggingFace datasets 库)")
+    parser = argparse.ArgumentParser(
+        description="Datasetunder载工具 (use HuggingFace datasets 库)"
+    )
     parser.add_argument("--all", "-a", action="store_true", help="under载所hasDataset")
     parser.add_argument("--math500", action="store_true", help="under载 MATH-500")
     parser.add_argument("--gsm8k", action="store_true", help="under载 GSM8K")
     parser.add_argument("--mmlu", action="store_true", help="under载 MMLU")
     parser.add_argument("--humaneval", action="store_true", help="under载 HumanEval")
-    parser.add_argument("--status", "-s", action="store_true", help="CheckDatasetStatus")
+    parser.add_argument(
+        "--status", "-s", action="store_true", help="CheckDatasetStatus"
+    )
     parser.add_argument("--force", "-f", action="store_true", help="强制重新under载")
 
     args = parser.parse_args()
 
     # Check datasets 库
     if not check_datasets_installed():
-        print("⚠️ datasets 库未安装")
+        print("datasets 库未安装")
         install_datasets()
 
     if args.status:

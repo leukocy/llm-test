@@ -424,4 +424,6 @@ for root, _, files in os.walk("."):
                 status = f"({remaining} remaining)" if remaining > 0 else "(clean)"
                 print(f"  {path} {status}")
 
-print(f"\nPhase 2 translated {total_translated} files. {total_remaining} segments remaining.")
+print(
+    f"\nPhase 2 translated {total_translated} files. {total_remaining} segments remaining."
+)

@@ -41,7 +41,9 @@ except Exception as e:
 
 print("-" * 50)
 print(f"Generating prompt with ~{TARGET_INPUT_TOKENS} tokens...")
-prompt_text, local_prompt_count = generate_calibrated_prompt(tokenizer, TARGET_INPUT_TOKENS)
+prompt_text, local_prompt_count = generate_calibrated_prompt(
+    tokenizer, TARGET_INPUT_TOKENS
+)
 print(f"Local Tokenizer Count (Input): {local_prompt_count}")
 
 payload = {
@@ -79,9 +81,7 @@ output_str += f"Model: {MODEL}\n"
 output_str += f"Time:  {end_time - start_time:.2f}s\n"
 output_str += "-" * 50 + "\n\n"
 
-output_str += (
-    f"{'Type':<15} | {'Local Tokenizer':<15} | {'API Usage':<15} | {'Gap':<15} | {'Gap %':<10}\n"
-)
+output_str += f"{'Type':<15} | {'Local Tokenizer':<15} | {'API Usage':<15} | {'Gap':<15} | {'Gap %':<10}\n"
 output_str += "-" * 80 + "\n"
 
 api_prompt = usage["prompt_tokens"]
@@ -91,7 +91,9 @@ output_str += f"{'Input (Prefill)':<15} | {local_prompt_count:<15} | {api_prompt
 
 api_completion = usage["completion_tokens"]
 diff_output = api_completion - local_output_count
-diff_output_pct = (diff_output / local_output_count) * 100 if local_output_count > 0 else 0
+diff_output_pct = (
+    (diff_output / local_output_count) * 100 if local_output_count > 0 else 0
+)
 output_str += f"{'Output (Decode)':<15} | {local_output_count:<15} | {api_completion:<15} | {diff_output:<15} | {diff_output_pct:.1f}%\n"
 
 output_str += "-" * 80 + "\n"
