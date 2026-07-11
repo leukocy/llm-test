@@ -50,7 +50,7 @@ def test_global_css_defines_dashboard_tokens_and_responsive_rule():
     assert "--accent-primary" in GLOBAL_CSS
     assert "--status-danger" in GLOBAL_CSS
     assert "@media (max-width: 900px)" in GLOBAL_CSS
-    assert "[data-testid=\"stSidebar\"]" in GLOBAL_CSS
+    assert '[data-testid="stSidebar"]' in GLOBAL_CSS
 
 
 def test_global_font_rule_does_not_override_streamlit_material_icons():
@@ -64,7 +64,7 @@ def test_sidebar_model_refresh_action_uses_full_width_layout():
 
     source = inspect.getsource(render_sidebar)
     model_controls = source[
-        source.index("# Dynamically fetch model list"):source.index("model_id_custom")
+        source.index("# Dynamically fetch model list") : source.index("model_id_custom")
     ]
 
     assert '"Refresh models"' in model_controls
@@ -90,7 +90,7 @@ def test_sidebar_latency_probe_uses_full_width_layout():
 
     source = inspect.getsource(render_sidebar)
     calibration_controls = source[
-        source.index("# Probe button section"):source.index("# PD separation toggle")
+        source.index("# Probe button section") : source.index("# PD separation toggle")
     ]
 
     assert '"Measure latency"' in calibration_controls

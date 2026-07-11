@@ -124,7 +124,11 @@ def import_snapshot(
     """
     machine_id = snapshot.get("machine_id")
     if not machine_id:
-        return {"ok": False, "skipped": False, "reason": "快照缺 machine_id（无法归并）"}
+        return {
+            "ok": False,
+            "skipped": False,
+            "reason": "快照缺 machine_id（无法归并）",
+        }
 
     new_hash = fingerprint_hash(snapshot)
 
@@ -163,7 +167,9 @@ def import_snapshot(
     extra = {"machine_id": machine_id, "status_detail": HW_INVENTORY_STATUS_DETAIL}
     try:
         if hasattr(db, "complete_test_run"):
-            db.complete_test_run(run, success=True, calculate_stats=False, extra_fields=extra)
+            db.complete_test_run(
+                run, success=True, calculate_stats=False, extra_fields=extra
+            )
         elif hasattr(db, "runs") and hasattr(db.runs, "complete"):
             db.runs.complete(run_id, True, extra)
     except Exception as e:  # noqa: BLE001  complete 失败不抹掉已插入的 run
@@ -190,7 +196,9 @@ def import_snapshot_file(db, path: str | Path, dedupe: bool = False) -> dict[str
     return result
 
 
-def import_snapshots(db, paths: list[str | Path], dedupe: bool = False) -> dict[str, Any]:
+def import_snapshots(
+    db, paths: list[str | Path], dedupe: bool = False
+) -> dict[str, Any]:
     """批量导入多份快照。返回汇总 {total, imported, skipped, failed, results}。"""
     summary: dict[str, Any] = {
         "total": len(paths),

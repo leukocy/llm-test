@@ -84,7 +84,9 @@ class TestExecutor:
         resume_data = st.session_state.get("resume_data", None)
 
         if is_resuming and resume_data:
-            st.info(f"Resuming test from saved progress: {resume_data.get('test_type', 'Unknown')}")
+            st.info(
+                f"Resuming test from saved progress: {resume_data.get('test_type', 'Unknown')}"
+            )
             # Restore completed results
             preloaded_results = resume_data.get("completed_results", [])
         else:
@@ -106,7 +108,9 @@ class TestExecutor:
         with log_container.container():
             with st.expander("Real-time logging (Live Request Log)", expanded=True):
                 log_placeholder = st.empty()
-                log_placeholder.info("Log window initialized... waiting for test to start")
+                log_placeholder.info(
+                    "Log window initialized... waiting for test to start"
+                )
 
         result_container = st.empty()
         placeholder = result_container
@@ -144,7 +148,9 @@ class TestExecutor:
                     st.dataframe(display_df, width="stretch")
                 if latest_output:
                     with output_placeholder.container():
-                        with st.expander(f"最新输出预览 (Session {session_id})", expanded=False):
+                        with st.expander(
+                            f"最新输出预览 (Session {session_id})", expanded=False
+                        ):
                             st.code(latest_output, language=None, wrap_lines=True)
             except Exception:
                 # 后台线程渲染失败不应中断测试
@@ -199,7 +205,9 @@ class TestExecutor:
                 hf_tokenizer_model_id=self.config.get("hf_tokenizer_model_id"),
                 latency_offset=st.session_state.latency_offset,
                 random_seed=st.session_state.get("random_seed"),
-                skip_first_token_for_tps=st.session_state.get("skip_first_token_for_tps", False),
+                skip_first_token_for_tps=st.session_state.get(
+                    "skip_first_token_for_tps", False
+                ),
                 template_tokens=st.session_state.get(
                     "template_tokens", self.config.get("template_tokens", 0)
                 ),
@@ -328,7 +336,10 @@ class TestExecutor:
                     sys_info[key] = custom_value
 
             # Fallback values
-            if not sys_info.get("model_name") or sys_info.get("model_name") == "Unknown":
+            if (
+                not sys_info.get("model_name")
+                or sys_info.get("model_name") == "Unknown"
+            ):
                 sys_info["model_name"] = self.config["model_id"]
             # engine_name has no fallback — provider is not the engine
             # Engine refers to inference backend (e.g. vLLM, SGLang, TRT-LLM), users can fill in manually via sidebar
@@ -374,7 +385,9 @@ class TestExecutor:
             test_type = st.session_state.get("current_test_type", "")
             model_id = self.config.get("model_id", "")
 
-            insights, severities = generate_performance_insights(df, test_type, model_id)
+            insights, severities = generate_performance_insights(
+                df, test_type, model_id
+            )
             bw = runner_instance.last_bandwidth or {}
             utilization = bw.get("bandwidth_utilization_pct")
             bottleneck = derive_bottleneck(insights, severities, utilization)
@@ -451,7 +464,8 @@ class TestExecutor:
         elif func_name == "run_throughput_matrix_test":
             selected_concurrencies, context_lengths, rounds_per_level, *_ = args
             total_reqs = sum(
-                c * len(context_lengths) * rounds_per_level for c in selected_concurrencies
+                c * len(context_lengths) * rounds_per_level
+                for c in selected_concurrencies
             )
             runner_instance.total_requests = total_reqs
         elif func_name == "run_segmented_prefill_test":
@@ -511,7 +525,9 @@ class TestExecutor:
                 if pending:
                     try:
                         loop.run_until_complete(
-                            asyncio.wait(pending, timeout=0.5, return_when=asyncio.ALL_COMPLETED)
+                            asyncio.wait(
+                                pending, timeout=0.5, return_when=asyncio.ALL_COMPLETED
+                            )
                         )
                     except Exception:
                         pass
@@ -524,7 +540,9 @@ class TestExecutor:
                 except Exception:
                     pass
 
-                shutdown_default_executor = getattr(loop, "shutdown_default_executor", None)
+                shutdown_default_executor = getattr(
+                    loop, "shutdown_default_executor", None
+                )
                 if shutdown_default_executor is not None:
                     try:
                         loop.run_until_complete(shutdown_default_executor())
@@ -544,7 +562,9 @@ class TestExecutor:
             "Model ID": self.config["model_id"],
             "Provider": self.config["provider"],
             "Template Tokens": str(
-                st.session_state.get("template_tokens", self.config.get("template_tokens", 0))
+                st.session_state.get(
+                    "template_tokens", self.config.get("template_tokens", 0)
+                )
             ),
             "Timestamp": timestamp,
         }

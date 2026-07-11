@@ -71,7 +71,9 @@ class ResultMetadata:
         return asdict(self)
 
     @classmethod
-    def from_result(cls, result: EvaluationResult, filepath: str, label: str) -> "ResultMetadata":
+    def from_result(
+        cls, result: EvaluationResult, filepath: str, label: str
+    ) -> "ResultMetadata":
         """从 EvaluationResult Create元Data"""
         # Get性能Statistics
         perf_stats = result.performance_stats or {}
@@ -162,7 +164,9 @@ class ComparisonEntry:
         if best is None or best == 0:
             return None
         return {
-            label: ((value - best) / best * 100) if isinstance(best, (int, float)) else 0
+            label: (
+                ((value - best) / best * 100) if isinstance(best, (int, float)) else 0
+            )
             for label, value in self.values.items()
         }
 
@@ -190,7 +194,9 @@ class ComparisonReport:
         if not self.comparison_id:
             import hashlib
 
-            self.comparison_id = hashlib.md5(datetime.now().isoformat().encode()).hexdigest()[:12]
+            self.comparison_id = hashlib.md5(
+                datetime.now().isoformat().encode()
+            ).hexdigest()[:12]
         if not self.created_at:
             self.created_at = datetime.now().isoformat()
 
@@ -539,7 +545,18 @@ class ResultComparator:
             for i, (label, value) in enumerate(sorted_values):
                 # Checkis否is数值类型
                 if isinstance(value, (int, float)):
-                    rank_label = f"{i + 1}."
+                    if comparison.higher_is_better:
+                        rank_label = (
+                            "1st"
+                            if i == 0
+                            else "2nd" if i == 1 else "3rd" if i == 2 else "   "
+                        )
+                    else:
+                        rank_label = (
+                            "1st"
+                            if i == 0
+                            else "2nd" if i == 1 else "3rd" if i == 2 else "   "
+                        )
 
                     # Format值
                     format_fn = None
@@ -652,7 +669,11 @@ class ResultComparator:
             import matplotlib.pyplot as plt
 
             # Setin文字体
-            plt.rcParams["font.sans-serif"] = ["SimHei", "Microsoft YaHei", "Arial Unicode MS"]
+            plt.rcParams["font.sans-serif"] = [
+                "SimHei",
+                "Microsoft YaHei",
+                "Arial Unicode MS",
+            ]
             plt.rcParams["axes.unicode_minus"] = False
 
         except ImportError:
@@ -674,7 +695,9 @@ class ResultComparator:
             comp
             for comp in self.report.comparisons
             if comp.metric_name in metrics
-            and any(isinstance(v, (int, float)) and v != 0 for v in comp.values.values())
+            and any(
+                isinstance(v, (int, float)) and v != 0 for v in comp.values.values()
+            )
         ]
 
         if not valid_comparisons:
@@ -743,7 +766,8 @@ class ResultComparator:
         if output_path:
             # 确保目录存in
             os.makedirs(
-                os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True
+                os.path.dirname(output_path) if os.path.dirname(output_path) else ".",
+                exist_ok=True,
             )
             plt.savefig(output_path, dpi=dpi, bbox_inches="tight")
             self._log(f"Chart saved: {output_path}")
@@ -774,7 +798,8 @@ class ResultComparator:
 
         # 确保目录存in
         os.makedirs(
-            os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True
+            os.path.dirname(output_path) if os.path.dirname(output_path) else ".",
+            exist_ok=True,
         )
 
         if format == "json":
@@ -871,7 +896,8 @@ def load_comparison(filepath: str) -> ComparisonReport:
         data = json.load(f)
 
     report = ComparisonReport(
-        comparison_id=data.get("comparison_id", ""), created_at=data.get("created_at", "")
+        comparison_id=data.get("comparison_id", ""),
+        created_at=data.get("created_at", ""),
     )
 
     # 重建Result元Data

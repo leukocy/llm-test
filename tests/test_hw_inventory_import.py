@@ -32,11 +32,20 @@ from core.warehouse.query import build_hardware_inventory_rows, build_hm_test_ro
 
 
 def _snap(
-    machine_id="mid_aaaa1111bbbb2222", disks=None, manual=None, engine=None, model_spec=None
+    machine_id="mid_aaaa1111bbbb2222",
+    disks=None,
+    manual=None,
+    engine=None,
+    model_spec=None,
 ) -> dict[str, Any]:
     fp = {
         "machine_id": machine_id,
-        "os": {"hostname": "box01", "name": "Linux", "release": "6.8", "machine": "x86_64"},
+        "os": {
+            "hostname": "box01",
+            "name": "Linux",
+            "release": "6.8",
+            "machine": "x86_64",
+        },
         "cpu": {"model_name": "AMD EPYC 9355", "sockets": 2, "cores_per_socket": 32},
         "memory": {"type": "DDR5", "total_gb": 1133.35},
         "gpus": [
@@ -55,8 +64,18 @@ def _snap(
             disks
             if disks is not None
             else [
-                {"name": "/dev/nvme0", "model": "Samsung 990 Pro", "size_tb": 3.5, "is_ssd": True},
-                {"name": "/dev/nvme1", "model": "WD SN850X", "size_tb": 7.68, "is_ssd": True},
+                {
+                    "name": "/dev/nvme0",
+                    "model": "Samsung 990 Pro",
+                    "size_tb": 3.5,
+                    "is_ssd": True,
+                },
+                {
+                    "name": "/dev/nvme1",
+                    "model": "WD SN850X",
+                    "size_tb": 7.68,
+                    "is_ssd": True,
+                },
                 {"name": "/dev/sda", "model": "HDD", "size_tb": 8.0, "is_ssd": False},
             ]
         ),
@@ -96,7 +115,10 @@ def test_largest_ssd_picks_biggest_ssd_ignores_hdd():
 
 
 def test_largest_ssd_none_when_no_ssd():
-    assert _largest_ssd([{"model": "HDD", "size_tb": 8.0, "is_ssd": False}]) == (None, None)
+    assert _largest_ssd([{"model": "HDD", "size_tb": 8.0, "is_ssd": False}]) == (
+        None,
+        None,
+    )
     assert _largest_ssd([]) == (None, None)
 
 
@@ -104,7 +126,9 @@ def test_largest_ssd_none_when_no_ssd():
 
 
 def test_snapshot_to_run_maps_core_fields():
-    snap = _snap(manual={"owner": "张三", "remark": "测试机", "product_line": "数据中心"})
+    snap = _snap(
+        manual={"owner": "张三", "remark": "测试机", "product_line": "数据中心"}
+    )
     run = snapshot_to_run(snap)
     assert isinstance(run, TestRun)
     assert run.test_type == HW_INVENTORY_TEST_TYPE
@@ -116,12 +140,16 @@ def test_snapshot_to_run_maps_core_fields():
     assert run.status == "completed"
     assert run.total_requests == 0
     # 持久化结构：system_info 内嵌 fingerprint
-    assert run.system_info["hardware_fingerprint"]["machine_id"] == "mid_aaaa1111bbbb2222"
+    assert (
+        run.system_info["hardware_fingerprint"]["machine_id"] == "mid_aaaa1111bbbb2222"
+    )
     assert run.system_info["machine_id"] == "mid_aaaa1111bbbb2222"
 
 
 def test_snapshot_to_run_engine_and_model_spec_propagate():
-    snap = _snap(engine={"engine": "vllm"}, model_spec={"name": "glm-5", "architecture": "moe"})
+    snap = _snap(
+        engine={"engine": "vllm"}, model_spec={"name": "glm-5", "architecture": "moe"}
+    )
     run = snapshot_to_run(snap)
     assert run.serving_config == {"engine": "vllm"}
     assert run.model_spec == {"name": "glm-5", "architecture": "moe"}
@@ -192,7 +220,9 @@ class _FakeDB:
         self.runs = _FakeRunsRepo()
         self._recent: list[TestRun] = []
 
-    def complete_test_run(self, run, success=True, calculate_stats=True, extra_fields=None):
+    def complete_test_run(
+        self, run, success=True, calculate_stats=True, extra_fields=None
+    ):
         self.runs.complete(run.id, success, extra_fields)
         return True
 
@@ -328,7 +358,9 @@ def test_build_hardware_inventory_rows_dedupes_by_machine_id_keeps_latest():
 
 def test_project_run_falls_back_to_disks_for_ssd_when_config_empty():
     """config 无 ssd_model → project_run 从 fingerprint.disks[] 取最大 SSD。"""
-    run = _hw_run()  # snapshot_to_run 已用兜底填了 config；这里手动清空验证 project_run 兜底
+    run = (
+        _hw_run()
+    )  # snapshot_to_run 已用兜底填了 config；这里手动清空验证 project_run 兜底
     run.config = {}  # 清掉 config 里的 ssd_*
     row = project_run(run)
     assert row["ssd_model"] == "WD SN850X"  # disks[] 最大 SSD

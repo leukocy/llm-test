@@ -90,7 +90,11 @@ def build_snapshot(
         machine_id, hostname, hardware_fingerprint, system_info,
         engine_capture?, model_spec?, manual}。绝不包含 sudo_password。
     """
-    manual = {k: v for k, v in (manual or {}).items() if k in MANUAL_FIELDS and v not in (None, "")}
+    manual = {
+        k: v
+        for k, v in (manual or {}).items()
+        if k in MANUAL_FIELDS and v not in (None, "")
+    }
 
     # A 维 —— 硬件指纹（CPU/内存/GPU/CUDA/拓扑/磁盘 + machine_id）
     fingerprint = capture_hardware_fingerprint(sudo_password)
@@ -106,7 +110,8 @@ def build_snapshot(
         "collector_version": COLLECTOR_VERSION,
         "collected_at": datetime.now().isoformat(),
         "machine_id": fingerprint.get("machine_id"),
-        "hostname": fingerprint.get("os", {}).get("hostname") or system_info.get("hostname"),
+        "hostname": fingerprint.get("os", {}).get("hostname")
+        or system_info.get("hostname"),
         "hardware_fingerprint": fingerprint,
         "system_info": system_info,
         "manual": manual,
@@ -117,7 +122,10 @@ def build_snapshot(
         try:
             snapshot["engine_capture"] = capture_engine_config(engine_url)
         except Exception:  # noqa: BLE001  采集兜底
-            snapshot["engine_capture"] = {"capture_source": ["error"], "api_base": engine_url}
+            snapshot["engine_capture"] = {
+                "capture_source": ["error"],
+                "api_base": engine_url,
+            }
 
     # D 维 —— 模型架构（可选快照态）。from_local_config 只读 config.json。
     if model_config_path:
@@ -161,7 +169,9 @@ def load_snapshot(path: str | Path) -> dict[str, Any]:
         raise ValueError(f"快照不是 JSON 对象: {path}")
     schema = data.get("schema")
     if schema != SCHEMA_VERSION:
-        raise ValueError(f"快照 schema 不兼容: 期望 {SCHEMA_VERSION}，实际 {schema!r}（{path}）")
+        raise ValueError(
+            f"快照 schema 不兼容: 期望 {SCHEMA_VERSION}，实际 {schema!r}（{path}）"
+        )
     if "hardware_fingerprint" not in data:
         raise ValueError(f"快照缺少 hardware_fingerprint 字段: {path}")
     return data
@@ -175,11 +185,15 @@ def fingerprint_hash(snapshot: dict[str, Any]) -> str:
     """
     fp = snapshot.get("hardware_fingerprint") or {}
     gpus = fp.get("gpus") or []
-    gpu_sig = sorted(f"{g.get('name')}|{g.get('vram_gb')}" for g in gpus if g.get("name"))
+    gpu_sig = sorted(
+        f"{g.get('name')}|{g.get('vram_gb')}" for g in gpus if g.get("name")
+    )
     cpu = fp.get("cpu") or {}
     mem = fp.get("memory") or {}
     disks = fp.get("disks") or []
-    disk_sig = sorted(f"{d.get('name')}|{d.get('size_tb')}" for d in disks if d.get("name"))
+    disk_sig = sorted(
+        f"{d.get('name')}|{d.get('size_tb')}" for d in disks if d.get("name")
+    )
     stable = {
         "cpu_model": cpu.get("model_name"),
         "sockets": cpu.get("sockets"),

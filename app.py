@@ -93,40 +93,11 @@ def _get_test_config_manager():
 
 
 # === Page configuration ===
-st.set_page_config(page_title="LLM Benchmark Platform V2", layout="wide")
-
-
-# === CSS styles ===
-st.markdown(
-    """
-<style>
-.stApp {
-    background-color: #f0f2f6;
-}
-[data-testid="stSidebar"] {
-    background-color: #ffffff;
-    border-right: 1px solid #e6e9ef;
-}
-[data-testid="main"] {
-    background-color: #ffffff;
-    border-radius: 10px;
-    box-shadow: 0 0 15px rgba(0,0,0,0.03);
-    margin: 1rem;
-    padding: 1.5rem;
-}
-h1 {
-    color: #1a1a1a;
-    font-weight: 600;
-    border-bottom: 2px solid #f0f2f6;
-    padding-bottom: 10px;
-}
-</style>
-""",
-    unsafe_allow_html=True,
-)
+st.set_page_config(page_title="LLM Benchmark Platform", layout="wide")
 
 
 # === UI module imports (lightweight, immediate import) ===
+from ui.design_system import apply_design_system, material_icon, render_application_header
 from ui.onboarding import (
     init_onboarding_state,
     render_compact_welcome_banner,
@@ -170,6 +141,8 @@ def run_test(test_function, runner_class, *args):
 def main():
     """Main program entry"""
 
+    apply_design_system()
+
     # 1. Initialize session state
     init_session_state()
 
@@ -180,17 +153,10 @@ def main():
     # 3. Initialize onboarding state
     init_onboarding_state()
 
-    # 4. Render onboarding welcome or the persistent product title.
-    if not render_compact_welcome_banner():
-        st.title("LLM Benchmark Platform")
-
-    # 5. Render inline onboarding guide when user chooses
-    render_onboarding_guide()
-
-    # 6. Render sidebar and get configuration
+    # 4. Render sidebar and get configuration
     sidebar_config = render_sidebar()
 
-    # 7. Save configuration to session_state
+    # 5. Save configuration to session_state
     st.session_state.current_provider = sidebar_config["provider"]
     st.session_state.current_api_base = sidebar_config["api_base_url"]
     st.session_state.current_model_id = sidebar_config["model_id"]
@@ -200,8 +166,19 @@ def main():
     st.session_state.template_tokens = sidebar_config.get("template_tokens", 0)
     st.session_state.current_test_type = sidebar_config["test_type"]
 
-    # 8. Handle test types
+    # 6. Render the active benchmark context
     test_type = sidebar_config["test_type"]
+    render_application_header(
+        provider=sidebar_config["provider"],
+        model_id=sidebar_config["model_id"],
+        test_type=test_type,
+    )
+
+    # 7. Render onboarding content below the stable application header
+    render_compact_welcome_banner()
+    render_onboarding_guide()
+
+    # 8. Handle test types
 
     if test_type == "quality":
         advanced_panels = _get_advanced_panels()
@@ -230,7 +207,7 @@ def main():
         # 9. Render test control panel (provides Stop button)
         from ui.test_control_panel import render_test_control_panel
 
-        control_actions = render_test_control_panel()
+        render_test_control_panel()
 
         # 10. Render normal test panels (includes test config and start button)
         test_panels = _get_test_panels()
@@ -268,6 +245,7 @@ def render_preset_management():
                 "Load",
                 disabled=(selected_preset_name == "<New Config>"),
                 width="stretch",
+                icon=material_icon("download"),
             ):
                 preset_data = preset_manager.load_preset(selected_preset_name)
                 if preset_data:
@@ -280,6 +258,7 @@ def render_preset_management():
                 "Delete",
                 disabled=(selected_preset_name == "<New Config>"),
                 width="stretch",
+                icon=material_icon("delete"),
             ):
                 if preset_manager.delete_preset(selected_preset_name):
                     st.success(f"Deleted: {selected_preset_name}")
@@ -310,7 +289,11 @@ def render_custom_config():
             custom_provider_name = st.text_input("Provider Name", key="custom_provider_name")
             custom_provider_url = st.text_input("API Base URL", key="custom_provider_url")
 
-            if st.button("Add Provider", key="add_provider"):
+            if st.button(
+                "Add Provider",
+                key="add_provider",
+                icon=material_icon("add"),
+            ):
                 if custom_provider_name and custom_provider_url:
                     if custom_config.add_custom_provider(custom_provider_name, custom_provider_url):
                         st.success(f"Added: {custom_provider_name}")
@@ -321,7 +304,11 @@ def render_custom_config():
             st.markdown("**Add Custom Model**")
             custom_model_name = st.text_input("Model Name", key="custom_model_name")
 
-            if st.button("Add Model", key="add_model"):
+            if st.button(
+                "Add Model",
+                key="add_model",
+                icon=material_icon("add"),
+            ):
                 if custom_model_name and custom_model_name.strip():
                     if custom_config.add_custom_model(custom_model_name.strip()):
                         st.success(f"Added: {custom_model_name}")

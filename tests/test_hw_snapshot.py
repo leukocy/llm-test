@@ -26,7 +26,12 @@ import core.hw_snapshot as hws
 
 _FAKE_FP = {
     "machine_id": "abc123def4567890",
-    "os": {"hostname": "testbox01", "name": "Linux", "release": "6.8", "machine": "x86_64"},
+    "os": {
+        "hostname": "testbox01",
+        "name": "Linux",
+        "release": "6.8",
+        "machine": "x86_64",
+    },
     "cpu": {
         "model_name": "AMD EPYC 9355",
         "sockets": 2,
@@ -55,7 +60,12 @@ _FAKE_FP = {
     * 8,
     "cuda": {"driver": "580.159.03", "cuda_version": "13.0"},
     "disks": [
-        {"name": "/dev/nvme0", "model": "Samsung 990 Pro", "size_tb": 3.5, "is_ssd": True},
+        {
+            "name": "/dev/nvme0",
+            "model": "Samsung 990 Pro",
+            "size_tb": 3.5,
+            "is_ssd": True,
+        },
         {"name": "/dev/sda", "model": "WD Blue HDD", "size_tb": 8.0, "is_ssd": False},
     ],
     "gpu_topology": {"has_nvlink": False, "matrix": []},
@@ -98,7 +108,9 @@ def patched_collectors():
         patch.object(
             hws,
             "from_local_config",
-            return_value=type("S", (), {"to_dict": staticmethod(lambda: _FAKE_MODELSPEC)})(),
+            return_value=type(
+                "S", (), {"to_dict": staticmethod(lambda: _FAKE_MODELSPEC)}
+            )(),
         ),
     ):
         yield
@@ -221,7 +233,8 @@ def test_write_then_load_roundtrip(tmp_path: Path, patched_collectors):
 def test_load_snapshot_rejects_wrong_schema(tmp_path: Path):
     bad = tmp_path / "bad.json"
     bad.write_text(
-        json.dumps({"schema": "hw-snapshot/v999", "hardware_fingerprint": {}}), encoding="utf-8"
+        json.dumps({"schema": "hw-snapshot/v999", "hardware_fingerprint": {}}),
+        encoding="utf-8",
     )
     with pytest.raises(ValueError, match="schema 不兼容"):
         hws.load_snapshot(bad)

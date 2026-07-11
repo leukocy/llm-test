@@ -121,7 +121,9 @@ def extract_vllm_runtime(parsed: dict[str, Any]) -> dict[str, Any]:
 
     # 推测解码接受率:vLLM 0.6+ 直接暴露 ratio;旧版用两个 counter 算
     spec_rate = _gauge(
-        parsed, "vllm:spec_token_total_acceptance_rate", "vllm:spec_token_piecewise_acceptance_rate"
+        parsed,
+        "vllm:spec_token_total_acceptance_rate",
+        "vllm:spec_token_piecewise_acceptance_rate",
     )
     if spec_rate is None:
         accepted = _counter(parsed, "vllm:spec_decode_num_accepted_tokens_total")
@@ -138,7 +140,9 @@ def extract_vllm_runtime(parsed: dict[str, Any]) -> dict[str, Any]:
         "num_requests_waiting": _gauge(parsed, "vllm:num_requests_waiting"),
         "num_requests_swapped": _gauge(parsed, "vllm:num_requests_swapped"),
         # 抢占数:新版 num_preemptions_total,旧版 num_preemption
-        "num_preemption": _counter(parsed, "vllm:num_preemptions_total", "vllm:num_preemption"),
+        "num_preemption": _counter(
+            parsed, "vllm:num_preemptions_total", "vllm:num_preemption"
+        ),
         "gpu_prefix_cache_hit_rate": _ratio_from_counters(
             _counter(parsed, "vllm:gpu_prefix_cache_hits_total"),
             _counter(parsed, "vllm:gpu_prefix_cache_queries_total"),
@@ -155,7 +159,9 @@ def extract_vllm_runtime(parsed: dict[str, Any]) -> dict[str, Any]:
             "block_size": _to_int(cache_cfg.get("block_size")),
             "num_gpu_blocks": _to_int(cache_cfg.get("num_gpu_blocks")),
             "num_cpu_blocks": _to_int(cache_cfg.get("num_cpu_blocks")),
-            "gpu_memory_utilization": _to_float(cache_cfg.get("gpu_memory_utilization")),
+            "gpu_memory_utilization": _to_float(
+                cache_cfg.get("gpu_memory_utilization")
+            ),
         },
     }
 
@@ -175,7 +181,9 @@ def extract_sglang_runtime(parsed: dict[str, Any]) -> dict[str, Any]:
         "cache_hit_rate": v.get("sglang:cache_hit_rate"),
         "gpu_prefix_cache_hit_rate": v.get("sglang:cache_hit_rate"),  # 别名统一
         "ttft_mean_s": (
-            h.get("sglang:gen_decode_latency") or h.get("sglang:time_to_first_token") or {}
+            h.get("sglang:gen_decode_latency")
+            or h.get("sglang:time_to_first_token")
+            or {}
         ).get("mean"),
         "tpot_mean_s": (h.get("sglang:gen_throughput") or {}).get("mean"),
         # SGLang 推测解码(SGLang 0.4+ 暴露 spec 接受率)
@@ -186,7 +194,9 @@ def extract_sglang_runtime(parsed: dict[str, Any]) -> dict[str, Any]:
 
 def detect_engine_family(parsed: dict[str, Any]) -> str:
     """根据出现的指标前缀判断引擎族（vllm / sglang / unknown）。"""
-    names = set(parsed["values"]) | set(parsed["labeled"]) | set(parsed["histograms"] or {})
+    names = (
+        set(parsed["values"]) | set(parsed["labeled"]) | set(parsed["histograms"] or {})
+    )
     if any(n.startswith("vllm:") for n in names):
         return "vllm"
     if any(n.startswith("sglang:") for n in names):
