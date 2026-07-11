@@ -547,15 +547,15 @@ class ResultComparator:
                 if isinstance(value, (int, float)):
                     if comparison.higher_is_better:
                         rank_emoji = (
-                            "🥇"
+                            "1st"
                             if i == 0
-                            else "🥈" if i == 1 else "🥉" if i == 2 else "  "
+                            else "2nd" if i == 1 else "3rd" if i == 2 else "   "
                         )
                     else:
                         rank_emoji = (
-                            "🥇"
+                            "1st"
                             if i == 0
-                            else "🥈" if i == 1 else "🥉" if i == 2 else "  "
+                            else "2nd" if i == 1 else "3rd" if i == 2 else "   "
                         )
 
                     # Format值

@@ -377,7 +377,7 @@ def init_builtin_presets():
 
 def render_preset_manager():
     """Render预设管理界面"""
-    st.subheader("📁 Test Configuration预设")
+    st.subheader("Test Configuration 预设")
 
     # Get所has预设
     all_presets = config_manager.list_presets()
@@ -400,7 +400,7 @@ def render_preset_manager():
 
     with tab_all:
         for preset in all_presets:
-            with st.expander(f"📋 {preset['name']}", expanded=False):
+            with st.expander(f"{preset['name']}", expanded=False):
                 col1, col2, col3 = st.columns(3)
 
                 with col1:
@@ -417,14 +417,14 @@ def render_preset_manager():
                     col_load, col_del = st.columns(2)
 
                     with col_load:
-                        if st.button("📥 Apply", key=f"load_{preset['name']}"):
+                        if st.button("Apply", key=f"load_{preset['name']}"):
                             if apply_preset(preset["name"]):
                                 st.success(f"已Apply预设: {preset['name']}")
                                 st.rerun()
 
                     with col_del:
                         if st.button(
-                            "🗑️", key=f"del_{preset['name']}", help="Delete预设"
+                            "Delete", key=f"del_{preset['name']}", help="Delete预设"
                         ):
                             if config_manager.delete_preset(preset["name"]):
                                 st.rerun()
@@ -446,7 +446,7 @@ def render_preset_manager():
 
 def render_save_preset_form():
     """RenderSave预设表单"""
-    with st.expander("💾 Save Current Configis预设", expanded=False):
+    with st.expander("Save Current Config 预设", expanded=False):
         name = st.text_input(
             "Preset name", key="preset_name", placeholder="For example: 我CustomTest"
         )
@@ -462,7 +462,7 @@ def render_save_preset_form():
         col_save, col_cancel = st.columns(2)
 
         with col_save:
-            if st.button("💾 Save预设", type="primary", use_container_width=True):
+            if st.button("Save 预设", type="primary", use_container_width=True):
                 if not name:
                     st.error("Please enterPreset name")
                 else:
@@ -610,7 +610,7 @@ def get_current_config() -> dict[str, Any]:
 
 def render_config_import_export():
     """RenderConfigureImport/Export界面"""
-    with st.expander("📦 Import/ExportConfigure", expanded=False):
+    with st.expander("Import / Export", expanded=False):
         col_import, col_export = st.columns(2)
 
         with col_import:
@@ -623,7 +623,7 @@ def render_config_import_export():
             )
 
             if uploaded_file:
-                if st.button("📥 Import", use_container_width=True):
+                if st.button("Import", use_container_width=True):
                     # Save临时文件
                     temp_path = Path(f"temp_import_{uploaded_file.name}")
                     with open(temp_path, "wb") as f:
@@ -645,7 +645,7 @@ def render_config_import_export():
                     "选择要Export预设", preset_names, key="export_preset"
                 )
 
-                if st.button("📤 Export", use_container_width=True):
+                if st.button("Export", use_container_width=True):
                     # ExportConfigure
                     export_filename = f"{selected_preset}_config.json"
                     preset_data = config_manager.load_preset(selected_preset)
@@ -655,7 +655,7 @@ def render_config_import_export():
                             preset_data.to_dict(), ensure_ascii=False, indent=2
                         )
                         st.download_button(
-                            label="⬇️ under载Configure文件",
+                            label="Download 配置文件",
                             data=json_data,
                             file_name=export_filename,
                             mime="application/json",

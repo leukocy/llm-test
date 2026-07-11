@@ -281,7 +281,7 @@ class CertificationReportGenerator:
 
     def _save_report_md(self, result: CertificationResult):
         path = self.output_dir / f"{result.test_id}.md"
-        badge = "✅ PASS" if result.status == "PASS" else "❌ FAIL"
+        badge = "PASS" if result.status == "PASS" else "FAIL"
 
         lines = [
             f"# Model Quality Certification Report: {result.test_id}",
