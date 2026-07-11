@@ -71,6 +71,7 @@ class TestExecutor:
         # 强制重置停止标志 - 确保开始新测试时状态干净
         try:
             from core.providers.openai import set_stop_requested
+
             set_stop_requested(False)
         except ImportError:
             pass
@@ -79,13 +80,15 @@ class TestExecutor:
         st.session_state.current_test_type = test_type
 
         # Check if in resume mode
-        is_resuming = st.session_state.get('is_resuming', False)
-        resume_data = st.session_state.get('resume_data', None)
+        is_resuming = st.session_state.get("is_resuming", False)
+        resume_data = st.session_state.get("resume_data", None)
 
         if is_resuming and resume_data:
-            st.info(f"🔄 Resuming test from saved progress: {resume_data.get('test_type', 'Unknown')}")
+            st.info(
+                f"🔄 Resuming test from saved progress: {resume_data.get('test_type', 'Unknown')}"
+            )
             # Restore completed results
-            preloaded_results = resume_data.get('completed_results', [])
+            preloaded_results = resume_data.get("completed_results", [])
         else:
             preloaded_results = []
 
@@ -112,12 +115,15 @@ class TestExecutor:
 
         output_container = st.empty()
         output_placeholder = output_container.empty()
-        output_placeholder.info("📝 Output preview area ready, waiting for first request to complete...")
+        output_placeholder.info(
+            "📝 Output preview area ready, waiting for first request to complete..."
+        )
 
         # 实时进度渲染回调：core 不再直接调 st.*，由本闭包在后台线程渲染到 placeholder。
         # 后台线程无 script run context，需附上主线程捕获的 ctx 才能调 st.*。
         try:
             from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
+
             _main_ctx = get_script_run_ctx()
         except Exception:
             _main_ctx = None
@@ -127,6 +133,7 @@ class TestExecutor:
 
             from ui.formatters import format_results_for_display
             from utils.helpers import reorder_dataframe_columns
+
             try:
                 if _main_ctx and not get_script_run_ctx():
                     add_script_run_ctx(_threading.current_thread(), _main_ctx)
@@ -134,7 +141,7 @@ class TestExecutor:
                     st.subheader("实时Result")
                     display_df = format_results_for_display(
                         reorder_dataframe_columns(df) if not df.empty else df,
-                        st.session_state.get('current_test_type'),
+                        st.session_state.get("current_test_type"),
                     )
                     st.dataframe(display_df, width="stretch")
                 if latest_output:
@@ -150,10 +157,16 @@ class TestExecutor:
             import threading as _threading
 
             from ui.log_viewer import render_log_viewer
+
             try:
                 if _main_ctx and not get_script_run_ctx():
                     add_script_run_ctx(_threading.current_thread(), _main_ctx)
-                render_log_viewer(logger, placeholder=log_placeholder, max_display=50, compact_mode=True)
+                render_log_viewer(
+                    logger,
+                    placeholder=log_placeholder,
+                    max_display=50,
+                    compact_mode=True,
+                )
             except Exception:
                 pass
 
@@ -161,31 +174,37 @@ class TestExecutor:
             # Create filename
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             test_type_str = test_type.replace(" ", "_").replace("-", "_")
-            model_dir = os.path.join("raw_data", self.config['model_id'])
+            model_dir = os.path.join("raw_data", self.config["model_id"])
             if not os.path.exists(model_dir):
                 os.makedirs(model_dir)
 
-            csv_filename = os.path.join(model_dir,
-                f"benchmark_results_{self.config['model_id']}_{test_type_str}_{timestamp}.csv")
+            csv_filename = os.path.join(
+                model_dir,
+                f"benchmark_results_{self.config['model_id']}_{test_type_str}_{timestamp}.csv",
+            )
             st.session_state.current_csv_file = csv_filename
 
             # Initialize runner
             runner_instance = runner_class(
-                placeholder, progress_bar, status_text,
-                self.config['api_base_url'],
-                self.config['model_id'],
-                self.config['tokenizer_option'],
+                placeholder,
+                progress_bar,
+                status_text,
+                self.config["api_base_url"],
+                self.config["model_id"],
+                self.config["tokenizer_option"],
                 csv_filename,
-                self.config['api_key'],
+                self.config["api_key"],
                 log_placeholder,
-                self.config['provider'],
+                self.config["provider"],
                 dashboard=None,
                 output_placeholder=output_placeholder,
-                hf_tokenizer_model_id=self.config.get('hf_tokenizer_model_id'),
+                hf_tokenizer_model_id=self.config.get("hf_tokenizer_model_id"),
                 latency_offset=st.session_state.latency_offset,
-                random_seed=st.session_state.get('random_seed'),
-                skip_first_token_for_tps=st.session_state.get('skip_first_token_for_tps', False),
-                template_tokens=st.session_state.get('template_tokens', self.config.get('template_tokens', 0)),
+                random_seed=st.session_state.get("random_seed"),
+                skip_first_token_for_tps=st.session_state.get("skip_first_token_for_tps", False),
+                template_tokens=st.session_state.get(
+                    "template_tokens", self.config.get("template_tokens", 0)
+                ),
                 warehouse_context=self._build_warehouse_context(),
                 ui_state=SessionStateBridge(st.session_state),
                 render_progress=_render_progress,
@@ -216,44 +235,52 @@ class TestExecutor:
             output_container.empty()
             result_container.empty()
 
-            st.success(f"Test completed! Duration: {duration_sec:.2f}s. Results saved to {csv_filename}")
+            st.success(
+                f"Test completed! Duration: {duration_sec:.2f}s. Results saved to {csv_filename}"
+            )
 
         except asyncio.CancelledError:
             from config.session_state import set_test_cancelled
+
             set_test_cancelled()
             st.warning("Test stopped by user.")
-            df = pd.DataFrame(runner_instance.results_list) if 'runner_instance' in locals() else pd.DataFrame()
+            df = (
+                pd.DataFrame(runner_instance.results_list)
+                if "runner_instance" in locals()
+                else pd.DataFrame()
+            )
         except Exception as e:
             st.error(f"Error occurred during test execution: {e}")
             st.code(traceback.format_exc())
             # 确保异常情况下也清理状态
             from config.session_state import set_test_completed
+
             set_test_completed()
         finally:
             # Reorder Result DataFrame columns for UI and download consistency
             if not df.empty:
                 df = reorder_dataframe_columns(df)
             st.session_state.results_df = df
-            if not df.empty and st.session_state.get('current_csv_file'):
+            if not df.empty and st.session_state.get("current_csv_file"):
                 save_last_result_snapshot(
                     csv_path=st.session_state.current_csv_file,
-                    test_type=st.session_state.get('current_test_type', test_type),
-                    model_id=self.config.get('model_id', ''),
-                    provider=self.config.get('provider', ''),
-                    duration=st.session_state.get('test_duration', 0),
-                    test_config=st.session_state.get('test_config', {}),
-                    system_info=st.session_state.get('system_info', {}),
+                    test_type=st.session_state.get("current_test_type", test_type),
+                    model_id=self.config.get("model_id", ""),
+                    provider=self.config.get("provider", ""),
+                    duration=st.session_state.get("test_duration", 0),
+                    test_config=st.session_state.get("test_config", {}),
+                    system_info=st.session_state.get("system_info", {}),
                 )
 
             # 检查当前状态，只有在没有被取消的情况下才标记为完成
-            test_status = st.session_state.get('test_status', 'Idle')
+            test_status = st.session_state.get("test_status", "Idle")
 
             # Clear resume flags（在任何情况下都清除）
-            was_resuming = st.session_state.get('is_resuming', False)
+            was_resuming = st.session_state.get("is_resuming", False)
             st.session_state.is_resuming = False
             st.session_state.resume_data = None
 
-            if test_status == 'Running':
+            if test_status == "Running":
                 # 正常完成，设置状态
                 set_test_completed()
 
@@ -264,15 +291,15 @@ class TestExecutor:
             if was_resuming:
                 st.session_state.test_paused = False
 
-            if 'runner_instance' in locals():
+            if "runner_instance" in locals():
                 st.session_state.logger = runner_instance.logger
-                if hasattr(runner_instance, 'all_outputs'):
+                if hasattr(runner_instance, "all_outputs"):
                     st.session_state.test_outputs = runner_instance.all_outputs
                 # 采集本次富指纹 + 资源监控 + run_id（UI 富视图与归因写回依赖）
                 self._capture_post_run_artifacts(runner_instance)
 
             # 清除 runner 实例引用
-            if '_current_runner_instance' in st.session_state:
+            if "_current_runner_instance" in st.session_state:
                 del st.session_state._current_runner_instance
 
         return df
@@ -287,15 +314,22 @@ class TestExecutor:
             sys_info = {**full, **{k: v for k, v in (sparse or {}).items() if v}}
 
             # Merge user custom system info
-            custom_sys_info = st.session_state.get('custom_sys_info', {})
-            for key in ['processor', 'mainboard', 'memory', 'gpu', 'system', 'engine_name']:
-                custom_value = custom_sys_info.get(key, '')
+            custom_sys_info = st.session_state.get("custom_sys_info", {})
+            for key in [
+                "processor",
+                "mainboard",
+                "memory",
+                "gpu",
+                "system",
+                "engine_name",
+            ]:
+                custom_value = custom_sys_info.get(key, "")
                 if custom_value:
                     sys_info[key] = custom_value
 
             # Fallback values
-            if not sys_info.get('model_name') or sys_info.get('model_name') == 'Unknown':
-                sys_info['model_name'] = self.config['model_id']
+            if not sys_info.get("model_name") or sys_info.get("model_name") == "Unknown":
+                sys_info["model_name"] = self.config["model_id"]
             # engine_name has no fallback — provider is not the engine
             # Engine refers to inference backend (e.g. vLLM, SGLang, TRT-LLM), users can fill in manually via sidebar
 
@@ -312,7 +346,7 @@ class TestExecutor:
             # 重新合并一次，确保拿到本次测试的结构化指纹
             full = runner_instance.get_full_system_info()
             if full:
-                prev = dict(st.session_state.get('system_info', {}))
+                prev = dict(st.session_state.get("system_info", {}))
                 prev.update(full)
                 st.session_state.system_info = prev
             st.session_state.resource_monitor = runner_instance.last_resource_monitor
@@ -334,36 +368,40 @@ class TestExecutor:
             )
             from ui.insights import generate_performance_insights
 
-            df = st.session_state.get('results_df')
-            if df is None or getattr(df, 'empty', True):
+            df = st.session_state.get("results_df")
+            if df is None or getattr(df, "empty", True):
                 return
-            test_type = st.session_state.get('current_test_type', '')
-            model_id = self.config.get('model_id', '')
+            test_type = st.session_state.get("current_test_type", "")
+            model_id = self.config.get("model_id", "")
 
-            insights = generate_performance_insights(df, test_type, model_id)
+            insights, severities = generate_performance_insights(df, test_type, model_id)
             bw = runner_instance.last_bandwidth or {}
-            utilization = bw.get('bandwidth_utilization_pct')
-            bottleneck = derive_bottleneck(insights, utilization)
+            utilization = bw.get("bandwidth_utilization_pct")
+            bottleneck = derive_bottleneck(insights, severities, utilization)
 
             success_rate = self._success_rate_from_df(df)
-            status = derive_status_detail(True, insights, success_rate)
+            status = derive_status_detail(True, insights, severities, success_rate)
 
-            results = df.to_dict('records') if hasattr(df, 'to_dict') else []
+            results = df.to_dict("records") if hasattr(df, "to_dict") else []
             err = derive_error_attribution(results)
 
             st.session_state.insights = insights
+            st.session_state.insight_severities = severities
             st.session_state.bottleneck = bottleneck
             st.session_state.status_detail = (
-                status.value if hasattr(status, 'value') else str(status)
+                status.value if hasattr(status, "value") else str(status)
             )
             st.session_state.error_attribution = err
 
             run_id = runner_instance.last_run_id
             if run_id:
-                db_manager.update_publish_metadata(run_id, {
-                    'bottleneck': bottleneck,
-                    'status_detail': st.session_state.status_detail,
-                })
+                db_manager.update_publish_metadata(
+                    run_id,
+                    {
+                        "bottleneck": bottleneck,
+                        "status_detail": st.session_state.status_detail,
+                    },
+                )
         except Exception:
             pass
 
@@ -382,13 +420,13 @@ class TestExecutor:
     def _success_rate_from_df(df) -> float | None:
         """从结果 DataFrame 的 error 列估算成功率（0~1）。"""
         try:
-            if df is None or getattr(df, 'empty', True) or 'error' not in df.columns:
+            if df is None or getattr(df, "empty", True) or "error" not in df.columns:
                 return None
             total = len(df)
             if total == 0:
                 return None
-            non_empty = df['error'].apply(
-                lambda x: bool(x) and str(x).strip() not in ('', 'nan', 'None')
+            non_empty = df["error"].apply(
+                lambda x: bool(x) and str(x).strip() not in ("", "nan", "None")
             )
             failed = int(non_empty.sum())
             return max(0.0, 1.0 - failed / total)
@@ -399,26 +437,32 @@ class TestExecutor:
         """Calculate total requests"""
         func_name = test_function.__name__
 
-        if func_name == 'run_concurrency_test':
+        if func_name == "run_concurrency_test":
             selected_concurrencies, rounds_per_level, *_ = args
-            runner_instance.total_requests = sum(c * rounds_per_level for c in selected_concurrencies)
-        elif func_name == 'run_prefill_test':
+            runner_instance.total_requests = sum(
+                c * rounds_per_level for c in selected_concurrencies
+            )
+        elif func_name == "run_prefill_test":
             token_levels, requests_per_level, _ = args
             runner_instance.total_requests = len(token_levels) * requests_per_level
-        elif func_name == 'run_long_context_test':
+        elif func_name == "run_long_context_test":
             context_lengths, rounds, _ = args
             runner_instance.total_requests = len(context_lengths) * rounds
-        elif func_name == 'run_throughput_matrix_test':
+        elif func_name == "run_throughput_matrix_test":
             selected_concurrencies, context_lengths, rounds_per_level, *_ = args
-            total_reqs = sum(c * len(context_lengths) * rounds_per_level for c in selected_concurrencies)
+            total_reqs = sum(
+                c * len(context_lengths) * rounds_per_level for c in selected_concurrencies
+            )
             runner_instance.total_requests = total_reqs
-        elif func_name == 'run_segmented_prefill_test':
+        elif func_name == "run_segmented_prefill_test":
             segment_levels, requests_per_segment, _max_tokens, *rest = args
             cumulative_mode = rest[0] if len(rest) > 0 else True
             total_rounds = rest[1] if len(rest) > 1 else 1
             _per_round_unique = rest[2] if len(rest) > 2 else False
             concurrency = rest[3] if len(rest) > 3 else 1
-            runner_instance.total_requests = len(segment_levels) * requests_per_segment * total_rounds
+            runner_instance.total_requests = (
+                len(segment_levels) * requests_per_segment * total_rounds
+            )
 
     def _execute_test_async(self, test_function, runner_instance, args):
         """Execute test asynchronously with stop signal monitoring"""
@@ -430,6 +474,7 @@ class TestExecutor:
         asyncio.set_event_loop(loop)
 
         import sniffio
+
         token = sniffio.current_async_library_cvar.set("asyncio")
 
         stop_event = threading.Event()
@@ -479,7 +524,7 @@ class TestExecutor:
                 except Exception:
                     pass
 
-                shutdown_default_executor = getattr(loop, 'shutdown_default_executor', None)
+                shutdown_default_executor = getattr(loop, "shutdown_default_executor", None)
                 if shutdown_default_executor is not None:
                     try:
                         loop.run_until_complete(shutdown_default_executor())
@@ -496,15 +541,17 @@ class TestExecutor:
         """Capture test configuration"""
         config_summary = {
             "Test Type": test_type,
-            "Model ID": self.config['model_id'],
-            "Provider": self.config['provider'],
-            "Template Tokens": str(st.session_state.get('template_tokens', self.config.get('template_tokens', 0))),
-            "Timestamp": timestamp
+            "Model ID": self.config["model_id"],
+            "Provider": self.config["provider"],
+            "Template Tokens": str(
+                st.session_state.get("template_tokens", self.config.get("template_tokens", 0))
+            ),
+            "Timestamp": timestamp,
         }
 
         func_name = test_function.__name__
 
-        if func_name == 'run_concurrency_test':
+        if func_name == "run_concurrency_test":
             selected_concurrencies, rounds_per_level, *others = args
             input_target = others[-1] if others else "N/A"
             config_summary["Input Tokens"] = str(input_target)
@@ -513,23 +560,23 @@ class TestExecutor:
             if len(others) >= 1:
                 config_summary["Max Tokens"] = str(others[0])
 
-        elif func_name == 'run_prefill_test':
+        elif func_name == "run_prefill_test":
             token_levels, requests_per_level, _ = args
             config_summary["Token Levels"] = str(token_levels)
             config_summary["Requests per Level"] = str(requests_per_level)
 
-        elif func_name == 'run_long_context_test':
+        elif func_name == "run_long_context_test":
             context_lengths, rounds, _ = args
             config_summary["Context Lengths"] = str(context_lengths)
             config_summary["Rounds"] = str(rounds)
 
-        elif func_name == 'run_throughput_matrix_test':
+        elif func_name == "run_throughput_matrix_test":
             selected_concurrencies, context_lengths, rounds_per_level, *_ = args
             config_summary["Concurrency Levels"] = str(selected_concurrencies)
             config_summary["Context Lengths"] = str(context_lengths)
             config_summary["Rounds"] = str(rounds_per_level)
 
-        elif func_name == 'run_segmented_prefill_test':
+        elif func_name == "run_segmented_prefill_test":
             segment_levels, requests_per_segment, max_tokens, *rest = args
             cumulative_mode = rest[0] if len(rest) > 0 else True
             total_rounds = rest[1] if len(rest) > 1 else 1
@@ -538,7 +585,9 @@ class TestExecutor:
             config_summary["Segment Levels"] = str(segment_levels)
             config_summary["Requests per Segment"] = str(requests_per_segment)
             config_summary["Max Tokens"] = str(max_tokens)
-            config_summary["Cumulative Mode"] = "Yes (Prefix Caching)" if cumulative_mode else "No (Independent)"
+            config_summary["Cumulative Mode"] = (
+                "Yes (Prefix Caching)" if cumulative_mode else "No (Independent)"
+            )
             config_summary["Total Rounds"] = str(total_rounds)
             config_summary["Per Round Unique"] = str(per_round_unique)
             config_summary["Concurrency"] = str(concurrency)
