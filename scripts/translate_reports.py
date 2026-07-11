@@ -2,7 +2,7 @@
 import re
 
 # Read the file
-with open('ui/reports.py', 'r', encoding='utf-8') as f:
+with open('ui/reports.py', encoding='utf-8') as f:
     content = f.read()
 
 # Define replacements - ordered from longer to shorter to avoid partial matches
@@ -36,15 +36,15 @@ replacements = [
     ('\"并发请求数量。\"', '"Number of concurrent requests."'),
 
     # Test summary card
-    ('\"⏱️ 测试摘要 (Test Summary)\"', '"⏱️ Test Summary"'),
-    ('f\"**🤖 模型**: `{model_id}`\"', 'f"**🤖 Model**: `{model_id}`"'),
-    ('f\"**🔌 供应商**: `{provider}`\"', 'f"**🔌 Provider**: `{provider}`"'),
-    ('f\"**⏱️ 测试总时长**: `{mins}m {secs:.1f}s`\"', 'f"**⏱️ Total Duration**: `{mins}m {secs:.1f}s`"'),
-    ('f\"**⏱️ 测试总时长**: `{duration:.2f}s`\"', 'f"**⏱️ Total Duration**: `{duration:.2f}s`"'),
+    ('\" 测试摘要 (Test Summary)\"', '" Test Summary"'),
+    ('f\"** 模型**: `{model_id}`\"', 'f"** Model**: `{model_id}`"'),
+    ('f\"** 供应商**: `{provider}`\"', 'f"** Provider**: `{provider}`"'),
+    ('f\"** 测试总时长**: `{mins}m {secs:.1f}s`\"', 'f"** Total Duration**: `{mins}m {secs:.1f}s`"'),
+    ('f\"** 测试总时长**: `{duration:.2f}s`\"', 'f"** Total Duration**: `{duration:.2f}s`"'),
 
     # Concurrency analysis
-    ('f\"##### 🔍 并发扩展分析 (并发 {int(lo)} → {int(hi)})\"',
-     'f"##### 🔍 Concurrency Scaling Analysis (Concurrency {int(lo)} → {int(hi)})"'),
+    ('f\"#####  并发扩展分析 (并发 {int(lo)} → {int(hi)})\"',
+     'f"#####  Concurrency Scaling Analysis (Concurrency {int(lo)} → {int(hi)})"'),
     ('st.metric(\"总请求数\", f\"{total_requests}\", delta=f\"{successful} 成功\")',
      'st.metric("Total Requests", f"{total_requests}", delta=f"{successful} succeeded")'),
     ('st.metric(f\"TTFT @ 并发{int(lo)}\", f\"{ttft_lo:.3f}s\", help=\"低并发基线延迟\")',
@@ -72,7 +72,7 @@ replacements = [
     ('saturation_label = f\"@ 并发{saturation_c}\" if saturation_c else \"未饱和\"',
      'saturation_label = f"@ C{saturation_c}" if saturation_c else "Not saturated"'),
     ('saturation_label = \"数据不足\"', 'saturation_label = "Insufficient data"'),
-    ('\"##### 📈 峰值与趋势分析\"', '"##### 📈 Peak & Trend Analysis"'),
+    ('\"#####  峰值与趋势分析\"', '"#####  Peak & Trend Analysis"'),
     ('st.metric(\"最佳 TTFT\", f\"{best_ttft_val:.3f}s\", delta=f\"@ 并发{best_ttft_c}\")',
      'st.metric("Best TTFT", f"{best_ttft_val:.3f}s", delta=f"@ C{best_ttft_c}")'),
     ('st.metric(\"峰值单流 TPS\", f\"{peak_tps_val:.1f} t/s\", delta=f\"@ 并发{peak_tps_c}\")',
@@ -92,9 +92,9 @@ replacements = [
      'speed_trend = f"{_fmt(drop_from)}→{_fmt(drop_to)} dropped {drop_pct:.0f}%" if drop_pct > 10 else "Gradual decline"'),
     ('speed_trend = f\"↓ {((1 - ratio)*100):.0f}%\" if ratio < 0.95 else \"稳定\"',
      'speed_trend = f"↓ {((1 - ratio)*100):.0f}%" if ratio < 0.95 else "Stable"'),
-    ('ttft_scaling = \"超线性增长 ⚠️\"', 'ttft_scaling = "Super-linear growth ⚠️"'),
+    ('ttft_scaling = \"超线性增长 [WARNING]\"', 'ttft_scaling = "Super-linear growth [WARNING]"'),
     ('ttft_scaling = \"近似线性\"', 'ttft_scaling = "Near-linear"'),
-    ('ttft_scaling = \"亚线性 ✅\"', 'ttft_scaling = "Sub-linear ✅"'),
+    ('ttft_scaling = \"亚线性 [OK]\"', 'ttft_scaling = "Sub-linear [OK]"'),
     ('st.metric(\"峰值 Prefill 速度\", f\"{peak_ps_val:.0f} t/s\", delta=f\"@ {_fmt(peak_ps_level)}t\")',
      'st.metric("Peak Prefill Speed", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_level)}t")'),
     ('st.metric(\"最佳 TTFT\", f\"{best_ttft_val:.3f}s\", delta=f\"@ {_fmt(best_ttft_level)}t\")',
@@ -105,8 +105,8 @@ replacements = [
      'st.metric("TTFT Growth Pattern", ttft_scaling, help="TTFT growth relationship relative to input length")'),
 
     # Long context section
-    ('f\"##### 🔍 长上下文性能衰减 ({_fmt(sh)} → {_fmt(lo)} ctx)\"',
-     'f"##### 🔍 Long Context Performance Degradation ({_fmt(sh)} → {_fmt(lo)} ctx)"'),
+    ('f\"#####  长上下文性能衰减 ({_fmt(sh)} → {_fmt(lo)} ctx)\"',
+     'f"#####  Long Context Performance Degradation ({_fmt(sh)} → {_fmt(lo)} ctx)"'),
     ('st.metric(\"TTFT 增长倍数\", f\"{growth:.1f}x\")', 'st.metric("TTFT Growth Factor", f"{growth:.1f}x")'),
     ('d = f\"↓ {((1 - tps_r)*100):.0f}%\" if tps_r < 0.9 else \"稳定\"',
      'd = f"↓ {((1 - tps_r)*100):.0f}%" if tps_r < 0.9 else "Stable"'),
@@ -126,8 +126,8 @@ replacements = [
      'st.metric("TPS Volatility", tps_stability, help="Coefficient of variation of TPS across context lengths")'),
 
     # Segmented (Prefix Caching)
-    ('f\"##### 🔍 Prefix Caching 效果 ({len(levels)} 分段)\"',
-     'f"##### 🔍 Prefix Caching Effect ({len(levels)} segments)"'),
+    ('f\"#####  Prefix Caching 效果 ({len(levels)} 分段)\"',
+     'f"#####  Prefix Caching Effect ({len(levels)} segments)"'),
     ('st.metric(\"总缓存命中率\", f\"{cache_rate:.1f}%\", help=f\"命中 {_fmt(cache_total)} / 总 {_fmt(total_input)}\")',
      'st.metric("Total Cache Hit Rate", f"{cache_rate:.1f}%", help=f"Hit {_fmt(cache_total)} / Total {_fmt(total_input)}")'),
     ('d = f\"↑ {r_l - r_f:.0f}pp\" if r_l > r_f + 5 else \"未增长\"',
@@ -144,13 +144,13 @@ replacements = [
      'st.metric("Best TTFT", f"{best_ttft_val:.3f}s", delta=f"@ {_fmt(best_ttft_seg)} ctx")'),
     ('st.metric(\"峰值 Prefill 速度\", f\"{peak_ps_val:.0f} t/s\", delta=f\"@ {_fmt(peak_ps_seg)} ctx\")',
      'st.metric("Peak Prefill Speed", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_seg)} ctx")'),
-    ('cache_trend = \"持续增长 ✅\" if increasing and cache_vals[-1] > cache_vals[0] + 5 else (\"波动\" if not increasing else \"稳定\")',
-     'cache_trend = "Increasing ✅" if increasing and cache_vals[-1] > cache_vals[0] + 5 else ("Volatile" if not increasing else "Stable")'),
+    ('cache_trend = \"持续增长 [OK]\" if increasing and cache_vals[-1] > cache_vals[0] + 5 else (\"波动\" if not increasing else \"稳定\")',
+     'cache_trend = "Increasing [OK]" if increasing and cache_vals[-1] > cache_vals[0] + 5 else ("Volatile" if not increasing else "Stable")'),
     ('st.metric(\"缓存率趋势\", cache_trend, help=\"各分段缓存命中率的整体变化趋势\")',
      'st.metric("Cache Rate Trend", cache_trend, help="Overall trend of cache hit rates across segments")'),
 
     # Matrix section
-    ('\"##### 🔍 矩阵组合最优/最差配置\"', '"##### 🔍 Matrix Best/Worst Configuration"'),
+    ('\"#####  矩阵组合最优/最差配置\"', '"#####  Matrix Best/Worst Configuration"'),
     ('st.metric(\"测试矩阵\", f\"{len(conc_levels)}×{len(ctx_levels)}\", help=f\"并发: {conc_levels}\\n上下文: {ctx_levels}\")',
      'st.metric("Test Matrix", f"{len(conc_levels)}×{len(ctx_levels)}", help=f"Concurrency: {conc_levels}\\nContext: {ctx_levels}")'),
     ('st.metric(\"最高吞吐量\",', 'st.metric("Max Throughput",'),
@@ -159,8 +159,8 @@ replacements = [
     ('st.metric(\"最差 TTFT\",', 'st.metric("Worst TTFT",'),
 
     # Generic summary
-    ('st.warning(\"⚠️ **数据质量告警**: TTFT、TPS、Token 数量均为 0 或缺失。测试可能未正确采集到性能指标数据，请检查 API 返回的 usage 信息和流式输出。\")',
-     'st.warning("⚠️ **Data Quality Alert**: TTFT, TPS, and Token counts are all 0 or missing. The test may not have correctly captured performance metrics. Please check the API response usage info and streaming output.")'),
+    ('st.warning(\"[WARNING] **数据质量告警**: TTFT、TPS、Token 数量均为 0 或缺失。测试可能未正确采集到性能指标数据，请检查 API 返回的 usage 信息和流式输出。\")',
+     'st.warning("[WARNING] **Data Quality Alert**: TTFT, TPS, and Token counts are all 0 or missing. The test may not have correctly captured performance metrics. Please check the API response usage info and streaming output.")'),
     ('st_mod.metric(\"总请求数\", f\"{total_requests}\", delta=f\"{successful} 成功\")',
      'st_mod.metric("Total Requests", f"{total_requests}", delta=f"{successful} succeeded")'),
     ('st_mod.metric(\"请求完成率\", f\"{success_rate:.1f}%\")',
@@ -190,13 +190,13 @@ replacements = [
     ('help=\"系统输出吞吐量 (越高越好)\"', 'help="System Output Throughput (higher is better)"'),
     ('help=\"每分钟最大请求处理量 (由 RPS * 60 估算)\"',
      'help="Maximum requests per minute (estimated from RPS × 60)"'),
-    ('\"📊 性能洞察与分析\"', '"📊 Performance Insights & Analysis"'),
-    ('\"📊 性能洞察\"', '"📊 Performance Insights"'),
+    ('\" 性能洞察与分析\"', '" Performance Insights & Analysis"'),
+    ('\" 性能洞察\"', '" Performance Insights"'),
     ('f\"**综合评级**: <span style=\'color:{color};font-size:20px;font-weight:bold\'>{grade}</span> - {description}\"',
      'f"**Overall Grade**: <span style=\'color:{color};font-size:20px;font-weight:bold\'>{grade}</span> - {description}"'),
     ('report_md += \"\\n### 性能洞察\\n\\n\"', 'report_md += "\\n### Performance Insights\\n\\n"'),
-    ('\"### 📈 图表分析\"', '"### 📈 Chart Analysis"'),
-    ('\"📷 下载静态分析图\"', '"📷 Download Static Chart"'),
+    ('\"###  图表分析\"', '"###  Chart Analysis"'),
+    ('\" 下载静态分析图\"', '" Download Static Chart"'),
 
     # Chart titles - Concurrency
     ('f\"首字延迟 (TTFT) {io_label}\"', 'f"Time To First Token (TTFT) {io_label}"'),
@@ -206,7 +206,7 @@ replacements = [
     ('f\"系统输出吞吐量 (Decode) {io_label}\"', 'f"System Output Throughput (Decode) {io_label}"'),
     ('f\"系统处理能力 (QPM Trend) {io_label}\"', 'f"System Processing Capacity (QPM Trend) {io_label}"'),
     ('f\"并发性能测试报告 - {model_id}\"', 'f"Concurrency Performance Test Report - {model_id}"'),
-    ('\"🌐 下载完整 HTML 报告 (含所有图表)\"', '"🌐 Download Full HTML Report (All Charts)"'),
+    ('\" 下载完整 HTML 报告 (含所有图表)\"', '" Download Full HTML Report (All Charts)"'),
     ('report_md += \"(图表请参见 Web 界面)\\n\"', 'report_md += "(See charts in Web UI)\\n"'),
 
     # Prefill report
@@ -243,7 +243,7 @@ replacements = [
      'st.error("Matrix test report failed: missing \'context_length_target\' or \'concurrency\' column.")'),
     ('st.warning(\"综合测试报告：没有有效的综合测试数据。\")',
      'st.warning("Matrix test report: no valid matrix test data.")'),
-    ('\"📊 综合性能洞察\"', '"📊 Comprehensive Performance Insights"'),
+    ('\" 综合性能洞察\"', '" Comprehensive Performance Insights"'),
     ('f\"**评级**: {grade} ({description})\"', 'f"**Grade**: {grade} ({description})"'),
     ('f\"系统QPM (随输入长度变化) {out_label}\"', 'f"System QPM (by Input Length) {out_label}"'),
     ('f\"并发-上下文综合测试报告 - {model_id}\"', 'f"Concurrency-Context Matrix Test Report - {model_id}"'),
@@ -266,19 +266,19 @@ replacements = [
     ('\"平均首字延迟：所有请求的 TTFT 均值。\"', '"Average TTFT: Mean TTFT across all requests."'),
     ('help=\"缓存命中率 (越高说明 Prefix Caching 效果越好)\"',
      'help="Cache Hit Rate (higher indicates better Prefix Caching)"'),
-    ('f\"🏆 **最佳 TTFT**: `{best_ttft_row[\'Best_TTFT (s)\']:.4f}s` (分段: {best_ttft_row[\'context_length_target\']})\"',
-     'f"🏆 **Best TTFT**: `{best_ttft_row[\'Best_TTFT (s)\']:.4f}s` (segment: {best_ttft_row[\'context_length_target\']})"'),
-    ('f\"⚡ **最高 Prefill 速度**: `{best_prefill_row[\'Max_Prefill_Speed (tokens/s)\']:.0f} tokens/s` (分段: {best_prefill_row[\'context_length_target\']})\"',
-     'f"⚡ **Peak Prefill Speed**: `{best_prefill_row[\'Max_Prefill_Speed (tokens/s)\']:.0f} tokens/s` (segment: {best_prefill_row[\'context_length_target\']})"'),
-    ('f\"💾 **最高缓存命中率**: `{max_cache_rate:.1f}%` (分段: {best_cache_row[\'context_length_target\']})\"',
-     'f"💾 **Peak Cache Hit Rate**: `{max_cache_rate:.1f}%` (segment: {best_cache_row[\'context_length_target\']})"'),
-    ('\"📈 **缓存效果递增**: 随着分段累计增长，缓存命中率逐渐提升，说明 Prefix Caching 有效工作。\"',
-     '"📈 **Cache Effect Increasing**: Cache hit rate grows with cumulative segments, indicating Prefix Caching is working effectively."'),
-    ('\"⚠️ **无缓存命中**: 未检测到 Prefix Caching 效果，请确认 API 是否支持此特性。\"',
-     '"⚠️ **No Cache Hits**: No Prefix Caching effect detected. Please verify if the API supports this feature."'),
-    ('f\"⚠️ **TTFT 增长显著**: 从 {ttft_first:.4f}s 到 {ttft_last:.4f}s (增长 {ratio:.1f}x)。随输入增长 Prefill 时间线性增加是正常表现。\"',
-     'f"⚠️ **Significant TTFT Growth**: From {ttft_first:.4f}s to {ttft_last:.4f}s ({ratio:.1f}x increase). Linear TTFT growth with input length is expected behavior."'),
-    
+    ('f\" **最佳 TTFT**: `{best_ttft_row[\'Best_TTFT (s)\']:.4f}s` (分段: {best_ttft_row[\'context_length_target\']})\"',
+     'f" **Best TTFT**: `{best_ttft_row[\'Best_TTFT (s)\']:.4f}s` (segment: {best_ttft_row[\'context_length_target\']})"'),
+    ('f\" **最高 Prefill 速度**: `{best_prefill_row[\'Max_Prefill_Speed (tokens/s)\']:.0f} tokens/s` (分段: {best_prefill_row[\'context_length_target\']})\"',
+     'f" **Peak Prefill Speed**: `{best_prefill_row[\'Max_Prefill_Speed (tokens/s)\']:.0f} tokens/s` (segment: {best_prefill_row[\'context_length_target\']})"'),
+    ('f\" **最高缓存命中率**: `{max_cache_rate:.1f}%` (分段: {best_cache_row[\'context_length_target\']})\"',
+     'f" **Peak Cache Hit Rate**: `{max_cache_rate:.1f}%` (segment: {best_cache_row[\'context_length_target\']})"'),
+    ('\" **缓存效果递增**: 随着分段累计增长，缓存命中率逐渐提升，说明 Prefix Caching 有效工作。\"',
+     '" **Cache Effect Increasing**: Cache hit rate grows with cumulative segments, indicating Prefix Caching is working effectively."'),
+    ('\"[WARNING] **无缓存命中**: 未检测到 Prefix Caching 效果，请确认 API 是否支持此特性。\"',
+     '"[WARNING] **No Cache Hits**: No Prefix Caching effect detected. Please verify if the API supports this feature."'),
+    ('f\"[WARNING] **TTFT 增长显著**: 从 {ttft_first:.4f}s 到 {ttft_last:.4f}s (增长 {ratio:.1f}x)。随输入增长 Prefill 时间线性增加是正常表现。\"',
+     'f"[WARNING] **Significant TTFT Growth**: From {ttft_first:.4f}s to {ttft_last:.4f}s ({ratio:.1f}x increase). Linear TTFT growth with input length is expected behavior."'),
+
     # Segmented chart titles
     ('\"首字延迟 (TTFT) by Segment\"', '"Time To First Token (TTFT) by Segment"'),
     ('\"Context Segment (分段级别)\"', '"Context Segment"'),
@@ -289,8 +289,8 @@ replacements = [
     ('f\"分段上下文测试报告 (Prefix Caching) - {model_id}\"', 'f"Segmented Context Test Report (Prefix Caching) - {model_id}"'),
 
     # Config and system info
-    ('\"**📋 测试配置:**\"', '"**📋 Test Configuration:**"'),
-    ('\"**🖥️ 系统环境:**\"', '"**🖥️ System Environment:**"'),
+    ('\"** 测试配置:**\"', '"** Test Configuration:**"'),
+    ('\"** 系统环境:**\"', '"** System Environment:**"'),
 
     # Chart comments (in Chinese)
     ('# 新增 QPM 图表，帮助用户直观判断系统容量瓶颈',

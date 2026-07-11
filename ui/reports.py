@@ -46,6 +46,7 @@ from ui.reporting.builders import (
     build_prefill_summary,
 )
 from ui.reporting.columns import COLUMN_RENAME_MAP, COLUMN_TOOLTIPS
+from ui.status import InsightSeverity, PerformanceInsight
 from ui.styled_tables import create_styled_summary_table
 
 
@@ -57,6 +58,21 @@ def safe_to_markdown(df, **kwargs):
         # Fallback: create a simple text table representation
         return df.to_string(**kwargs)
 
+
+def _safe_series_max_idx(series):
+    """Return (max_value, index_of_max) for a Series, or (0, None) if empty/all-NA."""
+    if series.empty or series.isna().all():
+        return 0, None
+    return series.max(), series.idxmax()
+
+
+def _safe_series_min_idx(series):
+    """Return (min_value, index_of_min) for a Series, or (0, None) if empty/all-NA."""
+    if series.empty or series.isna().all():
+        return 0, None
+    return series.min(), series.idxmin()
+
+
 def _render_test_summary_card(model_id, provider, duration, test_config, system_info=None, df=None, test_type=None):
     """
     Renders a test-type-aware summary card with meaningful insights.
@@ -64,20 +80,20 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
     """
     import numpy as np
 
-    with st.expander("⏱️ Test Summary", expanded=True):
+    with st.expander("Test summary", expanded=True):
         # --- Row 1: Basic Info & Context ---
         info_col1, info_col2, info_col3 = st.columns(3)
         with info_col1:
-            st.markdown(f"**🤖 Model**: `{model_id}`")
+            st.markdown(f"**Model**: `{model_id}`")
         with info_col2:
-            st.markdown(f"**🔌 Provider**: `{provider}`")
+            st.markdown(f"**Provider**: `{provider}`")
         with info_col3:
             if duration >= 60:
                 mins = int(duration // 60)
                 secs = duration % 60
-                st.markdown(f"**⏱️ Total Duration**: `{mins}m {secs:.1f}s`")
+                st.markdown(f"**Total duration**: `{mins}m {secs:.1f}s`")
             else:
-                st.markdown(f"**⏱️ Total Duration**: `{duration:.2f}s`")
+                st.markdown(f"**Total duration**: `{duration:.2f}s`")
 
         # --- Row 2: Test-type-specific Performance Insights ---
         if df is not None and not df.empty:
@@ -115,13 +131,15 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
                     tp_col = 'system_output_throughput' if 'system_output_throughput' in df_ok.columns else ('system_throughput' if 'system_throughput' in df_ok.columns else None)
                     if tp_col:
                         tp_by_c = df_ok.groupby('concurrency')[tp_col].max()
-                        peak_tp, peak_c = tp_by_c.max(), int(tp_by_c.idxmax())
+                        peak_tp, peak_c = _safe_series_max_idx(tp_by_c)
+                        if peak_c is None:
+                            peak_c = "N/A"
                     else:
                         peak_tp, peak_c = 0, "N/A"
                     tps_lo = lo_df['tps'].mean() if 'tps' in lo_df.columns else 0
                     tps_hi = hi_df['tps'].mean() if 'tps' in hi_df.columns else 0
 
-                    st.markdown(f"##### 🔍 Concurrency Scaling Analysis (Concurrency {int(lo)} → {int(hi)})")
+                    st.markdown(f"#####  Concurrency Scaling Analysis (Concurrency {int(lo)} → {int(hi)})")
                     m1, m2, m3, m4 = st.columns(4)
                     with m1:
                         st.metric("Total Requests", f"{total_requests}", delta=f"{successful} succeeded")
@@ -146,11 +164,9 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
 
                     # --- Row 3: Peak & Trend Analysis ---
                     ttft_by_c = df_ok.groupby('concurrency')['ttft'].mean()
-                    best_ttft_val = ttft_by_c.min()
-                    best_ttft_c = int(ttft_by_c.idxmin())
+                    best_ttft_val, best_ttft_c = _safe_series_min_idx(ttft_by_c)
                     tps_by_c = df_ok.groupby('concurrency')['tps'].mean()
-                    peak_tps_val = tps_by_c.max()
-                    peak_tps_c = int(tps_by_c.idxmax())
+                    peak_tps_val, peak_tps_c = _safe_series_max_idx(tps_by_c)
 
                     # Detect TTFT trend: check if monotonically increasing or has a dip
                     ttft_vals = [ttft_by_c[c] for c in conc_levels]
@@ -181,12 +197,12 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
                         saturation_label = "N/A"
 
                     st.markdown("---")
-                    st.markdown("##### 📈 Peak & Trend Analysis")
+                    st.markdown("#####  Peak & Trend Analysis")
                     m9, m10, m11, m12 = st.columns(4)
                     with m9:
-                        st.metric("Best TTFT", f"{best_ttft_val:.3f}s", delta=f"@ C{best_ttft_c}")
+                        st.metric("Best TTFT", f"{best_ttft_val:.3f}s", delta=f"@ C{best_ttft_c}" if best_ttft_c is not None else "N/A")
                     with m10:
-                        st.metric("Peak Single TPS", f"{peak_tps_val:.1f} t/s", delta=f"@ C{peak_tps_c}")
+                        st.metric("Peak Single TPS", f"{peak_tps_val:.1f} t/s", delta=f"@ C{peak_tps_c}" if peak_tps_c is not None else "N/A")
                     with m11:
                         st.metric("TTFT Trend", ttft_trend, help="TTFT change pattern as concurrency increases")
                     with m12:
@@ -206,7 +222,7 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
                     ttft_lg = lg_df['ttft'].mean() if 'ttft' in lg_df.columns else 0
                     ratio = ps_lg / ps_sm if ps_sm > 0 else 0
 
-                    st.markdown(f"##### 🔍 Prefill Speed Change ({_fmt(sm)} → {_fmt(lg)} tokens)")
+                    st.markdown(f"#####  Prefill Speed Change ({_fmt(sm)} → {_fmt(lg)} tokens)")
                     m1, m2, m3, m4 = st.columns(4)
                     with m1:
                         st.metric("Total Requests", f"{total_requests}", delta=f"{successful} succeeded")
@@ -231,11 +247,9 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
 
                     # --- Row 3: Peak & Trend Analysis ---
                     ps_by_level = df_ok.groupby('input_tokens_target')['prefill_speed'].mean()
-                    peak_ps_val = ps_by_level.max()
-                    peak_ps_level = int(ps_by_level.idxmax())
+                    peak_ps_val, peak_ps_level = _safe_series_max_idx(ps_by_level)
                     ttft_by_level = df_ok.groupby('input_tokens_target')['ttft'].mean()
-                    best_ttft_val = ttft_by_level.min()
-                    best_ttft_level = int(ttft_by_level.idxmin())
+                    best_ttft_val, best_ttft_level = _safe_series_min_idx(ttft_by_level)
 
                     # Detect biggest prefill speed drop between adjacent levels
                     ps_vals = [ps_by_level[lv] for lv in levels]
@@ -254,21 +268,21 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
                         input_ratio = levels[-1] / levels[0] if levels[0] > 0 else 1
                         ttft_ratio_full = ttft_by_level[levels[-1]] / ttft_by_level[levels[0]] if ttft_by_level[levels[0]] > 0 else 1
                         if ttft_ratio_full > input_ratio * 1.5:
-                            ttft_scaling = "Super-linear growth ⚠️"
+                            ttft_scaling = "Super-linear growth "
                         elif ttft_ratio_full > input_ratio * 0.8:
                             ttft_scaling = "Near-linear"
                         else:
-                            ttft_scaling = "Sub-linear ✅"
+                            ttft_scaling = "Sub-linear "
                     else:
                         ttft_scaling = f"↑ {g:.1f}x"
 
                     st.markdown("---")
-                    st.markdown("##### 📈 Peak & Trend Analysis")
+                    st.markdown("#####  Peak & Trend Analysis")
                     m9, m10, m11, m12 = st.columns(4)
                     with m9:
-                        st.metric("Peak Prefill Speed", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_level)}t")
+                        st.metric("Peak Prefill Speed", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_level)}t" if peak_ps_level is not None else "N/A")
                     with m10:
-                        st.metric("Best TTFT", f"{best_ttft_val:.3f}s", delta=f"@ {_fmt(best_ttft_level)}t")
+                        st.metric("Best TTFT", f"{best_ttft_val:.3f}s", delta=f"@ {_fmt(best_ttft_level)}t" if best_ttft_level is not None else "N/A")
                     with m11:
                         st.metric("Speed Decline Point", speed_trend, help="Location of the largest single drop in Prefill speed")
                     with m12:
@@ -291,7 +305,7 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
                     tps_lo2 = lo_df['tps'].mean() if 'tps' in lo_df.columns else 0
                     tps_r = tps_lo2 / tps_sh if tps_sh > 0 else 0
 
-                    st.markdown(f"##### 🔍 Long Context Performance Degradation ({_fmt(sh)} → {_fmt(lo)} ctx)")
+                    st.markdown(f"#####  Long Context Performance Degradation ({_fmt(sh)} → {_fmt(lo)} ctx)")
                     m1, m2, m3, m4 = st.columns(4)
                     with m1:
                         st.metric("Total Requests", f"{total_requests}", delta=f"{successful} succeeded")
@@ -315,11 +329,9 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
 
                     # --- Row 3: Peak & Trend Analysis ---
                     ps_by_ctx = df_ok.groupby('context_length_target')['prefill_speed'].mean()
-                    peak_ps_val = ps_by_ctx.max()
-                    peak_ps_ctx = int(ps_by_ctx.idxmax())
+                    peak_ps_val, peak_ps_ctx = _safe_series_max_idx(ps_by_ctx)
                     tps_by_ctx = df_ok.groupby('context_length_target')['tps'].mean()
-                    peak_tps_val = tps_by_ctx.max()
-                    peak_tps_ctx = int(tps_by_ctx.idxmax())
+                    peak_tps_val, peak_tps_ctx = _safe_series_max_idx(tps_by_ctx)
 
                     # Find the biggest TTFT jump between adjacent levels
                     ttft_by_ctx = df_ok.groupby('context_length_target')['ttft'].mean()
@@ -340,12 +352,12 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
                     tps_stability = f"Volatile {tps_cv:.0f}%" if tps_cv > 10 else f"Stable (CV={tps_cv:.0f}%)"
 
                     st.markdown("---")
-                    st.markdown("##### 📈 Peak & Trend Analysis")
+                    st.markdown("#####  Peak & Trend Analysis")
                     m9, m10, m11, m12 = st.columns(4)
                     with m9:
-                        st.metric("Peak Prefill Speed", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_ctx)} ctx")
+                        st.metric("Peak Prefill Speed", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_ctx)} ctx" if peak_ps_ctx is not None else "N/A")
                     with m10:
-                        st.metric("Peak TPS", f"{peak_tps_val:.1f} t/s", delta=f"@ {_fmt(peak_tps_ctx)} ctx")
+                        st.metric("Peak TPS", f"{peak_tps_val:.1f} t/s", delta=f"@ {_fmt(peak_tps_ctx)} ctx" if peak_tps_ctx is not None else "N/A")
                     with m11:
                         st.metric("TTFT Inflection", ttft_inflection, help="Context length segment with the largest single TTFT increase")
                     with m12:
@@ -374,7 +386,7 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
                     ps_f = f_df['prefill_speed'].max() if 'prefill_speed' in f_df.columns else 0
                     ps_l = l_df['prefill_speed'].max() if 'prefill_speed' in l_df.columns else 0
 
-                    st.markdown(f"##### 🔍 Prefix Caching Effect ({len(levels)} segments)")
+                    st.markdown(f"#####  Prefix Caching Effect ({len(levels)} segments)")
                     m1, m2, m3, m4 = st.columns(4)
                     with m1:
                         st.metric("Total Requests", f"{total_requests}", delta=f"{successful} succeeded")
@@ -411,10 +423,9 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
                     peak_cache_seg = max(cache_by_seg, key=cache_by_seg.get)
                     peak_cache_rate = cache_by_seg[peak_cache_seg]
                     # Best TTFT segment (smallest Uncached TTFT)
-                    best_ttft_seg = int(ttft_by_seg.idxmin())
-                    best_ttft_val = ttft_by_seg.min()
+                    best_ttft_val, best_ttft_seg = _safe_series_min_idx(ttft_by_seg)
                     # Peak prefill speed segment
-                    peak_ps_seg = int(ps_by_seg.idxmax())
+                    peak_ps_val, peak_ps_seg = _safe_series_max_idx(ps_by_seg)
                     peak_ps_val = ps_by_seg.max()
 
                     # Cache effectiveness trend
@@ -422,19 +433,19 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
                     if len(cache_vals) >= 3:
                         # Check if cache rate is consistently growing
                         increasing = all(cache_vals[i+1] >= cache_vals[i] - 1 for i in range(len(cache_vals)-1))
-                        cache_trend = "Increasing ✅" if increasing and cache_vals[-1] > cache_vals[0] + 5 else ("Volatile" if not increasing else "Stable")
+                        cache_trend = "Increasing" if increasing and cache_vals[-1] > cache_vals[0] + 5 else ("Volatile" if not increasing else "Stable")
                     else:
                         cache_trend = f"{r_f:.0f}% → {r_l:.0f}%"
 
                     st.markdown("---")
-                    st.markdown("##### 📈 Peak & Trend Analysis")
+                    st.markdown("#####  Peak & Trend Analysis")
                     m9, m10, m11, m12 = st.columns(4)
                     with m9:
                         st.metric("Peak Cache Rate", f"{peak_cache_rate:.0f}%", delta=f"@ {_fmt(peak_cache_seg)} ctx")
                     with m10:
-                        st.metric("Min Uncached TTFT", f"{best_ttft_val:.3f}s", delta=f"@ {_fmt(best_ttft_seg)} ctx")
+                        st.metric("Min Uncached TTFT", f"{best_ttft_val:.3f}s", delta=f"@ {_fmt(best_ttft_seg)} ctx" if best_ttft_seg is not None else "N/A")
                     with m11:
-                        st.metric("Peak Prefill Speed", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_seg)} ctx")
+                        st.metric("Peak Prefill Speed", f"{peak_ps_val:.0f} t/s", delta=f"@ {_fmt(peak_ps_seg)} ctx" if peak_ps_seg is not None else "N/A")
                     with m12:
                         st.metric("Cache Rate Trend", cache_trend, help="Overall trend of cache hit rates across segments")
                 else:
@@ -446,7 +457,7 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
                 conc_levels = sorted(df_ok['concurrency'].unique())
                 ctx_levels = sorted(df_ok['context_length_target'].unique())
 
-                st.markdown("##### 🔍 Matrix Best/Worst Configuration")
+                st.markdown("#####  Matrix Best/Worst Configuration")
                 m1, m2, m3, m4 = st.columns(4)
                 with m1:
                     st.metric("Total Requests", f"{total_requests}", delta=f"{successful} succeeded")
@@ -484,7 +495,7 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
         # --- Row 3: Test Configuration (filtered) ---
         if test_config:
             st.markdown("---")
-            st.markdown("**📋 Test Configuration:**")
+            st.markdown("**Test configuration:**")
 
             # Filter out keys that are already shown above
             skip_keys = {'Test Type', 'Model ID', 'Provider', 'Timestamp'}
@@ -503,7 +514,7 @@ def _render_test_summary_card(model_id, provider, duration, test_config, system_
         # --- Row 4: System Environment ---
         if system_info:
             st.markdown("---")
-            st.markdown("**🖥️ System Environment:**")
+            st.markdown("**System environment:**")
             display_keys = {
                 'processor': 'Processor',
                 'gpu': 'GPU',
@@ -538,7 +549,7 @@ def _render_generic_summary(st_mod, df, total_requests, successful, total_input,
 
     # Data quality warning
     if total_input == 0 and total_output == 0 and ttft_data.empty:
-        st_mod.warning("⚠️ **Data Quality Alert**: TTFT, TPS, and Token counts are all 0 or missing. The test may not have correctly captured performance metrics. Please check the API response usage info and streaming output.")
+        st_mod.warning("**Data quality alert**: TTFT, TPS, and token counts are all 0 or missing. The test may not have correctly captured performance metrics. Check the API response usage information and streaming output.")
 
     m1, m2, m3, m4 = st_mod.columns(4)
     with m1:
@@ -665,7 +676,7 @@ def generate_concurrency_report(df_group, model_id, provider="Unknown", duration
     # === Enhanced: Performance insights ===
     insights = generate_performance_insights(summary, 'concurrency', model_id)
     if insights:
-        with st.expander("📊 Performance Insights & Analysis", expanded=True):
+        with st.expander("Performance insights and analysis", expanded=True):
             grade, color, description = get_performance_grade(insights)
             st.markdown(f"**Overall Grade**: <span style='color:{color};font-size:20px;font-weight:bold'>{grade}</span> - {description}", unsafe_allow_html=True)
             st.markdown("---")
@@ -676,7 +687,7 @@ def generate_concurrency_report(df_group, model_id, provider="Unknown", duration
     summary['concurrency_str'] = summary['concurrency'].astype(int).astype(str)
 
     # === Add Static Chart Download Button ===
-    st.markdown("### 📈 Chart Analysis")
+    st.markdown("### Chart analysis")
     chart_col1, chart_col2 = st.columns([1, 4])
     with chart_col1:
         # Generate static chart bytes
@@ -696,7 +707,7 @@ def generate_concurrency_report(df_group, model_id, provider="Unknown", duration
                     create_static_chart_download_link(
                         static_fig_bytes,
                         f"concurrency_{model_id}.png",
-                        "📷 Download Static Chart"
+                        "Download static chart"
                     ),
                     unsafe_allow_html=True
                 )
@@ -767,7 +778,7 @@ def generate_concurrency_report(df_group, model_id, provider="Unknown", duration
                 create_html_download_link(
                     html_report,
                     f"concurrency_full_{model_id}.html",
-                    "🌐 Download Full HTML Report (All Charts)"
+                    "Download full HTML report"
                 ),
                 unsafe_allow_html=True
             )
@@ -866,7 +877,7 @@ def generate_prefill_report(df_group, model_id, provider="Unknown", duration=0, 
     # === Enhanced: Performance insights ===
     insights = generate_performance_insights(summary, 'prefill', model_id)
     if insights:
-        with st.expander("📊 Performance Insights", expanded=True):
+        with st.expander("Performance insights", expanded=True):
             for insight in insights:
                 st.markdown(insight)
             report_md += "\n### Performance Insights\n\n" + "\n".join([f"- {i}" for i in insights]) + "\n\n"
@@ -874,7 +885,7 @@ def generate_prefill_report(df_group, model_id, provider="Unknown", duration=0, 
     hover_data_prefill = ['Actual_Tokens_Mean', 'input_tokens_target']
 
     # === Add Static Chart Download Button ===
-    st.markdown("### 📈 Chart Analysis")
+    st.markdown("### Chart analysis")
     chart_col1, chart_col2 = st.columns([1, 4])
     with chart_col1:
         # Generate static chart bytes
@@ -894,7 +905,7 @@ def generate_prefill_report(df_group, model_id, provider="Unknown", duration=0, 
                     create_static_chart_download_link(
                         static_fig_bytes,
                         f"prefill_{model_id}.png",
-                        "📷 Download Static Chart"
+                        "Download static chart"
                     ),
                     unsafe_allow_html=True
                 )
@@ -932,7 +943,7 @@ def generate_prefill_report(df_group, model_id, provider="Unknown", duration=0, 
                 create_html_download_link(
                     html_report,
                     f"prefill_full_{model_id}.html",
-                    "🌐 Download Full HTML Report (All Charts)"
+                    "Download full HTML report"
                 ),
                 unsafe_allow_html=True
             )
@@ -1051,7 +1062,7 @@ def generate_long_context_report(df_group, model_id, provider="Unknown", duratio
     # === Enhanced: Performance insights ===
     insights = generate_performance_insights(summary, 'long_context', model_id)
     if insights:
-        with st.expander("📊 Performance Insights", expanded=True):
+        with st.expander("Performance insights", expanded=True):
             for insight in insights:
                 st.markdown(insight)
             report_md += "\n### Performance Insights\n\n" + "\n".join([f"- {i}" for i in insights]) + "\n\n"
@@ -1061,7 +1072,7 @@ def generate_long_context_report(df_group, model_id, provider="Unknown", duratio
     hover_data_decode = ['Actual_Tokens_Mean']
 
     # === Add Static Chart Download Button ===
-    st.markdown("### 📈 Chart Analysis")
+    st.markdown("### Chart analysis")
     chart_col1, chart_col2 = st.columns([1, 4])
     with chart_col1:
         # Generate static chart bytes
@@ -1075,7 +1086,7 @@ def generate_long_context_report(df_group, model_id, provider="Unknown", duratio
                 create_static_chart_download_link(
                     static_fig_bytes,
                     f"long_context_{model_id}.png",
-                    "📷 Download Static Chart"
+                    "Download static chart"
                 ),
                 unsafe_allow_html=True
             )
@@ -1142,7 +1153,7 @@ def generate_long_context_report(df_group, model_id, provider="Unknown", duratio
                 create_html_download_link(
                     html_report,
                     f"long_context_full_{model_id}.html",
-                    "🌐 Download Full HTML Report (All Charts)"
+                    "Download full HTML report"
                 ),
                 unsafe_allow_html=True
             )
@@ -1320,7 +1331,7 @@ def generate_matrix_report(df_group, model_id, provider="Unknown", duration=0, t
     # === Enhanced: Performance insights ===
     # Insights generated above before renaming
     if insights:
-        with st.expander("📊 Comprehensive Performance Insights", expanded=True):
+        with st.expander("Comprehensive performance insights", expanded=True):
             grade, color, description = get_performance_grade(insights)
             st.markdown(f"**Grade**: {grade} ({description})")
             st.markdown("---")
@@ -1331,7 +1342,7 @@ def generate_matrix_report(df_group, model_id, provider="Unknown", duration=0, t
     # Previous duplicate charts and heatmap removed
 
     # === Add Static Chart Download Button ===
-    st.markdown("### 📈 Chart Analysis")
+    st.markdown("### Chart analysis")
     chart_col1, chart_col2 = st.columns([1, 4])
     with chart_col1:
         # Generate static chart bytes
@@ -1345,7 +1356,7 @@ def generate_matrix_report(df_group, model_id, provider="Unknown", duration=0, t
                 create_static_chart_download_link(
                     static_fig_bytes,
                     f"matrix_{model_id}.png",
-                    "📷 Download Static Chart"
+                    "Download static chart"
                 ),
                 unsafe_allow_html=True
             )
@@ -1449,7 +1460,7 @@ def generate_matrix_report(df_group, model_id, provider="Unknown", duration=0, t
                 create_html_download_link(
                     html_report,
                     f"matrix_full_{model_id}.html",
-                    "🌐 Download Full HTML Report (All Charts)"
+                    "Download full HTML report"
                 ),
                 unsafe_allow_html=True
             )
@@ -1666,25 +1677,60 @@ def generate_segmented_report(df_group, model_id, provider="Unknown", duration=0
         and stats['Max_Prefill_Speed (tokens/s)'].notna().any()
     ):
         best_ttft_row = stats.loc[stats['Uncached_TTFT (s)'].idxmin()]
-        insights.append(f"🏆 **Best Uncached TTFT**: `{best_ttft_row['Uncached_TTFT (s)']:.4f}s` (segment: {best_ttft_row['context_length_target']})")
+        insights.append(
+            PerformanceInsight(
+                InsightSeverity.POSITIVE,
+                "Best Uncached TTFT",
+                f"`{best_ttft_row['Uncached_TTFT (s)']:.4f}s` "
+                f"(segment: {best_ttft_row['context_length_target']})",
+            )
+        )
 
         best_prefill_row = stats.loc[stats['Max_Prefill_Speed (tokens/s)'].idxmax()]
-        insights.append(f"⚡ **Peak Prefill Speed**: `{best_prefill_row['Max_Prefill_Speed (tokens/s)']:.0f} tokens/s` (segment: {best_prefill_row['context_length_target']})")
+        insights.append(
+            PerformanceInsight(
+                InsightSeverity.POSITIVE,
+                "Peak Prefill Speed",
+                f"`{best_prefill_row['Max_Prefill_Speed (tokens/s)']:.0f} tokens/s` "
+                f"(segment: {best_prefill_row['context_length_target']})",
+            )
+        )
 
         if 'Cache_Hit_Rate (%)' in stats.columns:
             max_cache_rate = stats['Cache_Hit_Rate (%)'].max()
             if max_cache_rate > 0:
                 best_cache_row = stats.loc[stats['Cache_Hit_Rate (%)'].idxmax()]
-                insights.append(f"💾 **Peak Cache Hit Rate**: `{max_cache_rate:.1f}%` (segment: {best_cache_row['context_length_target']})")
+                insights.append(
+                    PerformanceInsight(
+                        InsightSeverity.POSITIVE,
+                        "Peak Cache Hit Rate",
+                        f"`{max_cache_rate:.1f}%` "
+                        f"(segment: {best_cache_row['context_length_target']})",
+                    )
+                )
 
                 # Check for increasing cache hit rate pattern (Prefix Caching working)
                 if len(stats) >= 2:
                     first_rate = stats.iloc[0]['Cache_Hit_Rate (%)']
                     last_rate = stats.iloc[-1]['Cache_Hit_Rate (%)']
                     if last_rate > first_rate + 5:
-                        insights.append("📈 **Cache Effect Increasing**: Cache hit rate grows with cumulative segments, indicating Prefix Caching is working effectively.")
+                        insights.append(
+                            PerformanceInsight(
+                                InsightSeverity.POSITIVE,
+                                "Cache Effect Increasing",
+                                "Cache hit rate grows with cumulative segments, "
+                                "indicating Prefix Caching is working effectively.",
+                            )
+                        )
             else:
-                insights.append("⚠️ **No Cache Hits**: No Prefix Caching effect detected. Please verify if the API supports this feature.")
+                insights.append(
+                    PerformanceInsight(
+                        InsightSeverity.WARNING,
+                        "No Cache Hits",
+                        "No Prefix Caching effect detected. Verify that the API "
+                        "supports this feature.",
+                    )
+                )
 
         # TTFT degradation check
         if len(stats) >= 2:
@@ -1692,16 +1738,24 @@ def generate_segmented_report(df_group, model_id, provider="Unknown", duration=0
             ttft_last = stats.iloc[-1]['Uncached_TTFT (s)']
             if ttft_last > ttft_first * 3 and ttft_first > 0:
                 ratio = ttft_last / ttft_first
-                insights.append(f"⚠️ **Significant TTFT Growth**: From {ttft_first:.4f}s to {ttft_last:.4f}s ({ratio:.1f}x increase). Linear TTFT growth with input length is expected behavior.")
+                insights.append(
+                    PerformanceInsight(
+                        InsightSeverity.WARNING,
+                        "Significant TTFT Growth",
+                        f"From {ttft_first:.4f}s to {ttft_last:.4f}s "
+                        f"({ratio:.1f}x increase). Linear TTFT growth with input "
+                        "length is expected behavior.",
+                    )
+                )
 
     if insights:
-        with st.expander("📊 Performance Insights & Analysis", expanded=True):
+        with st.expander("Performance insights and analysis", expanded=True):
             for insight in insights:
                 st.markdown(insight)
             report_md += "\n### Performance Insights\n\n" + "\n".join([f"- {i}" for i in insights]) + "\n\n"
 
     # === Charts ===
-    st.markdown("### 📈 Chart Analysis")
+    st.markdown("### Chart analysis")
     chart_col1, chart_col2 = st.columns([1, 4])
     with chart_col1:
         # Static chart download
@@ -1714,7 +1768,7 @@ def generate_segmented_report(df_group, model_id, provider="Unknown", duration=0
                 create_static_chart_download_link(
                     static_fig_bytes,
                     f"segmented_{model_id}.png",
-                    "📷 Download Static Chart"
+                    "Download static chart"
                 ),
                 unsafe_allow_html=True
             )
@@ -1812,7 +1866,7 @@ def generate_segmented_report(df_group, model_id, provider="Unknown", duration=0
                 create_html_download_link(
                     html_report,
                     f"segmented_full_{model_id}.html",
-                    "🌐 Download Full HTML Report (All Charts)"
+                    "Download full HTML report"
                 ),
                 unsafe_allow_html=True
             )

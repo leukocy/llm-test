@@ -5,7 +5,7 @@
 1. 配置完整：tester 已填 + machine_id 存在（硬件指纹已冻结）+ CASE 03 强制字段
    （PCIe Gen/宽度、内存通道数、内存频率）非空（仅当传入硬件指纹时校验）。
 2. 可复现：machine_id + 硬件指纹 + 随机种子已记录（或明确标注随机）。
-3. 指标可信：无 ❌ 关键问题 + 成功率达标 + 资源监控已记录。
+3. 指标可信：无 Error: 关键问题 + 成功率达标 + 资源监控已记录。
 4. 人工复核：external_level 已被人工置为 'publishable'（永不自动提升）。
 
 level 推导：publishable 需四闸全过；1-3 过 → review；否则 internal。
@@ -126,7 +126,7 @@ def evaluate_publish_gate(
 
     g3_metrics = no_critical and sr_ok and has_monitor and enough_samples
     if not no_critical:
-        reasons.append("存在 ❌ 关键问题（指标不可信）")
+        reasons.append("存在 Error: 关键问题（指标不可信）")
     if not sr_ok:
         reasons.append(f"{sr_label} 低于阈值 {success_rate_threshold:.0%}")
     if not enough_samples and sample_size is not None:
@@ -209,7 +209,7 @@ GATE_LABELS = {
 }
 
 LEVEL_BADGE = {
-    "publishable": ("✅ 可对外", "green"),
-    "review": ("🟡 待复核", "orange"),
-    "internal": ("⚪ 内部", "gray"),
+    "publishable": ("OK: 可对外", "green"),
+    "review": ("Review: 待复核", "orange"),
+    "internal": ("Internal: 内部", "gray"),
 }

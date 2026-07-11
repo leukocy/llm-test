@@ -28,7 +28,7 @@ def render_hardware_fingerprint_card() -> None:
     fp = sys_info.get("hardware_fingerprint") or {}
     if not fp:
         return
-    with st.expander("🔩 硬件指纹（配置冻结）", expanded=False):
+    with st.expander("Hardware Fingerprint: 硬件指纹（配置冻结）", expanded=False):
         cpu = fp.get("cpu") or {}
         mem = fp.get("memory") or {}
         gpus = fp.get("gpus") or []
@@ -103,7 +103,7 @@ def render_resource_timeline() -> None:
     fig.update_yaxes(title_text="容量 (GB)", secondary_y=True)
 
     peaks = mon.get("peaks") or {}
-    with st.expander("📈 资源监控（利用率 / 显存 / 内存峰值）", expanded=False):
+    with st.expander("Scaling: 资源监控（利用率 / 显存 / 内存峰值）", expanded=False):
         st.plotly_chart(fig, use_container_width=True)
         p1, p2, p3, p4 = st.columns(4)
         p1.metric("GPU 利用率峰值", f"{peaks.get('gpu_util_percent') or '—'}%")
@@ -121,7 +121,7 @@ def render_deviation_analysis() -> None:
     if not bw or bw.get("effective_bandwidth_gbps") is None:
         return
     from core.effective_bandwidth import summarize_gap
-    with st.expander("📡 等效带宽偏差分析", expanded=False):
+    with st.expander("Bandwidth: 等效带宽偏差分析", expanded=False):
         c1, c2, c3 = st.columns(3)
         c1.metric("标称显存带宽", f"{bw.get('nominal_bandwidth_gbps') or '—'} GB/s")
         c2.metric("实测等效带宽", f"{bw.get('effective_bandwidth_gbps')} GB/s")
@@ -166,7 +166,7 @@ def render_engine_runtime() -> None:
 
     peaks = eng.get("peaks") or {}
     cc = eng.get("cache_config") or {}
-    with st.expander("🔌 推理引擎运行时（KV / 队列 / 抢救）", expanded=False):
+    with st.expander("Inference Engine: 推理引擎运行时（KV / 队列 / 抢救）", expanded=False):
         st.plotly_chart(fig, use_container_width=True)
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("KV 占用峰值", f"{(peaks.get('gpu_cache_usage_perc') or 0)*100:.0f}%")
@@ -194,7 +194,7 @@ def render_client_vs_engine_analysis() -> None:
     if r["client_ttft_s"] is None and r["engine_ttft_s"] is None:
         return
 
-    with st.expander("⏱️ 客户端 vs 引擎侧延迟对照", expanded=False):
+    with st.expander("Latency: 客户端 vs 引擎侧延迟对照", expanded=False):
         c1, c2, c3 = st.columns(3)
         c1.metric("客户端 TTFT(中位)", f"{r['client_ttft_s']*1000:.0f} ms" if r["client_ttft_s"] else "—")
         c2.metric("引擎侧 TTFT(整体)", f"{r['engine_ttft_s']*1000:.0f} ms" if r["engine_ttft_s"] else "—")
@@ -238,7 +238,7 @@ def render_publish_gate_badge() -> None:
     cols = st.columns(4)
     for i, (key, label_cn) in enumerate(GATE_LABELS.items()):
         passed = result.gates.get(key, False)
-        cols[i].metric(label_cn, "✅" if passed else "❌")
+        cols[i].metric(label_cn, "OK:" if passed else "Error:")
     if result.reasons:
         st.caption("未通过：" + "；".join(result.reasons))
 
@@ -342,7 +342,7 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
     from core.publish_gate import GATE_LABELS as _GL
     for key, label_cn in _GL.items():
         passed = (gate.get("gates") or {}).get(key)
-        lines.append(f"- {label_cn}: {'✅' if passed else '❌'}")
+        lines.append(f"- {label_cn}: {'OK:' if passed else 'Error:'}")
     if gate.get("reasons"):
         lines.append(f"- 未通过：{'；'.join(gate['reasons'])}")
     lines.append("")
@@ -366,7 +366,7 @@ def render_warehouse_panel(test_type: str, model_id: str) -> None:
     """在结果区后渲染全部富信息 + 导出按钮。任一段失败不阻塞其它。"""
     try:
         st.markdown("---")
-        st.header("🗂️ 数据仓库记录（八维）")
+        st.header("Data Warehouse: 数据仓库记录（八维）")
 
         # 闸门徽标
         render_publish_gate_badge()
@@ -378,10 +378,10 @@ def render_warehouse_panel(test_type: str, model_id: str) -> None:
         render_client_vs_engine_analysis()
 
         # 单次测试报告导出
-        if st.button("📄 导出单次测试报告 (Markdown)", key="export_single_report"):
+        if st.button("Export: 导出单次测试报告 (Markdown)", key="export_single_report"):
             md = build_single_test_report(_collect_report_context(test_type, model_id))
             st.download_button(
-                label="⬇️ 下载 .md",
+                label="Download: 下载 .md",
                 data=md.encode("utf-8"),
                 file_name=f"test_report_{model_id}_{test_type}.md",
                 mime="text/markdown",

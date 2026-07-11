@@ -13,6 +13,8 @@ import os
 import pandas as pd
 import streamlit as st
 
+from ui.design_system import material_icon
+
 # ============================================================================
 # Lazy Import Modules (loaded on demand)
 # ============================================================================
@@ -146,7 +148,7 @@ def _render_dataset_status_panel(available_datasets):
 
         # Display status table
         for row in status_data:
-            icon = "✅" if row["Available"] else "❌"
+            icon = "Available" if row["Available"] else "Download required"
             st.markdown(f"{icon} **{row['Dataset']}** — {row['Size']}")
 
         # Download buttons for missing datasets
@@ -207,7 +209,7 @@ def render_quality_test_panel(config, run_test_func):
     Returns:
         bool: Whether test was triggered
     """
-    st.header("📝 Model Quality Test")
+    st.header("Model Quality Test")
     st.info("Use public benchmarks (MMLU, GSM8K, etc.) to evaluate model reasoning and knowledge.")
 
     # Lazy detect and load module
@@ -223,12 +225,13 @@ def render_quality_test_panel(config, run_test_func):
     if 'quality_test_running' not in st.session_state:
         st.session_state.quality_test_running = False
 
-    with st.sidebar.expander("📊 Quality Test Parameters", expanded=True):
+    available_datasets = list(quality_module['EVALUATOR_REGISTRY'].keys())
+
+    with st.sidebar.expander("Quality Test Parameters", expanded=True):
         # Dataset status panel
         _render_dataset_status_panel(available_datasets)
 
         # Dataset selection
-        available_datasets = list(quality_module['EVALUATOR_REGISTRY'].keys())
         st.markdown("**Select test datasets**")
 
         # Define dataset layout: (registry_key, display_name, default, help_text)
@@ -273,13 +276,13 @@ def render_quality_test_panel(config, run_test_func):
         _render_dataset_group("basic", _BASIC_DATASETS)
 
         # Advanced Datasets
-        st.caption("🧠 Reasoning test sets")
+        st.caption("Reasoning test sets")
         _render_dataset_group("reasoning", _REASONING_DATASETS)
 
-        st.caption("💻 Code & extended test sets")
+        st.caption("Code & extended test sets")
         _render_dataset_group("code_extra", _CODE_EXTRA_DATASETS)
 
-        st.caption("🔧 Special test sets")
+        st.caption("Special test sets")
         _render_dataset_group("special", _SPECIAL_DATASETS)
 
         # Evaluation Parameters
@@ -325,7 +328,7 @@ def render_quality_test_panel(config, run_test_func):
             if selected_datasets:
                 min_dataset_size = min(DATASET_SAMPLE_COUNTS.get(ds, 10000) for ds in selected_datasets)
                 max_allowed = min(min_dataset_size, 10000)
-                st.caption(f"💡 Min sample count for selected datasets: {min_dataset_size}")
+                st.caption(f"Min sample count for selected datasets: {min_dataset_size}")
             else:
                 max_allowed = 10000
             max_samples = st.number_input(
@@ -341,7 +344,7 @@ def render_quality_test_panel(config, run_test_func):
         num_shots = st.slider("Few-shot examples", 0, 10, default_shots, key="quality_num_shots")
 
         # Detailed parameters
-        with st.expander("🔧 Detailed Parameter Settings", expanded=True):
+        with st.expander("Detailed Parameter Settings", expanded=True):
             quality_temperature = st.number_input(
                 "Temperature",
                 min_value=0.0, max_value=2.0, value=0.0, step=0.1
@@ -392,7 +395,8 @@ def render_quality_test_panel(config, run_test_func):
 
         # Start button
         start_quality_btn = st.button(
-            "🚀 Start Quality Assessment",
+            "Start Quality Assessment",
+            icon=material_icon("play_arrow"),
             key="start_quality_btn",
             type="primary",
             disabled=st.session_state.quality_test_running or not selected_datasets
@@ -471,7 +475,7 @@ def _run_quality_test(config, selected_datasets, max_samples, num_shots,
 
     # Display progress UI
     st.markdown("---")
-    st.markdown("### 🔄 Test in progress...")
+    st.markdown("### Test in progress...")
 
     progress_col1, progress_col2 = st.columns([3, 1])
     with progress_col1:
@@ -567,7 +571,7 @@ def _run_quality_test(config, selected_datasets, max_samples, num_shots,
         final_accuracy = total_correct / total_samples if total_samples > 0 else 0
 
         status_text.success(
-            f"✅ Quality assessment complete! Evaluated {len(results)} datasets, "
+            f"Quality assessment complete! Evaluated {len(results)} datasets, "
             f"{total_correct}/{total_samples} correct ({final_accuracy*100:.1f}%)"
         )
 
@@ -581,7 +585,7 @@ def _run_quality_test(config, selected_datasets, max_samples, num_shots,
 
 def render_ab_comparison_panel(config):
     """Render A/B model comparison panel"""
-    st.header("🔄 A/B Model Comparison")
+    st.header("A/B Model Comparison")
     st.info("Compare two models on the same test set with statistical significance analysis.")
 
     if not _check_enhanced_eval():
@@ -599,7 +603,7 @@ def render_ab_comparison_panel(config):
     col_models, col_config = st.columns([1, 1])
 
     with col_models:
-        st.subheader("🤖 Model Configuration")
+        st.subheader("Model Configuration")
 
         st.markdown("##### Model A (sidebar config)")
         st.success(f"ID: `{config['model_id']}`\n\nProvider: `{config['provider']}`")
@@ -618,7 +622,7 @@ def render_ab_comparison_panel(config):
         model_b_key = st.text_input("API Key", key="ab_model_b_key", type="password")
 
     with col_config:
-        st.subheader("📊 Test Configuration")
+        st.subheader("Test Configuration")
 
         available_datasets = list(quality_module['EVALUATOR_REGISTRY'].keys()) if quality_module else []
         st.markdown("**Select test datasets**")
@@ -634,7 +638,8 @@ def render_ab_comparison_panel(config):
         ab_num_shots = st.number_input("Number of few-shots", min_value=0, value=0, key="ab_num_shots")
 
         start_ab_btn = st.button(
-            "🚀 Start Comparison",
+            "Start Comparison",
+            icon=material_icon("compare_arrows"),
             type="primary",
             disabled=st.session_state.ab_comparison_running or not selected_datasets_ab or not model_b_id
         )
@@ -706,7 +711,7 @@ def _run_ab_comparison(config, model_b_id, provider, base_url, api_key,
         ))
 
         st.session_state.ab_result = result
-        st.success("✅ Comparison complete!")
+        st.success("Comparison complete!")
 
     except Exception as e:
         st.error(f"Comparison failed: {e}")
@@ -719,7 +724,7 @@ def _run_ab_comparison(config, model_b_id, provider, base_url, api_key,
 def _display_ab_comparison_results(result):
     """Display A/B comparison results"""
     st.markdown("---")
-    st.header("📈 Comparison Report")
+    st.header("Comparison Report")
 
     # Summary table
     st.subheader("1. Overall Performance")
@@ -739,7 +744,7 @@ def _display_ab_comparison_results(result):
 
         if "model_a_vs_model_b" in ds_res.statistical_tests:
             test_res = ds_res.statistical_tests["model_a_vs_model_b"]
-            sig = "✅ Significant" if test_res.get("significant") else "➖ Not significant"
+            sig = "Significant" if test_res.get("significant") else "Not significant"
             row["Statistical Significance"] = f"{sig} (p={test_res.get('p_value', 1.0):.3f})"
         else:
             row["Statistical Significance"] = "N/A"
@@ -751,7 +756,7 @@ def _display_ab_comparison_results(result):
 
 def render_advanced_eval_panel(config):
     """Render advanced evaluation analysis panel"""
-    st.header("🔬 Advanced Evaluation Analysis")
+    st.header("Advanced Evaluation Analysis")
     st.info("Provides advanced evaluation tools: consistency testing, robustness testing, smart answer parser demo.")
 
     if not _check_enhanced_eval():
@@ -760,10 +765,10 @@ def render_advanced_eval_panel(config):
 
     enhanced_module = _get_enhanced_eval_module()
 
-    adv_tabs = st.tabs(["🔍 Smart Parser Demo", "🔄 Consistency Test", "🛡️ Robustness Test"])
+    adv_tabs = st.tabs(["Smart Parser Demo", "Consistency Test", "Robustness Test"])
 
     with adv_tabs[0]:
-        st.subheader("🔍 Smart Answer Parser Demo")
+        st.subheader("Smart Answer Parser Demo")
         st.markdown("""
         Smart answer parser uses a layered strategy to extract answers:
         1. **Pattern matching** (fast) - Matches standard formats like `\\boxed{}`, `####`, `ANSWER: X`
@@ -790,10 +795,9 @@ def render_advanced_eval_panel(config):
             )
             demo_correct = st.text_input("Correct answer (optional)", "42", key="smart_parse_correct")
 
-        if st.button("🔍 Parse Answer", key="smart_parse_btn"):
+        if st.button("Parse Answer", key="smart_parse_btn", icon=material_icon("search")):
             try:
-                from evaluators.answer_parser import get_parser_for_dataset
-                from evaluators.answer_parser import MathAnswerParser
+                from evaluators.answer_parser import MathAnswerParser, get_parser_for_dataset
 
                 parser = get_parser_for_dataset(demo_dataset_type)
                 extracted = parser.parse(demo_response)
@@ -819,15 +823,15 @@ def render_advanced_eval_panel(config):
                         is_match = TextAnswerParser.check_answer(extracted, demo_correct)
 
                     if is_match:
-                        st.success("✅ Answer matches!")
+                        st.success("Answer matches!")
                     else:
-                        st.error(f"❌ Answer does not match. Expected: {demo_correct}, Got: {extracted}")
+                        st.error(f"Answer does not match. Expected: {demo_correct}, Got: {extracted}")
 
             except Exception as e:
                 st.error(f"Parse failed: {e}")
 
     with adv_tabs[1]:
-        st.subheader("🔄 Consistency Test")
+        st.subheader("Consistency Test")
         st.info("Consistency testing queries the same question multiple times to evaluate model answer stability.")
 
         col1, col2 = st.columns(2)
@@ -840,11 +844,15 @@ def render_advanced_eval_panel(config):
 
         st.info(f"Will run question {cons_runs} times, consistency rate ≥ {cons_threshold*100:.0f}% considered stable")
 
-        if st.button("🔄 Start Consistency Test", key="cons_start_btn"):
-            st.info("⚠️ Consistency testing requires API connection. Please configure API in the left panel first.")
+        if st.button(
+            "Start Consistency Test",
+            key="cons_start_btn",
+            icon=material_icon("repeat"),
+        ):
+            st.info("Consistency testing requires API connection. Please configure API in the left panel first.")
 
     with adv_tabs[2]:
-        st.subheader("🛡️ Robustness Test")
+        st.subheader("Robustness Test")
         st.info("Robustness testing evaluates model sensitivity to input perturbations.")
 
         from core.robustness_tester import PerturbationType, TextPerturber
@@ -865,7 +873,11 @@ def render_advanced_eval_panel(config):
             key="robust_ptype"
         )
 
-        if st.button("🔀 Apply Perturbation", key="robust_perturb_btn"):
+        if st.button(
+            "Apply Perturbation",
+            key="robust_perturb_btn",
+            icon=material_icon("shuffle"),
+        ):
             result = perturber.perturb(robust_input, PerturbationType(robust_ptype))
 
             col1, col2 = st.columns(2)

@@ -2,14 +2,14 @@
 <!-- 简要描述此 PR 的目的 -->
 
 ## 变更类型
-- [ ] 🐛 Bug 修复 (fixes a bug)
-- [ ] ✨ 新功能 (adds a feature)
-- [ ] 💥 破坏性变更 (breaking change)
-- [ ] 📝 文档更新 (documentation changes)
-- [ ] ⚡ 性能优化 (performance improvements)
-- [ ] 🎨 代码重构 (code refactoring)
-- [ ] ✅ 测试相关 (test improvements)
-- [ ] 🔒 安全相关 (security fixes)
+- [ ] Bug 修复 (fixes a bug)
+- [ ] 新功能 (adds a feature)
+- [ ] 破坏性变更 (breaking change)
+- [ ] 文档更新 (documentation changes)
+- [ ] 性能优化 (performance improvements)
+- [ ] 代码重构 (code refactoring)
+- [ ] 测试相关 (test improvements)
+- [ ] 安全相关 (security fixes)
 
 ## 测试
 - [ ] 添加了新测试

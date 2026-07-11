@@ -1032,7 +1032,7 @@ def generate_static_html_report(
         <img src="data:image/png;base64,{img_base64}" class="chart-image" alt="Performance Test Report">
         <div class="buttons">
             <a href="data:image/png;base64,{img_base64}" download="llm_performance_chart_{test_time.strftime('%Y%m%d_%H%M%S')}.png" class="download-btn">
-                📷 Download Image
+                Download image
             </a>
         </div>
     </div>

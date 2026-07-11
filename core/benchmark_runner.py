@@ -228,13 +228,17 @@ def _load_typed_pools() -> dict[str, list[str]]:
         for entry in mixed:
             head = entry[:80].lower()
             if "gpqa" in head or "science" in head:
-                science.append((f"gpqa_{g_i}", entry)); g_i += 1
+                science.append((f"gpqa_{g_i}", entry))
+                g_i += 1
             elif "humaneval" in head:
-                code.append((f"humaneval_{c_i}", entry)); c_i += 1
+                code.append((f"humaneval_{c_i}", entry))
+                c_i += 1
             elif "mbpp" in head or "programming" in head:
-                code.append((f"mbpp_{c_i}", entry)); c_i += 1
+                code.append((f"mbpp_{c_i}", entry))
+                c_i += 1
             elif "longbench" in head or "repobench" in head or "lcc" in head or "qasper" in head:
-                longform.append((f"longbench_{l_i}", entry)); l_i += 1
+                longform.append((f"longbench_{l_i}", entry))
+                l_i += 1
         cache["science"] = science
         cache["code"] = code
         cache["longform"] = longform
@@ -295,10 +299,12 @@ def _get_random_typed_prompt(target_token_budget: int, tokenizer,
             src = pools.get(t, [])
         candidates.extend(src)
     # dedupe by text preserving order (first id wins)
-    seen: set[str] = set(); uniq: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    uniq: list[tuple[str, str]] = []
     for sid, text in candidates:
         if text not in seen:
-            seen.add(text); uniq.append((sid, text))
+            seen.add(text)
+            uniq.append((sid, text))
     if not uniq:
         return None
 
@@ -3668,7 +3674,7 @@ class BenchmarkRunner:
 
             status_msg = f"currentlyTest (目标: {tokens_target})..."
             if q_summary:
-                status_msg += f"\n📋 {q_summary}"
+                status_msg += f"\n{q_summary}"
             self.status_text.info(status_msg)
             for i in range(req_per_level_p):
                 res = await self._run_prefill_request(None, long_prompt, max_tokens_p, i)
@@ -3720,7 +3726,7 @@ class BenchmarkRunner:
 
                 status_msg = f"currentlyTest (目标: {length_target}, 轮数: {r+1}/{rounds_per_level_l})..."
                 if q_summary:
-                    status_msg += f"\n📋 {q_summary}"
+                    status_msg += f"\n{q_summary}"
                 self.status_text.info(status_msg)
 
                 res = await self._run_long_context_request(None, long_prompt, max_tokens_l, 0)

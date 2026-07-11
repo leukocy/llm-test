@@ -50,17 +50,7 @@ class LogEntry:
     def to_text(self, include_metrics=True) -> str:
         """Convertis可读文本"""
         time_str = self.timestamp.strftime("%H:%M:%S")
-        level_emoji = {
-            LogLevel.DEBUG: "🔍",
-            LogLevel.INFO: "ℹ️",
-            LogLevel.SUCCESS: "✅",
-            LogLevel.WARNING: "⚠️",
-            LogLevel.ERROR: "❌",
-            LogLevel.CRITICAL: "🔥"
-        }
-
-        emoji = level_emoji.get(self.level, "📝")
-        parts = [f"[{time_str}] {emoji}"]
+        parts = [f"[{time_str}] [{self.level.value.upper()}]"]
 
         if self.session_id:
             parts.append(f"[{self.session_id}]")
@@ -82,7 +72,7 @@ class LogEntry:
                 parts.append(f"({', '.join(metrics_items)})")
 
         if self.error:
-            parts.append(f"⚠ Error: {self.error}")
+            parts.append(f"Error: {self.error}")
 
         return " ".join(parts)
 

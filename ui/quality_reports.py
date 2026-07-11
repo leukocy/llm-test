@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from evaluators.base_evaluator import EvaluationResult
+from ui.design_system import material_icon
 
 
 def generate_quality_summary(results: dict[str, EvaluationResult]) -> pd.DataFrame:
@@ -107,7 +108,7 @@ def render_accuracy_chart(results: dict[str, EvaluationResult]) -> go.Figure:
     ])
 
     fig.update_layout(
-        title="📊 Accuracy by Dataset",
+        title="Accuracy by dataset",
         xaxis_title="Dataset",
         yaxis_title="Accuracy (%)",
         yaxis_range=[0, 105],
@@ -149,7 +150,7 @@ def render_radar_chart(results: dict[str, EvaluationResult]) -> go.Figure:
                 'range': [0, 100]
             }
         },
-        title="🎯 Model Capability Radar",
+        title="Model capability radar",
         showlegend=False,
         height=450
     )
@@ -195,7 +196,7 @@ def render_category_heatmap(result: EvaluationResult) -> go.Figure:
     ])
 
     fig.update_layout(
-        title=f"📈 {result.dataset_name} Per-Category Accuracy (Top {min(len(categories), max_display)})",
+        title=f"{result.dataset_name} per-category accuracy (top {min(len(categories), max_display)})",
         xaxis_title="Accuracy (%)",
         yaxis_title="Category",
         xaxis_range=[0, 110],
@@ -219,23 +220,23 @@ def render_error_analysis(result: EvaluationResult, max_errors: int = 20) -> Non
     errors = [d for d in result.details if not d.is_correct]
 
     if not errors:
-        st.success("🎉 Great! No error samples found in this dataset.")
+        st.success("No error samples were found in this dataset.")
         return
 
     # --- New: Showing automated failure analysis report ---
     if hasattr(result, 'extended_metrics') and result.extended_metrics and 'failure_analysis' in result.extended_metrics:
         fa = result.extended_metrics['failure_analysis']
-        with st.expander("🤖 Automated Failure Analysis Report", expanded=True):
+        with st.expander("Automated failure analysis", expanded=True):
             st.markdown(f"**Overall Failure Rate**: `{fa.get('failure_rate', 0):.1f}%`")
 
             c1, c2 = st.columns(2)
             with c1:
-                st.markdown("##### 🚨 Top Failure Causes")
+                st.markdown("##### Top failure causes")
                 for issue in fa.get('top_issues', []):
                     st.write(f"- {issue}")
 
             with c2:
-                st.markdown("##### 💡 Improvement Suggestions")
+                st.markdown("##### Improvement suggestions")
                 for suggestion in fa.get('suggestions', []):
                     st.info(suggestion)
 
@@ -294,15 +295,16 @@ def render_error_analysis(result: EvaluationResult, max_errors: int = 20) -> Non
         if export_data:
             csv_df = pd.DataFrame(export_data)
             st.download_button(
-                label="📥 Download Error Report",
+                label="Download error report",
                 data=csv_df.to_csv(index=False),
                 file_name=f"errors_{result.dataset_name}_{result.model_id}.csv",
                 mime="text/csv",
-                help="Download all error samples with prompts and full responses"
+                help="Download all error samples with prompts and full responses",
+                icon=material_icon("download"),
             )
 
     # 2. Error list overview (display section)
-    st.markdown("#### ❌ Error List")
+    st.markdown("#### Error list")
 
     display_data = []
     for err in filtered_errors[:max_errors]:
@@ -328,7 +330,7 @@ def render_error_analysis(result: EvaluationResult, max_errors: int = 20) -> Non
             st.caption(f"*Showing only the first {max_errors} items. Use the button above to download the full report or the tool below for details.*")
 
     # 3. Deep diagnosis tool
-    st.markdown("#### 🕵️ Deep Diagnosis")
+    st.markdown("#### Deep diagnosis")
     st.caption("Select a sample ID to view the full prompt and model raw response for error analysis.")
 
     selected_error_id = st.selectbox(
@@ -396,7 +398,7 @@ def render_eval_method_breakdown(result: EvaluationResult) -> None:
     if not eval_methods and not parse_methods:
         return
 
-    st.markdown("##### 📊 Evaluation Method Breakdown")
+    st.markdown("##### Evaluation method breakdown")
 
     col1, col2 = st.columns(2)
 
@@ -429,7 +431,7 @@ def render_performance_stats(results: dict[str, EvaluationResult]) -> None:
     """
     Render performance metrics panel
     """
-    st.markdown("### ⚡ Performance Metrics")
+    st.markdown("### Performance metrics")
 
     # Collect results with performance data
     perf_data = []
@@ -473,7 +475,7 @@ def render_performance_stats(results: dict[str, EvaluationResult]) -> None:
             )
         ])
         fig_ttft.update_layout(
-            title="⏱️ Average TTFT",
+            title="Average TTFT",
             xaxis_title="Dataset",
             yaxis_title="TTFT (ms)",
             template="plotly_white",
@@ -495,7 +497,7 @@ def render_performance_stats(results: dict[str, EvaluationResult]) -> None:
             )
         ])
         fig_tps.update_layout(
-            title="🚀 Average TPS",
+            title="Average TPS",
             xaxis_title="Dataset",
             yaxis_title="Tokens/Second",
             template="plotly_white",
@@ -522,11 +524,11 @@ def render_quality_report(
         return
 
     # Title
-    st.header("📋 Model Quality Assessment Report")
+    st.header("Model quality assessment report")
     st.subheader(f"Model: `{model_id}`")
 
     # Summary table
-    st.markdown("### 📊 Evaluation Summary")
+    st.markdown("### Evaluation summary")
     summary_df = generate_quality_summary(results)
 
     # Format accuracy column
@@ -554,10 +556,10 @@ def render_quality_report(
 
     # Per-category details
     if show_details:
-        st.markdown("### 📈 Per-Category Analysis")
+        st.markdown("### Per-category analysis")
 
         for dataset_name, result in results.items():
-            with st.expander(f"🔍 {dataset_name} Detailed Analysis", expanded=True):
+            with st.expander(f"{dataset_name} detailed analysis", expanded=True):
                 # Per-category accuracy
                 if result.by_category:
                     heatmap = render_category_heatmap(result)
@@ -569,7 +571,10 @@ def render_quality_report(
                 # AI Judge correction records
                 corrected_samples = [s for s in result.details if getattr(s, "is_judge_corrected", False)]
                 if corrected_samples:
-                    st.info(f"⚖️ AI Judge successfully corrected {len(corrected_samples)} misjudged samples! (these are now included in the accuracy calculation)")
+                    st.info(
+                        f"AI Judge corrected {len(corrected_samples)} misjudged samples; "
+                        "they are included in the accuracy calculation."
+                    )
                     with st.expander("View Judge Correction Details", expanded=False):
                         for s in corrected_samples:
                             st.markdown(f"**Sample ID: {s.sample_id}**")
@@ -582,7 +587,7 @@ def render_quality_report(
                 render_error_analysis(result)
 
     # Export options
-    st.markdown("### 💾 Export Results")
+    st.markdown("### Export results")
 
     col_export1, col_export2 = st.columns(2)
 
@@ -590,10 +595,11 @@ def render_quality_report(
         # CSV Export
         csv_data = summary_df.to_csv(index=False)
         st.download_button(
-            label="📥 Download Summary CSV",
+            label="Download summary CSV",
             data=csv_data,
             file_name=f"quality_summary_{model_id}.csv",
-            mime="text/csv"
+            mime="text/csv",
+            icon=material_icon("download"),
         )
 
     with col_export2:
@@ -604,10 +610,11 @@ def render_quality_report(
             for name, result in results.items()
         }
         st.download_button(
-            label="📥 Download Detailed JSON",
+            label="Download detailed JSON",
             data=json.dumps(json_data, ensure_ascii=False, indent=2),
             file_name=f"quality_details_{model_id}.json",
-            mime="application/json"
+            mime="application/json",
+            icon=material_icon("download"),
         )
 
 
@@ -624,7 +631,7 @@ def render_model_comparison(
         st.warning("No comparison data yet")
         return
 
-    st.header("📊 Model Capability Comparison")
+    st.header("Model capability comparison")
 
     # Collect all datasets
     all_datasets = set()

@@ -77,7 +77,7 @@ def download_from_huggingface():
         cat = s.get("category", "unknown")
         categories[cat] = categories.get(cat, 0) + 1
 
-    print(f"\n✅ Arena-Hard DatasetSaved到 {output_file}")
+    print(f"\nArena-Hard DatasetSaved到 {output_file}")
     print(f"总计: {len(all_samples)}  samples")
     print("类别分布:")
     for cat, count in sorted(categories.items(), key=lambda x: -x[1]):
@@ -95,7 +95,7 @@ def main():
     if download_from_huggingface():
         return
 
-    print("\n⚠️  自动Download failed，willuse内置示例Data")
+    print("\n  自动Download failed，willuse内置示例Data")
 
 
 if __name__ == "__main__":

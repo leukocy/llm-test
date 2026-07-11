@@ -6,7 +6,7 @@
 
 ---
 
-## ✅ 已完成配置
+## [OK] 已完成配置
 
 ### 1. GitHub Actions 工作流
 
@@ -57,20 +57,20 @@
 
 | 钩子 | 功能 | 自动修复 |
 |------|------|----------|
-| **black** | 代码格式化 | ✅ |
-| **isort** | 导入排序 | ✅ |
-| **ruff** | 快速 lint | ✅ |
-| **bandit** | 安全检查 | ❌ |
-| **mypy** | 类型检查 | ❌ |
-| **trailing-whitespace** | 尾随空格 | ✅ |
-| **end-of-file-fixer** | 文件结尾 | ✅ |
-| **check-yaml** | YAML 语法 | ❌ |
-| **check-toml** | TOML 语法 | ❌ |
-| **check-json** | JSON 语法 | ❌ |
-| **detect-secrets** | 密钥检测 | ❌ |
-| **markdownlint** | Markdown lint | ✅ |
-| **shellcheck** | Shell 脚本检查 | ❌ |
-| **hadolint** | Dockerfile 检查 | ❌ |
+| **black** | 代码格式化 | [OK] |
+| **isort** | 导入排序 | [OK] |
+| **ruff** | 快速 lint | [OK] |
+| **bandit** | 安全检查 | [Missing] |
+| **mypy** | 类型检查 | [Missing] |
+| **trailing-whitespace** | 尾随空格 | [OK] |
+| **end-of-file-fixer** | 文件结尾 | [OK] |
+| **check-yaml** | YAML 语法 | [Missing] |
+| **check-toml** | TOML 语法 | [Missing] |
+| **check-json** | JSON 语法 | [Missing] |
+| **detect-secrets** | 密钥检测 | [Missing] |
+| **markdownlint** | Markdown lint | [OK] |
+| **shellcheck** | Shell 脚本检查 | [Missing] |
+| **hadolint** | Dockerfile 检查 | [Missing] |
 
 ### 4. 分支保护规则
 
@@ -82,12 +82,12 @@
 ┌─────────────────────────────────────────────────────┐
 │              main 分支保护规则                       │
 ├─────────────────────────────────────────────────────┤
-│ ✅ 需要 PR                                         │
-│ ✅ 至少 1 个审查批准                                │
-│ ✅ 新提交需重新审查                                 │
-│ ✅ 所有 CI 检查通过                                 │
-│ ✅ 分支必须最新                                     │
-│ ✅ CODEOWNERS 规则                                  │
+│ [OK] 需要 PR                                         │
+│ [OK] 至少 1 个审查批准                                │
+│ [OK] 新提交需重新审查                                 │
+│ [OK] 所有 CI 检查通过                                 │
+│ [OK] 分支必须最新                                     │
+│ [OK] CODEOWNERS 规则                                  │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -97,9 +97,9 @@
 ┌─────────────────────────────────────────────────────┐
 │             develop 分支保护规则                     │
 ├─────────────────────────────────────────────────────┤
-│ ✅ 需要 PR                                         │
-│ ✅ 至少 1 个审查批准                                │
-│ ✅ 基本检查通过                                     │
+│ [OK] 需要 PR                                         │
+│ [OK] 至少 1 个审查批准                                │
+│ [OK] 基本检查通过                                     │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -141,7 +141,7 @@
 
 ---
 
-## 📋 使用指南
+## 使用指南
 
 ### 开发者快速上手
 
@@ -219,19 +219,19 @@ pre-commit uninstall
 在 GitHub PR 页面查看所有检查状态：
 
 ```
-✅ lint - All checks passed
-✅ security-tests - 21/21 tests passed
-✅ unit-tests (Python 3.10) - Passed
-✅ unit-tests (Python 3.11) - Passed
-✅ unit-tests (Python 3.12) - Passed
-✅ import-check - All imports verified
-✅ dependency-check - No vulnerabilities found
-✅ complexity-check - Acceptable complexity
+[OK] lint - All checks passed
+[OK] security-tests - 21/21 tests passed
+[OK] unit-tests (Python 3.10) - Passed
+[OK] unit-tests (Python 3.11) - Passed
+[OK] unit-tests (Python 3.12) - Passed
+[OK] import-check - All imports verified
+[OK] dependency-check - No vulnerabilities found
+[OK] complexity-check - Acceptable complexity
 ```
 
 ---
 
-## 📊 预期效果
+## 预期效果
 
 ### 代码质量提升
 
@@ -247,17 +247,17 @@ pre-commit uninstall
 ### 开发效率变化
 
 ```
-短期 (1-2 周): ⬇️ 效率下降 10-20%
+短期 (1-2 周): 效率下降 10-20%
   - 适应新工具
   - 修复现有问题
   - 学习配置
 
-中期 (1-2 月): ➡️ 效率恢复
+中期 (1-2 月): 效率恢复
   - 熟悉工具
   - 自动化生效
   - 问题减少
 
-长期 (3+ 月): ⬆️ 效率提升 20-30%
+长期 (3+ 月): 效率提升 20-30%
   - 减少返工
   - 快速发现问题
   - 代码质量更高
@@ -265,7 +265,7 @@ pre-commit uninstall
 
 ---
 
-## 🎯 后续建议
+## 后续建议
 
 ### 短期 (1 周内)
 
@@ -321,7 +321,7 @@ pre-commit uninstall
 
 ---
 
-## 📁 文件清单
+## 文件清单
 
 ### 新建文件 (14 个)
 
@@ -347,7 +347,7 @@ pyproject.toml (updated)    # 项目配置
 
 ---
 
-## ✅ 完成检查
+## [OK] 完成检查
 
 - [x] CI 工作流配置
 - [x] CodeQL 安全分析
@@ -362,6 +362,6 @@ pyproject.toml (updated)    # 项目配置
 
 ---
 
-**配置状态:** ✅ 完成
+**配置状态:** [OK] 完成
 **下一步:** 测试 CI 流程，安装 pre-commit hooks
 **维护者:** 开发团队

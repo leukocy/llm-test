@@ -26,7 +26,7 @@ def _generate_markdown_summary(df, test_type, duration):
     total_output = int(df['decode_tokens'].sum()) if 'decode_tokens' in df.columns else 0
     df_ok = df[success_mask_from_error(df['error'])] if 'error' in df.columns else df
 
-    md = "### 📊 Test Summary\n\n"
+    md = "### Test summary\n\n"
 
     # Common stats
     md += f"- **Total Requests**: {total_requests} (succeeded: {successful}, Success Rate: {success_rate:.1f}%)\n"
@@ -128,11 +128,11 @@ def _generate_markdown_summary(df, test_type, duration):
                 input_ratio = levels[-1] / levels[0] if levels[0] > 0 else 1
                 ttft_ratio_full = ttft_by_level[levels[-1]] / ttft_by_level[levels[0]] if ttft_by_level[levels[0]] > 0 else 1
                 if ttft_ratio_full > input_ratio * 1.5:
-                    md += f"- **TTFT Growth Pattern**: Super-linear growth (TTFT grew {ttft_ratio_full:.1f}x while input only grew {input_ratio:.1f}x) ⚠️\n"
+                    md += f"- **TTFT Growth Pattern**: Super-linear growth (TTFT grew {ttft_ratio_full:.1f}x while input only grew {input_ratio:.1f}x)\n"
                 elif ttft_ratio_full > input_ratio * 0.8:
                     md += "- **TTFT Growth Pattern**: approximately linear.\n"
                 else:
-                    md += "- **TTFT Growth Pattern**: Sub-linear (TTFT grew slower than input) ✅\n"
+                    md += "- **TTFT Growth Pattern**: Sub-linear (TTFT grew slower than input)\n"
 
     elif test_type == 'long_context':
         levels = sorted(df_ok['context_length_target'].unique()) if 'context_length_target' in df_ok.columns else []
