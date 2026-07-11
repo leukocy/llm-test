@@ -67,12 +67,12 @@ def calculate_request_metrics(
     the prefill-decode gap does not distort generation-speed metrics.  TTFT is
     **never** affected.
     """
-    ttft = 0
-    tps = 0
-    tpot = 0
-    tpot_p95 = 0
-    tpot_p99 = 0
-    generation_time = 0
+    ttft = 0.0
+    tps = 0.0
+    tpot = 0.0
+    tpot_p95 = 0.0
+    tpot_p99 = 0.0
+    generation_time = 0.0
 
     if first_token_time:
         ttft_raw = first_token_time - start_time

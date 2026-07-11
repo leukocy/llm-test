@@ -10,23 +10,26 @@ logger = get_logger(__name__)
 
 def initialize_csv(columns, filename):
     try:
-        with open(filename, 'w', newline='', encoding='utf-8') as f:
+        with open(filename, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(columns)
     except OSError as e:
         logger.error(f"Initialize CSV 文件失败: {e}")
 
+
 def append_to_csv(result_dict, columns, filename):
     try:
-        with open(filename, 'a', newline='', encoding='utf-8') as f:
+        with open(filename, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=columns)
             writer.writerow({k: result_dict.get(k) for k in columns})
     except OSError as e:
         logger.error(f"写入 CSV 失败: {e}")
 
+
 def get_table_download_link(df, filename, text):
     csv_data = df.to_csv(index=False)
     b64 = base64.b64encode(csv_data.encode()).decode()
     return f'<a href="data:file/csv;base64,{b64}" download="{filename}">{text}</a>'
+
 
 def get_log_download_link(log_list, filename, text):
     """Generates a download link for a list of log strings."""
@@ -38,6 +41,7 @@ def get_log_download_link(log_list, filename, text):
     except Exception as e:
         logger.error(f"GenerateLog 下载链接失败: {e}")
         return ""
+
 
 def reorder_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -56,54 +60,71 @@ def reorder_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     # 1. Identity — 标识列
-    identity_cols = ['session_id', 'test_type']
+    identity_cols = ["session_id", "test_type"]
 
     # 2. Test Config — Test条件/Configure
     config_cols = [
-        'concurrency', 'round',
-        'input_tokens_target', 'context_length_target',
-        'cumulative_mode', 'timestamp',
+        "concurrency",
+        "round",
+        "input_tokens_target",
+        "context_length_target",
+        "cumulative_mode",
+        "timestamp",
     ]
 
     # 3. Input (Prefill) Metrics — 输入Process阶段
     #    ttft → prefill_speed → prefill_tokens → cache_hit_tokens
     #    (先看Latency，再看速度，再看 token 数)
     input_cols = [
-        'ttft', 'prefill_speed',
-        'prefill_tokens', 'cache_hit_tokens',
+        "ttft",
+        "prefill_speed",
+        "prefill_tokens",
+        "cache_hit_tokens",
     ]
 
     # 4. Output (Decode) Metrics — 输出Generate阶段
     #    tps → decode_tokens → decode_time → tpot → tpot_p95 → tpot_p99
     #    (先看速度，再看 token 数and时间，最后看尾部Latency)
     output_cols = [
-        'tps', 'decode_tokens', 'decode_time',
-        'tpot', 'tpot_p95', 'tpot_p99',
+        "tps",
+        "decode_tokens",
+        "decode_time",
+        "tpot",
+        "tpot_p95",
+        "tpot_p99",
     ]
 
     # 5. System Throughput — 系统级Aggregate指标
     system_cols = [
-        'system_input_throughput', 'system_output_throughput',
-        'system_throughput', 'system_total_throughput',
-        'rps',
+        "system_input_throughput",
+        "system_output_throughput",
+        "system_throughput",
+        "system_total_throughput",
+        "rps",
     ]
 
     # 6. Total Time — 端到端总耗时
-    time_cols = ['total_time']
+    time_cols = ["total_time"]
 
     # 7. Metadata — 技术细节 (放in最右侧)
     meta_cols = [
-        'start_time', 'first_token_time', 'end_time',
-        'token_calc_method',
-        'api_prefill', 'api_decode',
-        'effective_prefill_tokens', 'effective_decode_tokens', 'token_source',
-        'cache_hit_source',
-        'error',
+        "start_time",
+        "first_token_time",
+        "end_time",
+        "token_calc_method",
+        "api_prefill",
+        "api_decode",
+        "effective_prefill_tokens",
+        "effective_decode_tokens",
+        "token_source",
+        "cache_hit_source",
+        "error",
     ]
 
     # Construct final order based on what exists in the dataframe
-    all_defined = (identity_cols + config_cols + input_cols + output_cols
-                   + system_cols + time_cols + meta_cols)
+    all_defined = (
+        identity_cols + config_cols + input_cols + output_cols + system_cols + time_cols + meta_cols
+    )
 
     final_order = []
     final_order.extend([c for c in identity_cols if c in df.columns])

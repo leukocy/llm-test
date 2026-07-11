@@ -29,13 +29,22 @@ def render_history_browser():
     with col2:
         filter_type = st.selectbox(
             "Test Type",
-            ["All", "concurrency", "prefill", "segmented_prefill", "long_context", "matrix", "custom", "stability"]
+            [
+                "All",
+                "concurrency",
+                "prefill",
+                "segmented_prefill",
+                "long_context",
+                "matrix",
+                "custom",
+                "stability",
+            ],
         )
 
     with col3:
         filter_days = st.selectbox(
             "Time Range",
-            ["All", "Today", "Last 7 Days", "Last 30 Days", "Last 90 Days"]
+            ["All", "Today", "Last 7 Days", "Last 30 Days", "Last 90 Days"],
         )
 
     # Build query
@@ -114,7 +123,9 @@ def _render_stats(db, runs: list[TestRun]):
 
     with col4:
         if runs:
-            avg_ttft = sum(r.avg_ttft for r in runs if r.avg_ttft) / max(1, len([r for r in runs if r.avg_ttft]))
+            avg_ttft = sum(r.avg_ttft for r in runs if r.avg_ttft) / max(
+                1, len([r for r in runs if r.avg_ttft])
+            )
             st.metric("Average TTFT", f"{avg_ttft:.3f}s")
         else:
             st.metric("Average TTFT", "-")
@@ -191,18 +202,43 @@ def _show_run_metrics(run: TestRun, db):
 
         with col1:
             st.metric("Total Requests", stats.get("total_requests", 0))
-            st.metric("Average TTFT", f"{stats.get('avg_ttft', 0):.3f}s" if stats.get('avg_ttft') else "-")
-            st.metric("Min TTFT", f"{stats.get('min_ttft', 0):.3f}s" if stats.get('min_ttft') else "-")
+            st.metric(
+                "Average TTFT",
+                f"{stats.get('avg_ttft', 0):.3f}s" if stats.get("avg_ttft") else "-",
+            )
+            st.metric(
+                "Min TTFT",
+                f"{stats.get('min_ttft', 0):.3f}s" if stats.get("min_ttft") else "-",
+            )
 
         with col2:
-            st.metric("Average TPS", f"{stats.get('avg_tps', 0):.1f}" if stats.get('avg_tps') else "-")
-            st.metric("Max TPS", f"{stats.get('max_tps', 0):.1f}" if stats.get('max_tps') else "-")
-            st.metric("Min TPS", f"{stats.get('min_tps', 0):.1f}" if stats.get('min_tps') else "-")
+            st.metric(
+                "Average TPS",
+                f"{stats.get('avg_tps', 0):.1f}" if stats.get("avg_tps") else "-",
+            )
+            st.metric(
+                "Max TPS",
+                f"{stats.get('max_tps', 0):.1f}" if stats.get("max_tps") else "-",
+            )
+            st.metric(
+                "Min TPS",
+                f"{stats.get('min_tps', 0):.1f}" if stats.get("min_tps") else "-",
+            )
 
         with col3:
-            st.metric("Total Tokens", stats.get("total_prefill_tokens", 0) + stats.get("total_decode_tokens", 0))
+            st.metric(
+                "Total Tokens",
+                stats.get("total_prefill_tokens", 0) + stats.get("total_decode_tokens", 0),
+            )
             st.metric("Cache Hits", stats.get("total_cache_hit_tokens", 0))
-            st.metric("Average Prefill Speed", f"{stats.get('avg_prefill_speed', 0):.1f}" if stats.get('avg_prefill_speed') else "-")
+            st.metric(
+                "Average Prefill Speed",
+                (
+                    f"{stats.get('avg_prefill_speed', 0):.1f}"
+                    if stats.get("avg_prefill_speed")
+                    else "-"
+                ),
+            )
 
 
 def _export_run(run: TestRun, db):
@@ -240,7 +276,9 @@ def render_import_panel():
     source_type = st.radio("Import Source", ["Single File", "Entire Directory"])
 
     if source_type == "Single File":
-        csv_file = st.text_input("CSV file path", placeholder="e.g.: raw_data/model_id/benchmark_results.csv")
+        csv_file = st.text_input(
+            "CSV file path", placeholder="e.g.: raw_data/model_id/benchmark_results.csv"
+        )
 
         col1, col2 = st.columns(2)
         with col1:
@@ -250,7 +288,9 @@ def render_import_panel():
 
         if st.button("Start Import") and csv_file:
             with st.spinner("Importing..."):
-                imported, errors = db_manager.import_csv(csv_file, model_id or None, test_type or None)
+                imported, errors = db_manager.import_csv(
+                    csv_file, model_id or None, test_type or None
+                )
                 if imported > 0:
                     st.success(f"Successfully imported {imported} records")
                 if errors:
@@ -299,6 +339,7 @@ def render_dashboard():
     model_stats = stats.get("by_model", [])
     if model_stats:
         import pandas as pd
+
         df = pd.DataFrame(model_stats)
         st.bar_chart(df.set_index("model_id")["count"])
 
@@ -307,6 +348,7 @@ def render_dashboard():
     type_stats = stats.get("by_type", [])
     if type_stats:
         import pandas as pd
+
         df = pd.DataFrame(type_stats)
         st.bar_chart(df.set_index("test_type")["count"])
 
@@ -317,4 +359,6 @@ def render_dashboard():
         for run in recent[:5]:
             status_icons = {"completed": "🟢", "running": "🔵", "failed": "🔴"}
             icon = status_icons.get(run.status, "⚪")
-            st.markdown(f"- {icon} **{run.test_type}** - {run.model_id} ({run.created_at.strftime('%Y-%m-%d %H:%M') if run.created_at else ''})")
+            st.markdown(
+                f"- {icon} **{run.test_type}** - {run.model_id} ({run.created_at.strftime('%Y-%m-%d %H:%M') if run.created_at else ''})"
+            )

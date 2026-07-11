@@ -12,11 +12,7 @@ import time
 
 import pytest
 
-from core.metrics import (
-    ThinkingMetrics,
-    ThinkingMetricsResult,
-    format_metrics_report,
-)
+from core.metrics import ThinkingMetrics, ThinkingMetricsResult, format_metrics_report
 
 
 class TestThinkingMetricsResult:
@@ -39,7 +35,7 @@ class TestThinkingMetricsResult:
             content_tokens=200,
             total_tokens=700,
             platform="mimo",
-            model_id="mimo-v2-flash"
+            model_id="mimo-v2-flash",
         )
         assert result.ttft_ms == 100.0
         assert result.platform == "mimo"
@@ -52,7 +48,7 @@ class TestThinkingMetricsResult:
             reasoning_tokens=100,
             content_tokens=100,
             total_tokens=200,
-            reasoning_ratio=0.5
+            reasoning_ratio=0.5,
         )
         assert result.reasoning_ratio == 0.5
 
@@ -136,12 +132,14 @@ class TestThinkingMetrics:
     def test_set_usage_with_reasoning_tokens(self):
         """Set包含 reasoning_tokens  usage"""
         metrics = ThinkingMetrics()
-        metrics.set_usage({
-            "prompt_tokens": 100,
-            "completion_tokens": 200,
-            "total_tokens": 300,
-            "reasoning_tokens": 50
-        })
+        metrics.set_usage(
+            {
+                "prompt_tokens": 100,
+                "completion_tokens": 200,
+                "total_tokens": 300,
+                "reasoning_tokens": 50,
+            }
+        )
 
         result = metrics.calculate()
         assert result.reasoning_tokens == 50
@@ -151,14 +149,14 @@ class TestThinkingMetrics:
     def test_set_usage_with_nested_reasoning(self):
         """Set嵌套结构 reasoning_tokens"""
         metrics = ThinkingMetrics()
-        metrics.set_usage({
-            "prompt_tokens": 100,
-            "completion_tokens": 200,
-            "total_tokens": 300,
-            "completion_tokens_details": {
-                "reasoning_tokens": 80
+        metrics.set_usage(
+            {
+                "prompt_tokens": 100,
+                "completion_tokens": 200,
+                "total_tokens": 300,
+                "completion_tokens_details": {"reasoning_tokens": 80},
             }
-        })
+        )
 
         result = metrics.calculate()
         assert result.reasoning_tokens == 80
@@ -168,12 +166,14 @@ class TestThinkingMetrics:
         """based on字符比例估算推理 token"""
         metrics = ThinkingMetrics()
         metrics.record_reasoning_chunk("AAAA")  # 4 字符
-        metrics.record_content_chunk("BB")      # 2 字符
-        metrics.set_usage({
-            "prompt_tokens": 10,
-            "completion_tokens": 60,  # 6 tokens
-            "total_tokens": 70
-        })
+        metrics.record_content_chunk("BB")  # 2 字符
+        metrics.set_usage(
+            {
+                "prompt_tokens": 10,
+                "completion_tokens": 60,  # 6 tokens
+                "total_tokens": 70,
+            }
+        )
 
         result = metrics.calculate()
         # 推理占比 = 4/6，therefore reasoning_tokens = 60 * 4/6 = 40
@@ -195,12 +195,14 @@ class TestThinkingMetrics:
         time.sleep(0.01)
         metrics.record_request_end()
 
-        metrics.set_usage({
-            "prompt_tokens": 100,
-            "completion_tokens": 50,
-            "total_tokens": 150,
-            "reasoning_tokens": 30
-        })
+        metrics.set_usage(
+            {
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "total_tokens": 150,
+                "reasoning_tokens": 30,
+            }
+        )
 
         result = metrics.calculate()
         assert result.ttft_ms >= 0
@@ -210,7 +212,7 @@ class TestThinkingMetrics:
         assert result.reasoning_time_ms > 0  # 现inhas两推理块，应该has时间差
         assert result.reasoning_tokens == 30
         assert result.content_tokens == 20
-        assert result.reasoning_ratio == pytest.approx(30/150)  # reasoning / total
+        assert result.reasoning_ratio == pytest.approx(30 / 150)  # reasoning / total
         assert result.reasoning_density > 0
 
     def test_calculate_with_quality_score(self):
@@ -221,11 +223,7 @@ class TestThinkingMetrics:
         metrics.record_content_chunk("Answer")
         metrics.record_request_end()
 
-        metrics.set_usage({
-            "prompt_tokens": 1000,
-            "completion_tokens": 500,
-            "total_tokens": 1500
-        })
+        metrics.set_usage({"prompt_tokens": 1000, "completion_tokens": 500, "total_tokens": 1500})
 
         # quality_score = 8/10
         result = metrics.calculate(quality_score=8.0)
@@ -242,11 +240,7 @@ class TestThinkingMetrics:
         """免费平台成本is0"""
         metrics = ThinkingMetrics(platform="mimo")
 
-        metrics.set_usage({
-            "prompt_tokens": 1000,
-            "completion_tokens": 500,
-            "total_tokens": 1500
-        })
+        metrics.set_usage({"prompt_tokens": 1000, "completion_tokens": 500, "total_tokens": 1500})
 
         result = metrics.calculate()
         # MiMo 免费
@@ -301,10 +295,7 @@ class TestPricing:
         """未知平台usedefault定价"""
         metrics = ThinkingMetrics(platform="unknown")
 
-        metrics.set_usage({
-            "prompt_tokens": 1000,
-            "completion_tokens": 500
-        })
+        metrics.set_usage({"prompt_tokens": 1000, "completion_tokens": 500})
 
         result = metrics.calculate()
         # 应该usedefault定价 (0.5, 0.5)
@@ -327,12 +318,12 @@ class TestFormatMetricsReport:
             reasoning_tokens=100,
             content_tokens=50,
             total_tokens=150,
-            reasoning_ratio=2/3,
+            reasoning_ratio=2 / 3,
             reasoning_chars=500,
             content_chars=250,
             reasoning_density=2.0,
             estimated_cost_usd=0.001,
-            quality_per_dollar=5000.0
+            quality_per_dollar=5000.0,
         )
 
         report = format_metrics_report(result)
@@ -348,7 +339,7 @@ class TestFormatMetricsReport:
             platform="test",
             model_id="test-model",
             reasoning_tokens=100,
-            content_tokens=50
+            content_tokens=50,
         )
 
         report = format_metrics_report(result)
@@ -357,10 +348,7 @@ class TestFormatMetricsReport:
 
     def test_format_report_with_none_values(self):
         """Process None 值"""
-        result = ThinkingMetricsResult(
-            ttft_ms=None,
-            estimated_cost_usd=None
-        )
+        result = ThinkingMetricsResult(ttft_ms=None, estimated_cost_usd=None)
 
         report = format_metrics_report(result)
         assert "N/A" in report
@@ -373,15 +361,11 @@ class TestReasoningRatio:
         """推理占比Calculate"""
         metrics = ThinkingMetrics()
 
-        metrics.set_usage({
-            "total_tokens": 100,
-            "completion_tokens": 60,
-            "reasoning_tokens": 40
-        })
+        metrics.set_usage({"total_tokens": 100, "completion_tokens": 60, "reasoning_tokens": 40})
 
         result = metrics.calculate()
         # reasoning_ratio = reasoning_tokens / total_tokens
-        assert result.reasoning_ratio == pytest.approx(40/100)
+        assert result.reasoning_ratio == pytest.approx(40 / 100)
 
     def test_reasoning_ratio_zero_tokens(self):
         """零 token 时占比"""
@@ -393,7 +377,7 @@ class TestReasoningRatio:
         """推理密度Calculate"""
         metrics = ThinkingMetrics()
         metrics.record_reasoning_chunk("AAAA BBBB")  # 9 字符
-        metrics.record_content_chunk("CC")            # 2 字符
+        metrics.record_content_chunk("CC")  # 2 字符
 
         result = metrics.calculate()
-        assert result.reasoning_density == pytest.approx(9/2)
+        assert result.reasoning_density == pytest.approx(9 / 2)

@@ -13,6 +13,7 @@ from .thinking_params import get_content_field, get_platform_features, get_reaso
 @dataclass
 class ParsedChunk:
     """Parse后响应块"""
+
     content: str = ""  # 正文内容
     reasoning: str = ""  # 推理内容
     finish_reason: str | None = None  # 完成原因
@@ -23,6 +24,7 @@ class ParsedChunk:
 @dataclass
 class ParsedResponse:
     """Parse后完整响应"""
+
     full_content: str = ""  # 完整正文
     full_reasoning: str = ""  # 完整推理内容
     total_chunks: int = 0  # 总块数
@@ -185,7 +187,7 @@ class UnifiedResponseParser:
             finish_reason=self._finish_reason,
             first_reasoning_chunk_index=self._first_reasoning_idx,
             first_content_chunk_index=self._first_content_idx,
-            raw_snapshots=self._snapshots
+            raw_snapshots=self._snapshots,
         )
 
     def reset(self):
@@ -215,10 +217,7 @@ class UnifiedResponseParser:
         return len(self._full_reasoning) / total
 
 
-def parse_stream_response(
-    chunks: list[dict[str, Any]],
-    platform: str
-) -> ParsedResponse:
+def parse_stream_response(chunks: list[dict[str, Any]], platform: str) -> ParsedResponse:
     """
     便捷函数：Parse完整流式响应
 

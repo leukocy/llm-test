@@ -18,7 +18,7 @@ from .base_evaluator import BaseEvaluator, extract_numeric_answer
 class MATH500Evaluator(BaseEvaluator):
     """
     MATH-500 Dataset Evaluator.
-    
+
     Data Format:
     {
         "problem": "Let $r$ be the positive real solution to $x^3 + \\frac{2}{5} x - 1 = 0.$...",
@@ -38,7 +38,7 @@ class MATH500Evaluator(BaseEvaluator):
         "intermediate_algebra",
         "number_theory",
         "prealgebra",
-        "precalculus"
+        "precalculus",
     ]
 
     def __init__(
@@ -47,14 +47,14 @@ class MATH500Evaluator(BaseEvaluator):
         dataset_path: str = "datasets/math500",
         num_shots: int = 4,
         max_samples: int | None = None,
-        seed: int = 42
+        seed: int = 42,
     ):
         super().__init__(
             dataset_name=dataset_name,
             dataset_path=dataset_path,
             num_shots=num_shots,
             max_samples=max_samples,
-            seed=seed
+            seed=seed,
         )
         random.seed(seed)
 
@@ -64,20 +64,18 @@ class MATH500Evaluator(BaseEvaluator):
 
         try:
             from core.dataset_manager import get_dataset
-            
+
             # Load "test" split via DatasetManager
             all_samples = get_dataset(
-                name=self.dataset_name,
-                split="test", 
-                max_samples=None,
-                seed=self.seed
+                name=self.dataset_name, split="test", max_samples=None, seed=self.seed
             )
-            
+
             if subset:
-                subset_lower = subset.lower().replace(' ', '_')
+                subset_lower = subset.lower().replace(" ", "_")
                 samples = [
-                    s for s in all_samples
-                    if subset_lower in s.get('subject', '').lower().replace(' ', '_')
+                    s
+                    for s in all_samples
+                    if subset_lower in s.get("subject", "").lower().replace(" ", "_")
                 ]
             else:
                 samples = all_samples
@@ -94,31 +92,39 @@ class MATH500Evaluator(BaseEvaluator):
             for filepath in possible_files:
                 if os.path.exists(filepath):
                     try:
-                        if filepath.endswith('.jsonl'):
-                            with open(filepath, encoding='utf-8') as f:
+                        if filepath.endswith(".jsonl"):
+                            with open(filepath, encoding="utf-8") as f:
                                 for line in f:
                                     if line.strip():
                                         samples.append(json.loads(line))
                         else:
-                            with open(filepath, encoding='utf-8') as f:
+                            with open(filepath, encoding="utf-8") as f:
                                 data = json.load(f)
                             if isinstance(data, list):
                                 samples = data
-                            elif isinstance(data, dict) and 'data' in data:
-                                samples = data['data']
+                            elif isinstance(data, dict) and "data" in data:
+                                samples = data["data"]
                         break
                     except Exception as load_err:
                         print(f"Failed to load {filepath}: {load_err}")
-                        
+
             if samples and subset:
-                subset_lower = subset.lower().replace(' ', '_')
-                samples = [s for s in samples if subset_lower in s.get('subject', '').lower().replace(' ', '_')]
+                subset_lower = subset.lower().replace(" ", "_")
+                samples = [
+                    s
+                    for s in samples
+                    if subset_lower in s.get("subject", "").lower().replace(" ", "_")
+                ]
 
         if not samples:
             samples = self._create_sample_data()
             if subset:
-                 subset_lower = subset.lower().replace(' ', '_')
-                 samples = [s for s in samples if subset_lower in s.get('subject', '').lower().replace(' ', '_')]
+                subset_lower = subset.lower().replace(" ", "_")
+                samples = [
+                    s
+                    for s in samples
+                    if subset_lower in s.get("subject", "").lower().replace(" ", "_")
+                ]
 
         random.shuffle(samples)
 
@@ -129,11 +135,11 @@ class MATH500Evaluator(BaseEvaluator):
             samples = samples[:total_needed]
 
         if self.num_shots > 0 and len(samples) > self.num_shots:
-             self.few_shot_examples = samples[:self.num_shots]
-             samples = samples[self.num_shots:]
+            self.few_shot_examples = samples[: self.num_shots]
+            samples = samples[self.num_shots :]
 
         if self.max_samples and len(samples) > self.max_samples:
-            samples = samples[:self.max_samples]
+            samples = samples[: self.max_samples]
 
         self.samples = samples
         return samples
@@ -147,17 +153,17 @@ class MATH500Evaluator(BaseEvaluator):
                 "answer": "70",
                 "subject": "Counting & Probability",
                 "level": 1,
-                "unique_id": "test/counting_and_probability/0"
+                "unique_id": "test/counting_and_probability/0",
             }
         ]
 
     def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """Format sample using CoT (Chain-of-Thought) pattern."""
-        problem = sample.get('problem', '')
+        problem = sample.get("problem", "")
         prompt_lines = [f"Problem: {problem}"]
 
         if include_answer:
-            solution = sample.get('solution', '')
+            solution = sample.get("solution", "")
             prompt_lines.append(f"Solution: {solution}")
         else:
             prompt_lines.append("Solution: Let me solve this step by step.")
@@ -171,7 +177,7 @@ class MATH500Evaluator(BaseEvaluator):
             "Think step by step and put your final answer in \\boxed{}.\n\n"
         )
         examples = []
-        for example in self.few_shot_examples[:self.num_shots]:
+        for example in self.few_shot_examples[: self.num_shots]:
             examples.append(self.format_prompt(example, include_answer=True))
 
         current = self.format_prompt(sample, include_answer=False)
@@ -191,8 +197,13 @@ class MATH500Evaluator(BaseEvaluator):
         )
         messages.append({"role": "system", "content": system_instruction})
 
-        for ex in self.few_shot_examples[:self.num_shots]:
-            messages.append({"role": "user", "content": self.format_prompt(ex, include_answer=False)})
+        for ex in self.few_shot_examples[: self.num_shots]:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": self.format_prompt(ex, include_answer=False),
+                }
+            )
             # Extract the solution portion for the assistant message
             full_example = self.format_prompt(ex, include_answer=True)
             solution_part = full_example.split("Solution:", 1)
@@ -202,7 +213,12 @@ class MATH500Evaluator(BaseEvaluator):
                 assistant_content = full_example
             messages.append({"role": "assistant", "content": assistant_content})
 
-        messages.append({"role": "user", "content": self.format_prompt(sample, include_answer=False)})
+        messages.append(
+            {
+                "role": "user",
+                "content": self.format_prompt(sample, include_answer=False),
+            }
+        )
         return messages
 
     def parse_response(self, response: str) -> str:
@@ -217,16 +233,18 @@ class MATH500Evaluator(BaseEvaluator):
         results = []
         i = 0
         while i < len(response):
-            if response[i:i+7] == r'\boxed{':
+            if response[i : i + 7] == r"\boxed{":
                 start = i + 7
                 depth = 1
                 j = start
                 while j < len(response) and depth > 0:
-                    if response[j] == '{': depth += 1
-                    elif response[j] == '}': depth -= 1
+                    if response[j] == "{":
+                        depth += 1
+                    elif response[j] == "}":
+                        depth -= 1
                     j += 1
                 if depth == 0:
-                    results.append(response[start:j-1].strip())
+                    results.append(response[start : j - 1].strip())
                     i = j
                     continue
             i += 1
@@ -259,8 +277,10 @@ class MATH500Evaluator(BaseEvaluator):
             return True
 
         # Special case: "x \in [a,b]" vs "[a,b]"
-        if (norm_corr.startswith("x\\in") or norm_corr.startswith("xin")) and not (norm_pred.startswith("x\\in") or norm_pred.startswith("xin")):
-            norm_corr_val = re.sub(r'^[a-zA-Z](\\in|in)', '', norm_corr)
+        if (norm_corr.startswith("x\\in") or norm_corr.startswith("xin")) and not (
+            norm_pred.startswith("x\\in") or norm_pred.startswith("xin")
+        ):
+            norm_corr_val = re.sub(r"^[a-zA-Z](\\in|in)", "", norm_corr)
             if norm_pred == norm_corr_val:
                 return True
 
@@ -270,17 +290,18 @@ class MATH500Evaluator(BaseEvaluator):
             correct_val = self._eval_answer(correct_clean)
             if pred_val is not None and correct_val is not None:
                 return abs(pred_val - correct_val) < 1e-6
-        except:
+        except Exception:
             pass
 
         return False
 
     def _strip_boxed(self, text: str) -> str:
         """Recursively remove \\boxed tags."""
-        while '\\boxed{' in text:
-             text = re.sub(r'\\boxed\{([^{}]*)\}', r'\1', text)
-             if '\\boxed{' in text: continue
-             break
+        while "\\boxed{" in text:
+            text = re.sub(r"\\boxed\{([^{}]*)\}", r"\1", text)
+            if "\\boxed{" in text:
+                continue
+            break
         return text
 
     def _normalize_answer(self, answer: str) -> str:
@@ -290,24 +311,24 @@ class MATH500Evaluator(BaseEvaluator):
 
         answer = answer.strip()
         # Remove common LaTeX markers
-        answer = answer.replace('^\\circ', '').replace('^{\\circ}', '').replace('\\degree', '')
-        answer = answer.replace('$', '').replace('\\%', '')
+        answer = answer.replace("^\\circ", "").replace("^{\\circ}", "").replace("\\degree", "")
+        answer = answer.replace("$", "").replace("\\%", "")
 
         # Handle \text{}, \mathrm{}, etc.
-        answer = re.sub(r'\\+text\{([^{}]*)\}', r'\1', answer)
-        answer = re.sub(r'\\+mathrm\{([^{}]*)\}', r'\1', answer)
-        answer = re.sub(r'\\+mbox\{([^{}]*)\}', r'\1', answer)
+        answer = re.sub(r"\\+text\{([^{}]*)\}", r"\1", answer)
+        answer = re.sub(r"\\+mathrm\{([^{}]*)\}", r"\1", answer)
+        answer = re.sub(r"\\+mbox\{([^{}]*)\}", r"\1", answer)
 
-        answer = re.sub(r'^[a-zA-Z]\s*=\s*', '', answer) # Remove "x = "
-        answer = re.sub(r'\s+', '', answer) # Remove all whitespace
+        answer = re.sub(r"^[a-zA-Z]\s*=\s*", "", answer)  # Remove "x = "
+        answer = re.sub(r"\s+", "", answer)  # Remove all whitespace
 
         # Canonicalize LaTeX commands
-        for cmd in ['\\frac', '\\dfrac', '\\left', '\\right']:
-            answer = answer.replace(cmd, cmd.replace('\\', ''))
-            answer = answer.replace('\\' + cmd, cmd.replace('\\', ''))
+        for cmd in ["\\frac", "\\dfrac", "\\left", "\\right"]:
+            answer = answer.replace(cmd, cmd.replace("\\", ""))
+            answer = answer.replace("\\" + cmd, cmd.replace("\\", ""))
 
         # Standardize parentheses for single-letter options
-        answer = re.sub(r'^[\(\[\{]([A-Z])[\)\]\}]$', r'\1', answer)
+        answer = re.sub(r"^[\(\[\{]([A-Z])[\)\]\}]$", r"\1", answer)
 
         return answer
 
@@ -316,15 +337,15 @@ class MATH500Evaluator(BaseEvaluator):
         try:
             clean_ans = self._normalize_answer(answer)
             # Handle frac{a}{b}
-            frac_match = re.match(r'frac\{([\d\.]+)\}\{([\d\.]+)\}', clean_ans)
+            frac_match = re.match(r"frac\{([\d\.]+)\}\{([\d\.]+)\}", clean_ans)
             if frac_match:
                 return float(frac_match.group(1)) / float(frac_match.group(2))
             return float(clean_ans)
-        except:
+        except Exception:
             return None
 
     def get_sample_category(self, sample: dict[str, Any]) -> str:
-        return sample.get('subject', 'unknown')
+        return str(sample.get("subject", "unknown"))
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
-        return sample.get('answer', '')
+        return str(sample.get("answer", ""))

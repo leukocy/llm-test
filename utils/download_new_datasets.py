@@ -23,6 +23,7 @@ DATASETS_DIR = os.path.join(PROJECT_ROOT, "datasets")
 def ensure_datasets_installed():
     """确保 datasets 库已安装"""
     import importlib.util
+
     if importlib.util.find_spec("datasets") is not None:
         return True
     print("📦 currently安装 datasets 库...")
@@ -49,12 +50,12 @@ def download_gpqa():
 
         # GPQA need同意use条款，尝试多种方式
         try:
-            ds = load_dataset('Idavidrein/gpqa', 'gpqa_diamond', trust_remote_code=True)
-            split = 'train' if 'train' in ds else list(ds.keys())[0]
+            ds = load_dataset("Idavidrein/gpqa", "gpqa_diamond", trust_remote_code=True)
+            split = "train" if "train" in ds else list(ds.keys())[0]
         except Exception:
             # 备选方案
             print("⚠️ 官方Datasetneed授权，尝试备选来源...")
-            ds = load_dataset('fingertap/GPQA-Diamond', trust_remote_code=True)
+            ds = load_dataset("fingertap/GPQA-Diamond", trust_remote_code=True)
             split = list(ds.keys())[0]
 
         # Convertis标准格式
@@ -62,44 +63,53 @@ def download_gpqa():
         for item in ds[split]:
             try:
                 # 尝试not同字段名
-                question = item.get('Question', item.get('question', ''))
+                question = item.get("Question", item.get("question", ""))
 
                 # Options
                 choices = []
-                if 'choices' in item:
-                    choices = item['choices']
+                if "choices" in item:
+                    choices = item["choices"]
                 else:
                     choices = [
-                        item.get('Incorrect Answer 1', item.get('A', item.get('choice_a', ''))),
-                        item.get('Incorrect Answer 2', item.get('B', item.get('choice_b', ''))),
-                        item.get('Incorrect Answer 3', item.get('C', item.get('choice_c', ''))),
-                        item.get('Correct Answer', item.get('D', item.get('choice_d', '')))
+                        item.get(
+                            "Incorrect Answer 1",
+                            item.get("A", item.get("choice_a", "")),
+                        ),
+                        item.get(
+                            "Incorrect Answer 2",
+                            item.get("B", item.get("choice_b", "")),
+                        ),
+                        item.get(
+                            "Incorrect Answer 3",
+                            item.get("C", item.get("choice_c", "")),
+                        ),
+                        item.get("Correct Answer", item.get("D", item.get("choice_d", ""))),
                     ]
 
                 # Answer
-                ans_raw = item.get('Correct Answer', item.get('answer', item.get('Answer', 'D')))
+                ans_raw = item.get("Correct Answer", item.get("answer", item.get("Answer", "D")))
                 if isinstance(ans_raw, int):
                     answer = ans_raw
                 elif isinstance(ans_raw, str):
-                    if ans_raw.upper() in 'ABCD':
-                        answer = ord(ans_raw.upper()) - ord('A')
+                    if ans_raw.upper() in "ABCD":
+                        answer = ord(ans_raw.upper()) - ord("A")
                     else:
                         answer = 3  # defaultis D
                 else:
                     answer = 3
 
                 sample = {
-                    'question': question,
-                    'choices': choices,
-                    'answer': answer,
-                    'domain': item.get('Subdomain', item.get('domain', 'science'))
+                    "question": question,
+                    "choices": choices,
+                    "answer": answer,
+                    "domain": item.get("Subdomain", item.get("domain", "science")),
                 }
                 samples.append(sample)
             except Exception:
                 continue
 
         output_file = os.path.join(output_dir, "gpqa_diamond.json")
-        with open(output_file, 'w', encoding='utf-8') as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             json.dump(samples, f, ensure_ascii=False, indent=2)
 
         print(f"✅ GPQA Download complete: {len(samples)}  samples")
@@ -124,14 +134,14 @@ def download_arc():
         os.makedirs(output_dir, exist_ok=True)
 
         print("🔄 currently从 HuggingFace under载...")
-        ds = load_dataset('allenai/ai2_arc', 'ARC-Challenge')
+        ds = load_dataset("allenai/ai2_arc", "ARC-Challenge")
 
         # Saveis JSONL 格式
         output_file = os.path.join(output_dir, "ARC-Challenge-Test.jsonl")
 
-        with open(output_file, 'w', encoding='utf-8') as f:
-            for item in ds['test']:
-                f.write(json.dumps(item, ensure_ascii=False) + '\n')
+        with open(output_file, "w", encoding="utf-8") as f:
+            for item in ds["test"]:
+                f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
         print(f"✅ ARC-Challenge Download complete: {len(ds['test'])}  samples")
         print(f"   Save位置: {output_file}")
@@ -155,21 +165,21 @@ def download_truthfulqa():
         os.makedirs(output_dir, exist_ok=True)
 
         print("🔄 currently从 HuggingFace under载...")
-        ds = load_dataset('truthfulqa/truthful_qa', 'multiple_choice')
+        ds = load_dataset("truthfulqa/truthful_qa", "multiple_choice")
 
         # Convertis标准格式
         samples = []
-        for item in ds['validation']:
+        for item in ds["validation"]:
             sample = {
-                'question': item.get('question', ''),
-                'mc1_targets': item.get('mc1_targets', {}),
-                'mc2_targets': item.get('mc2_targets', {}),
-                'category': item.get('category', 'unknown')
+                "question": item.get("question", ""),
+                "mc1_targets": item.get("mc1_targets", {}),
+                "mc2_targets": item.get("mc2_targets", {}),
+                "category": item.get("category", "unknown"),
             }
             samples.append(sample)
 
         output_file = os.path.join(output_dir, "truthfulqa_mc.json")
-        with open(output_file, 'w', encoding='utf-8') as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             json.dump(samples, f, ensure_ascii=False, indent=2)
 
         print(f"✅ TruthfulQA Download complete: {len(samples)}  samples")
@@ -196,12 +206,14 @@ def download_longbench():
         print("🔄 currently从 HuggingFace under载 (这可能need一些时间)...")
         # LongBench has多子任务，我们先under载 narrativeqa 作is示例
         try:
-            ds = load_dataset('THUDM/LongBench', 'narrativeqa', split='test', trust_remote_code=True)
+            ds = load_dataset(
+                "THUDM/LongBench", "narrativeqa", split="test", trust_remote_code=True
+            )
 
             output_file = os.path.join(output_dir, "narrativeqa.jsonl")
-            with open(output_file, 'w', encoding='utf-8') as f:
+            with open(output_file, "w", encoding="utf-8") as f:
                 for item in ds:
-                    f.write(json.dumps(item, ensure_ascii=False) + '\n')
+                    f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
             print(f"✅ LongBench (narrativeqa) Download complete: {len(ds)}  samples")
             print(f"   Save位置: {output_file}")
@@ -230,12 +242,12 @@ def download_swebench_lite():
 
         print("🔄 currently从 HuggingFace under载...")
         try:
-            ds = load_dataset('princeton-nlp/SWE-bench_Lite', split='test', trust_remote_code=True)
+            ds = load_dataset("princeton-nlp/SWE-bench_Lite", split="test", trust_remote_code=True)
 
             output_file = os.path.join(output_dir, "swe-bench-lite.jsonl")
-            with open(output_file, 'w', encoding='utf-8') as f:
+            with open(output_file, "w", encoding="utf-8") as f:
                 for item in ds:
-                    f.write(json.dumps(item, ensure_ascii=False) + '\n')
+                    f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
             print(f"✅ SWE-Bench Lite Download complete: {len(ds)}  samples")
             print(f"   Save位置: {output_file}")
@@ -270,12 +282,23 @@ def download_needle_haystack():
 
 def main():
     parser = argparse.ArgumentParser(description="under载新增Test setData")
-    parser.add_argument('--dataset', '-d', type=str,
-                       choices=['gpqa', 'arc', 'truthfulqa', 'longbench', 'swebench_lite', 'needle_haystack', 'all'],
-                       default='all',
-                       help='要under载Dataset (default: all)')
-    parser.add_argument('--all', '-a', action='store_true',
-                       help='under载所hasDataset')
+    parser.add_argument(
+        "--dataset",
+        "-d",
+        type=str,
+        choices=[
+            "gpqa",
+            "arc",
+            "truthfulqa",
+            "longbench",
+            "swebench_lite",
+            "needle_haystack",
+            "all",
+        ],
+        default="all",
+        help="要under载Dataset (default: all)",
+    )
+    parser.add_argument("--all", "-a", action="store_true", help="under载所hasDataset")
 
     args = parser.parse_args()
 
@@ -289,25 +312,25 @@ def main():
 
     results = {}
 
-    if args.all or args.dataset == 'all':
-        results['gpqa'] = download_gpqa()
-        results['arc'] = download_arc()
-        results['truthfulqa'] = download_truthfulqa()
-        results['longbench'] = download_longbench()
-        results['swebench_lite'] = download_swebench_lite()
-        results['needle_haystack'] = download_needle_haystack()
-    elif args.dataset == 'gpqa':
-        results['gpqa'] = download_gpqa()
-    elif args.dataset == 'arc':
-        results['arc'] = download_arc()
-    elif args.dataset == 'truthfulqa':
-        results['truthfulqa'] = download_truthfulqa()
-    elif args.dataset == 'longbench':
-        results['longbench'] = download_longbench()
-    elif args.dataset == 'swebench_lite':
-        results['swebench_lite'] = download_swebench_lite()
-    elif args.dataset == 'needle_haystack':
-        results['needle_haystack'] = download_needle_haystack()
+    if args.all or args.dataset == "all":
+        results["gpqa"] = download_gpqa()
+        results["arc"] = download_arc()
+        results["truthfulqa"] = download_truthfulqa()
+        results["longbench"] = download_longbench()
+        results["swebench_lite"] = download_swebench_lite()
+        results["needle_haystack"] = download_needle_haystack()
+    elif args.dataset == "gpqa":
+        results["gpqa"] = download_gpqa()
+    elif args.dataset == "arc":
+        results["arc"] = download_arc()
+    elif args.dataset == "truthfulqa":
+        results["truthfulqa"] = download_truthfulqa()
+    elif args.dataset == "longbench":
+        results["longbench"] = download_longbench()
+    elif args.dataset == "swebench_lite":
+        results["swebench_lite"] = download_swebench_lite()
+    elif args.dataset == "needle_haystack":
+        results["needle_haystack"] = download_needle_haystack()
 
     # 打印汇总
     print("\n" + "=" * 50)

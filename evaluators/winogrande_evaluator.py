@@ -33,14 +33,14 @@ class WinoGrandeEvaluator(BaseEvaluator):
         dataset_path: str = "datasets/winogrande",
         num_shots: int = 5,
         max_samples: int | None = None,
-        seed: int = 42
+        seed: int = 42,
     ):
         super().__init__(
             dataset_name=dataset_name,
             dataset_path=dataset_path,
             num_shots=num_shots,
             max_samples=max_samples,
-            seed=seed
+            seed=seed,
         )
         random.seed(seed)
 
@@ -51,13 +51,14 @@ class WinoGrandeEvaluator(BaseEvaluator):
         # 1. Try DatasetManager (auto-download)
         try:
             from core.dataset_manager import get_dataset
+
             samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for WinoGrande: {e}")
 
         # 2. Fallback: manual file loading
         if not samples:
-            size = subset if subset in ['xs', 's', 'm', 'l', 'xl'] else 'xl'
+            size = subset if subset in ["xs", "s", "m", "l", "xl"] else "xl"
 
             possible_files = [
                 os.path.join(self.dataset_path, f"winogrande_{size}.json"),
@@ -69,18 +70,18 @@ class WinoGrandeEvaluator(BaseEvaluator):
             for filepath in possible_files:
                 if os.path.exists(filepath):
                     try:
-                        if filepath.endswith('.jsonl'):
-                            with open(filepath, encoding='utf-8') as f:
+                        if filepath.endswith(".jsonl"):
+                            with open(filepath, encoding="utf-8") as f:
                                 for line in f:
                                     if line.strip():
                                         samples.append(json.loads(line))
                         else:
-                            with open(filepath, encoding='utf-8') as f:
+                            with open(filepath, encoding="utf-8") as f:
                                 data = json.load(f)
                             if isinstance(data, list):
                                 samples = data
-                            elif isinstance(data, dict) and 'data' in data:
-                                samples = data['data']
+                            elif isinstance(data, dict) and "data" in data:
+                                samples = data["data"]
                         break
                     except Exception as e:
                         print(f"Load {filepath} 失败: {e}")
@@ -96,11 +97,11 @@ class WinoGrandeEvaluator(BaseEvaluator):
             samples = samples[:total_needed]
 
         if self.num_shots > 0:
-            self.few_shot_examples = samples[:self.num_shots]
-            samples = samples[self.num_shots:]
+            self.few_shot_examples = samples[: self.num_shots]
+            samples = samples[self.num_shots :]
 
         if self.max_samples and len(samples) > self.max_samples:
-            samples = samples[:self.max_samples]
+            samples = samples[: self.max_samples]
 
         self.samples = samples
         return samples
@@ -111,27 +112,29 @@ class WinoGrandeEvaluator(BaseEvaluator):
 
         for sample in samples:
             try:
-                sentence = sample.get('sentence', '')
-                option1 = sample.get('option1', '')
-                option2 = sample.get('option2', '')
-                answer = sample.get('answer', '1')
+                sentence = sample.get("sentence", "")
+                option1 = sample.get("option1", "")
+                option2 = sample.get("option2", "")
+                answer = sample.get("answer", "1")
 
                 # ConvertAnsweris 0-indexed
                 if isinstance(answer, str):
-                    if answer == '1':
+                    if answer == "1":
                         answer = 0
-                    elif answer == '2':
+                    elif answer == "2":
                         answer = 1
-                    elif answer in 'AB':
-                        answer = ord(answer) - ord('A')
+                    elif answer in "AB":
+                        answer = ord(answer) - ord("A")
                 elif isinstance(answer, int):
                     answer = answer - 1 if answer > 0 else answer
 
-                normalized.append({
-                    'sentence': sentence,
-                    'choices': [option1, option2],
-                    'answer': answer
-                })
+                normalized.append(
+                    {
+                        "sentence": sentence,
+                        "choices": [option1, option2],
+                        "answer": answer,
+                    }
+                )
             except Exception as e:
                 continue
 
@@ -143,50 +146,58 @@ class WinoGrandeEvaluator(BaseEvaluator):
             {
                 "sentence": "The trophy doesn't fit into the suitcase because _ is too large.",
                 "choices": ["the trophy", "the suitcase"],
-                "answer": 0  # trophy
+                "answer": 0,  # trophy
             },
             {
                 "sentence": "The trophy doesn't fit into the suitcase because _ is too small.",
                 "choices": ["the trophy", "the suitcase"],
-                "answer": 1  # suitcase
+                "answer": 1,  # suitcase
             },
             {
                 "sentence": "Paul tried to call George on the phone, but _ wasn't available.",
                 "choices": ["Paul", "George"],
-                "answer": 1  # George
+                "answer": 1,  # George
             },
             {
                 "sentence": "The dog chased the cat because _ was hungry.",
                 "choices": ["the dog", "the cat"],
-                "answer": 0  # dog
+                "answer": 0,  # dog
             },
             {
                 "sentence": "The man couldn't lift his son because _ was too heavy.",
                 "choices": ["the man", "his son"],
-                "answer": 1  # son
-            }
+                "answer": 1,  # son
+            },
         ]
 
     def build_chat_messages(self, sample: dict[str, Any]) -> list[dict[str, str]]:
         """Build structured chat messages with system prompt, few-shot turns, and user question."""
         messages = []
 
-        system_instruction = (
-            "Fill in the blank (_) with the correct option based on the context."
-        )
+        system_instruction = "Fill in the blank (_) with the correct option based on the context."
         messages.append({"role": "system", "content": system_instruction})
 
-        for ex in self.few_shot_examples[:self.num_shots]:
-            messages.append({"role": "user", "content": self.format_prompt(ex, include_answer=False)})
+        for ex in self.few_shot_examples[: self.num_shots]:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": self.format_prompt(ex, include_answer=False),
+                }
+            )
             messages.append({"role": "assistant", "content": self.get_correct_answer(ex)})
 
-        messages.append({"role": "user", "content": self.format_prompt(sample, include_answer=False)})
+        messages.append(
+            {
+                "role": "user",
+                "content": self.format_prompt(sample, include_answer=False),
+            }
+        )
         return messages
 
     def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """Format WinoGrande 样本"""
-        sentence = sample.get('sentence', '')
-        choices = sample.get('choices', [])
+        sentence = sample.get("sentence", "")
+        choices = sample.get("choices", [])
 
         while len(choices) < 2:
             choices.append("")
@@ -200,8 +211,10 @@ class WinoGrandeEvaluator(BaseEvaluator):
         ]
 
         if include_answer:
-            answer_idx = sample.get('answer', 0)
-            answer_letter = chr(ord('A') + answer_idx) if isinstance(answer_idx, int) else answer_idx
+            answer_idx = sample.get("answer", 0)
+            answer_letter = (
+                chr(ord("A") + answer_idx) if isinstance(answer_idx, int) else answer_idx
+            )
             prompt_lines.append(f"Answer: {answer_letter}")
         else:
             prompt_lines.append("Answer:")
@@ -210,12 +223,10 @@ class WinoGrandeEvaluator(BaseEvaluator):
 
     def build_full_prompt(self, sample: dict[str, Any]) -> str:
         """Build完整 prompt"""
-        instruction = (
-            "Fill in the blank (_) with the correct option based on the context.\n\n"
-        )
+        instruction = "Fill in the blank (_) with the correct option based on the context.\n\n"
 
         examples = []
-        for example in self.few_shot_examples[:self.num_shots]:
+        for example in self.few_shot_examples[: self.num_shots]:
             examples.append(self.format_prompt(example, include_answer=True))
 
         question = self.format_prompt(sample, include_answer=False)
@@ -228,17 +239,17 @@ class WinoGrandeEvaluator(BaseEvaluator):
         return full_prompt
 
     def parse_response(self, response: str) -> str:
-        return extract_choice_answer(response, ['A', 'B'])
+        return extract_choice_answer(response, ["A", "B"])
 
     def check_answer(self, predicted: str, correct: str) -> bool:
         if not predicted:
             return False
         if isinstance(correct, int) or (isinstance(correct, str) and correct.isdigit()):
-            correct = chr(ord('A') + int(correct))
+            correct = chr(ord("A") + int(correct))
         return predicted.upper() == correct.upper()
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
-        answer = sample.get('answer', 0)
+        answer = sample.get("answer", 0)
         if isinstance(answer, int):
-            return chr(ord('A') + answer)
+            return chr(ord("A") + answer)
         return str(answer).upper()

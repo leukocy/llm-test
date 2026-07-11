@@ -46,6 +46,7 @@ def test_to_dict_empty_extra_yields_none():
 
 def test_round_trip_preserves_fields():
     import json
+
     c = _sample_case()
     d = c.to_dict()
     # 模拟 DB 行（extra_json 是字符串）

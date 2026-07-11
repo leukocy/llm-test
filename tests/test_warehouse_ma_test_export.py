@@ -35,8 +35,15 @@ def _fresh(tmp_path):
 
 def test_rows_match_ma_test_field_set(tmp_path):
     repo = _fresh(tmp_path)
-    repo.insert(ApplicationCase(case_id="c1", scenario="coding", model_name="M1", success=True,
-                                quality_score=8.0))
+    repo.insert(
+        ApplicationCase(
+            case_id="c1",
+            scenario="coding",
+            model_name="M1",
+            success=True,
+            quality_score=8.0,
+        )
+    )
     rows = build_ma_test_rows_from_cases(_FakeDB(repo))
     assert len(rows) == 1
     assert set(rows[0].keys()) == set(MA_TEST_FIELDS)
@@ -57,6 +64,7 @@ def test_filter_by_scenario(tmp_path):
 def test_empty_when_no_db_method():
     class _NoMethod:
         pass
+
     assert build_ma_test_rows_from_cases(_NoMethod()) == []
 
 

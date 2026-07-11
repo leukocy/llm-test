@@ -36,7 +36,7 @@ class TestParsedChunk:
             content="Hello",
             reasoning="Thinking...",
             finish_reason="stop",
-            usage={"total_tokens": 100}
+            usage={"total_tokens": 100},
         )
         assert chunk.content == "Hello"
         assert chunk.reasoning == "Thinking..."
@@ -63,7 +63,7 @@ class TestParsedResponse:
             total_chunks=10,
             reasoning_chunks=5,
             content_chunks=5,
-            finish_reason="stop"
+            finish_reason="stop",
         )
         assert response.full_content == "Hello world"
         assert response.full_reasoning == "I thought about it"
@@ -94,12 +94,7 @@ class TestUnifiedResponseParser:
     def test_parse_chunk_with_choices(self):
         """Parse带 choices 块"""
         parser = UnifiedResponseParser("mimo")
-        chunk = {
-            "choices": [{
-                "delta": {"content": "Hello"},
-                "finish_reason": None
-            }]
-        }
+        chunk = {"choices": [{"delta": {"content": "Hello"}, "finish_reason": None}]}
         result = parser.parse_chunk(chunk)
         assert result.content == "Hello"
         assert result.finish_reason is None
@@ -108,13 +103,15 @@ class TestUnifiedResponseParser:
         """Parse带推理内容块"""
         parser = UnifiedResponseParser("deepseek")
         chunk = {
-            "choices": [{
-                "delta": {
-                    "content": "Answer",
-                    "reasoning_content": "Let me think..."
-                },
-                "finish_reason": None
-            }]
+            "choices": [
+                {
+                    "delta": {
+                        "content": "Answer",
+                        "reasoning_content": "Let me think...",
+                    },
+                    "finish_reason": None,
+                }
+            ]
         }
         result = parser.parse_chunk(chunk)
         assert result.content == "Answer"
@@ -124,15 +121,8 @@ class TestUnifiedResponseParser:
         """Parse带 usage 块"""
         parser = UnifiedResponseParser("mimo")
         chunk = {
-            "choices": [{
-                "delta": {"content": "Hi"},
-                "finish_reason": "stop"
-            }],
-            "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 5,
-                "total_tokens": 15
-            }
+            "choices": [{"delta": {"content": "Hi"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
         }
         result = parser.parse_chunk(chunk)
         assert result.usage["total_tokens"] == 15
@@ -149,13 +139,9 @@ class TestUnifiedResponseParser:
         parser = UnifiedResponseParser("mimo")
 
         # 一块
-        parser.parse_chunk({
-            "choices": [{"delta": {"content": "Hello "}, "finish_reason": None}]
-        })
+        parser.parse_chunk({"choices": [{"delta": {"content": "Hello "}, "finish_reason": None}]})
         # 二块
-        parser.parse_chunk({
-            "choices": [{"delta": {"content": "world"}, "finish_reason": "stop"}]
-        })
+        parser.parse_chunk({"choices": [{"delta": {"content": "world"}, "finish_reason": "stop"}]})
 
         response = parser.get_result()
         assert response.full_content == "Hello world"
@@ -168,13 +154,9 @@ class TestUnifiedResponseParser:
         parser = UnifiedResponseParser("deepseek")
 
         # 推理块
-        parser.parse_chunk({
-            "choices": [{"delta": {"reasoning_content": "Thinking... "}}]
-        })
+        parser.parse_chunk({"choices": [{"delta": {"reasoning_content": "Thinking... "}}]})
         # 正文块
-        parser.parse_chunk({
-            "choices": [{"delta": {"content": "Answer"}}]
-        })
+        parser.parse_chunk({"choices": [{"delta": {"content": "Answer"}}]})
 
         response = parser.get_result()
         assert response.full_reasoning == "Thinking... "
@@ -185,9 +167,7 @@ class TestUnifiedResponseParser:
     def test_get_result_after_reset(self):
         """Reset后GetResult"""
         parser = UnifiedResponseParser("mimo")
-        parser.parse_chunk({
-            "choices": [{"delta": {"content": "Test"}}]
-        })
+        parser.parse_chunk({"choices": [{"delta": {"content": "Test"}}]})
 
         parser.reset()
         response = parser.get_result()
@@ -201,9 +181,7 @@ class TestUnifiedResponseParser:
 
         assert parser.has_reasoning is False
 
-        parser.parse_chunk({
-            "choices": [{"delta": {"reasoning_content": "Thinking"}}]
-        })
+        parser.parse_chunk({"choices": [{"delta": {"reasoning_content": "Thinking"}}]})
 
         assert parser.has_reasoning is True
 
@@ -211,12 +189,10 @@ class TestUnifiedResponseParser:
         """Test reasoning_ratio 属性"""
         parser = UnifiedResponseParser("deepseek")
 
-        parser.parse_chunk({
-            "choices": [{"delta": {"reasoning_content": "AAAA", "content": "BB"}}]
-        })
+        parser.parse_chunk({"choices": [{"delta": {"reasoning_content": "AAAA", "content": "BB"}}]})
 
         # 4字符推理 / 6字符总计 = 2/3
-        assert parser.reasoning_ratio == pytest.approx(4/6)
+        assert parser.reasoning_ratio == pytest.approx(4 / 6)
 
     def test_reasoning_ratio_empty(self):
         """空响应推理比例"""
@@ -228,13 +204,9 @@ class TestUnifiedResponseParser:
         parser = UnifiedResponseParser("deepseek")
 
         # 推理块
-        parser.parse_chunk({
-            "choices": [{"delta": {"reasoning_content": "First"}}]
-        })
+        parser.parse_chunk({"choices": [{"delta": {"reasoning_content": "First"}}]})
         # 正文块
-        parser.parse_chunk({
-            "choices": [{"delta": {"content": "Second"}}]
-        })
+        parser.parse_chunk({"choices": [{"delta": {"content": "Second"}}]})
 
         response = parser.get_result()
         assert response.first_reasoning_chunk_index == 0
@@ -249,15 +221,17 @@ class TestGeminiParsing:
         parser = UnifiedResponseParser("gemini")
 
         chunk = {
-            "choices": [{
-                "delta": {
-                    "parts": [
-                        {"thought": "Thinking process"},
-                        {"text": "Answer text"}
-                    ]
-                },
-                "finish_reason": None
-            }]
+            "choices": [
+                {
+                    "delta": {
+                        "parts": [
+                            {"thought": "Thinking process"},
+                            {"text": "Answer text"},
+                        ]
+                    },
+                    "finish_reason": None,
+                }
+            ]
         }
 
         result = parser.parse_chunk(chunk)
@@ -269,12 +243,7 @@ class TestGeminiParsing:
         parser = UnifiedResponseParser("gemini")
 
         # Gemini use text 字段作is内容
-        chunk = {
-            "choices": [{
-                "delta": {"text": "Standard content"},
-                "finish_reason": None
-            }]
-        }
+        chunk = {"choices": [{"delta": {"text": "Standard content"}, "finish_reason": None}]}
 
         result = parser.parse_chunk(chunk)
         assert result.content == "Standard content"
@@ -283,15 +252,9 @@ class TestGeminiParsing:
         """Parse多 Gemini 块"""
         parser = UnifiedResponseParser("gemini")
 
-        parser.parse_chunk({
-            "choices": [{"delta": {"parts": [{"thought": "Thinking "}]}}]
-        })
-        parser.parse_chunk({
-            "choices": [{"delta": {"parts": [{"thought": "more..."}]}}]
-        })
-        parser.parse_chunk({
-            "choices": [{"delta": {"parts": [{"text": "Answer"}]}}]
-        })
+        parser.parse_chunk({"choices": [{"delta": {"parts": [{"thought": "Thinking "}]}}]})
+        parser.parse_chunk({"choices": [{"delta": {"parts": [{"thought": "more..."}]}}]})
+        parser.parse_chunk({"choices": [{"delta": {"parts": [{"text": "Answer"}]}}]})
 
         response = parser.get_result()
         assert response.full_reasoning == "Thinking more..."
@@ -305,7 +268,7 @@ class TestParseStreamResponse:
         """Parse标准平台流"""
         chunks = [
             {"choices": [{"delta": {"content": "Hello "}}]},
-            {"choices": [{"delta": {"content": "world"}}]}
+            {"choices": [{"delta": {"content": "world"}}]},
         ]
 
         result = parse_stream_response(chunks, "mimo")
@@ -316,7 +279,7 @@ class TestParseStreamResponse:
         """Parse推理Model流"""
         chunks = [
             {"choices": [{"delta": {"reasoning_content": "Let me think"}}]},
-            {"choices": [{"delta": {"content": "The answer is 42"}}]}
+            {"choices": [{"delta": {"content": "The answer is 42"}}]},
         ]
 
         result = parse_stream_response(chunks, "deepseek")
@@ -327,7 +290,7 @@ class TestParseStreamResponse:
         """Parse Gemini 流"""
         chunks = [
             {"choices": [{"delta": {"parts": [{"thought": "Hmm"}]}}]},
-            {"choices": [{"delta": {"parts": [{"text": "Got it"}]}}]}
+            {"choices": [{"delta": {"parts": [{"text": "Got it"}]}}]},
         ]
 
         result = parse_stream_response(chunks, "gemini")
@@ -340,8 +303,8 @@ class TestParseStreamResponse:
             {"choices": [{"delta": {"content": "Test"}}]},
             {
                 "choices": [{"delta": {}, "finish_reason": "stop"}],
-                "usage": {"total_tokens": 100}
-            }
+                "usage": {"total_tokens": 100},
+            },
         ]
 
         result = parse_stream_response(chunks, "mimo")

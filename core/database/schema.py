@@ -337,25 +337,20 @@ CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_test_runs_created ON test_runs(created_at);",
     # 注：machine_id / external_level / comparison_group 上的索引引用 1.2.0 新列，
     # 不能放在 create_tables（对老库会在迁移加列之前执行而崩溃），统一由 1.2.0 迁移创建。
-
     "CREATE INDEX IF NOT EXISTS idx_results_run_id ON test_results(run_id);",
     "CREATE INDEX IF NOT EXISTS idx_results_session ON test_results(session_id);",
     "CREATE INDEX IF NOT EXISTS idx_results_error ON test_results(error) WHERE error IS NOT NULL;",
-
     "CREATE INDEX IF NOT EXISTS idx_api_logs_run ON api_logs(run_id);",
     "CREATE INDEX IF NOT EXISTS idx_api_logs_status ON api_logs(status);",
     "CREATE INDEX IF NOT EXISTS idx_api_logs_model ON api_logs(model_id);",
     "CREATE INDEX IF NOT EXISTS idx_api_logs_created ON api_logs(created_at);",
-
     "CREATE INDEX IF NOT EXISTS idx_exec_logs_run ON execution_logs(run_id);",
     "CREATE INDEX IF NOT EXISTS idx_exec_logs_level ON execution_logs(level);",
     "CREATE INDEX IF NOT EXISTS idx_exec_logs_time ON execution_logs(timestamp);",
-
     "CREATE INDEX IF NOT EXISTS idx_reports_run ON reports(run_id);",
     "CREATE INDEX IF NOT EXISTS idx_reports_model ON reports(model_id);",
     "CREATE INDEX IF NOT EXISTS idx_reports_type ON reports(report_type);",
     "CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at);",
-
     # application_cases（1.4.0 新表；表本身在 create_tables 建，索引对新老库都安全）
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_app_cases_case_id ON application_cases(case_id);",
     "CREATE INDEX IF NOT EXISTS idx_app_cases_run ON application_cases(run_id);",

@@ -8,7 +8,7 @@ import csv
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, cast
 
 from core.database.connection import Database, db
 from core.models.test_result import TestResult
@@ -30,7 +30,7 @@ class DataImportService:
     - ErrorProcessand跳过
     """
 
-    def __init__(self, database: Database = None):
+    def __init__(self, database: Database | None = None):
         self.db = database or db
         self.run_repo = TestRunRepository(self.db)
         self.result_repo = TestResultRepository(self.db)
@@ -38,10 +38,10 @@ class DataImportService:
     def import_csv_file(
         self,
         csv_path: str,
-        model_id: str = None,
-        test_type: str = None,
-        provider: str = None,
-        on_progress: callable = None
+        model_id: str | None = None,
+        test_type: str | None = None,
+        provider: str | None = None,
+        on_progress: Callable[[int, int], None] | None = None,
     ) -> tuple[int, list[str]]:
         """
         Import单 CSV 文件
@@ -71,7 +71,7 @@ class DataImportService:
         imported = 0
 
         try:
-            with open(path, encoding='utf-8') as f:
+            with open(path, encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 rows = list(reader)
 
@@ -88,7 +88,7 @@ class DataImportService:
             run.total_requests = len(rows)
             run.status = TestRunStatus.COMPLETED.value
 
-            run_id = self.run_repo.insert(run)
+            run_id = cast(int, self.run_repo.insert(run))
 
             # ImportResult
             results = []
@@ -122,7 +122,7 @@ class DataImportService:
         self,
         directory: str,
         recursive: bool = True,
-        on_progress: callable = None
+        on_progress: Callable[[str, int, int], None] | None = None,
     ) -> tuple[int, int, list[str]]:
         """
         Import目录in所has CSV 文件
@@ -166,8 +166,9 @@ class DataImportService:
 
     def _row_to_result(self, row: dict[str, Any], run_id: int, index: int) -> TestResult:
         """will CSV 行Convertis TestResult"""
+
         def parse_float(value):
-            if value is None or value == '':
+            if value is None or value == "":
                 return None
             try:
                 return float(value)
@@ -175,7 +176,7 @@ class DataImportService:
                 return None
 
         def parse_int(value):
-            if value is None or value == '':
+            if value is None or value == "":
                 return None
             try:
                 return int(float(value))
@@ -185,37 +186,37 @@ class DataImportService:
         return TestResult(
             run_id=run_id,
             request_index=index,
-            session_id=parse_int(row.get('session_id')),
-            round=parse_int(row.get('round')),
-            concurrency_level=parse_int(row.get('concurrency')),
-            input_tokens_target=parse_int(row.get('input_tokens_target')),
-            context_length_target=parse_int(row.get('context_length_target')),
-            ttft=parse_float(row.get('ttft')),
-            tpot=parse_float(row.get('tpot')),
-            tpot_p95=parse_float(row.get('tpot_p95')),
-            tpot_p99=parse_float(row.get('tpot_p99')),
-            total_time=parse_float(row.get('total_time')),
-            decode_time=parse_float(row.get('decode_time')),
-            prefill_speed=parse_float(row.get('prefill_speed')),
-            tps=parse_float(row.get('tps')),
-            system_throughput=parse_float(row.get('system_throughput')),
-            system_input_throughput=parse_float(row.get('system_input_throughput')),
-            system_output_throughput=parse_float(row.get('system_output_throughput')),
-            system_total_throughput=parse_float(row.get('system_total_throughput')),
-            rps=parse_float(row.get('rps')),
-            prefill_tokens=parse_int(row.get('prefill_tokens')),
-            decode_tokens=parse_int(row.get('decode_tokens')),
-            cache_hit_tokens=parse_int(row.get('cache_hit_tokens')),
-            api_prefill=parse_int(row.get('api_prefill')),
-            api_decode=parse_int(row.get('api_decode')),
-            effective_prefill_tokens=parse_int(row.get('effective_prefill_tokens')),
-            effective_decode_tokens=parse_int(row.get('effective_decode_tokens')),
-            token_source=row.get('token_source'),
-            token_calc_method=row.get('token_calc_method'),
-            cache_hit_source=row.get('cache_hit_source'),
-            start_time=parse_float(row.get('start_time')),
-            end_time=parse_float(row.get('end_time')),
-            error=row.get('error') if row.get('error') and row.get('error') != 'None' else None,
+            session_id=parse_int(row.get("session_id")),
+            round=parse_int(row.get("round")),
+            concurrency_level=parse_int(row.get("concurrency")),
+            input_tokens_target=parse_int(row.get("input_tokens_target")),
+            context_length_target=parse_int(row.get("context_length_target")),
+            ttft=parse_float(row.get("ttft")),
+            tpot=parse_float(row.get("tpot")),
+            tpot_p95=parse_float(row.get("tpot_p95")),
+            tpot_p99=parse_float(row.get("tpot_p99")),
+            total_time=parse_float(row.get("total_time")),
+            decode_time=parse_float(row.get("decode_time")),
+            prefill_speed=parse_float(row.get("prefill_speed")),
+            tps=parse_float(row.get("tps")),
+            system_throughput=parse_float(row.get("system_throughput")),
+            system_input_throughput=parse_float(row.get("system_input_throughput")),
+            system_output_throughput=parse_float(row.get("system_output_throughput")),
+            system_total_throughput=parse_float(row.get("system_total_throughput")),
+            rps=parse_float(row.get("rps")),
+            prefill_tokens=parse_int(row.get("prefill_tokens")),
+            decode_tokens=parse_int(row.get("decode_tokens")),
+            cache_hit_tokens=parse_int(row.get("cache_hit_tokens")),
+            api_prefill=parse_int(row.get("api_prefill")),
+            api_decode=parse_int(row.get("api_decode")),
+            effective_prefill_tokens=parse_int(row.get("effective_prefill_tokens")),
+            effective_decode_tokens=parse_int(row.get("effective_decode_tokens")),
+            token_source=row.get("token_source"),
+            token_calc_method=row.get("token_calc_method"),
+            cache_hit_source=row.get("cache_hit_source"),
+            start_time=parse_float(row.get("start_time")),
+            end_time=parse_float(row.get("end_time")),
+            error=(row.get("error") if row.get("error") and row.get("error") != "None" else None),
             created_at=datetime.now(),
         )
 
@@ -239,9 +240,7 @@ class DataImportService:
 
 
 def import_csv_to_database(
-    csv_path: str,
-    model_id: str = None,
-    test_type: str = None
+    csv_path: str, model_id: str | None = None, test_type: str | None = None
 ) -> tuple[int, list[str]]:
     """
     便捷函数：Import CSV 文件到Database

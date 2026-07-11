@@ -19,14 +19,29 @@ from typing import Any
 
 # 已知的推理引擎（与手册 #engine 对齐）
 ENGINES = [
-    "vllm", "sglang", "tensorrt-llm", "trt-llm", "lmdeploy",
-    "llama.cpp", "tgi", "heyi", "openai-compatible", "unknown",
+    "vllm",
+    "sglang",
+    "tensorrt-llm",
+    "trt-llm",
+    "lmdeploy",
+    "llama.cpp",
+    "tgi",
+    "heyi",
+    "openai-compatible",
+    "unknown",
 ]
 
 # 常见注意力后端（vLLM: VLLM_ATTENTION_BACKEND；SGLang 类似）
 ATTENTION_BACKENDS = [
-    "FLASH_ATTN", "FLASH_ATTN_MLA", "FLASHINFER", "TRITON_ATTN",
-    "XFORMERS", "TORCH_SDPA", "CUTLASS", "_IVYFD", "FLASHINFER_MLA",
+    "FLASH_ATTN",
+    "FLASH_ATTN_MLA",
+    "FLASHINFER",
+    "TRITON_ATTN",
+    "XFORMERS",
+    "TORCH_SDPA",
+    "CUTLASS",
+    "_IVYFD",
+    "FLASHINFER_MLA",
 ]
 
 # MoE 后端
@@ -83,7 +98,7 @@ class ServingConfig:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> ServingConfig:
-        known = set(cls.__dataclass_fields__)  # type: ignore[attr-defined]
+        known = set(cls.__dataclass_fields__)
         return cls(**{k: v for k, v in (d or {}).items() if k in known})
 
 
@@ -96,6 +111,7 @@ def from_sidebar(state: dict[str, Any]) -> ServingConfig:
     gpu_memory_utilization, max_num_seqs, chunked_prefill, prefix_caching,
     mtp_enabled, num_speculative_tokens, speculative_method, draft_model
     """
+
     def g(k, default=None):
         v = state.get(k, default)
         return v if v not in ("", None) else default
@@ -167,7 +183,11 @@ def detect_engine_version(engine: str) -> str:
                 if exe:
                     try:
                         out = subprocess.run(
-                            [exe, "--version"], capture_output=True, text=True, timeout=5, check=False
+                            [exe, "--version"],
+                            capture_output=True,
+                            text=True,
+                            timeout=5,
+                            check=False,
                         )
                         line = (out.stdout or out.stderr or "").strip().splitlines()
                         if line:

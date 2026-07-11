@@ -7,8 +7,8 @@ Covers: comparison_page, test_runner, dashboard_components, dataset_manager,
         markdown_summary, evaluation_dashboard, quality_reports
 """
 
-import re
 import os
+import re
 
 # ── Global phrase table (longest first to avoid partial collisions) ──────────
 
@@ -28,7 +28,6 @@ TRANSLATIONS = {
     "选择Comparison Metrics": "Select Comparison Metric",
     "指标 '{metric}' in选inDatainnot存in。": "Metric '{metric}' does not exist in selected data.",
     "📋 查看详细Data (Detailed Data)": "📋 View Detailed Data",
-
     # === test_runner.py ===
     "Configure字典，包含 api_base_url, model_id, api_key etc.": "Configuration dict containing api_base_url, model_id, api_key, etc.",
     "Execute test并管理Status": "Execute test and manage status",
@@ -68,7 +67,6 @@ TRANSLATIONS = {
     "# Initialize运行器": "# Initialize runner",
     "# CreateFilename": "# Create filename",
     "# Create UI 组件": "# Create UI components",
-
     # === dashboard_components.py ===
     "📊 实时Test指标": "📊 Real-time Test Metrics",
     "🟢 活跃请求": "🟢 Active Requests",
@@ -85,7 +83,6 @@ TRANSLATIONS = {
     "失败": "Failed",
     "🔲 请求StatusGrid": "🔲 Request Status Grid",
     "暂no请求": "No requests yet",
-
     # === dataset_manager.py ===
     "📂 Dataset管理 (Dataset Management)": "📂 Dataset Management",
     "📤 on传新Dataset": "📤 Upload New Dataset",
@@ -103,7 +100,6 @@ TRANSLATIONS = {
     "Display前 ": "Showing first ",
     " 行": " rows",
     "no法Load预览": "Unable to load preview",
-
     # === thinking_components.py ===
     "Phase 6: UI 增强组件 (Enhanced UI Components)": "Phase 6: Enhanced UI Components",
     "提供推理Model专用 UI 组件：": "Provides specialized UI components for reasoning models:",
@@ -179,7 +175,6 @@ TRANSLATIONS = {
     "连贯性": "Coherence",
     "完整性": "Completeness",
     "综合Score / 10": "Overall Score / 10",
-
     # === log_viewer.py ===
     "Render增强Log查看器": "Render enhanced log viewer",
     "BenchmarkLogger实例": "BenchmarkLogger instance",
@@ -242,7 +237,6 @@ TRANSLATIONS = {
     "# CSVExport": "# CSV export",
     "📊 under载 CSV": "📊 Download CSV",
     "CSV格式，可用Excel打开": "CSV format, can be opened with Excel",
-
     # === export.py ===
     "📗 under载 Excel 报告": "📗 Download Excel Report",
     "🌐 under载 HTML 报告": "🌐 Download HTML Report",
@@ -318,7 +312,6 @@ TRANSLATIONS = {
     "Average每TokenGenerate时间 (TPOT)": "Average Time Per Output Token (TPOT)",
     "# Checkis否至少has 1 has效面板": "# Check if at least 1 valid panel exists",
     "汇总图表Export failed: ": "Summary chart export failed: ",
-
     # === history_browser.py ===
     "History浏览 UI": "History Browser UI",
     "提供TestHistory浏览、搜索、Export功能。": "Provides test history browsing, search, and export functionality.",
@@ -397,7 +390,6 @@ TRANSLATIONS = {
     "#### 按Test TypeStatistics": "#### Statistics by Test Type",
     "# 最近Test": "# Recent tests",
     "#### 最近Test": "#### Recent Tests",
-
     # === markdown_summary.py ===
     "### 📊 Test摘要 (Summary)\\n\\n": "### 📊 Test Summary\\n\\n",
     "总Data量": "Total Data Volume",
@@ -460,7 +452,6 @@ TRANSLATIONS = {
     "TTFT 范围": "TTFT Range",
     "Concurrency ": "Concurrency ",
     " × onunder文 ": " × context ",
-
     # === evaluation_dashboard.py ===
     "Streamlit 组件，用于VisualizationEvaluationResult。": "Streamlit component for visualizing evaluation results.",
     "📊 EvaluationResultDashboard": "📊 Evaluation Results Dashboard",
@@ -544,7 +535,6 @@ TRANSLATIONS = {
     "输入: ": "Input: ",
     "推理: ": "Reasoning: ",
     "输出: ": "Output: ",
-
     # === quality_reports.py ===
     "质量Test Report模块 - GenerateQuality AssessmentVisualization报告": "Quality test report module - generates quality assessment visualization reports",
     "GenerateQuality Assessment汇总表": "Generate quality assessment summary table",
@@ -651,7 +641,6 @@ TRANSLATIONS = {
     "# 对比Bar Chart": "# Comparison bar chart",
     "### Visualization对比": "### Visual Comparison",
     "各Modelinnot同DatasetonAccuracy对比": "Accuracy Comparison Across Models and Datasets",
-
     # Short common fragments (apply last due to ordering)
     "Display ": "Showing ",
 }
@@ -659,7 +648,7 @@ TRANSLATIONS = {
 
 def translate_file(filepath: str, translations: dict) -> tuple[int, list[str]]:
     """Apply translations to a single file. Returns (count, changes)."""
-    with open(filepath, 'r', encoding='utf-8') as f:
+    with open(filepath, encoding="utf-8") as f:
         content = f.read()
 
     original = content
@@ -676,7 +665,7 @@ def translate_file(filepath: str, translations: dict) -> tuple[int, list[str]]:
             changes.append(f"  [{count}x] '{cn_text[:50]}...' → '{en_text[:50]}...'")
 
     if content != original:
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             f.write(content)
 
     return len(changes), changes
@@ -684,24 +673,24 @@ def translate_file(filepath: str, translations: dict) -> tuple[int, list[str]]:
 
 def count_chinese(filepath: str) -> int:
     """Count Chinese character segments in a file."""
-    with open(filepath, 'r', encoding='utf-8') as f:
+    with open(filepath, encoding="utf-8") as f:
         content = f.read()
-    return len(re.findall(r'[\u4e00-\u9fff]+', content))
+    return len(re.findall(r"[\u4e00-\u9fff]+", content))
 
 
 def main():
     target_files = [
-        'ui/comparison_page.py',
-        'ui/test_runner.py',
-        'ui/dashboard_components.py',
-        'ui/dataset_manager.py',
-        'ui/thinking_components.py',
-        'ui/log_viewer.py',
-        'ui/export.py',
-        'ui/history_browser.py',
-        'ui/markdown_summary.py',
-        'ui/evaluation_dashboard.py',
-        'ui/quality_reports.py',
+        "ui/comparison_page.py",
+        "ui/test_runner.py",
+        "ui/dashboard_components.py",
+        "ui/dataset_manager.py",
+        "ui/thinking_components.py",
+        "ui/log_viewer.py",
+        "ui/export.py",
+        "ui/history_browser.py",
+        "ui/markdown_summary.py",
+        "ui/evaluation_dashboard.py",
+        "ui/quality_reports.py",
     ]
 
     print("=" * 60)
@@ -742,5 +731,5 @@ def main():
             print(f"  {status} {fp}: {remaining}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

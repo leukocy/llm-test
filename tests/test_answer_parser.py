@@ -19,8 +19,8 @@ from evaluators.answer_parser import (
 )
 from evaluators.base_evaluator import (
     extract_choice_answer,
-    extract_numeric_answer,
     extract_number_answer,
+    extract_numeric_answer,
     normalize_text,
 )
 
@@ -34,36 +34,45 @@ class TestMultiChoiceParser:
         self.parser = MultiChoiceParser()
 
     # English patterns
-    @pytest.mark.parametrize("response,expected", [
-        ("ANSWER: B", "B"),
-        ("Answer: C", "C"),
-        ("The answer is A", "A"),
-        ("I choose D", "D"),
-        ("I select B", "B"),
-        ("My answer is C", "C"),
-    ])
+    @pytest.mark.parametrize(
+        "response,expected",
+        [
+            ("ANSWER: B", "B"),
+            ("Answer: C", "C"),
+            ("The answer is A", "A"),
+            ("I choose D", "D"),
+            ("I select B", "B"),
+            ("My answer is C", "C"),
+        ],
+    )
     def test_english_patterns(self, response, expected):
         assert self.parser.parse(response) == expected
 
     # Chinese patterns
-    @pytest.mark.parametrize("response,expected", [
-        ("答案是A", "A"),
-        ("选择B", "B"),
-        ("选项C", "C"),
-        ("正确答案为D", "D"),
-        ("答案为A", "A"),
-    ])
+    @pytest.mark.parametrize(
+        "response,expected",
+        [
+            ("答案是A", "A"),
+            ("选择B", "B"),
+            ("选项C", "C"),
+            ("正确答案为D", "D"),
+            ("答案为A", "A"),
+        ],
+    )
     def test_chinese_patterns(self, response, expected):
         assert self.parser.parse(response) == expected
 
     # Structured formats
-    @pytest.mark.parametrize("response,expected", [
-        ("(A)", "A"),
-        ("（B）", "B"),
-        ("[C]", "C"),
-        ("A. First option", "A"),
-        ("B。第二个选项", "B"),
-    ])
+    @pytest.mark.parametrize(
+        "response,expected",
+        [
+            ("(A)", "A"),
+            ("（B）", "B"),
+            ("[C]", "C"),
+            ("A. First option", "A"),
+            ("B。第二个选项", "B"),
+        ],
+    )
     def test_structured_formats(self, response, expected):
         assert self.parser.parse(response) == expected
 
@@ -255,6 +264,7 @@ class TestGetParserForDataset:
 # Migrated from test_smart_answer_parser.py — equivalent coverage via new parsers
 # ===========================================================================
 
+
 class TestMigratedNumberParsing:
     """Number parsing tests migrated from SmartAnswerParser, now using MathAnswerParser."""
 
@@ -345,6 +355,7 @@ class TestMigratedChoiceParsing:
 # extract_choice_answer / extract_numeric_answer (base_evaluator delegation)
 # ===========================================================================
 
+
 class TestExtractChoiceAnswer:
     """Tests for the base_evaluator.extract_choice_answer function."""
 
@@ -430,6 +441,7 @@ class TestNormalizeText:
 # MathAnswerParser — additional edge cases
 # ===========================================================================
 
+
 class TestMathAnswerParserEdgeCases:
     """Additional edge cases for MathAnswerParser beyond migrated tests."""
 
@@ -482,6 +494,7 @@ class TestMathAnswerParserEdgeCases:
 # CodeAnswerParser — additional edge cases
 # ===========================================================================
 
+
 class TestCodeAnswerParserEdgeCases:
 
     def setup_method(self):
@@ -506,6 +519,7 @@ class TestCodeAnswerParserEdgeCases:
 # ===========================================================================
 # TextAnswerParser — additional edge cases
 # ===========================================================================
+
 
 class TestTextAnswerParserEdgeCases:
 
@@ -536,6 +550,7 @@ class TestTextAnswerParserEdgeCases:
 # MultiChoiceParser — additional edge cases
 # ===========================================================================
 
+
 class TestMultiChoiceParserEdgeCases:
 
     def setup_method(self):
@@ -565,6 +580,7 @@ class TestMultiChoiceParserEdgeCases:
 # Tests derived from patterns in evalscope/utils/multi_choices.py and
 # evalscope/metrics/math_parser.py to ensure feature parity.
 # ===========================================================================
+
 
 class TestEvalScopeChoicePatterns:
     """Tests for EvalScope-style ANSWER: X and 答案：X patterns."""

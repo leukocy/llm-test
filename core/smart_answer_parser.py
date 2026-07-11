@@ -13,23 +13,25 @@ from typing import Any
 
 class AnswerType(Enum):
     """Answer类型"""
-    NUMBER = "number"           # 数值Answer
-    CHOICE = "choice"           # 选择题 (A/B/C/D)
-    TEXT = "text"               # 文本Answer
-    BOOLEAN = "boolean"         # is/否
-    CODE = "code"               # 代码
-    MATH_EXPRESSION = "math"    # 数学表达式
+
+    NUMBER = "number"  # 数值Answer
+    CHOICE = "choice"  # 选择题 (A/B/C/D)
+    TEXT = "text"  # 文本Answer
+    BOOLEAN = "boolean"  # is/否
+    CODE = "code"  # 代码
+    MATH_EXPRESSION = "math"  # 数学表达式
 
 
 @dataclass
 class ParseResult:
     """Parse result"""
-    extracted_answer: str           # 提取Answer
-    confidence: float               # 置信度 (0-1)
-    method: str                     # Parse方法 (rule/llm/hybrid)
-    normalized_value: Any           # 规范化后值（数值类型）
-    raw_match: str                  # 原始匹配字符串
-    error: str | None = None     # Error信息
+
+    extracted_answer: str  # 提取Answer
+    confidence: float  # 置信度 (0-1)
+    method: str  # Parse方法 (rule/llm/hybrid)
+    normalized_value: Any  # 规范化后值（数值类型）
+    raw_match: str  # 原始匹配字符串
+    error: str | None = None  # Error信息
 
 
 class SmartAnswerParser:
@@ -71,10 +73,11 @@ class SmartAnswerParser:
         self.llm_fallback_threshold = llm_fallback_threshold
 
         # 选择题Options
-        self.choice_options = ['A', 'B', 'C', 'D', 'E', 'F']
+        self.choice_options = ["A", "B", "C", "D", "E", "F"]
 
-    def parse(self, response: str, answer_type: AnswerType,
-              expected_answer: str | None = None) -> ParseResult:
+    def parse(
+        self, response: str, answer_type: AnswerType, expected_answer: str | None = None
+    ) -> ParseResult:
         """
         ParseModel响应，提取Answer（仅规则Parse）
 
@@ -102,7 +105,7 @@ class SmartAnswerParser:
         response = response.strip()
 
         # 策略1: 匹配 \boxed{...}（MATH 标准格式）
-        boxed_matches = re.findall(r'\\boxed\{([^{}]+)\}', response)
+        boxed_matches = re.findall(r"\\boxed\{([^{}]+)\}", response)
         if boxed_matches:
             value_str = boxed_matches[-1].strip()
             normalized = self._normalize_number(value_str)
@@ -112,11 +115,11 @@ class SmartAnswerParser:
                     confidence=0.95,
                     method="rule_boxed",
                     normalized_value=normalized,
-                    raw_match=f"\\boxed{{{value_str}}}"
+                    raw_match=f"\\boxed{{{value_str}}}",
                 )
 
         # 策略2: 匹配 #### 后数值（GSM8K 标准格式）
-        hash_match = re.search(r'####\s*([-+]?[\d,]+(?:\.\d+)?)', response)
+        hash_match = re.search(r"####\s*([-+]?[\d,]+(?:\.\d+)?)", response)
         if hash_match:
             value_str = hash_match.group(1)
             normalized = self._normalize_number(value_str)
@@ -126,14 +129,14 @@ class SmartAnswerParser:
                     confidence=0.95,
                     method="rule_hash",
                     normalized_value=normalized,
-                    raw_match=hash_match.group(0)
+                    raw_match=hash_match.group(0),
                 )
 
         # 策略3: 匹配 "answer is X" 格式
         answer_patterns = [
-            r'(?:answer|result|Answer|Result)[:\s]*(?:is\s*)?[$]?\s*([-+]?[\d,]+(?:\.\d+)?)',
-            r'(?:=|etc.于|得)\s*([-+]?[\d,]+(?:\.\d+)?)\s*(?:$|[。.\s])',
-            r'(?:最终|final)\s*[:：]?\s*([-+]?[\d,]+(?:\.\d+)?)',
+            r"(?:answer|result|Answer|Result)[:\s]*(?:is\s*)?[$]?\s*([-+]?[\d,]+(?:\.\d+)?)",
+            r"(?:=|etc.于|得)\s*([-+]?[\d,]+(?:\.\d+)?)\s*(?:$|[。.\s])",
+            r"(?:最终|final)\s*[:：]?\s*([-+]?[\d,]+(?:\.\d+)?)",
         ]
 
         for pattern in answer_patterns:
@@ -147,11 +150,11 @@ class SmartAnswerParser:
                         confidence=0.85,
                         method="rule_pattern",
                         normalized_value=normalized,
-                        raw_match=match.group(0)
+                        raw_match=match.group(0),
                     )
 
         # 策略4: 匹配末尾etc.式Result
-        eq_match = re.search(r'=\s*([-+]?[\d,]+(?:\.\d+)?)[^=\n]*$', response.strip())
+        eq_match = re.search(r"=\s*([-+]?[\d,]+(?:\.\d+)?)[^=\n]*$", response.strip())
         if eq_match:
             value_str = eq_match.group(1)
             normalized = self._normalize_number(value_str)
@@ -161,11 +164,11 @@ class SmartAnswerParser:
                     confidence=0.7,
                     method="rule_equation",
                     normalized_value=normalized,
-                    raw_match=eq_match.group(0)
+                    raw_match=eq_match.group(0),
                 )
 
         # 策略5: 取最后一出现数字（低置信度）
-        all_numbers = re.findall(r'[-+]?[\d,]+(?:\.\d+)?', response)
+        all_numbers = re.findall(r"[-+]?[\d,]+(?:\.\d+)?", response)
         if all_numbers:
             value_str = all_numbers[-1]
             normalized = self._normalize_number(value_str)
@@ -175,7 +178,7 @@ class SmartAnswerParser:
                     confidence=0.4,
                     method="rule_last_number",
                     normalized_value=normalized,
-                    raw_match=value_str
+                    raw_match=value_str,
                 )
 
         return ParseResult(
@@ -184,20 +187,20 @@ class SmartAnswerParser:
             method="rule_failed",
             normalized_value=None,
             raw_match="",
-            error="No number found in response"
+            error="No number found in response",
         )
 
     def _parse_choice(self, response: str) -> ParseResult:
         """Parse选择题Answer"""
         response_clean = response.strip()
-        choice_pattern = '|'.join(self.choice_options)
+        choice_pattern = "|".join(self.choice_options)
 
         # 策略1: 明确Answer声明
         patterns = [
-            rf'(?:answer|Answer)[:\s]*[（(]?({choice_pattern})[)）]?',
-            rf'(?:选择|选|choose)[:\s]*[（(]?({choice_pattern})[)）]?',
-            rf'^[（(]?({choice_pattern})[)）.]?\s*$',  # 单独Options
-            rf'\b({choice_pattern})\b(?:\s*[.。:：])',  # Options后跟标点
+            rf"(?:answer|Answer)[:\s]*[（(]?({choice_pattern})[)）]?",
+            rf"(?:选择|选|choose)[:\s]*[（(]?({choice_pattern})[)）]?",
+            rf"^[（(]?({choice_pattern})[)）.]?\s*$",  # 单独Options
+            rf"\b({choice_pattern})\b(?:\s*[.。:：])",  # Options后跟标点
         ]
 
         for pattern in patterns:
@@ -209,11 +212,13 @@ class SmartAnswerParser:
                     confidence=0.9,
                     method="rule_explicit",
                     normalized_value=choice,
-                    raw_match=match.group(0)
+                    raw_match=match.group(0),
                 )
 
         # 策略2: 响应开头Options
-        first_char_match = re.match(rf'^[（(]?({choice_pattern})[)）.]?', response_clean, re.IGNORECASE)
+        first_char_match = re.match(
+            rf"^[（(]?({choice_pattern})[)）.]?", response_clean, re.IGNORECASE
+        )
         if first_char_match:
             choice = first_char_match.group(1).upper()
             return ParseResult(
@@ -221,7 +226,7 @@ class SmartAnswerParser:
                 confidence=0.8,
                 method="rule_first_char",
                 normalized_value=choice,
-                raw_match=first_char_match.group(0)
+                raw_match=first_char_match.group(0),
             )
 
         # 策略3: 任意位置一Options（低置信度）
@@ -232,7 +237,7 @@ class SmartAnswerParser:
                     confidence=0.5,
                     method="rule_any_choice",
                     normalized_value=char.upper(),
-                    raw_match=char
+                    raw_match=char,
                 )
 
         return ParseResult(
@@ -241,15 +246,15 @@ class SmartAnswerParser:
             method="rule_failed",
             normalized_value=None,
             raw_match="",
-            error="No choice found in response"
+            error="No choice found in response",
         )
 
     def _parse_boolean(self, response: str) -> ParseResult:
         """Parseis/否Answer"""
         response_lower = response.lower().strip()
 
-        yes_indicators = ['yes', 'true', 'is', '对', '正确', '确实']
-        no_indicators = ['no', 'false', '否', 'not', 'Error', 'not对']
+        yes_indicators = ["yes", "true", "is", "对", "正确", "确实"]
+        no_indicators = ["no", "false", "否", "not", "Error", "not对"]
 
         for indicator in yes_indicators:
             if indicator in response_lower:
@@ -258,7 +263,7 @@ class SmartAnswerParser:
                     confidence=0.85,
                     method="rule_keyword",
                     normalized_value=True,
-                    raw_match=indicator
+                    raw_match=indicator,
                 )
 
         for indicator in no_indicators:
@@ -268,7 +273,7 @@ class SmartAnswerParser:
                     confidence=0.85,
                     method="rule_keyword",
                     normalized_value=False,
-                    raw_match=indicator
+                    raw_match=indicator,
                 )
 
         return ParseResult(
@@ -277,19 +282,19 @@ class SmartAnswerParser:
             method="rule_failed",
             normalized_value=None,
             raw_match="",
-            error="No boolean indicator found"
+            error="No boolean indicator found",
         )
 
     def _parse_math_expression(self, response: str) -> ParseResult:
         """Parse数学表达式"""
         # 匹配 \boxed{} 内表达式
-        boxed_matches = re.findall(r'\\boxed\{([^{}]+)\}', response)
+        boxed_matches = re.findall(r"\\boxed\{([^{}]+)\}", response)
         if boxed_matches:
             expr = boxed_matches[-1].strip()
             # 尝试求值
             try:
                 normalized = self._evaluate_expression(expr)
-            except:
+            except Exception:
                 normalized = expr
 
             return ParseResult(
@@ -297,7 +302,7 @@ class SmartAnswerParser:
                 confidence=0.9,
                 method="rule_boxed",
                 normalized_value=normalized,
-                raw_match=f"\\boxed{{{expr}}}"
+                raw_match=f"\\boxed{{{expr}}}",
             )
 
         # 回退到数值Parse
@@ -306,7 +311,7 @@ class SmartAnswerParser:
     def _parse_text(self, response: str) -> ParseResult:
         """Parse文本Answer（通用）"""
         # 尝试提取最后一句作isAnswer
-        sentences = re.split(r'[.。!！?？\n]', response.strip())
+        sentences = re.split(r"[.。!！?？\n]", response.strip())
         last_sentence = sentences[-1].strip() if sentences else response.strip()
 
         return ParseResult(
@@ -314,25 +319,25 @@ class SmartAnswerParser:
             confidence=0.5,
             method="rule_last_sentence",
             normalized_value=last_sentence[:200],
-            raw_match=last_sentence[:200]
+            raw_match=last_sentence[:200],
         )
 
     def _normalize_number(self, value_str: str) -> float | None:
         """规范化数值字符串"""
         try:
             # 移除逗号、货币符号、空格
-            clean = value_str.replace(',', '').replace('$', '').replace(' ', '').strip()
+            clean = value_str.replace(",", "").replace("$", "").replace(" ", "").strip()
             return float(clean)
-        except:
+        except Exception:
             return None
 
     def _evaluate_expression(self, expr: str) -> float | None:
         """安全地求值简单数学表达式"""
         try:
             # 只允许数字and基本运算符
-            safe_expr = re.sub(r'[^0-9+\-*/().\s]', '', expr)
+            safe_expr = re.sub(r"[^0-9+\-*/().\s]", "", expr)
             return float(eval(safe_expr))
-        except:
+        except Exception:
             return None
 
     async def parse_with_llm_fallback(
@@ -340,7 +345,7 @@ class SmartAnswerParser:
         response: str,
         answer_type: AnswerType,
         llm_func,
-        expected_answer: str | None = None
+        expected_answer: str | None = None,
     ) -> ParseResult:
         """
         带 LLM 兜底Parse
@@ -376,12 +381,7 @@ class SmartAnswerParser:
             rule_result.error = f"LLM fallback failed: {e}"
             return rule_result
 
-    async def _llm_parse(
-        self,
-        response: str,
-        answer_type: AnswerType,
-        llm_func
-    ) -> ParseResult:
+    async def _llm_parse(self, response: str, answer_type: AnswerType, llm_func) -> ParseResult:
         """use LLM ParseAnswer"""
         type_instruction = {
             AnswerType.NUMBER: "Extract the final numerical answer. Return ONLY the number, nothing else. If the answer is a fraction, convert it to decimal.",
@@ -414,7 +414,7 @@ Extracted answer:"""
                     confidence=0.85,
                     method="llm",
                     normalized_value=normalized,
-                    raw_match=extracted
+                    raw_match=extracted,
                 )
         elif answer_type == AnswerType.CHOICE:
             if extracted.upper() in self.choice_options:
@@ -423,7 +423,7 @@ Extracted answer:"""
                     confidence=0.85,
                     method="llm",
                     normalized_value=extracted.upper(),
-                    raw_match=extracted
+                    raw_match=extracted,
                 )
         else:
             return ParseResult(
@@ -431,7 +431,7 @@ Extracted answer:"""
                 confidence=0.8,
                 method="llm",
                 normalized_value=extracted,
-                raw_match=extracted
+                raw_match=extracted,
             )
 
         return ParseResult(
@@ -439,15 +439,12 @@ Extracted answer:"""
             confidence=0.5,
             method="llm_uncertain",
             normalized_value=extracted,
-            raw_match=extracted
+            raw_match=extracted,
         )
 
 
 def compare_answers(
-    predicted: Any,
-    expected: Any,
-    answer_type: AnswerType,
-    tolerance: float = 0.001
+    predicted: Any, expected: Any, answer_type: AnswerType, tolerance: float = 0.001
 ) -> tuple[bool, float]:
     """
     比较两Answeris否etc.价
@@ -467,7 +464,7 @@ def compare_answers(
     if answer_type == AnswerType.NUMBER:
         try:
             pred_val = float(predicted) if not isinstance(predicted, (int, float)) else predicted
-            exp_val = float(str(expected).replace(',', ''))
+            exp_val = float(str(expected).replace(",", ""))
 
             # 完全相etc.
             if pred_val == exp_val:
@@ -492,8 +489,16 @@ def compare_answers(
         return pred_str == exp_str, 1.0 if pred_str == exp_str else 0.0
 
     elif answer_type == AnswerType.BOOLEAN:
-        pred_bool = predicted if isinstance(predicted, bool) else str(predicted).lower() in ['true', 'yes', 'is']
-        exp_bool = expected if isinstance(expected, bool) else str(expected).lower() in ['true', 'yes', 'is']
+        pred_bool = (
+            predicted
+            if isinstance(predicted, bool)
+            else str(predicted).lower() in ["true", "yes", "is"]
+        )
+        exp_bool = (
+            expected
+            if isinstance(expected, bool)
+            else str(expected).lower() in ["true", "yes", "is"]
+        )
         return pred_bool == exp_bool, 1.0 if pred_bool == exp_bool else 0.0
 
     else:

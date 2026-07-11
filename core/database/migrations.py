@@ -6,7 +6,7 @@ Database Migrations Module
 
 import logging
 import sqlite3
-from typing import Callable
+from typing import Any, Callable
 
 from .schema import SCHEMA_VERSION
 
@@ -26,6 +26,15 @@ def _add_column(table: str, column: str, type_spec: str) -> MigrationFunc:
         except sqlite3.OperationalError as e:
             if "duplicate column" not in str(e).lower():
                 raise
+
+    return _migrate
+
+
+def _exec(sql: str) -> MigrationFunc:
+    """生成执行 DDL（CREATE INDEX/TABLE 等）的迁移；忽略返回的 Cursor。"""
+
+    def _migrate(conn: sqlite3.Connection) -> None:
+        conn.execute(sql)
 
     return _migrate
 
@@ -59,12 +68,11 @@ MIGRATIONS: dict[str, list[MigrationFunc]] = {
         _add_column("test_runs", "resource_monitor_json", "TEXT"),
         _add_column("test_runs", "status_detail", "TEXT"),
         # 索引
-        lambda conn: conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_test_runs_machine ON test_runs(machine_id)"),
-        lambda conn: conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_test_runs_external_level ON test_runs(external_level)"),
-        lambda conn: conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_test_runs_comparison ON test_runs(comparison_group)"),
+        _exec("CREATE INDEX IF NOT EXISTS idx_test_runs_machine ON test_runs(machine_id)"),
+        _exec(
+            "CREATE INDEX IF NOT EXISTS idx_test_runs_external_level ON test_runs(external_level)"
+        ),
+        _exec("CREATE INDEX IF NOT EXISTS idx_test_runs_comparison ON test_runs(comparison_group)"),
     ],
     # 1.2.0 -> 1.3.0: 推理引擎运行时（/metrics 轮询 + KV 实况）
     "1.3.0": [
@@ -77,7 +85,8 @@ MIGRATIONS: dict[str, list[MigrationFunc]] = {
     # 1.3.0 -> 1.4.0: 模型×应用质量评估表（手册 maTest 模板采集层）
     # 新表，CREATE TABLE IF NOT EXISTS 幂等（create_tables 对新老库都已建；此处双保险）。
     "1.4.0": [
-        lambda conn: conn.execute("""CREATE TABLE IF NOT EXISTS application_cases (
+        _exec(
+            """CREATE TABLE IF NOT EXISTS application_cases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             case_id TEXT NOT NULL UNIQUE,
             run_id INTEGER,
@@ -116,19 +125,18 @@ MIGRATIONS: dict[str, list[MigrationFunc]] = {
             next_action TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             extra_json TEXT
-        )"""),
-        lambda conn: conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_app_cases_case_id ON application_cases(case_id)"),
-        lambda conn: conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_app_cases_run ON application_cases(run_id)"),
-        lambda conn: conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_app_cases_scenario ON application_cases(scenario)"),
-        lambda conn: conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_app_cases_model ON application_cases(model_name)"),
-        lambda conn: conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_app_cases_external ON application_cases(external_level)"),
-        lambda conn: conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_app_cases_machine ON application_cases(machine_id)"),
+        )"""
+        ),
+        _exec(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_app_cases_case_id ON application_cases(case_id)"
+        ),
+        _exec("CREATE INDEX IF NOT EXISTS idx_app_cases_run ON application_cases(run_id)"),
+        _exec("CREATE INDEX IF NOT EXISTS idx_app_cases_scenario ON application_cases(scenario)"),
+        _exec("CREATE INDEX IF NOT EXISTS idx_app_cases_model ON application_cases(model_name)"),
+        _exec(
+            "CREATE INDEX IF NOT EXISTS idx_app_cases_external ON application_cases(external_level)"
+        ),
+        _exec("CREATE INDEX IF NOT EXISTS idx_app_cases_machine ON application_cases(machine_id)"),
     ],
 }
 
@@ -138,7 +146,7 @@ def get_current_version(conn: sqlite3.Connection) -> str:
     try:
         cursor = conn.execute("SELECT value FROM db_meta WHERE key = 'schema_version'")
         row = cursor.fetchone()
-        return row[0] if row else "0.0.0"
+        return str(row[0]) if row else "0.0.0"
     except sqlite3.OperationalError:
         # db_meta 表not存in
         return "0.0.0"
@@ -146,10 +154,13 @@ def get_current_version(conn: sqlite3.Connection) -> str:
 
 def set_version(conn: sqlite3.Connection, version: str):
     """SetDatabaseVersion"""
-    conn.execute("""
+    conn.execute(
+        """
         INSERT OR REPLACE INTO db_meta (key, value, updated_at)
         VALUES ('schema_version', ?, CURRENT_TIMESTAMP)
-    """, (version,))
+    """,
+        (version,),
+    )
 
 
 def compare_versions(v1: str, v2: str) -> int:
@@ -159,8 +170,9 @@ def compare_versions(v1: str, v2: str) -> int:
     Returns:
         -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2
     """
+
     def parse(v):
-        return [int(x) for x in v.split('.')]
+        return [int(x) for x in v.split(".")]
 
     p1, p2 = parse(v1), parse(v2)
 
@@ -197,11 +209,14 @@ def run_migrations(conn: sqlite3.Connection, target_version: str = SCHEMA_VERSIO
     # Getneed执行Migration
     migrations_to_run = []
     for version, migrations in MIGRATIONS.items():
-        if compare_versions(version, current_version) > 0 and compare_versions(version, target_version) <= 0:
+        if (
+            compare_versions(version, current_version) > 0
+            and compare_versions(version, target_version) <= 0
+        ):
             migrations_to_run.append((version, migrations))
 
     # 按VersionSort
-    migrations_to_run.sort(key=lambda x: [int(v) for v in x[0].split('.')])
+    migrations_to_run.sort(key=lambda x: [int(v) for v in x[0].split(".")])
 
     # 执行Migration
     for version, migrations in migrations_to_run:
@@ -229,11 +244,13 @@ def register_migration(version: str):
         def add_new_field(conn):
             conn.execute("ALTER TABLE test_runs ADD COLUMN new_field TEXT")
     """
+
     def decorator(func: MigrationFunc) -> MigrationFunc:
         if version not in MIGRATIONS:
             MIGRATIONS[version] = []
         MIGRATIONS[version].append(func)
         return func
+
     return decorator
 
 
@@ -244,11 +261,13 @@ def check_database_health(conn: sqlite3.Connection) -> dict:
     Returns:
         健康Status字典
     """
+    issues: list[str] = []
+    tables_info: dict[str, dict[str, Any]] = {}
     health = {
         "version": get_current_version(conn),
-        "tables": {},
+        "tables": tables_info,
         "integrity": "unknown",
-        "issues": [],
+        "issues": issues,
     }
 
     try:
@@ -258,7 +277,7 @@ def check_database_health(conn: sqlite3.Connection) -> dict:
         health["integrity"] = result
 
         if result != "ok":
-            health["issues"].append(f"完整性Check失败: {result}")
+            issues.append(f"完整性Check失败: {result}")
 
         # Check表
         cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -267,16 +286,16 @@ def check_database_health(conn: sqlite3.Connection) -> dict:
         for table in tables:
             cursor = conn.execute(f"SELECT COUNT(*) FROM {table}")
             count = cursor.fetchone()[0]
-            health["tables"][table] = {"count": count}
+            tables_info[table] = {"count": count}
 
         # Check外键
         cursor = conn.execute("PRAGMA foreign_key_check")
         fk_issues = cursor.fetchall()
         if fk_issues:
-            health["issues"].append(f"外键问题: {len(fk_issues)} ")
+            issues.append(f"外键问题: {len(fk_issues)} ")
 
     except Exception as e:
-        health["issues"].append(f"Check失败: {e}")
+        issues.append(f"Check失败: {e}")
 
     return health
 

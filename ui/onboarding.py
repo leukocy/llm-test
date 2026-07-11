@@ -17,9 +17,8 @@ import streamlit as st
 # Onboarding State Management
 # ----------------------------------------------------------------------------
 
-_ONBOARDING_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)), ".onboarding_state"
-)
+_ONBOARDING_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".onboarding_state")
+
 
 def _load_onboarding_file():
     """Load persistent onboarding state from disk."""
@@ -130,10 +129,9 @@ ONBOARDING_CONTENT = {
         """,
         "tips": [
             "💡 Tip: You can reopen this guide anytime from the sidebar",
-            "💡 Tip: Test results are automatically saved and can be viewed in History"
-        ]
+            "💡 Tip: Test results are automatically saved and can be viewed in History",
+        ],
     },
-
     "api_config": {
         "title": "🔧 Configure API Connect",
         "content": """
@@ -161,10 +159,9 @@ ONBOARDING_CONTENT = {
         """,
         "tips": [
             "💡 Tip: Click 'Get Model List' to validate API connection",
-            "💡 Tip: Common configurations can be saved as presets for future use"
-        ]
+            "💡 Tip: Common configurations can be saved as presets for future use",
+        ],
     },
-
     "test_selection": {
         "title": "🎯 Select Test Type",
         "content": """
@@ -188,10 +185,9 @@ ONBOARDING_CONTENT = {
         """,
         "tips": [
             "💡 Tip: First-time users should start with the 'Quick Test' preset",
-            "💡 Tip: Stress tests consume more API quota"
-        ]
+            "💡 Tip: Stress tests consume more API quota",
+        ],
     },
-
     "run_test": {
         "title": "🚀 Run Test",
         "content": """
@@ -214,10 +210,9 @@ ONBOARDING_CONTENT = {
         """,
         "tips": [
             "💡 Tip: You can stop the test anytime without losing saved results",
-            "💡 Tip: Recommend running a small test first to validate configuration"
-        ]
+            "💡 Tip: Recommend running a small test first to validate configuration",
+        ],
     },
-
     "results": {
         "title": "📊 View Results",
         "content": """
@@ -246,10 +241,9 @@ ONBOARDING_CONTENT = {
         """,
         "tips": [
             "💡 Tip: Use result comparison to visually compare multiple tests",
-            "💡 Tip: History is automatically saved in the project directory"
-        ]
+            "💡 Tip: History is automatically saved in the project directory",
+        ],
     },
-
     "complete": {
         "title": "🎉 Congratulations!",
         "content": """
@@ -276,15 +270,16 @@ ONBOARDING_CONTENT = {
         """,
         "tips": [
             "🎉 Happy testing!",
-            "💡 Tip: Saving common configurations can significantly improve testing efficiency"
-        ]
-    }
+            "💡 Tip: Saving common configurations can significantly improve testing efficiency",
+        ],
+    },
 }
 
 
 # ============================================================================
 # Onboarding UI Components
 # ============================================================================
+
 
 def _show_previous_onboarding_step():
     """Move onboarding to the previous step."""
@@ -395,12 +390,26 @@ def render_onboarding_guide():
         prev_col, next_col, skip_col = st.columns(3)
         with prev_col:
             if state.current_step > 0:
-                st.button("⬅️ Previous", on_click=_show_previous_onboarding_step, key="onb_prev")
+                st.button(
+                    "⬅️ Previous",
+                    on_click=_show_previous_onboarding_step,
+                    key="onb_prev",
+                )
         with next_col:
             if state.current_step < len(OnboardingState.STEPS) - 1:
-                st.button("Next ➡️", type="primary", on_click=_show_next_onboarding_step, key="onb_next")
+                st.button(
+                    "Next ➡️",
+                    type="primary",
+                    on_click=_show_next_onboarding_step,
+                    key="onb_next",
+                )
             else:
-                st.button("Done ✅", type="primary", on_click=_complete_onboarding, key="onb_done")
+                st.button(
+                    "Done ✅",
+                    type="primary",
+                    on_click=_complete_onboarding,
+                    key="onb_done",
+                )
         with skip_col:
             st.button("Skip Onboarding ⏭️", on_click=_skip_onboarding, key="onb_skip")
 
@@ -421,7 +430,8 @@ def render_onboarding_trigger():
 
 def render_quick_reference():
     """Render quick reference card"""
-    st.markdown("""
+    st.markdown(
+        """
     <style>
     .quick-ref {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -435,10 +445,13 @@ def render_quick_reference():
         margin-top: 0;
     }
     </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     with st.container():
-        st.markdown("""
+        st.markdown(
+            """
         <div class="quick-ref">
             <h3>🚀 Quick Start</h3>
             <p><strong>1.</strong> Configure API on the left</p>
@@ -447,7 +460,9 @@ def render_quick_reference():
             <p><strong>4.</strong> View and analyze results</p>
             <p style="margin-bottom: 0;">👆 need <a href="#" onclick="Streamlit.setComponentValue('onboarding_trigger', true)">detailed help</a>?</p>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
 
 def render_feature_highlights():
@@ -456,34 +471,42 @@ def render_feature_highlights():
         col1, col2 = st.columns(2)
 
         with col1:
-            st.markdown("""
+            st.markdown(
+                """
             **🎯 Precise Testing**
             - Supports 7 test types
             - Multi-dimensional performance metrics
             - Reproducible test environment
-            """)
+            """
+            )
 
-            st.markdown("""
+            st.markdown(
+                """
             **📊 Deep Analysis**
             - Real-time progress monitoring
             - Visualization chart display
             - Automatic report generation
-            """)
+            """
+            )
 
         with col2:
-            st.markdown("""
+            st.markdown(
+                """
             **💾 Smart Management**
             - Configuration preset saving
             - Test progress persistence
             - History query
-            """)
+            """
+            )
 
-            st.markdown("""
+            st.markdown(
+                """
             **🔧 Flexible Configuration**
             - Multi API provider support
             - Custom test parameters
             - Thinking mode testing
-            """)
+            """
+            )
 
 
 def render_faqs():
@@ -499,7 +522,7 @@ def render_faqs():
                 - **Stress test**: Concurrency 16+
 
                 Note: High concurrency consumes more API quota.
-                """
+                """,
             },
             {
                 "q": "What to do when tests fail?",
@@ -509,7 +532,7 @@ def render_faqs():
                 - **429 Error**: Lower concurrency or retry later
                 - **ConnectError**: Check network and API URL
                 - **Timeout**: Increase max_tokens or lower concurrency
-                """
+                """,
             },
             {
                 "q": "How to compare different model performances?",
@@ -518,7 +541,7 @@ def render_faqs():
                 1. Run tests on multiple models
                 2. Select results to compare on the comparison page
                 3. View comparison charts and reports
-                """
+                """,
             },
             {
                 "q": "Where is Test data saved?",
@@ -529,8 +552,8 @@ def render_faqs():
                 - `test_presets/` - Configuration presets
 
                 These files are in the project directory and can be safely backed up or deleted.
-                """
-            }
+                """,
+            },
         ]
 
         for i, faq in enumerate(faqs):
@@ -541,6 +564,7 @@ def render_faqs():
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
 
 def show_onboarding():
     """Display onboarding (if not completed)"""
@@ -567,4 +591,4 @@ def skip_onboarding():
 
 def is_onboarding_completed() -> bool:
     """Check if onboarding is completed"""
-    return st.session_state.get("onboarding_completed", False)
+    return bool(st.session_state.get("onboarding_completed", False))

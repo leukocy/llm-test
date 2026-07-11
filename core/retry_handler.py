@@ -21,12 +21,13 @@ from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
 class RetryConfig:
     """重试Configure"""
+
     max_retries: int = 3  # 最大Retry count
     base_delay: float = 1.0  # 基础Latency（seconds）
     max_delay: float = 60.0  # 最大Latency（seconds）
@@ -40,6 +41,7 @@ class RetryConfig:
 @dataclass
 class RetryResult:
     """重试Result"""
+
     success: bool
     result: Any = None
     error: Exception | None = None
@@ -88,7 +90,7 @@ class RetryHandler:
             Latencyseconds数
         """
         # 指数退避
-        delay = self.config.base_delay * (self.config.exponential_base ** attempt)
+        delay = self.config.base_delay * (self.config.exponential_base**attempt)
 
         # ifhas Retry-After，use较大值
         if retry_after:
@@ -123,16 +125,16 @@ class RetryHandler:
             return True, None, None
 
         # 尝试从异常in提取Status码
-        if hasattr(error, 'status_code'):
+        if hasattr(error, "status_code"):
             status_code = error.status_code
-        elif hasattr(error, 'response') and hasattr(error.response, 'status_code'):
+        elif hasattr(error, "response") and hasattr(error.response, "status_code"):
             status_code = error.response.status_code
 
         # CheckStatus码is否可重试
         if status_code in self.config.retryable_status_codes:
             # 尝试提取 Retry-After
-            if hasattr(error, 'response') and hasattr(error.response, 'headers'):
-                retry_after_str = error.response.headers.get('Retry-After')
+            if hasattr(error, "response") and hasattr(error.response, "headers"):
+                retry_after_str = error.response.headers.get("Retry-After")
                 if retry_after_str:
                     try:
                         # Try parsing as seconds first
@@ -154,8 +156,9 @@ class RetryHandler:
 
             # 也Check异常消息in retryDelay
             error_str = str(error)
-            if 'retryDelay' in error_str:
+            if "retryDelay" in error_str:
                 import re
+
                 match = re.search(r"retryDelay['\"]?\s*[:=]\s*['\"]?(\d+)s?", error_str)
                 if match:
                     retry_after = float(match.group(1))
@@ -164,7 +167,12 @@ class RetryHandler:
 
         # CheckError消息inis否包含可重试关键词
         error_msg = str(error).lower()
-        retryable_keywords = ['rate limit', 'too many requests', 'resource exhausted', 'temporarily unavailable']
+        retryable_keywords = [
+            "rate limit",
+            "too many requests",
+            "resource exhausted",
+            "temporarily unavailable",
+        ]
         for keyword in retryable_keywords:
             if keyword in error_msg:
                 return True, 429, None
@@ -172,10 +180,7 @@ class RetryHandler:
         return False, status_code, None
 
     async def execute_async(
-        self,
-        func: Callable[..., Awaitable[T]],
-        *args,
-        **kwargs
+        self, func: Callable[..., Awaitable[T]], *args, **kwargs
     ) -> RetryResult:
         """
         带重试执行Async函数
@@ -199,7 +204,7 @@ class RetryHandler:
                     success=True,
                     result=result,
                     attempts=attempts + 1,
-                    total_delay=total_delay
+                    total_delay=total_delay,
                 )
 
             except Exception as e:
@@ -214,8 +219,10 @@ class RetryHandler:
                 delay = self._calculate_delay(attempts, retry_after)
                 total_delay += delay
 
-                logger.info(f"Retry {attempts + 1}/{self.config.max_retries}: "
-                           f"status={status_code}, delay={delay:.1f}s")
+                logger.info(
+                    f"Retry {attempts + 1}/{self.config.max_retries}: "
+                    f"status={status_code}, delay={delay:.1f}s"
+                )
 
                 await asyncio.sleep(delay)
                 attempts += 1
@@ -225,15 +232,10 @@ class RetryHandler:
             error=last_error,
             attempts=attempts + 1,
             total_delay=total_delay,
-            last_status_code=last_status_code
+            last_status_code=last_status_code,
         )
 
-    def execute_sync(
-        self,
-        func: Callable[..., T],
-        *args,
-        **kwargs
-    ) -> RetryResult:
+    def execute_sync(self, func: Callable[..., T], *args, **kwargs) -> RetryResult:
         """
         带重试执行Sync函数
 
@@ -256,7 +258,7 @@ class RetryHandler:
                     success=True,
                     result=result,
                     attempts=attempts + 1,
-                    total_delay=total_delay
+                    total_delay=total_delay,
                 )
 
             except Exception as e:
@@ -271,8 +273,10 @@ class RetryHandler:
                 delay = self._calculate_delay(attempts, retry_after)
                 total_delay += delay
 
-                logger.info(f"Retry {attempts + 1}/{self.config.max_retries}: "
-                           f"status={status_code}, delay={delay:.1f}s")
+                logger.info(
+                    f"Retry {attempts + 1}/{self.config.max_retries}: "
+                    f"status={status_code}, delay={delay:.1f}s"
+                )
 
                 time.sleep(delay)
                 attempts += 1
@@ -282,7 +286,7 @@ class RetryHandler:
             error=last_error,
             attempts=attempts + 1,
             total_delay=total_delay,
-            last_status_code=last_status_code
+            last_status_code=last_status_code,
         )
 
     def retry_decorator(self, func: Callable) -> Callable:
@@ -295,20 +299,24 @@ class RetryHandler:
                 ...
         """
         if inspect.iscoroutinefunction(func):
+
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
                 result = await self.execute_async(func, *args, **kwargs)
                 if result.success:
                     return result.result
                 raise result.error
+
             return async_wrapper
         else:
+
             @wraps(func)
             def sync_wrapper(*args, **kwargs):
                 result = self.execute_sync(func, *args, **kwargs)
                 if result.success:
                     return result.result
                 raise result.error
+
             return sync_wrapper
 
 

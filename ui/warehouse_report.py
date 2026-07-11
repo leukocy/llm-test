@@ -23,6 +23,7 @@ from core.publish_gate import GATE_LABELS, LEVEL_BADGE, evaluate_publish_gate
 # 硬件指纹卡
 # ---------------------------------------------------------------------------
 
+
 def render_hardware_fingerprint_card() -> None:
     sys_info = st.session_state.get("system_info") or {}
     fp = sys_info.get("hardware_fingerprint") or {}
@@ -35,25 +36,34 @@ def render_hardware_fingerprint_card() -> None:
         cuda = fp.get("cuda") or {}
 
         c1, c2, c3 = st.columns(3)
-        c1.metric("CPU", cpu.get("model_name") or "—",
-                  f"{cpu.get('sockets', 1)}×{cpu.get('cores_per_socket') or '?'}核 / "
-                  f"{cpu.get('threads_per_core') or '?'}线程 / NUMA {cpu.get('numa_nodes') or '?'}")
-        c2.metric("内存", f"{mem.get('total_gb') or '?'} GB",
-                  f"{mem.get('type') or '?'} / {mem.get('channels') or '?'}ch / "
-                  f"{mem.get('speed_mt_s') or '?'}MT/s / ECC {mem.get('ecc') or '?'}")
+        c1.metric(
+            "CPU",
+            cpu.get("model_name") or "—",
+            f"{cpu.get('sockets', 1)}×{cpu.get('cores_per_socket') or '?'}核 / "
+            f"{cpu.get('threads_per_core') or '?'}线程 / NUMA {cpu.get('numa_nodes') or '?'}",
+        )
+        c2.metric(
+            "内存",
+            f"{mem.get('total_gb') or '?'} GB",
+            f"{mem.get('type') or '?'} / {mem.get('channels') or '?'}ch / "
+            f"{mem.get('speed_mt_s') or '?'}MT/s / ECC {mem.get('ecc') or '?'}",
+        )
         c3.metric("GPU 数量", len(gpus))
 
         if gpus:
             rows = []
             for g in gpus:
-                rows.append({
-                    "GPU": g.get("name") or "—",
-                    "显存(GB)": g.get("vram_gb"),
-                    "类型": g.get("memory_type") or "—",
-                    "标称带宽(GB/s)": g.get("nominal_bandwidth_gbps"),
-                    "PCIe": f"Gen{g.get('pcie_gen') or '?'} ×{g.get('pcie_width') or '?'}",
-                })
+                rows.append(
+                    {
+                        "GPU": g.get("name") or "—",
+                        "显存(GB)": g.get("vram_gb"),
+                        "类型": g.get("memory_type") or "—",
+                        "标称带宽(GB/s)": g.get("nominal_bandwidth_gbps"),
+                        "PCIe": f"Gen{g.get('pcie_gen') or '?'} ×{g.get('pcie_width') or '?'}",
+                    }
+                )
             import pandas as pd
+
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
         meta = st.columns(3)
@@ -65,6 +75,7 @@ def render_hardware_fingerprint_card() -> None:
 # ---------------------------------------------------------------------------
 # 资源监控时序图
 # ---------------------------------------------------------------------------
+
 
 def render_resource_timeline() -> None:
     mon = st.session_state.get("resource_monitor")
@@ -85,18 +96,37 @@ def render_resource_timeline() -> None:
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     # 利用率（左轴）
     if "cpu_percent" in df:
-        fig.add_trace(go.Scatter(x=df["t"], y=df["cpu_percent"], name="CPU%", line={"width": 1}), secondary_y=False)
+        fig.add_trace(
+            go.Scatter(x=df["t"], y=df["cpu_percent"], name="CPU%", line={"width": 1}),
+            secondary_y=False,
+        )
     if "gpu_util_percent" in df:
-        fig.add_trace(go.Scatter(x=df["t"], y=df["gpu_util_percent"], name="GPU%", line={"width": 1}), secondary_y=False)
+        fig.add_trace(
+            go.Scatter(x=df["t"], y=df["gpu_util_percent"], name="GPU%", line={"width": 1}),
+            secondary_y=False,
+        )
     # 容量（右轴）
     if "gpu_vram_gb" in df:
-        fig.add_trace(go.Scatter(x=df["t"], y=df["gpu_vram_gb"], name="显存(GB)", line={"dash": "dot"}), secondary_y=True)
+        fig.add_trace(
+            go.Scatter(x=df["t"], y=df["gpu_vram_gb"], name="显存(GB)", line={"dash": "dot"}),
+            secondary_y=True,
+        )
     if "system_memory_gb" in df:
-        fig.add_trace(go.Scatter(x=df["t"], y=df["system_memory_gb"], name="内存(GB)", line={"dash": "dot"}), secondary_y=True)
+        fig.add_trace(
+            go.Scatter(
+                x=df["t"],
+                y=df["system_memory_gb"],
+                name="内存(GB)",
+                line={"dash": "dot"},
+            ),
+            secondary_y=True,
+        )
 
     fig.update_layout(
-        title="资源监控时序（测试期间）", height=320,
-        legend={"orientation": "h", "y": -0.2}, margin={"l": 10, "r": 10, "t": 40, "b": 10},
+        title="资源监控时序（测试期间）",
+        height=320,
+        legend={"orientation": "h", "y": -0.2},
+        margin={"l": 10, "r": 10, "t": 40, "b": 10},
     )
     fig.update_xaxes(title_text="时间 (s)")
     fig.update_yaxes(title_text="利用率 (%)", secondary_y=False, range=[0, 105])
@@ -109,18 +139,23 @@ def render_resource_timeline() -> None:
         p1.metric("GPU 利用率峰值", f"{peaks.get('gpu_util_percent') or '—'}%")
         p2.metric("显存峰值", f"{peaks.get('gpu_vram_gb') or '—'} GB")
         p3.metric("内存峰值", f"{peaks.get('system_memory_gb') or '—'} GB")
-        p4.metric("功耗/温度", f"{peaks.get('gpu_power_w') or '—'}W / {peaks.get('gpu_temp_c') or '—'}℃")
+        p4.metric(
+            "功耗/温度",
+            f"{peaks.get('gpu_power_w') or '—'}W / {peaks.get('gpu_temp_c') or '—'}℃",
+        )
 
 
 # ---------------------------------------------------------------------------
 # 等效带宽偏差分析
 # ---------------------------------------------------------------------------
 
+
 def render_deviation_analysis() -> None:
     bw = st.session_state.get("effective_bandwidth") or {}
     if not bw or bw.get("effective_bandwidth_gbps") is None:
         return
     from core.effective_bandwidth import summarize_gap
+
     with st.expander("📡 等效带宽偏差分析", expanded=False):
         c1, c2, c3 = st.columns(3)
         c1.metric("标称显存带宽", f"{bw.get('nominal_bandwidth_gbps') or '—'} GB/s")
@@ -132,6 +167,7 @@ def render_deviation_analysis() -> None:
 # ---------------------------------------------------------------------------
 # 推理引擎运行时（KV 占用 / 调度队列 / 抢救）
 # ---------------------------------------------------------------------------
+
 
 def render_engine_runtime() -> None:
     """渲染引擎自身的运行视图：KV cache 占用、运行/等待队列、抢救数、KV 容量。"""
@@ -151,14 +187,40 @@ def render_engine_runtime() -> None:
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     if "gpu_cache_usage_perc" in df:
-        fig.add_trace(go.Scatter(x=df["t"], y=df["gpu_cache_usage_perc"], name="KV cache 占用", line={"width": 2}), secondary_y=False)
+        fig.add_trace(
+            go.Scatter(
+                x=df["t"],
+                y=df["gpu_cache_usage_perc"],
+                name="KV cache 占用",
+                line={"width": 2},
+            ),
+            secondary_y=False,
+        )
     if "num_requests_running" in df:
-        fig.add_trace(go.Scatter(x=df["t"], y=df["num_requests_running"], name="运行请求", line={"dash": "dot"}), secondary_y=True)
+        fig.add_trace(
+            go.Scatter(
+                x=df["t"],
+                y=df["num_requests_running"],
+                name="运行请求",
+                line={"dash": "dot"},
+            ),
+            secondary_y=True,
+        )
     if "num_requests_waiting" in df:
-        fig.add_trace(go.Scatter(x=df["t"], y=df["num_requests_waiting"], name="等待请求", line={"dash": "dot"}), secondary_y=True)
+        fig.add_trace(
+            go.Scatter(
+                x=df["t"],
+                y=df["num_requests_waiting"],
+                name="等待请求",
+                line={"dash": "dot"},
+            ),
+            secondary_y=True,
+        )
     fig.update_layout(
-        title=f"推理引擎运行时（{eng.get('engine_family', '?')}）", height=320,
-        legend={"orientation": "h", "y": -0.2}, margin={"l": 10, "r": 10, "t": 40, "b": 10},
+        title=f"推理引擎运行时（{eng.get('engine_family', '?')}）",
+        height=320,
+        legend={"orientation": "h", "y": -0.2},
+        margin={"l": 10, "r": 10, "t": 40, "b": 10},
     )
     fig.update_xaxes(title_text="时间 (s)")
     fig.update_yaxes(title_text="KV cache 占用 (0~1)", secondary_y=False, range=[0, 1.05])
@@ -172,14 +234,20 @@ def render_engine_runtime() -> None:
         c1.metric("KV 占用峰值", f"{(peaks.get('gpu_cache_usage_perc') or 0)*100:.0f}%")
         c2.metric("抢救数(窗口)", eng.get("preemption_total") or 0)
         c3.metric("运行队列峰值", peaks.get("num_requests_running") or "—")
-        c4.metric("KV 容量(tokens)", cc.get("kv_capacity_tokens") or st.session_state.get("kv_cache_capacity_tokens") or "—")
+        c4.metric(
+            "KV 容量(tokens)",
+            cc.get("kv_capacity_tokens") or st.session_state.get("kv_cache_capacity_tokens") or "—",
+        )
         if cc.get("num_gpu_blocks"):
-            st.caption(f"block_size={cc.get('block_size')} · num_gpu_blocks={cc.get('num_gpu_blocks')} · num_cpu_blocks={cc.get('num_cpu_blocks')}")
+            st.caption(
+                f"block_size={cc.get('block_size')} · num_gpu_blocks={cc.get('num_gpu_blocks')} · num_cpu_blocks={cc.get('num_cpu_blocks')}"
+            )
 
 
 # ---------------------------------------------------------------------------
 # 客户端 vs 引擎侧 TTFT/TPOT 对照
 # ---------------------------------------------------------------------------
+
 
 def render_client_vs_engine_analysis() -> None:
     """客户端（端到端）vs 引擎侧（/metrics 直方图）TTFT/TPOT 对照，定位延迟在传输还是引擎。"""
@@ -196,21 +264,40 @@ def render_client_vs_engine_analysis() -> None:
 
     with st.expander("⏱️ 客户端 vs 引擎侧延迟对照", expanded=False):
         c1, c2, c3 = st.columns(3)
-        c1.metric("客户端 TTFT(中位)", f"{r['client_ttft_s']*1000:.0f} ms" if r["client_ttft_s"] else "—")
-        c2.metric("引擎侧 TTFT(整体)", f"{r['engine_ttft_s']*1000:.0f} ms" if r["engine_ttft_s"] else "—")
+        c1.metric(
+            "客户端 TTFT(中位)",
+            f"{r['client_ttft_s']*1000:.0f} ms" if r["client_ttft_s"] else "—",
+        )
+        c2.metric(
+            "引擎侧 TTFT(整体)",
+            f"{r['engine_ttft_s']*1000:.0f} ms" if r["engine_ttft_s"] else "—",
+        )
         oh = r["ttft_overhead_pct"]
-        c3.metric("TTFT 开销占比", f"{oh}%" if oh is not None else "—",
-                  help="(客户端-引擎)/引擎 —— 高则延迟在网络/排队，低则在引擎内部")
+        c3.metric(
+            "TTFT 开销占比",
+            f"{oh}%" if oh is not None else "—",
+            help="(客户端-引擎)/引擎 —— 高则延迟在网络/排队，低则在引擎内部",
+        )
         c4, c5, c6 = st.columns(3)
-        c4.metric("客户端 TPOT(中位)", f"{r['client_tpot_ms']:.1f} ms" if r["client_tpot_ms"] else "—")
-        c5.metric("引擎侧 TPOT(整体)", f"{r['engine_tpot_ms']:.1f} ms" if r["engine_tpot_ms"] else "—")
-        c6.metric("TPOT 开销", f"{r['tpot_overhead_ms']:.1f} ms" if r["tpot_overhead_ms"] is not None else "—")
+        c4.metric(
+            "客户端 TPOT(中位)",
+            f"{r['client_tpot_ms']:.1f} ms" if r["client_tpot_ms"] else "—",
+        )
+        c5.metric(
+            "引擎侧 TPOT(整体)",
+            f"{r['engine_tpot_ms']:.1f} ms" if r["engine_tpot_ms"] else "—",
+        )
+        c6.metric(
+            "TPOT 开销",
+            (f"{r['tpot_overhead_ms']:.1f} ms" if r["tpot_overhead_ms"] is not None else "—"),
+        )
         st.caption(r["verdict"])
 
 
 # ---------------------------------------------------------------------------
 # 可对外闸门徽标
 # ---------------------------------------------------------------------------
+
 
 def render_publish_gate_badge() -> None:
     sys_info = st.session_state.get("system_info") or {}
@@ -248,7 +335,9 @@ def _success_rate() -> float | None:
     try:
         if df is None or getattr(df, "empty", True) or "error" not in df.columns:
             return None
-        non_empty = df["error"].apply(lambda x: bool(x) and str(x).strip() not in ("", "nan", "None"))
+        non_empty = df["error"].apply(
+            lambda x: bool(x) and str(x).strip() not in ("", "nan", "None")
+        )
         failed = int(non_empty.sum())
         return max(0.0, 1.0 - failed / len(df)) if len(df) else None
     except Exception:  # noqa: BLE001
@@ -258,6 +347,7 @@ def _success_rate() -> float | None:
 # ---------------------------------------------------------------------------
 # 单次测试 markdown 报告（纯函数，可测可复用）
 # ---------------------------------------------------------------------------
+
 
 def build_single_test_report(ctx: dict[str, Any]) -> str:
     """从上下文字典生成单次测试 markdown 报告（9 节）。
@@ -281,10 +371,16 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
     cpu = fp.get("cpu") or {}
     mem = fp.get("memory") or {}
     gpus = fp.get("gpus") or []
-    lines.append(f"- CPU: {cpu.get('model_name') or '—'} ({cpu.get('sockets', 1)}×{cpu.get('cores_per_socket') or '?'}核)")
-    lines.append(f"- 内存: {mem.get('total_gb') or '?'} GB / {mem.get('type') or '?'} / {mem.get('channels') or '?'}通道")
+    lines.append(
+        f"- CPU: {cpu.get('model_name') or '—'} ({cpu.get('sockets', 1)}×{cpu.get('cores_per_socket') or '?'}核)"
+    )
+    lines.append(
+        f"- 内存: {mem.get('total_gb') or '?'} GB / {mem.get('type') or '?'} / {mem.get('channels') or '?'}通道"
+    )
     for g in gpus:
-        lines.append(f"- GPU: {g.get('name')} {g.get('vram_gb')}GB / 带宽 {g.get('nominal_bandwidth_gbps')}GB/s / PCIe Gen{g.get('pcie_gen')}×{g.get('pcie_width')}")
+        lines.append(
+            f"- GPU: {g.get('name')} {g.get('vram_gb')}GB / 带宽 {g.get('nominal_bandwidth_gbps')}GB/s / PCIe Gen{g.get('pcie_gen')}×{g.get('pcie_width')}"
+        )
     cuda = fp.get("cuda") or {}
     lines.append(f"- CUDA/驱动: {cuda.get('cuda_version') or '—'} / {cuda.get('driver') or '—'}")
     lines.append("")
@@ -304,7 +400,9 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
     lines.append(f"- GPU 利用率峰值: {peaks.get('gpu_util_percent') or '—'}%")
     lines.append(f"- 显存峰值: {peaks.get('gpu_vram_gb') or '—'} GB")
     lines.append(f"- 内存峰值: {peaks.get('system_memory_gb') or '—'} GB")
-    lines.append(f"- 功耗/温度: {peaks.get('gpu_power_w') or '—'}W / {peaks.get('gpu_temp_c') or '—'}℃")
+    lines.append(
+        f"- 功耗/温度: {peaks.get('gpu_power_w') or '—'}W / {peaks.get('gpu_temp_c') or '—'}℃"
+    )
     lines.append("")
 
     lines.append("## 推理引擎运行时\n")
@@ -314,9 +412,13 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
         cc = eng.get("cache_config") or {}
         lines.append(f"- 引擎: {eng.get('engine_family', '?')} @ {eng.get('metrics_url', '?')}")
         lines.append(f"- KV cache 占用峰值: {(ep.get('gpu_cache_usage_perc') or 0)*100:.0f}%")
-        lines.append(f"- 运行队列峰值: {ep.get('num_requests_running') or '—'} / 等待峰值: {ep.get('num_requests_waiting') or '—'}")
+        lines.append(
+            f"- 运行队列峰值: {ep.get('num_requests_running') or '—'} / 等待峰值: {ep.get('num_requests_waiting') or '—'}"
+        )
         lines.append(f"- 抢救数(窗口): {eng.get('preemption_total') or 0}")
-        lines.append(f"- KV 容量: {cc.get('kv_capacity_tokens') or '—'} tokens (block_size={cc.get('block_size') or '?'})")
+        lines.append(
+            f"- KV 容量: {cc.get('kv_capacity_tokens') or '—'} tokens (block_size={cc.get('block_size') or '?'})"
+        )
     else:
         lines.append("- 未采集到引擎运行时（未配置 /metrics 端点或端点不可达）。")
     lines.append("")
@@ -324,8 +426,12 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
     lines.append("## 客户端 vs 引擎侧延迟对照\n")
     ce = ctx.get("client_vs_engine") or {}
     if ce.get("client_ttft_s") is not None or ce.get("engine_ttft_s") is not None:
-        lines.append(f"- 客户端 TTFT(中位): {ce.get('client_ttft_s') or '—'} s | 引擎侧 TTFT(整体): {ce.get('engine_ttft_s') or '—'} s | 开销占比: {ce.get('ttft_overhead_pct') or '—'}%")
-        lines.append(f"- 客户端 TPOT(中位): {ce.get('client_tpot_ms') or '—'} ms | 引擎侧 TPOT(整体): {ce.get('engine_tpot_ms') or '—'} ms")
+        lines.append(
+            f"- 客户端 TTFT(中位): {ce.get('client_ttft_s') or '—'} s | 引擎侧 TTFT(整体): {ce.get('engine_ttft_s') or '—'} s | 开销占比: {ce.get('ttft_overhead_pct') or '—'}%"
+        )
+        lines.append(
+            f"- 客户端 TPOT(中位): {ce.get('client_tpot_ms') or '—'} ms | 引擎侧 TPOT(整体): {ce.get('engine_tpot_ms') or '—'} ms"
+        )
         lines.append(f"- 判定: {ce.get('verdict') or '—'}")
     else:
         lines.append("- 对照数据不全（缺客户端 TTFT 或引擎侧 /metrics）。")
@@ -333,6 +439,7 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
 
     lines.append("## 等效带宽偏差分析\n")
     from core.effective_bandwidth import summarize_gap
+
     lines.append(summarize_gap(ctx.get("effective_bandwidth") or {}))
     lines.append("")
 
@@ -340,6 +447,7 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
     gate = ctx.get("gate") or {}
     lines.append(f"- 等级: **{gate.get('level', 'internal')}**")
     from core.publish_gate import GATE_LABELS as _GL
+
     for key, label_cn in _GL.items():
         passed = (gate.get("gates") or {}).get(key)
         lines.append(f"- {label_cn}: {'✅' if passed else '❌'}")
@@ -348,7 +456,7 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
     lines.append("")
 
     lines.append("## 洞察 (insights)\n")
-    for i in (ctx.get("insights") or []):
+    for i in ctx.get("insights") or []:
         lines.append(f"- {i}")
     lines.append("")
 
@@ -361,6 +469,7 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 # 编排入口
 # ---------------------------------------------------------------------------
+
 
 def render_warehouse_panel(test_type: str, model_id: str) -> None:
     """在结果区后渲染全部富信息 + 导出按钮。任一段失败不阻塞其它。"""
@@ -393,9 +502,7 @@ def render_warehouse_panel(test_type: str, model_id: str) -> None:
 def _client_vs_engine_for_report(ss) -> dict[str, Any]:
     from core.latency_analysis import compute_client_vs_engine_latency
 
-    return compute_client_vs_engine_latency(
-        ss.get("results_df"), ss.get("engine_metrics")
-    )
+    return compute_client_vs_engine_latency(ss.get("results_df"), ss.get("engine_metrics"))
 
 
 def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
@@ -428,7 +535,11 @@ def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
         "engine_metrics": st.session_state.get("engine_metrics") or {},
         "client_vs_engine": _client_vs_engine_for_report(st.session_state),
         "effective_bandwidth": bw,
-        "gate": {"level": result.level, "gates": result.gates, "reasons": result.reasons},
+        "gate": {
+            "level": result.level,
+            "gates": result.gates,
+            "reasons": result.reasons,
+        },
         "insights": st.session_state.get("insights") or [],
         "notes": tm.get("notes"),
         "next_action": tm.get("next_action"),

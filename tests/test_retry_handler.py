@@ -12,13 +12,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from core.retry_handler import (
-    RetryConfig,
-    RetryHandler,
-    RetryResult,
-    retry_async,
-    retry_sync,
-)
+from core.retry_handler import RetryConfig, RetryHandler, RetryResult, retry_async, retry_sync
 
 
 class TestRetryConfig:
@@ -36,11 +30,7 @@ class TestRetryConfig:
 
     def test_custom_config(self):
         """Custom Configuration"""
-        config = RetryConfig(
-            max_retries=5,
-            base_delay=0.5,
-            max_delay=30.0
-        )
+        config = RetryConfig(max_retries=5, base_delay=0.5, max_delay=30.0)
         assert config.max_retries == 5
         assert config.base_delay == 0.5
         assert config.max_delay == 30.0
@@ -51,12 +41,9 @@ class TestRetryHandler:
 
     def test_calculate_delay_exponential_backoff(self):
         """Test指数退避"""
-        handler = RetryHandler(RetryConfig(
-            base_delay=1.0,
-            exponential_base=2.0,
-            max_delay=100.0,
-            jitter=False
-        ))
+        handler = RetryHandler(
+            RetryConfig(base_delay=1.0, exponential_base=2.0, max_delay=100.0, jitter=False)
+        )
 
         # 0次: 1 * 2^0 = 1
         assert handler._calculate_delay(0) == 1.0
@@ -67,23 +54,16 @@ class TestRetryHandler:
 
     def test_calculate_delay_with_max(self):
         """Test最大延迟限制"""
-        handler = RetryHandler(RetryConfig(
-            base_delay=10.0,
-            exponential_base=3.0,
-            max_delay=20.0,
-            jitter=False
-        ))
+        handler = RetryHandler(
+            RetryConfig(base_delay=10.0, exponential_base=3.0, max_delay=20.0, jitter=False)
+        )
 
         # 10 * 3^2 = 90 > 20，应该被限制is 20
         assert handler._calculate_delay(2) == 20.0
 
     def test_calculate_delay_with_retry_after(self):
         """Testuse Retry-After 值"""
-        handler = RetryHandler(RetryConfig(
-            base_delay=1.0,
-            exponential_base=2.0,
-            jitter=False
-        ))
+        handler = RetryHandler(RetryConfig(base_delay=1.0, exponential_base=2.0, jitter=False))
 
         # retry_after=10 > base_delay=1，应该use 10
         delay = handler._calculate_delay(0, retry_after=10.0)
@@ -91,11 +71,7 @@ class TestRetryHandler:
 
     def test_calculate_delay_with_jitter(self):
         """Test随机抖动"""
-        handler = RetryHandler(RetryConfig(
-            base_delay=1.0,
-            jitter=True,
-            jitter_range=(0.5, 1.5)
-        ))
+        handler = RetryHandler(RetryConfig(base_delay=1.0, jitter=True, jitter_range=(0.5, 1.5)))
 
         delay = handler._calculate_delay(0)
         # 应该in 0.5 到 1.5 之间
@@ -178,6 +154,7 @@ class TestRetryHandler:
         # Mock response with HTTP Date
         # Use a future date to ensure positive delay
         from datetime import datetime, timedelta, timezone
+
         future_date = datetime.now(timezone.utc) + timedelta(seconds=100)
         http_date = future_date.strftime("%a, %d %b %Y %H:%M:%S GMT")
 
@@ -205,7 +182,7 @@ class TestRetryHandler:
         class RetryDelayError(Exception):
             def __init__(self):
                 self.status_code = 429
-                super().__init__('Too many requests, retryDelay:10')
+                super().__init__("Too many requests, retryDelay:10")
 
         error = RetryDelayError()
 
@@ -421,6 +398,7 @@ class TestConvenienceFunctions:
     @pytest.mark.asyncio
     async def test_retry_async_success(self):
         """retry_async 成功"""
+
         async def my_func():
             return "result"
 
@@ -430,6 +408,7 @@ class TestConvenienceFunctions:
     @pytest.mark.asyncio
     async def test_retry_async_raises_on_failure(self):
         """retry_async 失败时抛出异常"""
+
         async def always_fail():
             raise ConnectionError("Fail")
 
@@ -438,6 +417,7 @@ class TestConvenienceFunctions:
 
     def test_retry_sync_success(self):
         """retry_sync 成功"""
+
         def my_func():
             return "result"
 
@@ -446,6 +426,7 @@ class TestConvenienceFunctions:
 
     def test_retry_sync_raises_on_failure(self):
         """retry_sync 失败时抛出异常"""
+
         def always_fail():
             raise ConnectionError("Fail")
 
@@ -458,12 +439,7 @@ class TestRetryResult:
 
     def test_retry_result_success(self):
         """成功Result"""
-        result = RetryResult(
-            success=True,
-            result="data",
-            attempts=1,
-            total_delay=0.0
-        )
+        result = RetryResult(success=True, result="data", attempts=1, total_delay=0.0)
         assert result.success is True
         assert result.result == "data"
         assert result.error is None
@@ -476,7 +452,7 @@ class TestRetryResult:
             error=error,
             attempts=3,
             total_delay=5.0,
-            last_status_code=429
+            last_status_code=429,
         )
         assert result.success is False
         assert result.error == error

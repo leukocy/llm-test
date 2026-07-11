@@ -16,6 +16,7 @@ import yaml
 @dataclass
 class ModelConfig:
     """Model Configuration"""
+
     platform: str
     model_id: str
     api_base_url: str = ""
@@ -36,6 +37,7 @@ class ModelConfig:
 @dataclass
 class DatasetConfig:
     """DatasetConfigure"""
+
     name: str
     path: str = ""
     subset: str = ""
@@ -47,6 +49,7 @@ class DatasetConfig:
 @dataclass
 class MetricsConfig:
     """指标Configure"""
+
     accuracy: bool = True
     reasoning_quality: bool = True
     ttft: bool = True
@@ -61,6 +64,7 @@ class MetricsConfig:
 @dataclass
 class OutputConfig:
     """输出Configure"""
+
     report_dir: str = "reports"
     json_export: bool = True
     markdown_export: bool = True
@@ -72,6 +76,7 @@ class OutputConfig:
 @dataclass
 class TestConfig:
     """完整Test Configuration"""
+
     name: str
     description: str = ""
     version: str = "1.0"
@@ -134,7 +139,7 @@ class TestConfigLoader:
         if not path.is_absolute():
             path = self.config_dir / path
 
-        with open(path, encoding='utf-8') as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         return self._parse_config(data)
@@ -143,69 +148,71 @@ class TestConfigLoader:
         """ParseConfigure字典"""
         # ParseModel Configuration
         models = []
-        for model_data in data.get('models', []):
-            models.append(ModelConfig(
-                platform=model_data.get('platform', 'unknown'),
-                model_id=model_data.get('model_id', ''),
-                api_base_url=model_data.get('api_base_url', ''),
-                api_key_env=model_data.get('api_key_env', ''),
-                thinking_enabled=model_data.get('thinking_enabled', False),
-                thinking_budget=model_data.get('thinking_budget'),
-                reasoning_effort=model_data.get('reasoning_effort', 'medium'),
-                temperature=model_data.get('temperature', 0.7),
-                max_tokens=model_data.get('max_tokens', 2048)
-            ))
+        for model_data in data.get("models", []):
+            models.append(
+                ModelConfig(
+                    platform=model_data.get("platform", "unknown"),
+                    model_id=model_data.get("model_id", ""),
+                    api_base_url=model_data.get("api_base_url", ""),
+                    api_key_env=model_data.get("api_key_env", ""),
+                    thinking_enabled=model_data.get("thinking_enabled", False),
+                    thinking_budget=model_data.get("thinking_budget"),
+                    reasoning_effort=model_data.get("reasoning_effort", "medium"),
+                    temperature=model_data.get("temperature", 0.7),
+                    max_tokens=model_data.get("max_tokens", 2048),
+                )
+            )
 
         # ParseDatasetConfigure
-        dataset_data = data.get('dataset', {})
+        dataset_data = data.get("dataset", {})
         dataset = DatasetConfig(
-            name=dataset_data.get('name', ''),
-            path=dataset_data.get('path', ''),
-            subset=dataset_data.get('subset', ''),
-            samples=dataset_data.get('samples', 0),
-            seed=dataset_data.get('seed', 42),
-            num_shots=dataset_data.get('num_shots', 0)
+            name=dataset_data.get("name", ""),
+            path=dataset_data.get("path", ""),
+            subset=dataset_data.get("subset", ""),
+            samples=dataset_data.get("samples", 0),
+            seed=dataset_data.get("seed", 42),
+            num_shots=dataset_data.get("num_shots", 0),
         )
 
         # Parse指标Configure
-        metrics_data = data.get('metrics', {})
+        metrics_data = data.get("metrics", {})
         metrics = MetricsConfig(
-            accuracy=metrics_data.get('accuracy', True),
-            reasoning_quality=metrics_data.get('reasoning_quality', True),
-            ttft=metrics_data.get('ttft', True),
-            ttut=metrics_data.get('ttut', True),
-            tps=metrics_data.get('tps', True),
-            token_usage=metrics_data.get('token_usage', True),
-            cost=metrics_data.get('cost', True),
-            consistency=metrics_data.get('consistency', False),
-            consistency_runs=metrics_data.get('consistency_runs', 3)
+            accuracy=metrics_data.get("accuracy", True),
+            reasoning_quality=metrics_data.get("reasoning_quality", True),
+            ttft=metrics_data.get("ttft", True),
+            ttut=metrics_data.get("ttut", True),
+            tps=metrics_data.get("tps", True),
+            token_usage=metrics_data.get("token_usage", True),
+            cost=metrics_data.get("cost", True),
+            consistency=metrics_data.get("consistency", False),
+            consistency_runs=metrics_data.get("consistency_runs", 3),
         )
 
         # Parse输出Configure
-        output_data = data.get('output', {})
+        output_data = data.get("output", {})
         output = OutputConfig(
-            report_dir=output_data.get('report_dir', 'reports'),
-            json_export=output_data.get('json_export', True),
-            markdown_export=output_data.get('markdown_export', True),
-            html_export=output_data.get('html_export', True),
-            include_raw_responses=output_data.get('include_raw_responses', False),
-            include_reasoning_content=output_data.get('include_reasoning_content', True)
+            report_dir=output_data.get("report_dir", "reports"),
+            json_export=output_data.get("json_export", True),
+            markdown_export=output_data.get("markdown_export", True),
+            html_export=output_data.get("html_export", True),
+            include_raw_responses=output_data.get("include_raw_responses", False),
+            include_reasoning_content=output_data.get("include_reasoning_content", True),
         )
 
         return TestConfig(
-            name=data.get('name', 'Unnamed Test'),
-            description=data.get('description', ''),
-            version=data.get('version', '1.0'),
-            created_at=data.get('created_at', datetime.now().isoformat()),
+            name=data.get("name", "Unnamed Test"),
+            description=data.get("description", ""),
+            version=data.get("version", "1.0"),
+            created_at=data.get("created_at", datetime.now().isoformat()),
             models=models,
             dataset=dataset,
             metrics=metrics,
             output=output,
-            concurrency=data.get('concurrency', 4),
-            timeout_seconds=data.get('timeout_seconds', 120),
-            retry_count=data.get('retry_count', 3),
-            enable_llm_judge=data.get('enable_llm_judge', False),
-            enable_llm_parser=data.get('enable_llm_parser', False)
+            concurrency=data.get("concurrency", 4),
+            timeout_seconds=data.get("timeout_seconds", 120),
+            retry_count=data.get("retry_count", 3),
+            enable_llm_judge=data.get("enable_llm_judge", False),
+            enable_llm_parser=data.get("enable_llm_parser", False),
         )
 
     def save(self, config: TestConfig, filepath: str):
@@ -224,67 +231,62 @@ class TestConfigLoader:
 
         data = self._config_to_dict(config)
 
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, "w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
     def _config_to_dict(self, config: TestConfig) -> dict[str, Any]:
         """willConfigureConvertis字典"""
         return {
-            'name': config.name,
-            'description': config.description,
-            'version': config.version,
-            'created_at': config.created_at,
-
-            'models': [
+            "name": config.name,
+            "description": config.description,
+            "version": config.version,
+            "created_at": config.created_at,
+            "models": [
                 {
-                    'platform': m.platform,
-                    'model_id': m.model_id,
-                    'api_base_url': m.api_base_url,
-                    'api_key_env': m.api_key_env,
-                    'thinking_enabled': m.thinking_enabled,
-                    'thinking_budget': m.thinking_budget,
-                    'reasoning_effort': m.reasoning_effort,
-                    'temperature': m.temperature,
-                    'max_tokens': m.max_tokens
+                    "platform": m.platform,
+                    "model_id": m.model_id,
+                    "api_base_url": m.api_base_url,
+                    "api_key_env": m.api_key_env,
+                    "thinking_enabled": m.thinking_enabled,
+                    "thinking_budget": m.thinking_budget,
+                    "reasoning_effort": m.reasoning_effort,
+                    "temperature": m.temperature,
+                    "max_tokens": m.max_tokens,
                 }
                 for m in config.models
             ],
-
-            'dataset': {
-                'name': config.dataset.name,
-                'path': config.dataset.path,
-                'subset': config.dataset.subset,
-                'samples': config.dataset.samples,
-                'seed': config.dataset.seed,
-                'num_shots': config.dataset.num_shots
+            "dataset": {
+                "name": config.dataset.name,
+                "path": config.dataset.path,
+                "subset": config.dataset.subset,
+                "samples": config.dataset.samples,
+                "seed": config.dataset.seed,
+                "num_shots": config.dataset.num_shots,
             },
-
-            'metrics': {
-                'accuracy': config.metrics.accuracy,
-                'reasoning_quality': config.metrics.reasoning_quality,
-                'ttft': config.metrics.ttft,
-                'ttut': config.metrics.ttut,
-                'tps': config.metrics.tps,
-                'token_usage': config.metrics.token_usage,
-                'cost': config.metrics.cost,
-                'consistency': config.metrics.consistency,
-                'consistency_runs': config.metrics.consistency_runs
+            "metrics": {
+                "accuracy": config.metrics.accuracy,
+                "reasoning_quality": config.metrics.reasoning_quality,
+                "ttft": config.metrics.ttft,
+                "ttut": config.metrics.ttut,
+                "tps": config.metrics.tps,
+                "token_usage": config.metrics.token_usage,
+                "cost": config.metrics.cost,
+                "consistency": config.metrics.consistency,
+                "consistency_runs": config.metrics.consistency_runs,
             },
-
-            'output': {
-                'report_dir': config.output.report_dir,
-                'json_export': config.output.json_export,
-                'markdown_export': config.output.markdown_export,
-                'html_export': config.output.html_export,
-                'include_raw_responses': config.output.include_raw_responses,
-                'include_reasoning_content': config.output.include_reasoning_content
+            "output": {
+                "report_dir": config.output.report_dir,
+                "json_export": config.output.json_export,
+                "markdown_export": config.output.markdown_export,
+                "html_export": config.output.html_export,
+                "include_raw_responses": config.output.include_raw_responses,
+                "include_reasoning_content": config.output.include_reasoning_content,
             },
-
-            'concurrency': config.concurrency,
-            'timeout_seconds': config.timeout_seconds,
-            'retry_count': config.retry_count,
-            'enable_llm_judge': config.enable_llm_judge,
-            'enable_llm_parser': config.enable_llm_parser
+            "concurrency": config.concurrency,
+            "timeout_seconds": config.timeout_seconds,
+            "retry_count": config.retry_count,
+            "enable_llm_judge": config.enable_llm_judge,
+            "enable_llm_parser": config.enable_llm_parser,
         }
 
     def validate(self, config: TestConfig) -> list[str]:
@@ -309,9 +311,9 @@ class TestConfigLoader:
         else:
             for i, model in enumerate(config.models):
                 if not model.platform:
-                    errors.append(f"Model {i+1} 缺少 platform")
+                    errors.append(f"Model {i + 1} 缺少 platform")
                 if not model.model_id:
-                    errors.append(f"Model {i+1} 缺少 model_id")
+                    errors.append(f"Model {i + 1} 缺少 model_id")
 
         # CheckDataset
         if not config.dataset.name:
@@ -345,15 +347,10 @@ class TestConfigLoader:
                     platform="mimo",
                     model_id="mimo-v2-flash",
                     api_key_env="MIMO_API_KEY",
-                    thinking_enabled=True
+                    thinking_enabled=True,
                 )
             ],
-            dataset=DatasetConfig(
-                name="gsm8k",
-                samples=100,
-                seed=42,
-                num_shots=0
-            )
+            dataset=DatasetConfig(name="gsm8k", samples=100, seed=42, num_shots=0),
         )
 
         filepath = f"{name}.yaml"

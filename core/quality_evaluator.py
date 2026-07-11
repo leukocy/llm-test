@@ -8,14 +8,14 @@ import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
 from core.cancel_state import is_stop_requested
 from core.failure_analyzer import analyze_failures
 from core.providers.factory import get_provider
-from evaluators.base_evaluator import BaseEvaluator, EvaluationResult
+from evaluators.base_evaluator import BaseEvaluator, EvaluationResult, SampleResult
 from utils.logger import LogLevel
 
 
@@ -52,14 +52,16 @@ def _build_case_from_sample(
         success=bool(sample.is_correct) if sample.is_correct is not None else None,
         ttft_s=(sample.ttft_ms / 1000.0) if sample.ttft_ms else None,
         prefill_latency_s=(sample.ttft_ms / 1000.0) if sample.ttft_ms else None,
-        total_latency_s=(sample.total_time_ms / 1000.0) if sample.total_time_ms else None,
+        total_latency_s=((sample.total_time_ms / 1000.0) if sample.total_time_ms else None),
         decode_tps=sample.tps or None,
         input_tokens=sample.input_tokens or None,
         output_tokens=sample.output_tokens or None,
         # citation / quality / tool / retrieval ← None（evaluator 不产出，待手动补）
         failure_reason=(
-            getattr(sample, "failure_category", "") or getattr(sample, "failure_analysis", "")
-            or sample.error or ""
+            getattr(sample, "failure_category", "")
+            or getattr(sample, "failure_analysis", "")
+            or sample.error
+            or ""
         ),
         external_level="internal",
         extra={
@@ -75,6 +77,7 @@ def _build_case_from_sample(
 @dataclass
 class QualityTestConfig:
     """质量Test Configuration"""
+
     datasets: list[str] = field(default_factory=lambda: ["mmlu"])
     num_shots: int = 5
     max_samples: int | None = None  # None = 全部
@@ -119,7 +122,7 @@ class QualityTestConfig:
             "reasoning_effort": self.reasoning_effort,
             "dataset_overrides": self.dataset_overrides,
             "use_cache": self.use_cache,
-            "cache_ttl_hours": self.cache_ttl_hours
+            "cache_ttl_hours": self.cache_ttl_hours,
         }
 
 
@@ -152,8 +155,6 @@ class QualityEvaluator:
         "custom_needle": "needle_haystack_data",  # Custom needle test directory
     }
 
-
-
     # Evaluator类映射 (willin各Evaluator实现后Pad)
     EVALUATOR_CLASSES: dict[str, type[BaseEvaluator]] = {}
 
@@ -167,7 +168,7 @@ class QualityEvaluator:
         log_callback: Callable[[str, LogLevel], None] | None = None,
         tokenizer_model_id: str | None = None,
         enable_cache: bool = True,
-        warehouse_context: dict | None = None
+        warehouse_context: dict | None = None,
     ):
         """
         InitializeQuality Assessment引擎
@@ -218,6 +219,7 @@ class QualityEvaluator:
         if enable_cache:
             try:
                 from core.response_cache import get_cache
+
                 self.cache = get_cache(cache_dir=os.path.join(output_dir, "cache"))
                 self._log("响应缓存已启用")
             except ImportError:
@@ -246,7 +248,10 @@ class QualityEvaluator:
                     break
 
             if fallback_id:
-                self._log(f"no法Load {model_id}，尝试回退到本地/通用 Tokenizer: {fallback_id} ...", LogLevel.INFO)
+                self._log(
+                    f"no法Load {model_id}，尝试回退到本地/通用 Tokenizer: {fallback_id} ...",
+                    LogLevel.INFO,
+                )
                 self.tokenizer = get_cached_tokenizer(fallback_id)
                 if self.tokenizer:
                     self._log(f"已Load回退 tokenizer: {fallback_id}")
@@ -266,7 +271,7 @@ class QualityEvaluator:
 
         if self.tokenizer:
             try:
-                if hasattr(self.tokenizer, 'encode'):
+                if hasattr(self.tokenizer, "encode"):
                     return len(self.tokenizer.encode(text, add_special_tokens=False))
             except Exception:
                 pass
@@ -285,11 +290,17 @@ class QualityEvaluator:
                 "enabled": True,
                 "session_hits": self._cache_stats["hits"],
                 "session_misses": self._cache_stats["misses"],
-                "session_hit_rate": self._cache_stats["hits"] / (self._cache_stats["hits"] + self._cache_stats["misses"])
-                    if (self._cache_stats["hits"] + self._cache_stats["misses"]) > 0 else 0,
+                "session_hit_rate": (
+                    self._cache_stats["hits"]
+                    / (self._cache_stats["hits"] + self._cache_stats["misses"])
+                    if (self._cache_stats["hits"] + self._cache_stats["misses"]) > 0
+                    else 0
+                ),
                 "total_entries": cache_stats.total_entries,
                 "total_bytes": cache_stats.total_bytes,
-                "total_bytes_mb": cache_stats.total_bytes / (1024 * 1024) if cache_stats.total_bytes else 0
+                "total_bytes_mb": (
+                    cache_stats.total_bytes / (1024 * 1024) if cache_stats.total_bytes else 0
+                ),
             }
         except Exception:
             return {"enabled": True, "error": "no法GetStatistics"}
@@ -310,7 +321,6 @@ class QualityEvaluator:
                 self._log("已清除所has缓存")
             self._cache_stats = {"hits": 0, "misses": 0}
 
-
     def _log(self, message: str, level: LogLevel = LogLevel.INFO):
         """输出Log"""
         if self.log_callback:
@@ -324,7 +334,7 @@ class QualityEvaluator:
         max_tokens: int = 256,
         use_cache: bool = True,
         messages: list[dict] | None = None,
-        **kwargs
+        **kwargs,
     ) -> dict[str, Any]:
         """
         调用 LLM Get响应andPerformance Metrics
@@ -333,6 +343,7 @@ class QualityEvaluator:
         cache_key = ""
         if messages:
             import json as _json
+
             cache_key = _json.dumps(messages, ensure_ascii=False)
         else:
             cache_key = prompt
@@ -346,17 +357,17 @@ class QualityEvaluator:
                     "content": cached_response,
                     "error": None,
                     "input_tokens": self.count_tokens(cache_key) if cache_key else 0,
-                    "output_tokens": self.count_tokens(cached_response) if cached_response else 0,
+                    "output_tokens": (self.count_tokens(cached_response) if cached_response else 0),
                     "ttft_ms": 0,
                     "tps": 0,
                     "total_time_ms": 0,
-                    "from_cache": True
+                    "from_cache": True,
                 }
             else:
                 self._cache_stats["misses"] += 1
 
         # Add重试机制
-        retries = kwargs.get('retries', 3)
+        retries = kwargs.get("retries", 3)
         backoff = 1.0
 
         for attempt in range(retries + 1):
@@ -369,19 +380,19 @@ class QualityEvaluator:
                     max_tokens=max_tokens,
                     temperature=temperature,
                     messages=messages,
-                    **kwargs
+                    **kwargs,
                 )
 
                 # CheckError
-                if result.get('error'):
-                    raise Exception(result['error'])
+                if result.get("error"):
+                    raise Exception(result["error"])
 
                 # 提取Performance Metrics
-                content = result.get('full_response_content', '').strip()
-                start_time = result.get('start_time', 0)
-                first_token_time = result.get('first_token_time', 0)
-                end_time = result.get('end_time', 0)
-                usage_info = result.get('usage_info', {}) or {}
+                content = result.get("full_response_content", "").strip()
+                start_time = result.get("start_time", 0)
+                first_token_time = result.get("first_token_time", 0)
+                end_time = result.get("end_time", 0)
+                usage_info = result.get("usage_info", {}) or {}
 
                 # Calculate TTFT (毫seconds)
                 ttft_ms = 0
@@ -394,8 +405,8 @@ class QualityEvaluator:
                     total_time_ms = (end_time - start_time) * 1000
 
                 # Get token 数
-                input_tokens = usage_info.get('prompt_tokens', 0)
-                output_tokens = usage_info.get('completion_tokens', 0)
+                input_tokens = usage_info.get("prompt_tokens", 0)
+                output_tokens = usage_info.get("completion_tokens", 0)
 
                 if input_tokens == 0 and cache_key:
                     input_tokens = self.count_tokens(cache_key)
@@ -416,7 +427,10 @@ class QualityEvaluator:
                             cache_key,
                             content,
                             model_id=self.model_id,
-                            metadata={"temperature": temperature, "max_tokens": max_tokens}
+                            metadata={
+                                "temperature": temperature,
+                                "max_tokens": max_tokens,
+                            },
                         )
                     except Exception:
                         pass
@@ -429,13 +443,16 @@ class QualityEvaluator:
                     "ttft_ms": ttft_ms,
                     "tps": tps,
                     "total_time_ms": total_time_ms,
-                    "from_cache": False
+                    "from_cache": False,
                 }
 
             except Exception as e:
                 if attempt < retries:
-                    wait_time = backoff * (2 ** attempt)
-                    self._log(f"API 调用失败 (尝试 {attempt+1}/{retries+1}): {e}, {wait_time:.1f}s 后重试...", LogLevel.WARNING)
+                    wait_time = backoff * (2**attempt)
+                    self._log(
+                        f"API 调用失败 (尝试 {attempt + 1}/{retries + 1}): {e}, {wait_time:.1f}s 后重试...",
+                        LogLevel.WARNING,
+                    )
                     await asyncio.sleep(wait_time)
                     continue
                 else:
@@ -448,21 +465,28 @@ class QualityEvaluator:
                         "ttft_ms": 0,
                         "tps": 0,
                         "total_time_ms": 0,
-                        "from_cache": False
+                        "from_cache": False,
                     }
 
+        return {
+            "content": "",
+            "error": "retries exhausted",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "ttft_ms": 0,
+            "tps": 0,
+            "total_time_ms": 0,
+            "from_cache": False,
+        }
+
     async def _get_response(
-        self,
-        prompt: str,
-        temperature: float = 0.0,
-        max_tokens: int = 256
+        self, prompt: str, temperature: float = 0.0, max_tokens: int = 256
     ) -> str:
         """简化版响应Get (Backward compatibility)"""
         result = await self._get_response_with_metrics(prompt, temperature, max_tokens)
-        if result.get('error'):
-            raise Exception(result['error'])
-        return result.get('content', '')
-
+        if result.get("error"):
+            raise Exception(result["error"])
+        return str(result.get("content", ""))
 
     def register_evaluator(self, dataset_name: str, evaluator_class: type[BaseEvaluator]):
         """RegisterEvaluator类"""
@@ -472,7 +496,7 @@ class QualityEvaluator:
         self,
         dataset_name: str,
         config: QualityTestConfig,
-        test_filter: str | None = None
+        test_filter: str | None = None,
     ) -> BaseEvaluator | None:
         """
         Get指定DatasetEvaluator实例
@@ -496,19 +520,21 @@ class QualityEvaluator:
             self._log(f"Not foundDataset '{actual_dataset_name}' Evaluator", LogLevel.WARNING)
             return None
 
-        dataset_path = self.DATASET_PATHS.get(actual_dataset_name, f"datasets/{actual_dataset_name}")
+        dataset_path = self.DATASET_PATHS.get(
+            actual_dataset_name, f"datasets/{actual_dataset_name}"
+        )
 
         evaluator_class = self.EVALUATOR_CLASSES[actual_dataset_name]
 
         # is CustomNeedleEvaluator 传递 test_filter 参数
         if actual_dataset_name == "custom_needle" and test_filter:
-            evaluator = evaluator_class(
+            evaluator = cast("Any", evaluator_class)(
                 dataset_name=dataset_name,  # 保留原始名称用于Result标识
                 dataset_path=dataset_path,
                 num_shots=config.num_shots,
                 max_samples=config.max_samples,
                 seed=42,
-                test_filter=test_filter  # 传递Filter器
+                test_filter=test_filter,  # 传递Filter器
             )
         else:
             evaluator = evaluator_class(
@@ -516,22 +542,25 @@ class QualityEvaluator:
                 dataset_path=dataset_path,
                 num_shots=config.num_shots,
                 max_samples=config.max_samples,
-                seed=42
+                seed=42,
             )
 
         # 注入 LLM Judge Configure
-        use_judge = getattr(config, 'use_llm_judge', False)
-        evaluator.use_llm_judge = use_judge
-        self._log(f"DEBUG: get_evaluator for {dataset_name} -> config.use_llm_judge={use_judge}, set evaluator.use_llm_judge={evaluator.use_llm_judge}")
+        use_judge = getattr(config, "use_llm_judge", False)
+        cast("Any", evaluator).use_llm_judge = use_judge
+        self._log(
+            f"DEBUG: get_evaluator for {dataset_name} -> config.use_llm_judge={use_judge}, "
+            f"set evaluator.use_llm_judge={use_judge}"
+        )
 
-        return evaluator
+        return cast("BaseEvaluator", evaluator)
 
     async def evaluate_dataset(
         self,
         dataset_name: str,
         config: QualityTestConfig,
         subset: str | None = None,
-        progress_callback: Callable[[int, int, str], None] | None = None
+        progress_callback: Callable[[int, int, str], None] | None = None,
     ) -> EvaluationResult | None:
         """
         评估单Dataset
@@ -563,7 +592,7 @@ class QualityEvaluator:
             # 准备请求参数
             req_temperature = config.temperature
             req_max_tokens = config.max_tokens
-            req_extra_params = {}
+            req_extra_params: dict[str, Any] = {}
 
             # 1. ApplyDataset覆盖Configure
             if config.dataset_overrides and dataset_name in config.dataset_overrides:
@@ -586,7 +615,9 @@ class QualityEvaluator:
             req_use_cache = config.use_cache
 
             # Create响应Get函数 (Return包含Performance Metrics字典)
-            async def get_response_func(prompt: str = "", messages: list[dict] | None = None) -> dict[str, Any]:
+            async def get_response_func(
+                prompt: str = "", messages: list[dict] | None = None
+            ) -> dict[str, Any]:
                 # Check both internal flag and global stop signal
                 if self.should_stop:
                     raise asyncio.CancelledError("评估已停止")
@@ -603,12 +634,11 @@ class QualityEvaluator:
                     max_tokens=req_max_tokens,
                     use_cache=req_use_cache,
                     messages=messages,
-                    **req_extra_params
+                    **req_extra_params,
                 )
 
-
             # 用于追踪样本Result列表（用于实时Statistics）
-            live_sample_results = []
+            live_sample_results: list[SampleResult] = []
 
             # 进度Callback包装 - 增强版，输出更多信息
             def internal_progress(current: int, total: int):
@@ -628,11 +658,7 @@ class QualityEvaluator:
                     )
 
                 if progress_callback:
-                    progress_callback(
-                        current,
-                        total,
-                        f"评估 {dataset_name}: {current}/{total}"
-                    )
+                    progress_callback(current, total, f"评估 {dataset_name}: {current}/{total}")
 
             # ResultCallback - 收集每 samplesResult用于Real-time logging
             def on_result_complete(result):
@@ -645,10 +671,9 @@ class QualityEvaluator:
                 get_response_func=get_response_func,
                 concurrency=config.concurrency,
                 progress_callback=internal_progress,
-                result_callback=on_result_complete
+                result_callback=on_result_complete,
             )
             duration = time.time() - start_time
-
 
             # Calculate指标
             accuracy, by_category = evaluator.compute_metrics(sample_results)
@@ -664,7 +689,7 @@ class QualityEvaluator:
                 details=sample_results,
                 timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
                 duration_seconds=duration,
-                config=config.to_dict()
+                config=config.to_dict(),
             )
 
             # Calculate性能Statistics
@@ -674,7 +699,8 @@ class QualityEvaluator:
             try:
                 # 收集失败样本
                 failed_dicts = [
-                    s.to_dict() for s in sample_results
+                    s.to_dict()
+                    for s in sample_results
                     if not s.is_correct and not s.error  # 排除系统Error，只分析逻辑Error
                 ]
 
@@ -687,7 +713,7 @@ class QualityEvaluator:
                         "failure_rate": failure_report.failure_rate,
                         "category_distribution": failure_report.category_distribution,
                         "top_issues": failure_report.top_issues,
-                        "suggestions": failure_report.improvement_suggestions
+                        "suggestions": failure_report.improvement_suggestions,
                     }
 
                     self._log(f"分析完成: 主要问题 - {', '.join(failure_report.top_issues[:2])}")
@@ -710,20 +736,20 @@ class QualityEvaluator:
 
             return result
 
-
         except asyncio.CancelledError:
             self._log("评估被Cancel", LogLevel.WARNING)
             return None
         except Exception as e:
             self._log(f"评估出错: {e}", LogLevel.ERROR)
             import traceback
+
             traceback.print_exc()
             return None
 
     async def run_evaluation(
         self,
         config: QualityTestConfig,
-        progress_callback: Callable[[int, int, str], None] | None = None
+        progress_callback: Callable[[int, int, str], None] | None = None,
     ) -> dict[str, EvaluationResult]:
         """
         运行完整Quality Assessment
@@ -762,7 +788,7 @@ class QualityEvaluator:
                     self.should_stop = True
                     break
 
-                self._log(f"=== 评估Dataset [{i+1}/{total_datasets}]: {dataset_name} ===")
+                self._log(f"=== 评估Dataset [{i + 1}/{total_datasets}]: {dataset_name} ===")
 
                 # Checkis否has指定子集
                 subsets = None
@@ -787,8 +813,9 @@ class QualityEvaluator:
                             progress_callback(
                                 global_current,
                                 total_samples_all,
-                                f"[{ds_name}] {current}/{total} - {message}"
+                                f"[{ds_name}] {current}/{total} - {message}",
                             )
+
                     return global_progress
 
                 if subsets:
@@ -798,15 +825,14 @@ class QualityEvaluator:
                             break
 
                         subset_callback = create_global_progress_callback(
-                            f"{dataset_name}_{subset}",
-                            completed_samples_all
+                            f"{dataset_name}_{subset}", completed_samples_all
                         )
 
                         result = await self.evaluate_dataset(
                             dataset_name,
                             config,
                             subset=subset,
-                            progress_callback=subset_callback
+                            progress_callback=subset_callback,
                         )
                         if result:
                             self.results[f"{dataset_name}_{subset}"] = result
@@ -814,14 +840,11 @@ class QualityEvaluator:
                 else:
                     # 评估整Dataset
                     dataset_callback = create_global_progress_callback(
-                        dataset_name,
-                        completed_samples_all
+                        dataset_name, completed_samples_all
                     )
 
                     result = await self.evaluate_dataset(
-                        dataset_name,
-                        config,
-                        progress_callback=dataset_callback
+                        dataset_name, config, progress_callback=dataset_callback
                     )
                     if result:
                         self.results[dataset_name] = result
@@ -837,8 +860,7 @@ class QualityEvaluator:
                 misses = cache_stats.get("session_misses", 0)
                 hit_rate = cache_stats.get("session_hit_rate", 0)
                 self._log(
-                    f"📦 缓存Statistics: 命in {hits}, 未命in {misses}, "
-                    f"命in率 {hit_rate*100:.1f}%"
+                    f"📦 缓存Statistics: 命in {hits}, 未命in {misses}, 命in率 {hit_rate * 100:.1f}%"
                 )
 
             return self.results
@@ -860,11 +882,7 @@ class QualityEvaluator:
 
         # Save JSON Detailed Results
         for name, result in self.results.items():
-            filepath = os.path.join(
-                self.output_dir,
-                self.model_id,
-                f"{name}_{timestamp}.json"
-            )
+            filepath = os.path.join(self.output_dir, self.model_id, f"{name}_{timestamp}.json")
             result.save_to_json(filepath)
             self._log(f"ResultSaved: {filepath}")
 
@@ -873,9 +891,9 @@ class QualityEvaluator:
         for name, result in self.results.items():
             # 从result.configin提取Thinking modeConfigure
             config = result.config or {}
-            thinking_enabled = config.get('thinking_enabled', False)
-            thinking_budget = config.get('thinking_budget', 0)
-            reasoning_effort = config.get('reasoning_effort', 'N/A')
+            thinking_enabled = config.get("thinking_enabled", False)
+            thinking_budget = config.get("thinking_budget", 0)
+            reasoning_effort = config.get("reasoning_effort", "N/A")
 
             # BuildThinking mode描述
             if thinking_enabled:
@@ -883,26 +901,24 @@ class QualityEvaluator:
             else:
                 thinking_mode = "Disabled"
 
-            summary_data.append({
-                "Dataset": name,
-                "Model": result.model_id,
-                "Thinking Mode": thinking_mode,
-                "Thinking Budget": thinking_budget if thinking_enabled else "N/A",
-                "Reasoning Effort": reasoning_effort if thinking_enabled else "N/A",
-                "Accuracy": f"{result.accuracy:.2%}",
-                "Correct": result.correct_samples,
-                "Total": result.total_samples,
-                "Duration (s)": f"{result.duration_seconds:.1f}",
-                "Timestamp": result.timestamp
-            })
+            summary_data.append(
+                {
+                    "Dataset": name,
+                    "Model": result.model_id,
+                    "Thinking Mode": thinking_mode,
+                    "Thinking Budget": thinking_budget if thinking_enabled else "N/A",
+                    "Reasoning Effort": reasoning_effort if thinking_enabled else "N/A",
+                    "Accuracy": f"{result.accuracy:.2%}",
+                    "Correct": result.correct_samples,
+                    "Total": result.total_samples,
+                    "Duration (s)": f"{result.duration_seconds:.1f}",
+                    "Timestamp": result.timestamp,
+                }
+            )
 
         if summary_data:
             df = pd.DataFrame(summary_data)
-            csv_path = os.path.join(
-                self.output_dir,
-                self.model_id,
-                f"summary_{timestamp}.csv"
-            )
+            csv_path = os.path.join(self.output_dir, self.model_id, f"summary_{timestamp}.csv")
             os.makedirs(os.path.dirname(csv_path), exist_ok=True)
             df.to_csv(csv_path, index=False)
             self._log(f"汇总Saved: {csv_path}")
@@ -939,17 +955,19 @@ class QualityEvaluator:
 
             cases: list[ApplicationCase] = []
             for name, result in self.results.items():
-                for sample in (result.details or []):
-                    cases.append(_build_case_from_sample(
-                        sample=sample,
-                        evaluator_name=name,
-                        model_id=self.model_id,
-                        date_str=date_str,
-                        tester=tester,
-                        machine_id=machine_id,
-                        engine=engine,
-                        engine_version=engine_version,
-                    ))
+                for sample in result.details or []:
+                    cases.append(
+                        _build_case_from_sample(
+                            sample=sample,
+                            evaluator_name=name,
+                            model_id=self.model_id,
+                            date_str=date_str,
+                            tester=tester,
+                            machine_id=machine_id,
+                            engine=engine,
+                            engine_version=engine_version,
+                        )
+                    )
             if cases:
                 written = db_manager.save_application_cases_batch(cases)
                 self._log(f"已采集 {written}/{len(cases)} 条应用用例到数据仓库")
@@ -969,7 +987,7 @@ class QualityEvaluator:
             model_info = ModelInfo(
                 model_id=self.model_id,
                 provider=self.provider_name,
-                api_base_url=self.api_base_url
+                api_base_url=self.api_base_url,
             )
 
             # 从所hasResultCreate报告
@@ -981,10 +999,10 @@ class QualityEvaluator:
                 results_list,
                 model_info=model_info,
                 config={
-                    "num_shots": getattr(self, 'num_shots', 0),
-                    "max_samples": getattr(self, 'max_samples', None),
-                    "use_cache": getattr(self, 'enable_cache', False)
-                }
+                    "num_shots": getattr(self, "num_shots", 0),
+                    "max_samples": getattr(self, "max_samples", None),
+                    "use_cache": getattr(self, "enable_cache", False),
+                },
             )
 
             exporter = ReportExporter(report)
@@ -994,9 +1012,7 @@ class QualityEvaluator:
             os.makedirs(report_dir, exist_ok=True)
 
             # Export多种格式
-            json_path = exporter.to_json(
-                os.path.join(report_dir, f"standard_{timestamp}.json")
-            )
+            json_path = exporter.to_json(os.path.join(report_dir, f"standard_{timestamp}.json"))
             self._log(f"标准报告Saved: {json_path}")
 
             lm_eval_path = exporter.to_lm_eval_format(
@@ -1004,9 +1020,7 @@ class QualityEvaluator:
             )
             self._log(f"lm-eval 格式Saved: {lm_eval_path}")
 
-            md_path = exporter.to_markdown(
-                os.path.join(report_dir, f"report_{timestamp}.md")
-            )
+            md_path = exporter.to_markdown(os.path.join(report_dir, f"report_{timestamp}.md"))
             self._log(f"Markdown 报告Saved: {md_path}")
 
         except ImportError:
@@ -1023,9 +1037,9 @@ class QualityEvaluator:
         for name, result in self.results.items():
             # 从result.configin提取Thinking modeConfigure
             config = result.config or {}
-            thinking_enabled = config.get('thinking_enabled', False)
-            thinking_budget = config.get('thinking_budget', 0)
-            reasoning_effort = config.get('reasoning_effort', 'N/A')
+            thinking_enabled = config.get("thinking_enabled", False)
+            thinking_budget = config.get("thinking_budget", 0)
+            reasoning_effort = config.get("reasoning_effort", "N/A")
 
             # BuildThinking mode描述
             if thinking_enabled:
@@ -1035,16 +1049,18 @@ class QualityEvaluator:
                 thinking_mode = "❌ Close"
                 budget_display = "N/A"
 
-            data.append({
-                "Dataset": name,
-                "Model": result.model_id,
-                "Thinking mode": thinking_mode,
-                "Thinking budget": budget_display,
-                "Accuracy": result.accuracy,
-                "正确数": result.correct_samples,
-                "总数": result.total_samples,
-                "耗时(seconds)": result.duration_seconds
-            })
+            data.append(
+                {
+                    "Dataset": name,
+                    "Model": result.model_id,
+                    "Thinking mode": thinking_mode,
+                    "Thinking budget": budget_display,
+                    "Accuracy": result.accuracy,
+                    "正确数": result.correct_samples,
+                    "总数": result.total_samples,
+                    "耗时(seconds)": result.duration_seconds,
+                }
+            )
 
         return pd.DataFrame(data)
 
@@ -1056,11 +1072,13 @@ class QualityEvaluator:
         result = self.results[dataset_name]
         data = []
         for cat, metrics in result.by_category.items():
-            data.append({
-                "类别": cat,
-                "Accuracy": metrics.get("accuracy", 0),
-                "Sample count": metrics.get("count", 0)
-            })
+            data.append(
+                {
+                    "类别": cat,
+                    "Accuracy": metrics.get("accuracy", 0),
+                    "Sample count": metrics.get("count", 0),
+                }
+            )
 
         return pd.DataFrame(data).sort_values("Accuracy", ascending=False)
 
@@ -1069,13 +1087,14 @@ class QualityEvaluator:
 # 便捷函数
 # ============================================
 
+
 async def quick_evaluate(
     api_base_url: str,
     model_id: str,
     datasets: list[str],
     api_key: str = "",
     num_shots: int = 5,
-    max_samples: int = 100
+    max_samples: int = 100,
 ) -> dict[str, EvaluationResult]:
     """
     快速评估函数
@@ -1090,16 +1109,8 @@ async def quick_evaluate(
     )
     ```
     """
-    config = QualityTestConfig(
-        datasets=datasets,
-        num_shots=num_shots,
-        max_samples=max_samples
-    )
+    config = QualityTestConfig(datasets=datasets, num_shots=num_shots, max_samples=max_samples)
 
-    evaluator = QualityEvaluator(
-        api_base_url=api_base_url,
-        model_id=model_id,
-        api_key=api_key
-    )
+    evaluator = QualityEvaluator(api_base_url=api_base_url, model_id=model_id, api_key=api_key)
 
     return await evaluator.run_evaluation(config)

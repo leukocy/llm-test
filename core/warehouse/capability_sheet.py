@@ -20,9 +20,17 @@ _EXTERNAL_LEVEL_RANK = {"internal": 0, "review": 1, "publishable": 2}
 
 # 客户能力表列（导出口径）
 CAPABILITY_COLUMNS: list[str] = [
-    "customer_type", "scenario", "model_name", "case_count",
-    "success_rate", "avg_quality_score", "avg_decode_tps",
-    "external_level", "sales_summary", "evidence_count", "tasks",
+    "customer_type",
+    "scenario",
+    "model_name",
+    "case_count",
+    "success_rate",
+    "avg_quality_score",
+    "avg_decode_tps",
+    "external_level",
+    "sales_summary",
+    "evidence_count",
+    "tasks",
 ]
 
 
@@ -76,25 +84,29 @@ def build_capability_sheet(
         tasks = sorted({c.task_name for c in group if c.task_name})
 
         row = dict(zip(group_by, key, strict=False))
-        row.update({
-            "case_count": len(group),
-            "success_rate": success_rate,
-            "avg_quality_score": _mean([c.quality_score for c in group]),
-            "avg_decode_tps": _mean([c.decode_tps for c in group]),
-            "external_level": best_level,
-            "sales_summary": sales,
-            "evidence_count": sum(1 for c in group if c.evidence_path),
-            "tasks": ", ".join(tasks) if tasks else "",
-        })
+        row.update(
+            {
+                "case_count": len(group),
+                "success_rate": success_rate,
+                "avg_quality_score": _mean([c.quality_score for c in group]),
+                "avg_decode_tps": _mean([c.decode_tps for c in group]),
+                "external_level": best_level,
+                "sales_summary": sales,
+                "evidence_count": sum(1 for c in group if c.evidence_path),
+                "tasks": ", ".join(tasks) if tasks else "",
+            }
+        )
         rows.append(row)
 
     # 排序：customer_type → scenario → model_name → external_level 降序
-    rows.sort(key=lambda r: (
-        str(r.get("customer_type", "")),
-        str(r.get("scenario", "")),
-        str(r.get("model_name", "")),
-        -_EXTERNAL_LEVEL_RANK.get(r.get("external_level", "internal"), 0),
-    ))
+    rows.sort(
+        key=lambda r: (
+            str(r.get("customer_type", "")),
+            str(r.get("scenario", "")),
+            str(r.get("model_name", "")),
+            -_EXTERNAL_LEVEL_RANK.get(r.get("external_level", "internal"), 0),
+        )
+    )
     return rows
 
 
@@ -116,13 +128,19 @@ def build_capability_markdown(sheet: list[dict[str, Any]]) -> str:
     for customer, group in by_customer.items():
         lines.append(f"## {customer}")
         lines.append("")
-        lines.append("| 场景 | 模型 | 用例数 | 成功率 | 质量分 | decode TPS | 对外 | sales_summary |")
-        lines.append("|------|------|-------:|-------:|-------:|----------:|------|---------------|")
+        lines.append(
+            "| 场景 | 模型 | 用例数 | 成功率 | 质量分 | decode TPS | 对外 | sales_summary |"
+        )
+        lines.append(
+            "|------|------|-------:|-------:|-------:|----------:|------|---------------|"
+        )
         for r in group:
+
             def _cell(v, pct=False):
                 if v is None:
                     return "—"
                 return f"{v:.1%}" if pct else str(v)
+
             lines.append(
                 f"| {r.get('scenario', '—')} | {r.get('model_name', '—')} | "
                 f"{r.get('case_count', 0)} | {_cell(r.get('success_rate'), pct=True)} | "

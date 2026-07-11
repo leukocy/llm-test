@@ -13,11 +13,11 @@ from .test_result import TestResultRepository
 from .test_run import TestRunRepository
 
 __all__ = [
-    'BaseRepository',
-    'TestRunRepository',
-    'TestResultRepository',
-    'ApiLogRepository',
-    'ApplicationCaseRepository',
-    'ExecLogRepository',
-    'ReportRepository',
+    "BaseRepository",
+    "TestRunRepository",
+    "TestResultRepository",
+    "ApiLogRepository",
+    "ApplicationCaseRepository",
+    "ExecLogRepository",
+    "ReportRepository",
 ]

@@ -13,20 +13,20 @@ from core.repositories.base import BaseRepository
 class ReportRepository(BaseRepository[Report]):
     """报告 Repository"""
 
-    def __init__(self, database: Database = None):
+    def __init__(self, database: Database | None = None):
         super().__init__(database)
         self._table_name = "reports"
 
     def _from_row(self, row: dict[str, Any]) -> Report:
         return Report.from_row(row)
 
-    def insert(self, report: Report) -> int:
+    def insert(self, report: Report) -> int | None:
         """Insert报告"""
         data = report.to_dict()
-        columns = [k for k, v in data.items() if v is not None and k != 'id']
+        columns = [k for k, v in data.items() if v is not None and k != "id"]
         placeholders = ", ".join(["?" for _ in columns])
         columns_str = ", ".join(columns)
-        values = [v for k, v in data.items() if v is not None and k != 'id']
+        values = [v for k, v in data.items() if v is not None and k != "id"]
 
         sql = f"INSERT INTO reports ({columns_str}) VALUES ({placeholders})"
         cursor = self.db.execute(sql, tuple(values))
@@ -38,8 +38,8 @@ class ReportRepository(BaseRepository[Report]):
             return False
 
         data = report.to_dict()
-        set_clause = ", ".join([f"{k} = ?" for k in data if k != 'id'])
-        values = [v for k, v in data.items() if k != 'id'] + [report.id]
+        set_clause = ", ".join([f"{k} = ?" for k in data if k != "id"])
+        values = [v for k, v in data.items() if k != "id"] + [report.id]
 
         sql = f"UPDATE reports SET {set_clause} WHERE id = ?"
         cursor = self.db.execute(sql, tuple(values))
@@ -61,17 +61,10 @@ class ReportRepository(BaseRepository[Report]):
         """based on报告类型查找"""
         return self.find_by("report_type = ?", (report_type,), limit)
 
-    def find_by_date_range(
-        self,
-        start: datetime,
-        end: datetime,
-        limit: int = 100
-    ) -> list[Report]:
+    def find_by_date_range(self, start: datetime, end: datetime, limit: int = 100) -> list[Report]:
         """based on日期范围查找"""
         return self.find_by(
-            "created_at BETWEEN ? AND ?",
-            (start.isoformat(), end.isoformat()),
-            limit
+            "created_at BETWEEN ? AND ?", (start.isoformat(), end.isoformat()), limit
         )
 
     def search(self, query: str, limit: int = 50) -> list[Report]:
@@ -80,34 +73,34 @@ class ReportRepository(BaseRepository[Report]):
         return self.find_by(
             "model_id LIKE ? OR notes LIKE ? OR tags LIKE ?",
             (pattern, pattern, pattern),
-            limit
+            limit,
         )
 
     def update_export_paths(
         self,
         report_id: int,
-        json_path: str = None,
-        html_path: str = None,
-        markdown_path: str = None,
-        excel_path: str = None
+        json_path: str | None = None,
+        html_path: str | None = None,
+        markdown_path: str | None = None,
+        excel_path: str | None = None,
     ) -> bool:
         """UpdateExport路径"""
         data = {}
         if json_path:
-            data['json_path'] = json_path
+            data["json_path"] = json_path
         if html_path:
-            data['html_path'] = html_path
+            data["html_path"] = html_path
         if markdown_path:
-            data['markdown_path'] = markdown_path
+            data["markdown_path"] = markdown_path
         if excel_path:
-            data['excel_path'] = excel_path
+            data["excel_path"] = excel_path
 
         if not data:
             return False
 
         return self.update_by(data, "id = ?", (report_id,)) > 0
 
-    def get_summary(self, model_id: str = None) -> dict[str, Any]:
+    def get_summary(self, model_id: str | None = None) -> dict[str, Any]:
         """Get报告摘要"""
         where = "model_id = ?" if model_id else "1=1"
         params = (model_id,) if model_id else ()

@@ -1,11 +1,5 @@
 # tests/engine/test_models.py
-from engine.models import (
-    MetricsSnapshot,
-    TestConfig,
-    TestResult,
-    TestRunConfig,
-    TestType,
-)
+from engine.models import MetricsSnapshot, TestConfig, TestResult, TestRunConfig, TestType
 
 
 def test_test_type_enum():
@@ -71,7 +65,7 @@ def test_test_run_config_for_concurrency():
             "rounds_per_level": 3,
             "max_tokens": 512,
             "input_tokens_target": 64,
-        }
+        },
     )
     assert run_cfg.test_type == TestType.CONCURRENCY
     assert run_cfg.params["concurrencies"] == [1, 2, 4]

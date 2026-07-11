@@ -292,10 +292,10 @@ def format_metrics_report(metrics: ThinkingMetricsResult) -> str:
         f"Model: {metrics.model_id}",
         "",
         "【Latency指标】",
-        f"  TTFT (首Token): {metrics.ttft_ms:.0f}ms" if metrics.ttft_ms else "  TTFT: N/A",
+        (f"  TTFT (首Token): {metrics.ttft_ms:.0f}ms" if metrics.ttft_ms else "  TTFT: N/A"),
         f"  TTR (首推理): {metrics.ttr_ms:.0f}ms" if metrics.ttr_ms else "  TTR: N/A",
-        f"  TTUT (首正文): {metrics.ttut_ms:.0f}ms" if metrics.ttut_ms else "  TTUT: N/A",
-        f"  总耗时: {metrics.total_time_ms:.0f}ms" if metrics.total_time_ms else "  总耗时: N/A",
+        (f"  TTUT (首正文): {metrics.ttut_ms:.0f}ms" if metrics.ttut_ms else "  TTUT: N/A"),
+        (f"  总耗时: {metrics.total_time_ms:.0f}ms" if metrics.total_time_ms else "  总耗时: N/A"),
         (
             f"  推理阶段: {metrics.reasoning_time_ms:.0f}ms"
             if metrics.reasoning_time_ms
@@ -595,7 +595,10 @@ def root_mean_squared_error(predictions: list[float], references: list[float]) -
 
 
 def bootstrap_confidence_interval(
-    values: list[float], confidence: float = 0.95, n_bootstraps: int = 1000, seed: int = 42
+    values: list[float],
+    confidence: float = 0.95,
+    n_bootstraps: int = 1000,
+    seed: int = 42,
 ) -> tuple[float, float]:
     """Bootstrap Confidence Interval"""
     if not values:
@@ -732,7 +735,10 @@ class EvalMetricsCalculator:
 
             except Exception as e:
                 results[metric_name] = EvalMetricResult(
-                    name=metric_name, value=0.0, count=len(predictions), details={"error": str(e)}
+                    name=metric_name,
+                    value=0.0,
+                    count=len(predictions),
+                    details={"error": str(e)},
                 )
 
         if categories and "accuracy" in results:
@@ -743,7 +749,10 @@ class EvalMetricsCalculator:
         return results
 
     def compute_pass_at_k(
-        self, num_samples: list[int], num_correct: list[int], k_values: list[int] | None = None
+        self,
+        num_samples: list[int],
+        num_correct: list[int],
+        k_values: list[int] | None = None,
     ) -> dict[str, float]:
         """Calculate pass@k 指标"""
         if k_values is None:
@@ -788,6 +797,6 @@ def compute_accuracy_with_ci(
     return {
         "accuracy": acc_result.value,
         "stderr": acc_result.stderr or 0.0,
-        "ci_lower": acc_result.confidence_interval[0] if acc_result.confidence_interval else 0.0,
-        "ci_upper": acc_result.confidence_interval[1] if acc_result.confidence_interval else 1.0,
+        "ci_lower": (acc_result.confidence_interval[0] if acc_result.confidence_interval else 0.0),
+        "ci_upper": (acc_result.confidence_interval[1] if acc_result.confidence_interval else 1.0),
     }

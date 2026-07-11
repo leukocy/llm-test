@@ -43,42 +43,48 @@ import yaml
 # Jinja2 Import
 try:
     from jinja2 import BaseLoader, Environment, StrictUndefined
+
     JINJA2_AVAILABLE = True
 except ImportError:
     JINJA2_AVAILABLE = False
-    Environment = None
+    Environment = None  # type: ignore[assignment,misc]
 
 
 # ============================================
 # 模板格式枚举
 # ============================================
 
+
 class PromptFormat:
     """Prompt 格式类型"""
+
     COMPLETION = "completion"  # 传统补全格式 (GPT-3 style)
-    CHAT = "chat"              # Chat 格式 (ChatGPT style)
+    CHAT = "chat"  # Chat 格式 (ChatGPT style)
 
 
 # ============================================
 # Jinja2 环境Configure
 # ============================================
 
-def create_jinja_env() -> 'Environment':
+
+def create_jinja_env() -> "Environment":
     """CreateConfigure好 Jinja2 环境"""
     if not JINJA2_AVAILABLE:
-        raise ImportError("jinja2 is required for prompt templates. Install with: pip install jinja2")
+        raise ImportError(
+            "jinja2 is required for prompt templates. Install with: pip install jinja2"
+        )
 
     env = Environment(
         loader=BaseLoader(),
         undefined=StrictUndefined,
         autoescape=False,
-        keep_trailing_newline=True
+        keep_trailing_newline=True,
     )
 
     # AddCustomFilter器
-    env.filters['choice_letter'] = lambda idx: chr(ord('A') + int(idx))
-    env.filters['strip'] = lambda s: s.strip() if isinstance(s, str) else s
-    env.filters['escape_newlines'] = lambda s: s.replace('\n', '\\n') if isinstance(s, str) else s
+    env.filters["choice_letter"] = lambda idx: chr(ord("A") + int(idx))
+    env.filters["strip"] = lambda s: s.strip() if isinstance(s, str) else s
+    env.filters["escape_newlines"] = lambda s: (s.replace("\n", "\\n") if isinstance(s, str) else s)
 
     return env
 
@@ -107,7 +113,7 @@ def render_template(template_str: str, context: dict[str, Any]) -> str:
     try:
         env = create_jinja_env()
         template = env.from_string(template_str)
-        return template.render(**context)
+        return str(template.render(**context))
     except Exception:
         # 回退到简单替换
         result = template_str
@@ -119,6 +125,7 @@ def render_template(template_str: str, context: dict[str, Any]) -> str:
 # ============================================
 # Prompt 模板类
 # ============================================
+
 
 @dataclass
 class PromptTemplate:
@@ -133,6 +140,7 @@ class PromptTemplate:
         description: 任务描述 (optional)
         fewshot_delimiter: Few-shot 示例之间分隔符
     """
+
     doc_to_text: str
     doc_to_target: str = ""
     description: str = ""
@@ -143,11 +151,7 @@ class PromptTemplate:
     pre_process: Callable[[dict], dict] | None = None
     post_process: Callable[[str], str] | None = None
 
-    def render(
-        self,
-        sample: dict[str, Any],
-        include_target: bool = False
-    ) -> str:
+    def render(self, sample: dict[str, Any], include_target: bool = False) -> str:
         """
         Render单 samples
 
@@ -180,7 +184,7 @@ class PromptTemplate:
         self,
         sample: dict[str, Any],
         few_shot_examples: list[dict[str, Any]] | None = None,
-        include_description: bool = True
+        include_description: bool = True,
     ) -> str:
         """
         Render完整 Prompt (包含描述and few-shot)
@@ -213,16 +217,16 @@ class PromptTemplate:
         return self.fewshot_delimiter.join(parts)
 
     @classmethod
-    def from_yaml(cls, yaml_path: str) -> 'PromptTemplate':
+    def from_yaml(cls, yaml_path: str) -> "PromptTemplate":
         """从 YAML Configure文件Load模板"""
-        with open(yaml_path, encoding='utf-8') as f:
+        with open(yaml_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         return cls(
-            doc_to_text=config.get('doc_to_text', '{{question}}'),
-            doc_to_target=config.get('doc_to_target', '{{answer}}'),
-            description=config.get('description', ''),
-            fewshot_delimiter=config.get('fewshot_delimiter', '\n\n')
+            doc_to_text=config.get("doc_to_text", "{{question}}"),
+            doc_to_target=config.get("doc_to_target", "{{answer}}"),
+            description=config.get("description", ""),
+            fewshot_delimiter=config.get("fewshot_delimiter", "\n\n"),
         )
 
 
@@ -230,9 +234,11 @@ class PromptTemplate:
 # Chat 模板类
 # ============================================
 
+
 @dataclass
 class ChatMessage:
     """单条聊天消息"""
+
     role: str  # system, user, assistant
     content: str
 
@@ -253,6 +259,7 @@ class ChatTemplate:
         assistant_template: 助手消息模板 (Answer)
         fewshot_as_multiturn: Few-shot is否作is多轮对话
     """
+
     system_message: str = ""
     user_template: str = "{{question}}"
     assistant_template: str = "{{answer}}"
@@ -275,7 +282,7 @@ class ChatTemplate:
     def render_messages(
         self,
         sample: dict[str, Any],
-        few_shot_examples: list[dict[str, Any]] | None = None
+        few_shot_examples: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, str]]:
         """
         Renderis消息列表
@@ -315,7 +322,7 @@ class ChatTemplate:
         self,
         sample: dict[str, Any],
         few_shot_examples: list[dict[str, Any]] | None = None,
-        delimiter: str = "\n\n"
+        delimiter: str = "\n\n",
     ) -> str:
         """
         will Chat 格式Convertis Completion 格式
@@ -342,22 +349,25 @@ class ChatTemplate:
         return delimiter.join(parts)
 
     @classmethod
-    def from_yaml(cls, yaml_path: str) -> 'ChatTemplate':
+    def from_yaml(cls, yaml_path: str) -> "ChatTemplate":
         """从 YAML Configure文件Load模板"""
-        with open(yaml_path, encoding='utf-8') as f:
+        with open(yaml_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         return cls(
-            system_message=config.get('system_message', ''),
-            user_template=config.get('user_template', config.get('doc_to_text', '{{question}}')),
-            assistant_template=config.get('assistant_template', config.get('doc_to_target', '{{answer}}')),
-            fewshot_as_multiturn=config.get('fewshot_as_multiturn', True)
+            system_message=config.get("system_message", ""),
+            user_template=config.get("user_template", config.get("doc_to_text", "{{question}}")),
+            assistant_template=config.get(
+                "assistant_template", config.get("doc_to_target", "{{answer}}")
+            ),
+            fewshot_as_multiturn=config.get("fewshot_as_multiturn", True),
         )
 
 
 # ============================================
 # 预定义模板库
 # ============================================
+
 
 class TemplateLibrary:
     """预定义常用模板"""
@@ -373,7 +383,7 @@ B. {{choices[1]}}
 C. {{choices[2]}}
 D. {{choices[3]}}
 Answer:""",
-            doc_to_target=" {{answer|choice_letter if answer is number else answer}}"
+            doc_to_target=" {{answer|choice_letter if answer is number else answer}}",
         )
 
     @staticmethod
@@ -382,7 +392,7 @@ Answer:""",
         return PromptTemplate(
             description="Solve the following grade school math problems step by step. Show your work and put your final answer after ####.\n\n",
             doc_to_text="Question: {{question}}\nSolution:",
-            doc_to_target=" {{answer}}"
+            doc_to_target=" {{answer}}",
         )
 
     @staticmethod
@@ -391,7 +401,7 @@ Answer:""",
         return PromptTemplate(
             description="",
             doc_to_text="{{prompt}}",
-            doc_to_target="{{canonical_solution}}"
+            doc_to_target="{{canonical_solution}}",
         )
 
     @staticmethod
@@ -400,7 +410,7 @@ Answer:""",
         return PromptTemplate(
             description="Answer the following questions truthfully.\n\n",
             doc_to_text="Q: {{question}}\nA:",
-            doc_to_target=" {{best_answer}}"
+            doc_to_target=" {{best_answer}}",
         )
 
     @staticmethod
@@ -411,7 +421,7 @@ Answer:""",
             doc_to_text="""Question: {{question}}
 {% for label, text in zip(choices.label, choices.text) %}{{label}}. {{text}}
 {% endfor %}Answer:""",
-            doc_to_target=" {{answerKey}}"
+            doc_to_target=" {{answerKey}}",
         )
 
     @staticmethod
@@ -420,7 +430,7 @@ Answer:""",
         return ChatTemplate(
             system_message="You are a helpful, accurate, and concise assistant. Answer the user's questions directly.",
             user_template="{{question}}",
-            assistant_template="{{answer}}"
+            assistant_template="{{answer}}",
         )
 
     @staticmethod
@@ -429,7 +439,7 @@ Answer:""",
         return ChatTemplate(
             system_message="You are a helpful assistant that thinks step by step before providing the final answer.",
             user_template="{{question}}\n\nLet's think step by step.",
-            assistant_template="{{reasoning}}\n\nThe answer is: {{answer}}"
+            assistant_template="{{reasoning}}\n\nThe answer is: {{answer}}",
         )
 
     @staticmethod
@@ -438,13 +448,14 @@ Answer:""",
         return ChatTemplate(
             system_message="You are an expert programmer. Write clean, efficient, and well-documented code.",
             user_template="{{prompt}}",
-            assistant_template="{{solution}}"
+            assistant_template="{{solution}}",
         )
 
 
 # ============================================
 # 模板Factory
 # ============================================
+
 
 class TemplateFactory:
     """模板Factory - 统一模板Get接口"""
@@ -466,9 +477,7 @@ class TemplateFactory:
 
     @classmethod
     def get(
-        cls,
-        name: str,
-        format: str = PromptFormat.COMPLETION
+        cls, name: str, format: str = PromptFormat.COMPLETION
     ) -> Union[PromptTemplate, ChatTemplate]:
         """
         Get模板
@@ -488,7 +497,7 @@ class TemplateFactory:
                 completion_template = cls.TEMPLATES[name]()
                 return ChatTemplate(
                     user_template=completion_template.doc_to_text,
-                    assistant_template=completion_template.doc_to_target
+                    assistant_template=completion_template.doc_to_target,
                 )
         else:
             if name in cls.TEMPLATES:
@@ -498,9 +507,7 @@ class TemplateFactory:
 
     @classmethod
     def from_yaml(
-        cls,
-        yaml_path: str,
-        format: str = PromptFormat.COMPLETION
+        cls, yaml_path: str, format: str = PromptFormat.COMPLETION
     ) -> Union[PromptTemplate, ChatTemplate]:
         """从 YAML 文件Load模板"""
         if format == PromptFormat.CHAT:
@@ -512,13 +519,14 @@ class TemplateFactory:
         """列出所has可用模板"""
         return {
             "completion": list(cls.TEMPLATES.keys()),
-            "chat": list(cls.CHAT_TEMPLATES.keys())
+            "chat": list(cls.CHAT_TEMPLATES.keys()),
         }
 
 
 # ============================================
 # 便捷函数
 # ============================================
+
 
 def get_template(name: str, format: str = "completion") -> Union[PromptTemplate, ChatTemplate]:
     """Get模板便捷函数"""
@@ -528,7 +536,7 @@ def get_template(name: str, format: str = "completion") -> Union[PromptTemplate,
 def render_prompt(
     template_str: str,
     sample: dict[str, Any],
-    few_shot_examples: list[dict[str, Any]] | None = None
+    few_shot_examples: list[dict[str, Any]] | None = None,
 ) -> str:
     """
     快速Render prompt

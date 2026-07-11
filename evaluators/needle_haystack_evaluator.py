@@ -61,15 +61,15 @@ subway system that connects San Francisco to other cities in the Bay Area.
         num_shots: int = 0,
         max_samples: int | None = None,
         seed: int = 42,
-        context_lengths: list[int] = None,  # Testonunder文长度列表
-        needle_depths: list[float] = None   # 针深度位置列表
+        context_lengths: list[int] | None = None,  # Testonunder文长度列表
+        needle_depths: list[float] | None = None,  # 针深度位置列表
     ):
         super().__init__(
             dataset_name=dataset_name,
             dataset_path=dataset_path,
             num_shots=num_shots,
             max_samples=max_samples,
-            seed=seed
+            seed=seed,
         )
         random.seed(seed)
 
@@ -90,7 +90,7 @@ subway system that connects San Francisco to other cities in the Bay Area.
         for filepath in possible_files:
             if os.path.exists(filepath):
                 try:
-                    with open(filepath, encoding='utf-8') as f:
+                    with open(filepath, encoding="utf-8") as f:
                         data = json.load(f)
                     if isinstance(data, list):
                         samples = data
@@ -105,7 +105,7 @@ subway system that connects San Francisco to other cities in the Bay Area.
         random.shuffle(samples)
 
         if self.max_samples and len(samples) > self.max_samples:
-            samples = samples[:self.max_samples]
+            samples = samples[: self.max_samples]
 
         self.samples = samples
         return samples
@@ -131,12 +131,12 @@ subway system that connects San Francisco to other cities in the Bay Area.
         haystack = self._generate_haystack(context_length, needle, needle_depth)
 
         return {
-            'context': haystack,
-            'question': question,
-            'answer': answer,
-            'needle': needle,
-            'context_length': context_length,
-            'needle_depth': needle_depth
+            "context": haystack,
+            "question": question,
+            "answer": answer,
+            "needle": needle,
+            "context_length": context_length,
+            "needle_depth": needle_depth,
         }
 
     def _generate_haystack(self, target_length: int, needle: str, depth: float) -> str:
@@ -172,13 +172,13 @@ subway system that connects San Francisco to other cities in the Bay Area.
 
     def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """FormatTest样本"""
-        context = sample.get('context', '')
-        question = sample.get('question', '')
+        context = sample.get("context", "")
+        question = sample.get("question", "")
 
         prompt = f"Context:\n{context}\n\nQuestion: {question}"
 
         if include_answer:
-            answer = sample.get('answer', '')
+            answer = sample.get("answer", "")
             prompt += f"\n\nAnswer: {answer}"
         else:
             prompt += "\n\nAnswer:"
@@ -187,9 +187,7 @@ subway system that connects San Francisco to other cities in the Bay Area.
 
     def build_full_prompt(self, sample: dict[str, Any]) -> str:
         """Build完整 prompt"""
-        instruction = (
-            "Read the following context carefully and answer the question based on the information provided.\n\n"
-        )
+        instruction = "Read the following context carefully and answer the question based on the information provided.\n\n"
 
         return instruction + self.format_prompt(sample, include_answer=False)
 
@@ -206,7 +204,7 @@ subway system that connects San Francisco to other cities in the Bay Area.
         correct_lower = normalize_text(correct.lower())
 
         # Check关键词is否存in
-        key_phrases = ['sandwich', 'dolores park', 'sunny']
+        key_phrases = ["sandwich", "dolores park", "sunny"]
         found_count = sum(1 for phrase in key_phrases if phrase in predicted_lower)
 
         # 至少包含两关键词认is正确
@@ -214,10 +212,10 @@ subway system that connects San Francisco to other cities in the Bay Area.
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
         """GetCorrect answer"""
-        return sample.get('answer', '')
+        return str(sample.get("answer", ""))
 
     def get_sample_category(self, sample: dict[str, Any]) -> str:
         """Get类别（onunder文长度 + 深度）"""
-        length = sample.get('context_length', 0)
-        depth = sample.get('needle_depth', 0)
+        length = sample.get("context_length", 0)
+        depth = sample.get("needle_depth", 0)
         return f"len_{length}_depth_{int(depth*100)}"

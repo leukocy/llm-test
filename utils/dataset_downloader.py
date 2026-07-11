@@ -26,32 +26,30 @@ class DatasetDownloader:
             "config": "default",
             "split": "test",
             "local_path": "datasets/math500",
-            "filename": "test.json"
+            "filename": "test.json",
         },
         "gsm8k": {
             "hf_id": "openai/gsm8k",
             "config": "main",
             "split": "test",
             "local_path": "datasets/gsm8k",
-            "filename": "test.json"
+            "filename": "test.json",
         },
         "mmlu": {
             "hf_id": "cais/mmlu",
             "config": "all",
             "split": "test",
             "local_path": "datasets/mmlu",
-            "filename": "test.json"
+            "filename": "test.json",
         },
         "humaneval": {
             "hf_id": "openai/openai_humaneval",
             "config": "default",
             "split": "test",
             "local_path": "datasets/humaneval",
-            "filename": "test.json"
-        }
+            "filename": "test.json",
+        },
     }
-
-
 
     def __init__(self, base_dir: str = "."):
         """
@@ -63,10 +61,7 @@ class DatasetDownloader:
         self.base_dir = base_dir
 
     def download_dataset(
-        self,
-        dataset_name: str,
-        max_rows: int | None = None,
-        force: bool = False
+        self, dataset_name: str, max_rows: int | None = None, force: bool = False
     ) -> bool:
         """
         under载指定Dataset
@@ -116,7 +111,7 @@ class DatasetDownloader:
                     "config": hf_config,
                     "split": split,
                     "offset": offset,
-                    "length": min(page_size, max_total - len(all_samples))
+                    "length": min(page_size, max_total - len(all_samples)),
                 }
 
                 response = requests.get(url, params=params, timeout=60)
@@ -151,7 +146,7 @@ class DatasetDownloader:
             os.makedirs(local_path, exist_ok=True)
 
             # Save到文件
-            with open(full_path, 'w', encoding='utf-8') as f:
+            with open(full_path, "w", encoding="utf-8") as f:
                 json.dump(all_samples, f, ensure_ascii=False, indent=2)
 
             print(f"✅ succeededunder载 {len(all_samples)} 条Data到 {full_path}")
@@ -163,9 +158,9 @@ class DatasetDownloader:
         except Exception as e:
             print(f"Download failed: {e}")
             import traceback
+
             traceback.print_exc()
             return False
-
 
     def download_all(self, force: bool = False) -> dict[str, bool]:
         """
@@ -197,15 +192,15 @@ class DatasetDownloader:
                 "hf_id": config["hf_id"],
                 "local_path": full_path,
                 "exists": os.path.exists(full_path),
-                "samples": 0
+                "samples": 0,
             }
 
             if info["exists"]:
                 try:
-                    with open(full_path, encoding='utf-8') as f:
+                    with open(full_path, encoding="utf-8") as f:
                         data = json.load(f)
                     info["samples"] = len(data) if isinstance(data, list) else 0
-                except:
+                except Exception:
                     pass
 
             status[name] = info

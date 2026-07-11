@@ -1,12 +1,17 @@
 """core.engine_capture 单元测试(多引擎适配器架构)。"""
+
 from __future__ import annotations
 
 from unittest.mock import patch
 
 import core.engine_capture as ec
 from core.engine_capture import (
-    VLLMAdapter, SGLangAdapter, LlamaCppAdapter, KTransformersAdapter,
-    detect_adapter, capture_engine_config, get_adapters,
+    LlamaCppAdapter,
+    SGLangAdapter,
+    VLLMAdapter,
+    capture_engine_config,
+    detect_adapter,
+    get_adapters,
 )
 
 SAMPLE_VLLM_LOG = """\
@@ -23,8 +28,13 @@ SAMPLE_VLLM_LOG = """\
 def test_detect_adapters():
     assert detect_adapter("vllm/vllm-openai:v0.23", "vllm serve /m", None).name == "vLLM"
     assert detect_adapter("lmsysorg/sglang:latest", "python -m sglang", None).name == "SGLang"
-    assert detect_adapter("ghcr.io/ggerganov/llama.cpp:server", "llama-server -m x.gguf", None).name == "llama.cpp"
-    assert detect_adapter("ktransformers/ktransformers", "ktransformers", None).name == "ktransformers"
+    assert (
+        detect_adapter("ghcr.io/ggerganov/llama.cpp:server", "llama-server -m x.gguf", None).name
+        == "llama.cpp"
+    )
+    assert (
+        detect_adapter("ktransformers/ktransformers", "ktransformers", None).name == "ktransformers"
+    )
     assert detect_adapter("custom/image", "/custom", None) is None
 
 
@@ -79,6 +89,7 @@ def test_find_container_by_port():
     class R:
         returncode = 0
         stdout = "kimi-k27\t0.0.0.0:10814->10814/tcp\nother\t0.0.0.0:80->80/tcp\n"
+
     with patch.object(ec.subprocess, "run", return_value=R()):
         assert ec.find_vllm_container("http://localhost:10814/v1") == "kimi-k27"
 

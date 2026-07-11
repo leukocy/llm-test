@@ -18,10 +18,19 @@ import core.hardware_fingerprint as hf
 
 # ---------- 辅助 ----------
 
+
 def _fake_subprocess(commands_map: dict[tuple, str | None]):
     """根据 (args tuple) -> stdout 映射返回结果。未命中返回 None。"""
 
-    def fake_run(args, capture_output=True, text=True, timeout=None, check=False, env=None, **kwargs):
+    def fake_run(
+        args,
+        capture_output=True,
+        text=True,
+        timeout=None,
+        check=False,
+        env=None,
+        **kwargs,
+    ):
         class R:
             returncode = 0
 
@@ -53,10 +62,22 @@ LSCPU_OUT = (
 
 # ---------- _query_gpus ----------
 
+
 def test_query_gpus_parses_nvidia_smi_and_uses_bandwidth_table():
-    cmds = {("nvidia-smi", "--query-gpu=index,name,memory.total,pcie.link.gen.max,pcie.link.width.max", "--format=csv,noheader,nounits"): NVIDIA_SMI_GPU}
-    with patch("core.hardware_fingerprint.subprocess.run", side_effect=_fake_subprocess(cmds)), \
-         patch("core.hardware_fingerprint.shutil.which", return_value=None):
+    cmds = {
+        (
+            "nvidia-smi",
+            "--query-gpu=index,name,memory.total,pcie.link.gen.max,pcie.link.width.max",
+            "--format=csv,noheader,nounits",
+        ): NVIDIA_SMI_GPU
+    }
+    with (
+        patch(
+            "core.hardware_fingerprint.subprocess.run",
+            side_effect=_fake_subprocess(cmds),
+        ),
+        patch("core.hardware_fingerprint.shutil.which", return_value=None),
+    ):
         gpus = hf._query_gpus()
     assert len(gpus) == 2
     h100 = gpus[0]
@@ -72,14 +93,17 @@ def test_query_gpus_parses_nvidia_smi_and_uses_bandwidth_table():
 
 
 def test_query_gpus_empty_when_no_nvidia_smi_and_no_torch():
-    with patch("core.hardware_fingerprint.subprocess.run", side_effect=_fake_subprocess({})), \
-         patch("core.hardware_fingerprint.shutil.which", return_value=None), \
-         patch.dict("sys.modules", {"torch": None}):
+    with (
+        patch("core.hardware_fingerprint.subprocess.run", side_effect=_fake_subprocess({})),
+        patch("core.hardware_fingerprint.shutil.which", return_value=None),
+        patch.dict("sys.modules", {"torch": None}),
+    ):
         gpus = hf._query_gpus()
     assert gpus == []
 
 
 # ---------- bandwidth lookup / pcie fallback ----------
+
 
 def test_lookup_gpu_bandwidth_longest_substring_wins():
     assert hf._lookup_gpu_bandwidth("NVIDIA A100-SXM4-80GB", 80) == 2039.0
@@ -95,6 +119,7 @@ def test_pcie_bandwidth_formula_fallback():
 
 # ---------- _query_cpu_topology ----------
 
+
 def test_query_cpu_topology_parses_lscpu():
     cmds = {("lscpu",): LSCPU_OUT}
     with patch("core.hardware_fingerprint.subprocess.run", side_effect=_fake_subprocess(cmds)):
@@ -108,10 +133,15 @@ def test_query_cpu_topology_parses_lscpu():
 
 def test_query_cpu_topology_psutil_fallback():
     cmds = {("lscpu",): None}
-    with patch("core.hardware_fingerprint.subprocess.run", side_effect=_fake_subprocess(cmds)), \
-         patch("core.hardware_fingerprint._platform_cpu_model", return_value="fallback cpu"), \
-         patch("core.hardware_fingerprint._proc_socket_count", return_value=None), \
-         patch("core.hardware_fingerprint._psutil_cpu_count", side_effect=[64, 128]):
+    with (
+        patch(
+            "core.hardware_fingerprint.subprocess.run",
+            side_effect=_fake_subprocess(cmds),
+        ),
+        patch("core.hardware_fingerprint._platform_cpu_model", return_value="fallback cpu"),
+        patch("core.hardware_fingerprint._proc_socket_count", return_value=None),
+        patch("core.hardware_fingerprint._psutil_cpu_count", side_effect=[64, 128]),
+    ):
         cpu = hf._query_cpu_topology()
     assert cpu["model_name"] == "fallback cpu"
     assert cpu["sockets"] == 1
@@ -120,6 +150,7 @@ def test_query_cpu_topology_psutil_fallback():
 
 
 # ---------- compute_machine_id ----------
+
 
 def test_compute_machine_id_stable_under_reorder():
     fp_a = {
@@ -143,16 +174,25 @@ def test_compute_machine_id_stable_under_reorder():
 
 
 def test_compute_machine_id_changes_when_hardware_differs():
-    fp_a = {"cpu": {"model_name": "X", "sockets": 1, "cores_per_socket": 32},
-            "memory": {"total_gb": 128.0}, "gpus": []}
-    fp_b = {"cpu": {"model_name": "Y", "sockets": 1, "cores_per_socket": 32},
-            "memory": {"total_gb": 128.0}, "gpus": []}
+    fp_a = {
+        "cpu": {"model_name": "X", "sockets": 1, "cores_per_socket": 32},
+        "memory": {"total_gb": 128.0},
+        "gpus": [],
+    }
+    fp_b = {
+        "cpu": {"model_name": "Y", "sockets": 1, "cores_per_socket": 32},
+        "memory": {"total_gb": 128.0},
+        "gpus": [],
+    }
     assert hf.compute_machine_id(fp_a) != hf.compute_machine_id(fp_b)
 
 
 def test_compute_machine_id_works_with_empty_gpus():
-    fp = {"cpu": {"model_name": "X", "sockets": 1, "cores_per_socket": 8},
-          "memory": {"total_gb": 16.0}, "gpus": []}
+    fp = {
+        "cpu": {"model_name": "X", "sockets": 1, "cores_per_socket": 8},
+        "memory": {"total_gb": 16.0},
+        "gpus": [],
+    }
     mid = hf.compute_machine_id(fp)
     assert isinstance(mid, str)
     assert len(mid) == 16
@@ -160,11 +200,23 @@ def test_compute_machine_id_works_with_empty_gpus():
 
 # ---------- capture_hardware_fingerprint (整体优雅降级) ----------
 
+
 def test_capture_hardware_fingerprint_never_raises_and_has_machine_id():
-    with patch("core.hardware_fingerprint._query_gpus", side_effect=RuntimeError("boom")), \
-         patch("core.hardware_fingerprint._query_cpu_topology", return_value={"model_name": "CPU"}), \
-         patch("core.hardware_fingerprint._query_memory_details", return_value={"total_gb": 64.0}), \
-         patch("core.hardware_fingerprint._query_cuda_versions", return_value={"driver": "535.0"}):
+    with (
+        patch("core.hardware_fingerprint._query_gpus", side_effect=RuntimeError("boom")),
+        patch(
+            "core.hardware_fingerprint._query_cpu_topology",
+            return_value={"model_name": "CPU"},
+        ),
+        patch(
+            "core.hardware_fingerprint._query_memory_details",
+            return_value={"total_gb": 64.0},
+        ),
+        patch(
+            "core.hardware_fingerprint._query_cuda_versions",
+            return_value={"driver": "535.0"},
+        ),
+    ):
         fp = hf.capture_hardware_fingerprint()
     # 即使 _query_gpus 抛异常，整体仍返回（gpus 被降级为 []）
     assert fp["gpus"] == []
@@ -176,12 +228,24 @@ def test_capture_hardware_fingerprint_never_raises_and_has_machine_id():
 
 def test_capture_hardware_fingerprint_full_shape():
     cmds = {
-        ("nvidia-smi", "--query-gpu=index,name,memory.total,pcie.link.gen.max,pcie.link.width.max", "--format=csv,noheader,nounits"): "0, NVIDIA H100, 81920, 5, 16\n",
+        (
+            "nvidia-smi",
+            "--query-gpu=index,name,memory.total,pcie.link.gen.max,pcie.link.width.max",
+            "--format=csv,noheader,nounits",
+        ): "0, NVIDIA H100, 81920, 5, 16\n",
         ("lscpu",): LSCPU_OUT,
     }
-    with patch("core.hardware_fingerprint.subprocess.run", side_effect=_fake_subprocess(cmds)), \
-         patch("core.hardware_fingerprint._query_cuda_versions", return_value={"driver": "535", "cuda_version": "12.2"}), \
-         patch("core.hardware_fingerprint.shutil.which", return_value=None):
+    with (
+        patch(
+            "core.hardware_fingerprint.subprocess.run",
+            side_effect=_fake_subprocess(cmds),
+        ),
+        patch(
+            "core.hardware_fingerprint._query_cuda_versions",
+            return_value={"driver": "535", "cuda_version": "12.2"},
+        ),
+        patch("core.hardware_fingerprint.shutil.which", return_value=None),
+    ):
         fp = hf.capture_hardware_fingerprint()
     assert fp["cpu"]["sockets"] == 2
     assert fp["gpus"][0]["nominal_bandwidth_gbps"] == 3350.0
@@ -192,17 +256,38 @@ def test_capture_hardware_fingerprint_full_shape():
 
 # ---------- system_info 集成 ----------
 
+
 def test_capture_system_info_includes_fingerprint_and_machine_id():
     from core.system_info import capture_system_info
-    with patch("core.hardware_fingerprint._query_gpus", return_value=[
-        {"index": 0, "name": "NVIDIA RTX 4090", "vram_gb": 24.0,
-         "memory_type": "GDDR6X", "nominal_bandwidth_gbps": 1008.0,
-         "pcie_gen": 4, "pcie_width": 16}
-    ]), patch("core.hardware_fingerprint._query_cpu_topology",
-              return_value={"model_name": "X", "sockets": 1, "cores_per_socket": 8}), \
-         patch("core.hardware_fingerprint._query_memory_details", return_value={"total_gb": 32.0}), \
-         patch("core.hardware_fingerprint._query_cuda_versions",
-               return_value={"driver": "535", "cuda_version": "12.2"}):
+
+    with (
+        patch(
+            "core.hardware_fingerprint._query_gpus",
+            return_value=[
+                {
+                    "index": 0,
+                    "name": "NVIDIA RTX 4090",
+                    "vram_gb": 24.0,
+                    "memory_type": "GDDR6X",
+                    "nominal_bandwidth_gbps": 1008.0,
+                    "pcie_gen": 4,
+                    "pcie_width": 16,
+                }
+            ],
+        ),
+        patch(
+            "core.hardware_fingerprint._query_cpu_topology",
+            return_value={"model_name": "X", "sockets": 1, "cores_per_socket": 8},
+        ),
+        patch(
+            "core.hardware_fingerprint._query_memory_details",
+            return_value={"total_gb": 32.0},
+        ),
+        patch(
+            "core.hardware_fingerprint._query_cuda_versions",
+            return_value={"driver": "535", "cuda_version": "12.2"},
+        ),
+    ):
         info = capture_system_info()
     assert "hardware_fingerprint" in info
     assert info["machine_id"]

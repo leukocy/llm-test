@@ -32,17 +32,21 @@ import os
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
+
+from utils.logger import LogLevel
 
 # ============================================
 # Data结构
 # ============================================
 
+
 @dataclass
 class ModelConfig:
     """Model Configuration"""
+
     model_id: str
     api_base_url: str
     api_key: str = ""
@@ -58,6 +62,7 @@ class ModelConfig:
 @dataclass
 class SampleComparison:
     """单 samplesComparison Results"""
+
     sample_id: int
     question: str = ""
     expected_answer: str = ""
@@ -78,6 +83,7 @@ class SampleComparison:
 @dataclass
 class DatasetComparison:
     """单DatasetComparison Results"""
+
     dataset_name: str
     total_samples: int = 0
 
@@ -87,7 +93,7 @@ class DatasetComparison:
 
     # 对比Statistics
     both_correct: int = 0  # 所hasModel都对
-    both_wrong: int = 0    # 所hasModel都错
+    both_wrong: int = 0  # 所hasModel都错
     disagreements: int = 0  # has分歧Sample count
 
     # Statistics检验Result
@@ -106,7 +112,7 @@ class DatasetComparison:
             "both_wrong": self.both_wrong,
             "disagreements": self.disagreements,
             "statistical_tests": self.statistical_tests,
-            "sample_count": len(self.sample_comparisons)
+            "sample_count": len(self.sample_comparisons),
         }
         return result
 
@@ -114,6 +120,7 @@ class DatasetComparison:
 @dataclass
 class ComparisonResult:
     """完整Comparison Results"""
+
     comparison_id: str = ""
     created_at: str = ""
 
@@ -130,6 +137,7 @@ class ComparisonResult:
     def __post_init__(self):
         if not self.comparison_id:
             import hashlib
+
             self.comparison_id = hashlib.md5(
                 f"{self.models}_{datetime.now().isoformat()}".encode()
             ).hexdigest()[:12]
@@ -143,13 +151,14 @@ class ComparisonResult:
             "models": self.models,
             "model_labels": self.model_labels,
             "datasets": {k: v.to_dict() for k, v in self.datasets.items()},
-            "summary": self.summary
+            "summary": self.summary,
         }
 
 
 # ============================================
 # Statistics检验
 # ============================================
+
 
 def mcnemar_test(correct_a: list[bool], correct_b: list[bool]) -> dict[str, Any]:
     """
@@ -180,7 +189,7 @@ def mcnemar_test(correct_a: list[bool], correct_b: list[bool]) -> dict[str, Any]
             "statistic": 0,
             "p_value": 1.0,
             "significant": False,
-            "interpretation": "两Model表现完全一致"
+            "interpretation": "两Model表现完全一致",
         }
 
     # McNemar 检验Statistics量 (带连续性校正)
@@ -196,7 +205,7 @@ def mcnemar_test(correct_a: list[bool], correct_b: list[bool]) -> dict[str, Any]
         "significant": p_value < 0.05,
         "b01_count": b01,  # A 对 B 错
         "b10_count": b10,  # A 错 B 对
-        "interpretation": _interpret_mcnemar(b01, b10, p_value)
+        "interpretation": _interpret_mcnemar(b01, b10, p_value),
     }
 
 
@@ -261,7 +270,7 @@ def paired_t_test(scores_a: list[float], scores_b: list[float]) -> dict[str, Any
             "t_statistic": 0,
             "p_value": 1.0,
             "significant": False,
-            "mean_difference": mean_diff
+            "mean_difference": mean_diff,
         }
 
     t_stat = mean_diff / (std_diff / math.sqrt(n))
@@ -284,7 +293,8 @@ def paired_t_test(scores_a: list[float], scores_b: list[float]) -> dict[str, Any
         "p_value": p_value,
         "significant": p_value < 0.05,
         "mean_difference": mean_diff,
-        "interpretation": f"Average差异: {mean_diff:.4f}" + (", 显著" if p_value < 0.05 else ", not显著")
+        "interpretation": f"Average差异: {mean_diff:.4f}"
+        + (", 显著" if p_value < 0.05 else ", not显著"),
     }
 
 
@@ -319,6 +329,7 @@ def effect_size_cohens_d(scores_a: list[float], scores_b: list[float]) -> float:
 # 对比器
 # ============================================
 
+
 class ModelComparator:
     """
     Model Comparison器
@@ -329,7 +340,7 @@ class ModelComparator:
     def __init__(
         self,
         output_dir: str = "quality_results/comparisons",
-        log_callback: Callable[[str], None] | None = None
+        log_callback: Callable[[str], None] | None = None,
     ):
         self.output_dir = output_dir
         self.log_callback = log_callback
@@ -361,7 +372,7 @@ class ModelComparator:
         datasets: list[str],
         max_samples: int | None = None,
         num_shots: int = 0,
-        progress_callback: Callable[[float, str], None] | None = None
+        progress_callback: Callable[[float, str], None] | None = None,
     ) -> ComparisonResult:
         """
         运行对比评估
@@ -396,9 +407,9 @@ class ModelComparator:
                     model_id=model_config.model_id,
                     api_base_url=model_config.api_base_url,
                     api_key=model_config.api_key,
-                    provider_name=model_config.provider,
+                    provider=model_config.provider,
                     output_dir=os.path.join(self.output_dir, "raw_results"),
-                    log_callback=self.log_callback
+                    log_callback=cast("Callable[[str, LogLevel], None] | None", self.log_callback),
                 )
 
                 # Config
@@ -406,7 +417,7 @@ class ModelComparator:
                     datasets=datasets,
                     max_samples=max_samples,
                     num_shots=num_shots,
-                    max_concurrent=5
+                    concurrency=5,
                 )
 
                 # 运行评估
@@ -417,8 +428,7 @@ class ModelComparator:
                     current_step += 1
                     if progress_callback:
                         progress_callback(
-                            current_step / total_steps,
-                            f"{model_config.label} - {ds}"
+                            current_step / total_steps, f"{model_config.label} - {ds}"
                         )
 
             except Exception as e:
@@ -435,7 +445,7 @@ class ModelComparator:
     def compare_existing_results(
         self,
         results_dict: dict[str, dict[str, Any]],
-        model_labels: dict[str, str] | None = None
+        model_labels: dict[str, str] | None = None,
     ) -> ComparisonResult:
         """
         对比已hasEvaluation result
@@ -453,14 +463,10 @@ class ModelComparator:
         for model_id in results_dict:
             if model_id not in self.models:
                 label = model_labels.get(model_id, model_id) if model_labels else model_id
-                self.models[model_id] = ModelConfig(
-                    model_id=model_id,
-                    api_base_url="",
-                    label=label
-                )
+                self.models[model_id] = ModelConfig(model_id=model_id, api_base_url="", label=label)
 
         # Get所hasDataset
-        all_datasets = set()
+        all_datasets: set[str] = set()
         for model_results in results_dict.values():
             all_datasets.update(model_results.keys())
 
@@ -473,7 +479,7 @@ class ModelComparator:
         """分析Comparison Results"""
         result = ComparisonResult(
             models=list(self.models.keys()),
-            model_labels={m: c.label for m, c in self.models.items()}
+            model_labels={m: c.label for m, c in self.models.items()},
         )
 
         for dataset in datasets:
@@ -510,11 +516,11 @@ class ModelComparator:
         comparison.total_samples = first_result.total_samples
 
         # 逐样本对比
-        if hasattr(first_result, 'details') and first_result.details:
-            sample_map = {}  # sample_id -> {model_id: detail}
+        if hasattr(first_result, "details") and first_result.details:
+            sample_map: dict[Any, dict[str, Any]] = {}  # sample_id -> {model_id: detail}
 
             for model_id, result in model_results.items():
-                if hasattr(result, 'details'):
+                if hasattr(result, "details"):
                     for detail in result.details:
                         sid = detail.sample_id
                         if sid not in sample_map:
@@ -522,7 +528,7 @@ class ModelComparator:
                         sample_map[sid][model_id] = detail
 
             # 分析每 samples
-            correctness_lists = {m: [] for m in self.models}
+            correctness_lists: dict[str, list[bool]] = {m: [] for m in self.models}
 
             for sid, model_details in sample_map.items():
                 sample_comp = SampleComparison(sample_id=sid)
@@ -565,11 +571,10 @@ class ModelComparator:
             model_ids = list(self.models.keys())
             if len(model_ids) >= 2:
                 for i, model_a in enumerate(model_ids):
-                    for model_b in model_ids[i+1:]:
+                    for model_b in model_ids[i + 1 :]:
                         if model_a in correctness_lists and model_b in correctness_lists:
                             test_result = mcnemar_test(
-                                correctness_lists[model_a],
-                                correctness_lists[model_b]
+                                correctness_lists[model_a], correctness_lists[model_b]
                             )
                             comparison.statistical_tests[f"{model_a}_vs_{model_b}"] = test_result
 
@@ -577,20 +582,17 @@ class ModelComparator:
 
     def _compute_summary(self, result: ComparisonResult) -> dict[str, Any]:
         """Calculate汇总Statistics"""
-        summary = {
+        summary: dict[str, Any] = {
             "num_models": len(result.models),
             "num_datasets": len(result.datasets),
             "model_rankings": {},
-            "overall_winner": None
+            "overall_winner": None,
         }
 
         # Calculate各ModelAverageAccuracy排名
         model_avg_acc = {}
         for model_id in result.models:
-            accs = [
-                ds.accuracies.get(model_id, 0)
-                for ds in result.datasets.values()
-            ]
+            accs = [ds.accuracies.get(model_id, 0) for ds in result.datasets.values()]
             model_avg_acc[model_id] = sum(accs) / len(accs) if accs else 0
 
         # Sort
@@ -600,7 +602,7 @@ class ModelComparator:
             summary["model_rankings"][model_id] = {
                 "rank": rank,
                 "avg_accuracy": avg_acc,
-                "label": result.model_labels.get(model_id, model_id)
+                "label": result.model_labels.get(model_id, model_id),
             }
 
         if sorted_models:
@@ -618,7 +620,7 @@ class ModelComparator:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filepath = os.path.join(self.output_dir, f"comparison_{timestamp}.json")
 
-        with open(filepath, 'w', encoding='utf-8') as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             json.dump(self.comparison_result.to_dict(), f, ensure_ascii=False, indent=2)
 
         self._log(f"Comparison ResultsSaved: {filepath}")
@@ -630,7 +632,7 @@ class ModelComparator:
 
         data = []
         for ds_name, ds_comp in self.comparison_result.datasets.items():
-            row = {"Dataset": ds_name}
+            row: dict[str, Any] = {"Dataset": ds_name}
             for model_id in self.comparison_result.models:
                 label = self.comparison_result.model_labels.get(model_id, model_id)
                 acc = ds_comp.accuracies.get(model_id, 0)
@@ -645,20 +647,13 @@ class ModelComparator:
 
         return pd.DataFrame(data)
 
-    def get_disagreement_samples(
-        self,
-        dataset: str,
-        limit: int = 20
-    ) -> list[dict[str, Any]]:
+    def get_disagreement_samples(self, dataset: str, limit: int = 20) -> list[dict[str, Any]]:
         """Gethas分歧样本"""
         if not self.comparison_result or dataset not in self.comparison_result.datasets:
             return []
 
         ds_comp = self.comparison_result.datasets[dataset]
-        disagreements = [
-            s for s in ds_comp.sample_comparisons
-            if s.disagreement
-        ]
+        disagreements = [s for s in ds_comp.sample_comparisons if s.disagreement]
 
         return [s.to_dict() for s in disagreements[:limit]]
 
@@ -667,11 +662,9 @@ class ModelComparator:
 # 便捷函数
 # ============================================
 
+
 def quick_compare(
-    results_a,
-    results_b,
-    label_a: str = "Model A",
-    label_b: str = "Model B"
+    results_a, results_b, label_a: str = "Model A", label_b: str = "Model B"
 ) -> dict[str, Any]:
     """
     快速对比两Evaluation result
@@ -692,19 +685,19 @@ def quick_compare(
         label_a: {
             "accuracy": acc_a,
             "correct": results_a.correct_samples,
-            "total": results_a.total_samples
+            "total": results_a.total_samples,
         },
         label_b: {
             "accuracy": acc_b,
             "correct": results_b.correct_samples,
-            "total": results_b.total_samples
+            "total": results_b.total_samples,
         },
         "difference": diff,
-        "better": label_b if diff > 0 else label_a if diff < 0 else "equal"
+        "better": label_b if diff > 0 else label_a if diff < 0 else "equal",
     }
 
     # Statistics检验
-    if hasattr(results_a, 'details') and hasattr(results_b, 'details'):
+    if hasattr(results_a, "details") and hasattr(results_b, "details"):
         correct_a = [d.is_correct for d in results_a.details if not d.error]
         correct_b = [d.is_correct for d in results_b.details if not d.error]
 
@@ -716,7 +709,7 @@ def quick_compare(
 
 def load_comparison(filepath: str) -> ComparisonResult:
     """LoadComparison Results"""
-    with open(filepath, encoding='utf-8') as f:
+    with open(filepath, encoding="utf-8") as f:
         data = json.load(f)
 
     result = ComparisonResult(
@@ -724,7 +717,7 @@ def load_comparison(filepath: str) -> ComparisonResult:
         created_at=data.get("created_at", ""),
         models=data.get("models", []),
         model_labels=data.get("model_labels", {}),
-        summary=data.get("summary", {})
+        summary=data.get("summary", {}),
     )
 
     for ds_name, ds_data in data.get("datasets", {}).items():
@@ -736,7 +729,7 @@ def load_comparison(filepath: str) -> ComparisonResult:
             both_correct=ds_data.get("both_correct", 0),
             both_wrong=ds_data.get("both_wrong", 0),
             disagreements=ds_data.get("disagreements", 0),
-            statistical_tests=ds_data.get("statistical_tests", {})
+            statistical_tests=ds_data.get("statistical_tests", {}),
         )
 
     return result

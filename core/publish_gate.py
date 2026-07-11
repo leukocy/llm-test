@@ -110,6 +110,7 @@ def evaluate_publish_gate(
     if use_wilson and success_count is not None and sample_size:
         try:
             from core.metrics import wilson_score_interval
+
             wilson_lower, _ = wilson_score_interval(success_count, sample_size, 0.95)
         except Exception:  # noqa: BLE001
             wilson_lower = None
@@ -170,6 +171,7 @@ def gate_from_run(run: dict[str, Any], **extra) -> GateResult:
     sys_info = run.get("system_info") or {}
     if isinstance(sys_info, str):
         import json as _json
+
         try:
             sys_info = _json.loads(sys_info or "{}")
         except (ValueError, TypeError):
@@ -177,6 +179,7 @@ def gate_from_run(run: dict[str, Any], **extra) -> GateResult:
     config = run.get("config") or {}
     if isinstance(config, str):
         import json as _json
+
         try:
             config = _json.loads(config or "{}")
         except (ValueError, TypeError):

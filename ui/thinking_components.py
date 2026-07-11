@@ -31,7 +31,7 @@ def render_reasoning_expander(
     content: str,
     title: str = "🧠 Reasoning process",
     expanded: bool = False,
-    max_height: int = 400
+    max_height: int = 400,
 ):
     """
     Render collapsible reasoning content display
@@ -63,7 +63,7 @@ def render_reasoning_expander(
                     {reasoning_content}
                 </div>
                 """,
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
 
     if content:
@@ -81,7 +81,7 @@ def render_reasoning_expander(
                 {content}
             </div>
             """,
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
 
 
@@ -94,7 +94,7 @@ def render_thinking_metrics_cards(metrics: dict[str, Any], cols: int = 4):
         cols: Cards per row
     """
     # Convert to dict
-    if hasattr(metrics, '__dataclass_fields__'):
+    if hasattr(metrics, "__dataclass_fields__"):
         metrics = {k: getattr(metrics, k) for k in metrics.__dataclass_fields__}
 
     # Define metrics to display
@@ -139,7 +139,7 @@ def render_thinking_metrics_cards(metrics: dict[str, Any], cols: int = 4):
                     <div style="font-size: 12px; color: #94a3b8; text-transform: uppercase;">{label}</div>
                 </div>
                 """,
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
 
 
@@ -156,62 +156,73 @@ def render_latency_gauge(ttft: float, ttut: float, total: float, max_value: floa
     fig = go.Figure()
 
     # TTFT gauge
-    fig.add_trace(go.Indicator(
-        mode="gauge+number",
-        value=ttft or 0,
-        title={"text": "TTFT (ms)", "font": {"size": 14}},
-        domain={"x": [0, 0.3], "y": [0, 1]},
-        gauge={
-            "axis": {"range": [0, max_value / 5]},
-            "bar": {"color": "#eab308"},
-            "steps": [
-                {"range": [0, 500], "color": "rgba(34, 197, 94, 0.15)"},
-                {"range": [500, 1500], "color": "rgba(234, 179, 8, 0.15)"},
-                {"range": [1500, max_value / 5], "color": "rgba(239, 68, 68, 0.15)"}
-            ]
-        }
-    ))
+    fig.add_trace(
+        go.Indicator(
+            mode="gauge+number",
+            value=ttft or 0,
+            title={"text": "TTFT (ms)", "font": {"size": 14}},
+            domain={"x": [0, 0.3], "y": [0, 1]},
+            gauge={
+                "axis": {"range": [0, max_value / 5]},
+                "bar": {"color": "#eab308"},
+                "steps": [
+                    {"range": [0, 500], "color": "rgba(34, 197, 94, 0.15)"},
+                    {"range": [500, 1500], "color": "rgba(234, 179, 8, 0.15)"},
+                    {
+                        "range": [1500, max_value / 5],
+                        "color": "rgba(239, 68, 68, 0.15)",
+                    },
+                ],
+            },
+        )
+    )
 
     # TTUT gauge
-    fig.add_trace(go.Indicator(
-        mode="gauge+number",
-        value=ttut or 0,
-        title={"text": "TTUT (ms)", "font": {"size": 14}},
-        domain={"x": [0.35, 0.65], "y": [0, 1]},
-        gauge={
-            "axis": {"range": [0, max_value / 2]},
-            "bar": {"color": "#22c55e"},
-            "steps": [
-                {"range": [0, 2000], "color": "rgba(34, 197, 94, 0.15)"},
-                {"range": [2000, 5000], "color": "rgba(234, 179, 8, 0.15)"},
-                {"range": [5000, max_value / 2], "color": "rgba(239, 68, 68, 0.15)"}
-            ]
-        }
-    ))
+    fig.add_trace(
+        go.Indicator(
+            mode="gauge+number",
+            value=ttut or 0,
+            title={"text": "TTUT (ms)", "font": {"size": 14}},
+            domain={"x": [0.35, 0.65], "y": [0, 1]},
+            gauge={
+                "axis": {"range": [0, max_value / 2]},
+                "bar": {"color": "#22c55e"},
+                "steps": [
+                    {"range": [0, 2000], "color": "rgba(34, 197, 94, 0.15)"},
+                    {"range": [2000, 5000], "color": "rgba(234, 179, 8, 0.15)"},
+                    {
+                        "range": [5000, max_value / 2],
+                        "color": "rgba(239, 68, 68, 0.15)",
+                    },
+                ],
+            },
+        )
+    )
 
     # Total time gauge
-    fig.add_trace(go.Indicator(
-        mode="gauge+number",
-        value=total or 0,
-        title={"text": "Total (ms)", "font": {"size": 14}},
-        domain={"x": [0.7, 1], "y": [0, 1]},
-        gauge={
-            "axis": {"range": [0, max_value]},
-            "bar": {"color": "#60a5fa"},
-            "steps": [
-                {"range": [0, 5000], "color": "rgba(34, 197, 94, 0.15)"},
-                {"range": [5000, 10000], "color": "rgba(234, 179, 8, 0.15)"},
-                {"range": [10000, max_value], "color": "rgba(239, 68, 68, 0.15)"}
-            ]
-        }
-    ))
-
+    fig.add_trace(
+        go.Indicator(
+            mode="gauge+number",
+            value=total or 0,
+            title={"text": "Total (ms)", "font": {"size": 14}},
+            domain={"x": [0.7, 1], "y": [0, 1]},
+            gauge={
+                "axis": {"range": [0, max_value]},
+                "bar": {"color": "#60a5fa"},
+                "steps": [
+                    {"range": [0, 5000], "color": "rgba(34, 197, 94, 0.15)"},
+                    {"range": [5000, 10000], "color": "rgba(234, 179, 8, 0.15)"},
+                    {"range": [10000, max_value], "color": "rgba(239, 68, 68, 0.15)"},
+                ],
+            },
+        )
+    )
 
     fig.update_layout(
         height=200,
         margin={"l": 20, "r": 20, "t": 30, "b": 20},
         paper_bgcolor="rgba(0,0,0,0)",
-        font={"color": "#e2e8f0"}
+        font={"color": "#e2e8f0"},
     )
 
     st.plotly_chart(fig, use_container_width=True)
@@ -249,14 +260,18 @@ def render_token_pie_chart(reasoning_tokens: int, content_tokens: int, prompt_to
         st.info("No token data yet")
         return
 
-    fig = go.Figure(data=[go.Pie(
-        labels=labels,
-        values=values,
-        hole=0.6,
-        marker_colors=colors,
-        textinfo="percent+label",
-        textposition="outside"
-    )])
+    fig = go.Figure(
+        data=[
+            go.Pie(
+                labels=labels,
+                values=values,
+                hole=0.6,
+                marker_colors=colors,
+                textinfo="percent+label",
+                textposition="outside",
+            )
+        ]
+    )
 
     fig.update_layout(
         height=250,
@@ -264,7 +279,15 @@ def render_token_pie_chart(reasoning_tokens: int, content_tokens: int, prompt_to
         paper_bgcolor="rgba(0,0,0,0)",
         font={"color": "#e2e8f0"},
         showlegend=False,
-        annotations=[{"text": "Token<br>Distribution", "x": 0.5, "y": 0.5, "font_size": 14, "showarrow": False}]
+        annotations=[
+            {
+                "text": "Token<br>Distribution",
+                "x": 0.5,
+                "y": 0.5,
+                "font_size": 14,
+                "showarrow": False,
+            }
+        ],
     )
 
     st.plotly_chart(fig, use_container_width=True)
@@ -320,13 +343,12 @@ def render_platform_info(platform: str):
             {f'<p style="margin: 16px 0 0 0; color: #94a3b8; font-size: 13px;">💡 {notes}</p>' if notes else ''}
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
 
 def render_export_buttons(
-    report_builder: "ReportBuilder",
-    filename_prefix: str = "evaluation_report"
+    report_builder: "ReportBuilder", filename_prefix: str = "evaluation_report"
 ):
     """
     Render report export buttons
@@ -350,10 +372,13 @@ def render_export_buttons(
         if st.button("📑 Markdown", use_container_width=True):
             # Temporary file
             import tempfile
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
+
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".md", delete=False, encoding="utf-8"
+            ) as f:
                 report_builder.export_markdown(f.name)
                 f.seek(0)
-            with open(f.name, encoding='utf-8') as f:
+            with open(f.name, encoding="utf-8") as f:
                 md_content = f.read()
             b64 = base64.b64encode(md_content.encode()).decode()
             href = f'<a href="data:text/markdown;base64,{b64}" download="{filename_prefix}.md">Click to download Markdown</a>'
@@ -362,9 +387,12 @@ def render_export_buttons(
     with col3:
         if st.button("🌐 HTML", use_container_width=True):
             import tempfile
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
+
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".html", delete=False, encoding="utf-8"
+            ) as f:
                 report_builder.export_html(f.name)
-            with open(f.name, encoding='utf-8') as f:
+            with open(f.name, encoding="utf-8") as f:
                 html_content = f.read()
             b64 = base64.b64encode(html_content.encode()).decode()
             href = f'<a href="data:text/html;base64,{b64}" download="{filename_prefix}.html">Click to download HTML</a>'
@@ -375,7 +403,7 @@ def render_stream_preview(
     full_content: str = "",
     reasoning_content: str = "",
     is_streaming: bool = False,
-    show_reasoning: bool = True
+    show_reasoning: bool = True,
 ):
     """
     Render real-time streaming preview
@@ -416,7 +444,7 @@ def render_stream_preview(
                     @keyframes blink {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0; }} }}
                 </style>
                 """,
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
 
     # Content preview
@@ -436,7 +464,7 @@ def render_stream_preview(
                 {'<span style="animation: blink 1s infinite;">▌</span>' if is_streaming else ''}
             </div>
             """,
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
 
 
@@ -444,7 +472,7 @@ def render_quality_score_card(
     overall: float | None = None,
     accuracy: float | None = None,
     coherence: float | None = None,
-    completeness: float | None = None
+    completeness: float | None = None,
 ):
     """
     Render quality score card
@@ -455,6 +483,7 @@ def render_quality_score_card(
         coherence: Coherence
         completeness: Completeness
     """
+
     def get_color(score):
         if score is None:
             return "#64748b"
@@ -499,4 +528,3 @@ def render_quality_score_card(
     """
 
     st.markdown(html_content, unsafe_allow_html=True)
-

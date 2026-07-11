@@ -393,7 +393,7 @@ def format_results_for_display(df: pd.DataFrame, test_type: str | None = None) -
             )
         elif col in FORMAT_RULES["int"]:
             display_df[col] = display_df[col].apply(
-                lambda x: int(x) if isinstance(x, (int, float)) and not pd.isna(x) else x
+                lambda x: (int(x) if isinstance(x, (int, float)) and not pd.isna(x) else x)
             )
 
     return display_df

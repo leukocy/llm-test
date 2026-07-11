@@ -12,7 +12,7 @@ files_to_download = [
     "merges.txt",
     "added_tokens.json",
     "special_tokens_map.json",
-    "config.json"
+    "config.json",
 ]
 
 os.makedirs(local_dir, exist_ok=True)
@@ -20,11 +20,7 @@ os.makedirs(local_dir, exist_ok=True)
 for file in files_to_download:
     print(f"Downloading {file}...")
     try:
-        hf_hub_download(
-            repo_id=repo_id,
-            filename=file,
-            local_dir=local_dir
-        )
+        hf_hub_download(repo_id=repo_id, filename=file, local_dir=local_dir)
         print(f"Successfully downloaded {file}")
     except Exception as e:
         print(f"Failed to download {file}: {e}")

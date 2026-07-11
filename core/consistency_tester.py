@@ -15,6 +15,7 @@ from typing import Any
 @dataclass
 class ConsistencyRunResult:
     """单次运行Result"""
+
     run_id: int
     predicted_answer: str
     is_correct: bool
@@ -26,6 +27,7 @@ class ConsistencyRunResult:
 @dataclass
 class ConsistencyTestResult:
     """一致性Test Results"""
+
     sample_id: str
     question: str
     correct_answer: str
@@ -34,10 +36,10 @@ class ConsistencyTestResult:
     runs: list[ConsistencyRunResult] = field(default_factory=list)
 
     # 一致性指标
-    consistency_rate: float = 0.0          # Answer一致率 (0-1)
-    accuracy_rate: float = 0.0             # Accuracy (0-1)
-    majority_answer: str = ""              # 多数Answer
-    majority_is_correct: bool = False      # 多数Answeris否正确
+    consistency_rate: float = 0.0  # Answer一致率 (0-1)
+    accuracy_rate: float = 0.0  # Accuracy (0-1)
+    majority_answer: str = ""  # 多数Answer
+    majority_is_correct: bool = False  # 多数Answeris否正确
     answer_variants: dict[str, int] = field(default_factory=dict)  # Answer分布
 
     # 稳定性指标
@@ -45,23 +47,24 @@ class ConsistencyTestResult:
     response_time_std: float = 0.0
 
     # 诊断
-    is_stable: bool = False                # is否稳定（一致率 > 阈值）
+    is_stable: bool = False  # is否稳定（一致率 > 阈值）
     instability_note: str = ""
 
 
 @dataclass
 class ConsistencyReport:
     """一致性Test Report"""
+
     model_id: str
     test_timestamp: str
     total_samples: int
     runs_per_sample: int
 
     # 汇总指标
-    overall_consistency: float = 0.0       # 整体一致率
-    overall_accuracy: float = 0.0          # 整体Accuracy
-    stable_sample_count: int = 0           # 稳定Sample count
-    unstable_sample_count: int = 0         # not稳定Sample count
+    overall_consistency: float = 0.0  # 整体一致率
+    overall_accuracy: float = 0.0  # 整体Accuracy
+    stable_sample_count: int = 0  # 稳定Sample count
+    unstable_sample_count: int = 0  # not稳定Sample count
 
     # Detailed Results
     results: list[ConsistencyTestResult] = field(default_factory=list)
@@ -99,7 +102,7 @@ class ConsistencyTester:
         self,
         runs_per_sample: int = 3,
         stability_threshold: float = 0.8,
-        temperature_variation: bool = False
+        temperature_variation: bool = False,
     ):
         """
         InitializeConsistency Tester
@@ -119,7 +122,7 @@ class ConsistencyTester:
         question: str,
         correct_answer: str,
         get_response_func: Callable,
-        answer_parser: Callable = None
+        answer_parser: Callable = None,
     ) -> ConsistencyTestResult:
         """
         Test单 samples一致性
@@ -135,9 +138,7 @@ class ConsistencyTester:
             ConsistencyTestResult
         """
         result = ConsistencyTestResult(
-            sample_id=sample_id,
-            question=question,
-            correct_answer=correct_answer
+            sample_id=sample_id, question=question, correct_answer=correct_answer
         )
 
         runs = []
@@ -148,6 +149,7 @@ class ConsistencyTester:
         for run_id in range(self.runs_per_sample):
             try:
                 import time
+
                 start_time = time.time()
 
                 response_data = await get_response_func(question)
@@ -157,8 +159,8 @@ class ConsistencyTester:
 
                 # Parse响应
                 if isinstance(response_data, dict):
-                    full_response = response_data.get('content', '')
-                    reasoning = response_data.get('reasoning_content', '')
+                    full_response = response_data.get("content", "")
+                    reasoning = response_data.get("reasoning_content", "")
                 else:
                     full_response = str(response_data)
                     reasoning = ""
@@ -173,23 +175,27 @@ class ConsistencyTester:
                 is_correct = self._check_answer(predicted, correct_answer)
 
                 answers.append(predicted)
-                runs.append(ConsistencyRunResult(
-                    run_id=run_id,
-                    predicted_answer=predicted,
-                    is_correct=is_correct,
-                    response_time_ms=response_time,
-                    reasoning_content=reasoning,
-                    full_response=full_response[:1000]  # 限制长度
-                ))
+                runs.append(
+                    ConsistencyRunResult(
+                        run_id=run_id,
+                        predicted_answer=predicted,
+                        is_correct=is_correct,
+                        response_time_ms=response_time,
+                        reasoning_content=reasoning,
+                        full_response=full_response[:1000],  # 限制长度
+                    )
+                )
 
             except Exception as e:
-                runs.append(ConsistencyRunResult(
-                    run_id=run_id,
-                    predicted_answer="",
-                    is_correct=False,
-                    response_time_ms=0,
-                    full_response=f"Error: {str(e)}"
-                ))
+                runs.append(
+                    ConsistencyRunResult(
+                        run_id=run_id,
+                        predicted_answer="",
+                        is_correct=False,
+                        response_time_ms=0,
+                        full_response=f"Error: {str(e)}",
+                    )
+                )
                 answers.append("")
 
         result.runs = runs
@@ -203,7 +209,7 @@ class ConsistencyTester:
         self,
         result: ConsistencyTestResult,
         answers: list[str],
-        response_times: list[float]
+        response_times: list[float],
     ):
         """Calculate一致性指标"""
         if not answers:
@@ -211,6 +217,7 @@ class ConsistencyTester:
 
         # Answer分布
         from collections import Counter
+
         answer_counts = Counter(answers)
         result.answer_variants = dict(answer_counts)
 
@@ -260,17 +267,17 @@ class ConsistencyTester:
         import re
 
         # 尝试提取数字
-        numbers = re.findall(r'[-+]?\d+(?:\.\d+)?', response)
+        numbers = re.findall(r"[-+]?\d+(?:\.\d+)?", response)
         if numbers:
             return numbers[-1]
 
         # 尝试提取Options
-        choices = re.findall(r'\b([A-E])\b', response.upper())
+        choices = re.findall(r"\b([A-E])\b", response.upper())
         if choices:
             return choices[0]
 
         # Return响应最后一部分
-        lines = response.strip().split('\n')
+        lines = response.strip().split("\n")
         return lines[-1][:100] if lines else ""
 
     def _check_answer(self, predicted: str, correct: str) -> bool:
@@ -278,8 +285,8 @@ class ConsistencyTester:
         if not predicted or not correct:
             return False
 
-        pred_clean = predicted.strip().lower().replace(',', '')
-        correct_clean = correct.strip().lower().replace(',', '')
+        pred_clean = predicted.strip().lower().replace(",", "")
+        correct_clean = correct.strip().lower().replace(",", "")
 
         # 直接比较
         if pred_clean == correct_clean:
@@ -290,7 +297,7 @@ class ConsistencyTester:
             pred_num = float(pred_clean)
             correct_num = float(correct_clean)
             return abs(pred_num - correct_num) < 0.01
-        except:
+        except Exception:
             pass
 
         return False
@@ -301,7 +308,7 @@ class ConsistencyTester:
         get_response_func: Callable,
         answer_parser: Callable = None,
         concurrency: int = 4,
-        progress_callback: Callable = None
+        progress_callback: Callable = None,
     ) -> ConsistencyReport:
         """
         批量一致性Test
@@ -320,7 +327,7 @@ class ConsistencyTester:
             model_id="",
             test_timestamp=datetime.now().isoformat(),
             total_samples=len(samples),
-            runs_per_sample=self.runs_per_sample
+            runs_per_sample=self.runs_per_sample,
         )
 
         semaphore = asyncio.Semaphore(concurrency)
@@ -330,11 +337,11 @@ class ConsistencyTester:
             nonlocal completed
             async with semaphore:
                 result = await self.test_single(
-                    sample_id=sample.get('sample_id', str(completed)),
-                    question=sample.get('question', ''),
-                    correct_answer=sample.get('correct_answer', ''),
+                    sample_id=sample.get("sample_id", str(completed)),
+                    question=sample.get("question", ""),
+                    correct_answer=sample.get("correct_answer", ""),
                     get_response_func=get_response_func,
-                    answer_parser=answer_parser
+                    answer_parser=answer_parser,
                 )
                 completed += 1
                 if progress_callback:
@@ -371,7 +378,7 @@ class ConsistencyTester:
         # 最not稳定样本
         unstable = sorted(
             [r for r in report.results if not r.is_stable],
-            key=lambda x: x.consistency_rate
+            key=lambda x: x.consistency_rate,
         )
         report.most_unstable_samples = [r.sample_id for r in unstable[:5]]
 
@@ -400,12 +407,6 @@ class ConsistencyTester:
         return recommendations
 
 
-def create_consistency_tester(
-    runs: int = 3,
-    threshold: float = 0.8
-) -> ConsistencyTester:
+def create_consistency_tester(runs: int = 3, threshold: float = 0.8) -> ConsistencyTester:
     """Factory函数：CreateConsistency Tester"""
-    return ConsistencyTester(
-        runs_per_sample=runs,
-        stability_threshold=threshold
-    )
+    return ConsistencyTester(runs_per_sample=runs, stability_threshold=threshold)

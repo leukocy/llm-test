@@ -47,13 +47,15 @@ def download_from_huggingface():
                         "id": f"aime_{source.replace('-', '_')}_{len(all_samples) + 1}",
                         "problem": item.get("problem", item.get("question", "")),
                         "answer": str(item.get("answer", "")),
-                        "source": source
+                        "source": source,
                     }
                     if item.get("solution"):
                         sample["solution"] = item["solution"]
                     all_samples.append(sample)
 
-                print(f"  - {subset}: Load {len([s for s in all_samples if s['source'] == source])} 道题")
+                print(
+                    f"  - {subset}: Load {len([s for s in all_samples if s['source'] == source])} 道题"
+                )
 
             except Exception as e:
                 print(f"  - {subset}: Load failed ({e})")
@@ -75,7 +77,7 @@ def download_from_huggingface():
                     "id": item.get("id", f"aime_2025_{i+1}"),
                     "problem": item.get("problem", item.get("question", "")),
                     "answer": str(item.get("answer", "")),
-                    "source": "2025-I" if i < 15 else "2025-II"
+                    "source": "2025-I" if i < 15 else "2025-II",
                 }
                 if item.get("solution"):
                     sample["solution"] = item["solution"]
@@ -92,11 +94,13 @@ def download_from_huggingface():
 
     # SaveData
     output_file = os.path.join(output_dir, "aime2025.json")
-    with open(output_file, 'w', encoding='utf-8') as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(all_samples, f, ensure_ascii=False, indent=2)
 
     print(f"\n✅ DatasetSaved到 {output_file}")
-    print(f"   - AIME I: {len([s for s in all_samples if '2025-I' in s.get('source', '') and 'II' not in s.get('source', '')])} 道题")
+    print(
+        f"   - AIME I: {len([s for s in all_samples if '2025-I' in s.get('source', '') and 'II' not in s.get('source', '')])} 道题"
+    )
     print(f"   - AIME II: {len([s for s in all_samples if '2025-II' in s.get('source', '')])} 道题")
     print(f"   - 总计: {len(all_samples)} 道题")
 
@@ -135,11 +139,13 @@ def download_from_url():
                         "id": f"aime_{source.replace('-', '_')}_{len(all_samples) + 1}",
                         "problem": item.get("problem", item.get("question", "")),
                         "answer": str(item.get("answer", "")),
-                        "source": source
+                        "source": source,
                     }
                     all_samples.append(sample)
 
-                print(f"  - succeededLoad {len([s for s in all_samples if s['source'] == source])} 道题")
+                print(
+                    f"  - succeededLoad {len([s for s in all_samples if s['source'] == source])} 道题"
+                )
             else:
                 print(f"  - 失败 (HTTP {resp.status_code})")
         except Exception as e:
@@ -147,7 +153,7 @@ def download_from_url():
 
     if all_samples:
         output_file = os.path.join(output_dir, "aime2025.json")
-        with open(output_file, 'w', encoding='utf-8') as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             json.dump(all_samples, f, ensure_ascii=False, indent=2)
         print(f"\n✅ DatasetSaved到 {output_file}")
         return True
