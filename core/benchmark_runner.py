@@ -32,6 +32,371 @@ PREFILL_PROMPT_OVERHEAD = 0
 _SUFFIX_PROMPT_POOL: list[str] | None = None
 _SUFFIX_POOL_LOCK = threading.Lock()
 
+# ---------------------------------------------------------------------------
+# AIME stable-fill difficulty pools (for decode-fill guarantees).
+# Loaded from aime_stable_pools.json (see _probe / _export scripts). Each pool
+# is a set of AIME problems whose every observed trial reached the pool's
+# window, so they reliably force long decode output without early EOS.
+# ---------------------------------------------------------------------------
+AIME_POOLS_CACHE: dict[str, list[str]] | None = None
+AIME_POOLS_LOCK = threading.Lock()
+# Difficulty key -> (json pool key, human label, description). Order = UI order.
+AIME_DIFFICULTY_OPTIONS = [
+    ("fill_32768plus", "极难 (稳定撑满 32768, 11题)", "最难，真实长度 ≥32768，任意窗口都撑满"),
+    ("fill_8192plus", "难 (稳定撑满 8192, 33题)", "稳定撑满 8192，适合长 decode 测试"),
+    ("fill_4096plus", "中等 (稳定撑满 4096, 60题)", "稳定撑满 4096，2048 窗口下 100% 撑满"),
+    ("fill_2048plus", "易 (稳定撑满 2048, 73题)", "稳定撑满 2048"),
+    ("none", "不使用 AIME (原随机题池)", "回退到原 dataset 混合题池"),
+]
+# Currently selected difficulty key. Default = the 11 hardest problems.
+AIME_DIFFICULTY: str = "fill_32768plus"
+
+
+def _load_aime_pools() -> dict[str, list[str]]:
+    """Load AIME difficulty pools from aime_stable_pools.json (cached).
+
+    Returns a dict mapping pool key (e.g. 'fill_32768plus') -> list of problem
+    strings. Returns {} if the file is missing or unreadable.
+    """
+    global AIME_POOLS_CACHE
+    with AIME_POOLS_LOCK:
+        if AIME_POOLS_CACHE is not None:
+            return AIME_POOLS_CACHE
+        import json as _json
+        import os as _os
+
+        # Resolve relative to project root (this file is core/benchmark_runner.py)
+        candidates = [
+            _os.path.join(
+                _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+                "aime_stable_pools.json",
+            ),
+            "aime_stable_pools.json",
+        ]
+        data = None
+        for path in candidates:
+            try:
+                with open(path, encoding="utf-8") as f:
+                    data = _json.load(f)
+                break
+            except Exception:
+                continue
+        cache: dict[str, list[str]] = {}
+        if isinstance(data, dict):
+            for key, entry in (data.get("cumulative_pools") or {}).items():
+                probs = (entry or {}).get("problems") or []
+                cache[key] = [p.get("problem", "") for p in probs if p.get("problem")]
+        AIME_POOLS_CACHE = cache
+        return cache
+
+
+# Cache of AIME pools WITH source ids: {pool_key: [(source_id, text), ...]}
+AIME_POOLS_ID_CACHE: dict[str, list[tuple[str, str]]] | None = None
+
+
+def _load_aime_pools_with_id() -> dict[str, list[tuple[str, str]]]:
+    """Like _load_aime_pools but each entry carries a source id.
+
+    id format: '<source>_<problem_id>' e.g. 'aime2026_2026-II-12'.
+    """
+    global AIME_POOLS_ID_CACHE
+    with AIME_POOLS_LOCK:
+        if AIME_POOLS_ID_CACHE is not None:
+            return AIME_POOLS_ID_CACHE
+        import json as _json
+        import os as _os
+
+        candidates = [
+            _os.path.join(
+                _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+                "aime_stable_pools.json",
+            ),
+            "aime_stable_pools.json",
+        ]
+        data = None
+        for path in candidates:
+            try:
+                with open(path, encoding="utf-8") as f:
+                    data = _json.load(f)
+                break
+            except Exception:
+                continue
+        cache: dict[str, list[tuple[str, str]]] = {}
+        if isinstance(data, dict):
+            for key, entry in (data.get("cumulative_pools") or {}).items():
+                probs = (entry or {}).get("problems") or []
+                items = []
+                for p in probs:
+                    text = p.get("problem", "")
+                    if not text:
+                        continue
+                    src = (p.get("source") or "aime").strip()
+                    pid = str(p.get("problem_id") or "").strip()
+                    sid = f"{src}_{pid}" if pid else src
+                    items.append((sid, text))
+                cache[key] = items
+        AIME_POOLS_ID_CACHE = cache
+        return cache
+
+
+def set_aime_difficulty(key: str) -> None:
+    """Set the global AIME difficulty pool used for prompt suffixes."""
+    global AIME_DIFFICULTY
+    if key is None or key == "none":
+        AIME_DIFFICULTY = "none"
+        return
+    pools = _load_aime_pools()
+    if key in pools:
+        AIME_DIFFICULTY = key
+    else:
+        AIME_DIFFICULTY = "fill_32768plus"
+
+
+def get_aime_difficulty() -> str:
+    return AIME_DIFFICULTY
+
+
+# ---------------------------------------------------------------------------
+# Composable prompt-suffix builder (type x difficulty x output-instruction).
+# Replaces the single AIME-difficulty dropdown as the global suffix policy.
+# ---------------------------------------------------------------------------
+
+# Question types (multi-select). Each maps to a loader producing [problem_str].
+SUFFIX_TYPE_OPTIONS = [
+    ("math", "数学 (AIME)", "AIME 竞赛数学题，带 stable-fill 难度分层"),
+    ("science", "科学 (GPQA)", "GPQA 研究生级科学分析题"),
+    ("code", "代码 (HumanEval+MBPP)", "编程实现任务，天然较长输出"),
+    ("longform", "长文 (LongBench)", "长上下文推理/补全任务"),
+]
+
+# Output-instruction styles (multi-select). Appended after the question to
+# steer output length/shape. Drawn from the existing variant-suffix family.
+SUFFIX_INSTRUCTION_OPTIONS = [
+    (
+        "reasoning",
+        "详细逐步推理",
+        ("\n\n请逐步详细求解。展示完整推理过程与所有中间计算，不能只给最终答案。"),
+    ),
+    (
+        "verify",
+        "多方法验证/反例",
+        ("\n\n得出答案后，请用至少两种不同方法验证，并讨论反例与边界情况。"),
+    ),
+    (
+        "generalize",
+        "推广+变体",
+        ("\n\n完成后，请将问题推广到一个更难的变体并求解，说明原问题与变体之间的联系。"),
+    ),
+    ("bilingual", "中英双语作答", ("\n\n请用中文和英文双语作答，两部分都需完整。")),
+    ("none", "不附加指令", ""),
+]
+
+# Currently selected builder config (module-global, set from sidebar).
+SUFFIX_TYPES: tuple[str, ...] = ("math",)  # selected question types
+SUFFIX_INSTRUCTIONS: tuple[str, ...] = ("reasoning",)  # selected output instructions
+
+# Typed question pools cache: {type_key: [problem_str, ...]}
+TYPED_POOLS_CACHE: dict[str, list[str]] | None = None
+TYPED_POOLS_LOCK = threading.Lock()
+
+
+def _load_typed_pools() -> dict[str, list[str]]:
+    """Load question pools keyed by type: math / science / code / longform.
+
+    math uses aime_stable_pools.json (so it respects difficulty layering);
+    the others reuse the mixed dataset pool, filtered by source prefix that
+    _load_suffix_prompt_pool bakes into each entry.
+    """
+    global TYPED_POOLS_CACHE
+    with TYPED_POOLS_LOCK:
+        if TYPED_POOLS_CACHE is not None:
+            return TYPED_POOLS_CACHE
+        # Each pool is a list of (source_id, text). ids follow '<set>_<number>'
+        # for non-AIME sets (stable per process via deterministic load order);
+        # AIME uses its real source+problem_id (e.g. 'aime2026_2026-II-12').
+        cache: dict[str, list[tuple[str, str]]] = {}
+
+        # math: from AIME stable pools (default = all layers combined)
+        aime = _load_aime_pools_with_id()
+        math_seen: set[str] = set()
+        math_items: list[tuple[str, str]] = []
+        for key, items in aime.items():
+            for sid, text in items:
+                if text and text not in math_seen:
+                    math_seen.add(text)
+                    math_items.append((sid, text))
+        cache["math"] = math_items
+
+        # others: from the mixed dataset pool. _load_suffix_prompt_pool embeds
+        # a source header like "AIME 2024 competition math problem:\n..." so we
+        # can classify by keyword. Assign stable '<set>_<n>' ids by load order.
+        try:
+            mixed = _load_suffix_prompt_pool()
+        except Exception:
+            mixed = []
+        science: list[tuple[str, str]] = []
+        code: list[tuple[str, str]] = []
+        longform: list[tuple[str, str]] = []
+        g_i = c_i = l_i = 0
+        for entry in mixed:
+            head = entry[:80].lower()
+            if "gpqa" in head or "science" in head:
+                science.append((f"gpqa_{g_i}", entry))
+                g_i += 1
+            elif "humaneval" in head:
+                code.append((f"humaneval_{c_i}", entry))
+                c_i += 1
+            elif "mbpp" in head or "programming" in head:
+                code.append((f"mbpp_{c_i}", entry))
+                c_i += 1
+            elif "longbench" in head or "repobench" in head or "lcc" in head or "qasper" in head:
+                longform.append((f"longbench_{l_i}", entry))
+                l_i += 1
+        cache["science"] = science
+        cache["code"] = code
+        cache["longform"] = longform
+
+        TYPED_POOLS_CACHE = cache
+        return cache
+
+
+def set_suffix_builder(
+    types: list[str] | tuple[str, ...] | None, instructions: list[str] | tuple[str, ...] | None
+) -> None:
+    """Set the global suffix-builder selection.
+
+    types: selected question types (math/science/code/longform). Empty -> all.
+    instructions: selected output-instruction styles. Empty -> none appended.
+    """
+    global SUFFIX_TYPES, SUFFIX_INSTRUCTIONS
+    valid_types = {k for k, _, _ in SUFFIX_TYPE_OPTIONS}
+    sel_types = tuple(t for t in (types or ()) if t in valid_types)
+    SUFFIX_TYPES = sel_types if sel_types else tuple(k for k, _, _ in SUFFIX_TYPE_OPTIONS)
+
+    valid_ins = {k for k, _, _ in SUFFIX_INSTRUCTION_OPTIONS}
+    sel_ins = tuple(i for i in (instructions or ()) if i in valid_ins)
+    SUFFIX_INSTRUCTIONS = sel_ins  # empty means "no instruction"
+
+
+def get_suffix_builder() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    return SUFFIX_TYPES, SUFFIX_INSTRUCTIONS
+
+
+def _build_output_instruction() -> str:
+    """Concatenate the selected output-instruction styles (random order)."""
+    if not SUFFIX_INSTRUCTIONS or SUFFIX_INSTRUCTIONS == ("none",):
+        return ""
+    texts = [
+        t
+        for k, _, t in SUFFIX_INSTRUCTION_OPTIONS
+        if k in SUFFIX_INSTRUCTIONS and k != "none" and t
+    ]
+    random.shuffle(texts)
+    return "".join(texts)
+
+
+def _get_random_typed_prompt(
+    target_token_budget: int, tokenizer, prefer_shortest: bool = False
+) -> tuple[str, str] | None:
+    """Pick a question from the currently-selected type(s), respecting the
+    AIME difficulty layer for the math type.
+
+    Returns (source_id, question_text). source_id identifies the problem
+    (e.g. 'aime2026_2026-II-12', 'gpqa_42'). None if nothing fits."""
+    pools = _load_typed_pools()
+    # Build the candidate pool from selected types. For math, apply difficulty.
+    # Each candidate is (source_id, text).
+    candidates: list[tuple[str, str]] = []
+    for t in SUFFIX_TYPES:
+        if t == "math":
+            # Respect AIME_DIFFICULTY layer if set to a real pool (with ids)
+            aime_pools = _load_aime_pools_with_id()
+            layer = aime_pools.get(AIME_DIFFICULTY) if AIME_DIFFICULTY != "none" else None
+            src = layer or pools.get("math", [])
+        else:
+            src = pools.get(t, [])
+        candidates.extend(src)
+    # dedupe by text preserving order (first id wins)
+    seen: set[str] = set()
+    uniq: list[tuple[str, str]] = []
+    for sid, text in candidates:
+        if text not in seen:
+            seen.add(text)
+            uniq.append((sid, text))
+    if not uniq:
+        return None
+
+    def _len(item):
+        return len(tokenizer.encode(item[1], add_special_tokens=False))
+
+    fitting = [c for c in uniq if _len(c) <= target_token_budget]
+    if fitting:
+        if prefer_shortest:
+            fitting.sort(key=_len)
+            return random.choice(fitting[: min(5, len(fitting))])
+        return random.choice(random.sample(fitting, min(10, len(fitting))))
+    # nothing fits whole: trim the shortest
+    if target_token_budget < 8:
+        return None
+    best = min(uniq, key=_len)
+    sid, text = best
+    tokens = tokenizer.encode(text, add_special_tokens=False)
+    trimmed = tokenizer.decode(tokens[:target_token_budget], skip_special_tokens=True)
+    return (f"{sid}~trimmed", trimmed)
+
+
+def _get_random_aime_prompt(
+    target_token_budget: int, tokenizer, prefer_shortest: bool = False
+) -> tuple[str, str] | None:
+    """Pick an AIME problem from the currently-selected difficulty pool.
+
+    Args:
+        target_token_budget: max tokens the suffix may occupy.
+        prefer_shortest: when True (small budgets), pick the SHORTEST problem
+            that fits, rather than a random one. Used for ultra-short prefill
+            (target_tokens < 200) where only a few short problems fit at all.
+
+    Returns (source_id, text), or None if difficulty is 'none', the pool is
+    empty, or the budget is too small to hold even a truncated problem head.
+    """
+    if AIME_DIFFICULTY == "none":
+        return None
+    pools = _load_aime_pools_with_id()
+    pool = pools.get(AIME_DIFFICULTY) or []
+    if not pool or target_token_budget <= 0:
+        return None
+
+    def _len(item):
+        return len(tokenizer.encode(item[1], add_special_tokens=False))
+
+    scored = [(c, _len(c)) for c in pool]
+
+    # Problems that fit the budget as-is
+    fitting = [(c, n) for c, n in scored if n <= target_token_budget]
+    if fitting:
+        if prefer_shortest:
+            # Pick among the few shortest that fit (small randomization for variety)
+            fitting.sort(key=lambda x: x[1])
+            top = fitting[: min(5, len(fitting))]
+            return random.choice(top)[0]
+        # Normal mode: random among fitting, biased toward shorter for diversity
+        candidates = random.sample(pool, min(10, len(pool)))
+        for cand in candidates:
+            if _len(cand) <= target_token_budget:
+                return cand
+        # (shouldn't reach here since fitting is non-empty, but keep safe)
+        return fitting[0][0]
+
+    # Nothing fits whole: trim the shortest problem to the budget (keep its head).
+    # Only meaningful when budget >= some minimum so the truncation isn't absurd.
+    if target_token_budget < 8:
+        return None
+    best = min(scored, key=lambda x: x[1])
+    sid, text = best[0]
+    tokens = tokenizer.encode(text, add_special_tokens=False)
+    trimmed = tokenizer.decode(tokens[:target_token_budget], skip_special_tokens=True)
+    return (f"{sid}~trimmed", trimmed)
+
 
 def _load_suffix_prompt_pool() -> list[str]:
     """
@@ -82,9 +447,7 @@ def _load_suffix_prompt_pool() -> list[str]:
         task = (task or "").strip()
         if len(task) <= max_chars:
             return task
-        return (
-            task[:max_chars].rstrip() + "\n[Truncated for benchmark prompt generation.]"
-        )
+        return task[:max_chars].rstrip() + "\n[Truncated for benchmark prompt generation.]"
 
     def _add_hard_prompt(source: str, task: str):
         task = _clip_task_text(task)
@@ -189,9 +552,7 @@ def _load_suffix_prompt_pool() -> list[str]:
                 "edge case handling, and at least 3 additional test cases beyond the ones shown. "
                 "Also write a brief explanation of your approach."
             )
-            _add_hard_prompt(
-                f"HumanEval code generation task ({entry_point})", task_desc
-            )
+            _add_hard_prompt(f"HumanEval code generation task ({entry_point})", task_desc)
 
     for row in _load_json("datasets/mbpp/mbpp.json")[:500]:
         text = (row.get("text") or "").strip()
@@ -238,19 +599,32 @@ def _load_suffix_prompt_pool() -> list[str]:
     return pool
 
 
-def _get_random_suffix_prompt(target_token_budget: int, tokenizer) -> str:
+def _get_random_suffix_prompt(
+    target_token_budget: int, tokenizer, prefer_shortest: bool = False
+) -> tuple[str, str]:
     """
-    Pick a random real question from the dataset pool and trim it to fit
-    within the given token budget. Falls back to a short generic prompt
-    if the pool is unavailable.
+    Pick a question to use as the prompt suffix task, using the composable
+    suffix builder (type x difficulty x output-instruction).
+
+    Returns (source_id, question_text). source_id identifies the problem
+    (e.g. 'aime2026_2026-II-12', 'gpqa_42', 'generic'). The question text fits
+    within target_token_budget; the caller appends the output-instruction text
+    separately via _build_output_instruction() when token budget allows.
+
+    Falls back to a short generic prompt if no typed question is available.
     """
+    q = _get_random_typed_prompt(target_token_budget, tokenizer, prefer_shortest=prefer_shortest)
+    if q:
+        return q
+
+    # Fallback: mixed dataset pool (legacy) — no stable id available here
     try:
         pool = _load_suffix_prompt_pool()
     except Exception:
         pool = []
 
     if not pool:
-        return "Continue writing a detailed response."
+        return ("generic", "Continue writing a detailed response.")
 
     # Shuffle pick
     candidates = random.sample(pool, min(10, len(pool)))
@@ -258,20 +632,16 @@ def _get_random_suffix_prompt(target_token_budget: int, tokenizer) -> str:
     for candidate in candidates:
         tokens = tokenizer.encode(candidate, add_special_tokens=False)
         if len(tokens) <= target_token_budget:
-            return candidate
+            return ("legacy", candidate)
 
     # If all candidates too long, trim the shortest one
-    best = min(
-        candidates, key=lambda c: len(tokenizer.encode(c, add_special_tokens=False))
-    )
+    best = min(candidates, key=lambda c: len(tokenizer.encode(c, add_special_tokens=False)))
     tokens = tokenizer.encode(best, add_special_tokens=False)
     if len(tokens) > target_token_budget:
-        trimmed = tokenizer.decode(
-            tokens[:target_token_budget], skip_special_tokens=True
-        )
-        return str(trimmed)
+        trimmed = tokenizer.decode(tokens[:target_token_budget], skip_special_tokens=True)
+        return ("legacy~trimmed", trimmed)
 
-    return best
+    return ("legacy", best)
 
 
 # Module logger
@@ -305,6 +675,8 @@ class BenchmarkRunner:
         ui_state=None,
         render_progress=None,
         render_log=None,
+        temperature=None,
+        custom_params=None,
     ):
         self.placeholder, self.progress_bar, self.status_text = (
             placeholder,
@@ -330,6 +702,13 @@ class BenchmarkRunner:
         self.thinking_enabled = thinking_enabled
         self.thinking_budget = thinking_budget
         self.reasoning_effort = reasoning_effort
+
+        # Sampling temperature. None = do not send temperature (use API default).
+        self.temperature = temperature
+
+        # User-defined custom request params. List of
+        # {"name": str, "value": Any, "location": "payload"|"extra_body"}.
+        self.custom_params = list(custom_params) if custom_params else []
 
         # Random seed for reproducibility
         self.random_seed = random_seed
@@ -386,6 +765,7 @@ class BenchmarkRunner:
             "api_decode",
             "cache_hit_tokens",
             "token_calc_method",
+            "prompt_source",
             "error",
             "system_output_throughput",
             "system_input_throughput",
@@ -404,18 +784,18 @@ class BenchmarkRunner:
 
         # 资源监控 & 富记录回传给 UI（详见 data-warehouse 计划）
         self._resource_monitor: Any = None  # ResourceMonitor 实例（运行中）
-        self._last_system_info: dict[str, Any] = (
-            {}
-        )  # 最近一次 _start_db_run 采集的合并指纹
+        self._last_system_info: dict[str, Any] = {}  # 最近一次 _start_db_run 采集的合并指纹
         self._last_resource_monitor: dict | None = None  # 最近一次测试的监控汇总 dict
         self._last_run_id = None  # 最近一次测试的 DB run id（供 UI 写回归因）
         self._last_bandwidth: dict[str, Any] = (
             {}
         )  # 最近一次测试的等效带宽结果（供 UI 归因/偏差分析）
         self._engine_poller: Any = None  # EngineMetricsPoller 实例（运行中）
-        self._last_engine_metrics: dict | None = (
-            None  # 最近一次测试的引擎运行时汇总 dict
-        )
+        self._last_engine_metrics: dict | None = None  # 最近一次测试的引擎运行时汇总 dict
+        # 自适应测试：测试前一次性探测的 KV 预算（tokens）。None=未探测/不跳过，全跑。
+        # 来源优先级：warehouse_context 手动覆盖 > /metrics cache_config > /v1/models max_model_len。
+        self._kv_budget: int | None = None
+        self._kv_budget_source: str | None = None
         # UI 注入的数据仓库上下文（取代直接读 st.session_state，保持 core UI-agnostic）。
         # 键：engine_runtime / test_metadata / model_spec_override / serving_config / custom_sys_info
         self.warehouse_context: dict = warehouse_context or {}
@@ -519,9 +899,9 @@ class BenchmarkRunner:
 
             auto_sys_info = capture_system_info()
 
-            # Merge用户Custom系统信息
+            # Merge用户Custom系统信息(自动优先:手填只补充自动采不到的字段)
             user_sys_info = self.get_system_info()
-            merged_sys_info = {**auto_sys_info, **user_sys_info}
+            merged_sys_info = {**user_sys_info, **auto_sys_info}
 
             # BuildConfigure
             full_config = {
@@ -543,9 +923,7 @@ class BenchmarkRunner:
                 test_type=test_type,
                 model_id=self.model_id,
                 provider=(
-                    getattr(self.provider, "name", "unknown")
-                    if self.provider
-                    else "unknown"
+                    getattr(self.provider, "name", "unknown") if self.provider else "unknown"
                 ),
                 config=full_config,
                 system_info=merged_sys_info,
@@ -557,6 +935,8 @@ class BenchmarkRunner:
             self._start_resource_monitor()
             # 启动推理引擎 /metrics 轮询（记录引擎自身运行：KV 占用/队列/抢占）
             self._start_engine_poller()
+            # 自适应测试：测试前一次性探测 KV 预算（超预算 cell 自动跳过，永不阻塞测试）
+            self._probe_kv_budget()
 
             logger.info(f"DatabaseTest运行已Create: ID={self._db_run.id}")
             return self._db_run
@@ -606,18 +986,14 @@ class BenchmarkRunner:
         try:
             db = self._get_db_manager()
             # 组装八维仓库字段并随完成写入
-            extra_fields = self._build_warehouse_extra_fields(
-                monitor_summary, engine_summary
-            )
+            extra_fields = self._build_warehouse_extra_fields(monitor_summary, engine_summary)
             db.complete_test_run(
                 self._db_run,
                 success,
                 calculate_stats=True,
                 extra_fields=extra_fields,
             )
-            logger.info(
-                f"DatabaseTest运行Completed: ID={self._db_run.id}, success={success}"
-            )
+            logger.info(f"DatabaseTest运行Completed: ID={self._db_run.id}, success={success}")
         except Exception as e:
             logger.warning(f"完成DatabaseTest运行失败: {e}")
         finally:
@@ -652,10 +1028,17 @@ class BenchmarkRunner:
                 extra["gpu_vram_peak_gb"] = peaks["gpu_vram_gb"]
             if peaks.get("system_memory_gb") is not None:
                 extra["system_memory_peak_gb"] = peaks["system_memory_gb"]
+            # D 维资源峰值提升为一等列(标准要求:利用率/功耗/温度/CPU)
+            if peaks.get("gpu_util_percent") is not None:
+                extra["gpu_util_peak_pct"] = peaks["gpu_util_percent"]
+            if peaks.get("gpu_power_w") is not None:
+                extra["gpu_power_peak_w"] = peaks["gpu_power_w"]
+            if peaks.get("gpu_temp_c") is not None:
+                extra["gpu_temp_peak_c"] = peaks["gpu_temp_c"]
+            if peaks.get("cpu_percent") is not None:
+                extra["cpu_peak_pct"] = peaks["cpu_percent"]
             try:
-                extra["resource_monitor_json"] = _json.dumps(
-                    monitor_summary, ensure_ascii=False
-                )
+                extra["resource_monitor_json"] = _json.dumps(monitor_summary, ensure_ascii=False)
             except (TypeError, ValueError):
                 pass
 
@@ -694,17 +1077,13 @@ class BenchmarkRunner:
             if peaks.get("gpu_cache_usage_perc") is not None:
                 extra["gpu_kv_cache_usage_peak_pct"] = peaks["gpu_cache_usage_perc"]
             if peaks.get("num_requests_running") is not None:
-                extra["engine_running_requests_peak"] = int(
-                    peaks["num_requests_running"]
-                )
+                extra["engine_running_requests_peak"] = int(peaks["num_requests_running"])
             if engine_summary.get("preemption_total") is not None:
                 extra["num_preemption_total"] = int(engine_summary["preemption_total"])
             if cc.get("kv_capacity_tokens") is not None:
                 extra["kv_cache_capacity_tokens"] = cc["kv_capacity_tokens"]
             try:
-                extra["engine_metrics_json"] = _json.dumps(
-                    engine_summary, ensure_ascii=False
-                )
+                extra["engine_metrics_json"] = _json.dumps(engine_summary, ensure_ascii=False)
             except (TypeError, ValueError):
                 pass
 
@@ -740,9 +1119,7 @@ class BenchmarkRunner:
                 "status_detail": "status_detail",
                 "notes": "notes",
             }
-            return {
-                col: tm[k] for k, col in mapping.items() if tm.get(k) not in (None, "")
-            }
+            return {col: tm[k] for k, col in mapping.items() if tm.get(k) not in (None, "")}
         except Exception:  # noqa: BLE001
             return {}
 
@@ -759,6 +1136,7 @@ class BenchmarkRunner:
             serving_state = self.warehouse_context.get("serving_config") or {}
             serving_dict: dict = {}
             mtp_enabled: bool | None = None
+            sc: ServingConfig | None = None
             if serving_state:
                 sc = (
                     from_sidebar(serving_state)
@@ -772,6 +1150,7 @@ class BenchmarkRunner:
             # auto 覆盖手工——配置变了报告不再陈旧。失败优雅降级(不影响测试)。
             try:
                 from core.engine_capture import capture_engine_config
+                from core.serving_config import from_engine_capture, merge_serving_configs
 
                 auto = capture_engine_config(self.api_base_url)
                 if auto:
@@ -789,6 +1168,33 @@ class BenchmarkRunner:
                         serving_dict["parallel_strategy"] = auto["parallel"]
                     if auto.get("runtime"):
                         serving_dict["engine_runtime"] = auto["runtime"]
+                    if auto.get("backends"):
+                        serving_dict["backends"] = auto["backends"]
+                    # 用 from_engine_capture 把 auto 归一化成 ServingConfig,
+                    # 再 merge 到 sidebar 的 sc 上(engine-captured 值覆盖 sidebar 空值)。
+                    try:
+                        auto_sc = from_engine_capture(auto)
+                        # engine_version: from_engine_capture 不设,从 image tag 取(最可靠)
+                        if not auto_sc.engine_version and auto.get("engine_version"):
+                            auto_sc.engine_version = auto["engine_version"]
+                        if sc:
+                            sc = merge_serving_configs(sc, auto_sc)
+                        else:
+                            sc = auto_sc
+                        serving_dict = sc.to_dict()
+                        serving_dict["engine_capture"] = auto
+                        # 重新提升 auto 的非 ServingConfig 字段(serving_dict 被覆盖后丢了)
+                        if auto.get("launch_cmd"):
+                            serving_dict["launch_cmd"] = auto["launch_cmd"]
+                        if auto.get("parallel"):
+                            serving_dict["parallel_strategy"] = auto["parallel"]
+                        if auto.get("runtime"):
+                            serving_dict["engine_runtime"] = auto["runtime"]
+                        if auto.get("backends"):
+                            serving_dict["backends"] = auto["backends"]
+                        mtp_enabled = sc.mtp_enabled
+                    except Exception:  # noqa: BLE001
+                        pass
             except Exception:  # noqa: BLE001
                 pass
 
@@ -825,17 +1231,92 @@ class BenchmarkRunner:
         return sum(vals) / len(vals)
 
     def _nominal_gpu_bandwidth_gbps(self) -> float | None:
-        """取硬件指纹里第一张 GPU 的标称显存带宽（多卡取第一张代表）。"""
+        """取硬件指纹里的标称显存带宽合计(TP>1 时所有卡并行,带宽是合计值)。
+
+        bytes_per_token_read 是全模型视角(不除 TP),所以 nominal 也要用所有 GPU 合计,
+        保证口径一致。TP 数从 serving_config 取;取不到时用 GPU 数量(等同 TP=all)。
+        """
         try:
-            gpus = (self._last_system_info or {}).get("hardware_fingerprint", {}).get(
-                "gpus"
-            ) or []
-            for g in gpus:
-                if g.get("nominal_bandwidth_gbps"):
-                    return float(g["nominal_bandwidth_gbps"])
+            gpus = (self._last_system_info or {}).get("hardware_fingerprint", {}).get("gpus") or []
+            single = next(
+                (g["nominal_bandwidth_gbps"] for g in gpus if g.get("nominal_bandwidth_gbps")),
+                None,
+            )
+            if single is None:
+                return None
+            # TP 并行度:serving_config.tp_size 优先,否则用 GPU 数(全卡 TP)
+            tp = 1
+            try:
+                sc = self.warehouse_context.get("serving_config") or {}
+                tp = int(sc.get("tp_size") or len(gpus) or 1)
+            except (TypeError, ValueError):
+                tp = len(gpus) or 1
+            return single * tp
         except Exception:  # noqa: BLE001
             pass
         return None
+
+    def _probe_kv_budget(self) -> None:
+        """测试前一次性探测 KV 缓存容量，写入 self._kv_budget（自适应跳过超预算 cell 用）。
+
+        优先级：
+          1. warehouse_context['kv_budget'] 手动覆盖（UI 侧边栏 / 测试配置）
+          2. 引擎 /metrics 的 cache_config（block_size×num_gpu_blocks）——最准
+          3. /v1/models 的 max_model_len——保守上界
+          4. 都拿不到 → _kv_budget=None，不跳过任何 cell（全跑，与原行为一致）
+
+        永不抛异常（探测失败回退到全跑，比中断测试更可取）。
+        """
+        # 1. 手动覆盖
+        er = self.warehouse_context.get("engine_runtime") or {}
+        manual = er.get("kv_budget")
+        if manual and int(manual) > 0:
+            self._kv_budget = int(manual)
+            self._kv_budget_source = "manual"
+            self._show("info", f"自适应: KV 预算 {self._kv_budget:,} tokens（手动指定）")
+            return
+
+        # 2/3. 自动探测（/metrics 优先，/v1/models 兜底）
+        try:
+            from core.engine_metrics import probe_kv_capacity
+
+            r = probe_kv_capacity(self.api_base_url)
+            self._kv_budget = r.get("kv_capacity_tokens")
+            self._kv_budget_source = r.get("source")
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"KV 预算探测失败（不跳过，全跑）: {e}")
+            self._kv_budget = None
+            self._kv_budget_source = None
+
+        if self._kv_budget:
+            self._show(
+                "info",
+                f"自适应: KV 预算 {self._kv_budget:,} tokens（来源: {self._kv_budget_source}），"
+                f"超预算 cell 将自动跳过",
+            )
+        else:
+            self._show("info", "自适应: 未探测到 KV 容量，不跳过任何 cell（全跑）")
+
+    def should_skip_cell(
+        self, concurrency: int, context_tokens: int, max_tokens: int
+    ) -> tuple[bool, str]:
+        """判断一个 (并发×上下文×输出) cell 是否超 KV 预算应跳过。
+
+        Returns:
+            (skip, reason)。skip=False 时 reason=""；skip=True 时 reason 含预算明细，
+            会写入该 cell 的 error 列（留痕，不静默消失）。
+        """
+        if not self._kv_budget:
+            return False, ""
+        from core.engine_metrics import estimate_kv_need
+
+        need = estimate_kv_need(concurrency, context_tokens, max_tokens)
+        if need <= self._kv_budget:
+            return False, ""
+        return (
+            True,
+            f"over_kv_budget (need={need:,} > budget={self._kv_budget:,}, source={self._kv_budget_source})",
+        )
 
     def _start_resource_monitor(self) -> None:
         """启动后台资源监控（失败不影响测试）。"""
@@ -854,14 +1335,13 @@ class BenchmarkRunner:
             from core.engine_metrics import EngineMetricsPoller, default_metrics_url
 
             er = self.warehouse_context.get("engine_runtime") or {}
-            metrics_url = er.get("metrics_url") or default_metrics_url(
-                self.api_base_url
-            )
+            metrics_url = er.get("metrics_url") or default_metrics_url(self.api_base_url)
             if er.get("enabled", True) is False:  # 显式关闭
                 metrics_url = None
             if not metrics_url:
                 return
-            self._engine_poller = EngineMetricsPoller(metrics_url, interval=1.0)
+            poll_interval = max(1.0, float(er.get("poll_interval", 5)))
+            self._engine_poller = EngineMetricsPoller(metrics_url, interval=poll_interval)
             self._engine_poller.start()
         except Exception as e:
             logger.warning(f"启动引擎指标轮询失败（不影响测试）: {e}")
@@ -1024,31 +1504,23 @@ class BenchmarkRunner:
                 fn(message)
                 return
             except Exception:
-                logger.debug(
-                    f"log_placeholder {level} skipped (no context): {message[:50]}..."
-                )
+                logger.debug(f"log_placeholder {level} skipped (no context): {message[:50]}...")
         # 降级：Python logging（core 无 streamlit 依赖）
-        log_fn = getattr(
-            logger, level if level in ("info", "warning", "error") else "info"
-        )
+        log_fn = getattr(logger, level if level in ("info", "warning", "error") else "info")
         log_fn(message)
 
     def _get_tokenizer(self):
         """Get tokenizer: Custom HF -> Auto-Inferred HF -> transformers fallback"""
 
         # Priority 1: Custom HuggingFace Tokenizer
-        if (
-            self.tokenizer_option == "HuggingFace Tokenizer"
-            and self.hf_tokenizer_model_id
-        ):
+        if self.tokenizer_option == "HuggingFace Tokenizer" and self.hf_tokenizer_model_id:
             try:
                 if (
                     not hasattr(self, "_transformers_tokenizer")
                     or self._transformers_tokenizer is None
                     or (
                         hasattr(self._transformers_tokenizer, "name_or_path")
-                        and self._transformers_tokenizer.name_or_path
-                        != self.hf_tokenizer_model_id
+                        and self._transformers_tokenizer.name_or_path != self.hf_tokenizer_model_id
                     )
                 ):
                     self._safe_log(
@@ -1057,9 +1529,7 @@ class BenchmarkRunner:
                     )
 
                 # Use shared cached loader
-                self._transformers_tokenizer = get_cached_tokenizer(
-                    self.hf_tokenizer_model_id
-                )
+                self._transformers_tokenizer = get_cached_tokenizer(self.hf_tokenizer_model_id)
 
                 if self._transformers_tokenizer:
                     self._safe_log(
@@ -1125,10 +1595,7 @@ class BenchmarkRunner:
             from transformers import AutoTokenizer
 
             # Use GPT-2 tokenizer as a reasonable default
-            if (
-                not hasattr(self, "_transformers_tokenizer")
-                or self._transformers_tokenizer is None
-            ):
+            if not hasattr(self, "_transformers_tokenizer") or self._transformers_tokenizer is None:
                 self._transformers_tokenizer = AutoTokenizer.from_pretrained("gpt2")
                 self._show("info", "已Load transformers GPT-2 tokenizer 作is托底。")
             return self._transformers_tokenizer
@@ -1169,9 +1636,12 @@ class BenchmarkRunner:
 
         # Generate initial body (try to get close)
         # Pass the pre-loaded tokenizer to avoid thread-safety issues
-        body_text, _, _ = self._get_text_for_token_count(
+        body_text, _, _, body_source = self._get_text_for_token_count(
             body_target_tokens, force_random=True, _tokenizer=tokenizer
         )
+        # Track which question was used: only meaningful when no external suffix
+        # overrides the internally-selected question.
+        self._last_prompt_source = body_source if suffix == "" else "generic"
 
         # 2. Fine-grained Character Adjustment Loop
         # Only needed when body + suffix doesn't exactly match target.
@@ -1208,9 +1678,23 @@ class BenchmarkRunner:
 
         return body_text + suffix
 
-    def _get_text_for_token_count(
-        self, target_tokens, force_random=False, _tokenizer=None
+    def _calibrate_prompt_with_source(
+        self, target_tokens, suffix="", _tokenizer=None, source_override=None
     ):
+        """Like _calibrate_prompt but also returns the prompt-source id.
+
+        Returns (prompt_str, source_id). source_id identifies the question used
+        (e.g. 'aime2026_2026-II-12'), or 'generic' when no typed question was
+        selected. When source_override is given (e.g. custom_text pad mode where
+        the suffix IS the question), it takes precedence over the generic fallback.
+        """
+        prompt_str = self._calibrate_prompt(target_tokens, suffix=suffix, _tokenizer=_tokenizer)
+        if source_override is not None:
+            self._last_prompt_source = source_override
+        source_id = getattr(self, "_last_prompt_source", "generic")
+        return prompt_str, source_id
+
+    def _get_text_for_token_count(self, target_tokens, force_random=False, _tokenizer=None):
         """
         Generate text that strictly matches target_tokens using the current tokenizer.
 
@@ -1228,9 +1712,7 @@ class BenchmarkRunner:
                 "error",
                 "所has tokenizer（tiktoken, transformers）都not可用。no法Generate精确 Token 长度文本。",
             )
-            raise RuntimeError(
-                "No tokenizer available - cannot generate token-based prompts"
-            )
+            raise RuntimeError("No tokenizer available - cannot generate token-based prompts")
 
         try:
             # Helper for clean encoding
@@ -1247,9 +1729,7 @@ class BenchmarkRunner:
             # "Heavy" Suffix: Real question from dataset pool (>= 200 tokens)
             # "Medium" Suffix: Shorter real question (60 - 200 tokens)
             # "Micro" Suffix: Short prompt (20 - 60 tokens)
-            suffix_micro = (
-                "请直接创作一部超长篇科幻小说，描写人类在火星建立殖民地的故事。"
-            )
+            suffix_micro = "请直接创作一部超长篇科幻小说，描写人类在火星建立殖民地的故事。"
 
             # "Nano" Suffix (~4-8 tokens): For tiny prefill (8 - 20)
             suffix_nano = "续写万字小说"
@@ -1270,30 +1750,25 @@ class BenchmarkRunner:
 
             selected_suffix = ""
             suffix_tokens = []
+            current_source_id = "generic"  # tracks which question was selected
 
             if target_tokens >= 200:
                 # Use real question from dataset pool with separator
                 sep_tokens = encode_no_special(suffix_separator)
                 budget = effective_target - len(sep_tokens)
                 if budget > 10:
-                    question = _get_random_suffix_prompt(budget, tokenizer)
+                    current_source_id, question = _get_random_suffix_prompt(budget, tokenizer)
                     question_tokens = encode_no_special(question)
-                    # Append minimum-output enforcement instruction
-                    output_enforcement = (
-                        "\n\n请务必写出2000字以上的详细回答。你必须展示完整的推理过程，"
-                        "不能只给出简短答案。"
-                    )
+                    # Output instruction comes from the composable suffix builder
+                    # (selected styles; empty string when "none").
+                    output_enforcement = _build_output_instruction()
                     enforcement_tokens = encode_no_special(output_enforcement)
                     if (
                         len(sep_tokens) + len(question_tokens) + len(enforcement_tokens)
                         <= effective_target
                     ):
-                        selected_suffix = (
-                            suffix_separator + question + output_enforcement
-                        )
-                        suffix_tokens = (
-                            sep_tokens + question_tokens + enforcement_tokens
-                        )
+                        selected_suffix = suffix_separator + question + output_enforcement
+                        suffix_tokens = sep_tokens + question_tokens + enforcement_tokens
                     else:
                         # Not enough room for enforcement; use question as-is
                         selected_suffix = suffix_separator + question
@@ -1306,15 +1781,27 @@ class BenchmarkRunner:
             if not suffix_tokens and target_tokens >= 60:
                 # Medium: try a short real question without separator
                 budget = effective_target
-                question = _get_random_suffix_prompt(budget, tokenizer)
+                current_source_id, question = _get_random_suffix_prompt(budget, tokenizer)
                 question_tokens = encode_no_special(question)
                 if len(question_tokens) <= effective_target:
                     selected_suffix = question
                     suffix_tokens = question_tokens
+                else:
+                    current_source_id = "generic"  # didn't fit, will fall through
 
             if not suffix_tokens and target_tokens >= 20:
-                selected_suffix = suffix_micro
-                suffix_tokens = encode_no_special(selected_suffix)
+                # Ultra-short prefill: use a SHORT AIME problem if one fits
+                # (prefer_shortest picks the smallest problem statements);
+                # otherwise fall back to the generic micro prompt.
+                aime_short = _get_random_aime_prompt(
+                    effective_target, tokenizer, prefer_shortest=True
+                )
+                if aime_short:
+                    current_source_id, selected_suffix = aime_short
+                    suffix_tokens = encode_no_special(selected_suffix)
+                else:
+                    selected_suffix = suffix_micro
+                    suffix_tokens = encode_no_special(selected_suffix)
 
             if not suffix_tokens and target_tokens >= 8:
                 selected_suffix = suffix_nano
@@ -1329,9 +1816,7 @@ class BenchmarkRunner:
                 # Trim to fit
                 suffix_tokens = suffix_tokens[: max(effective_target, 0)]
                 if suffix_tokens:
-                    selected_suffix = tokenizer.decode(
-                        suffix_tokens, skip_special_tokens=True
-                    )
+                    selected_suffix = tokenizer.decode(suffix_tokens, skip_special_tokens=True)
                 else:
                     selected_suffix = ""
                     suffix_tokens = []
@@ -1505,10 +1990,7 @@ class BenchmarkRunner:
             # 4. Combine
             if noise_target_tokens > 0:
                 final_tokens = (
-                    prefix_tokens
-                    + final_noise_tokens
-                    + suffix_wrapper_tokens
-                    + suffix_tokens
+                    prefix_tokens + final_noise_tokens + suffix_wrapper_tokens + suffix_tokens
                 )
             else:
                 # If no space for noise, just return prefix+suffix (might overshoot if overhead > target, but minimal risk for >100 tokens)
@@ -1521,10 +2003,7 @@ class BenchmarkRunner:
                     final_tokens = final_tokens[:target_tokens]  # Hard clip
                 else:
                     final_tokens = (
-                        prefix_tokens
-                        + final_noise_tokens
-                        + suffix_wrapper_tokens
-                        + suffix_tokens
+                        prefix_tokens + final_noise_tokens + suffix_wrapper_tokens + suffix_tokens
                     )
 
             # Decode
@@ -1538,15 +2017,13 @@ class BenchmarkRunner:
                 display_text = selected_suffix
                 if display_text.startswith("--- BENCHMARK PADDING END ---"):
                     display_text = (
-                        display_text.split("\n", 2)[-1]
-                        if "\n" in display_text
-                        else display_text
+                        display_text.split("\n", 2)[-1] if "\n" in display_text else display_text
                     )
                 first_line = display_text.split("\n")[0].strip()
                 if first_line:
                     question_summary = first_line[:80]
 
-            return prompt_text, actual_tokens, question_summary
+            return prompt_text, actual_tokens, question_summary, current_source_id
 
         except Exception as e:
             self._show("error", f"use tokenizer Process文本失败: {e}。")
@@ -1656,9 +2133,7 @@ class BenchmarkRunner:
         # 记录 API Raw dataBackup
         api_usage = {
             "prompt_tokens": usage_info.get("prompt_tokens") if usage_info else None,
-            "completion_tokens": (
-                usage_info.get("completion_tokens") if usage_info else None
-            ),
+            "completion_tokens": (usage_info.get("completion_tokens") if usage_info else None),
         }
 
         # Priority 1: API Usage (最准确，包含 Chat Template 开销)
@@ -1685,17 +2160,12 @@ class BenchmarkRunner:
         if is_hf_ready:
             inferred_id = self._infer_hf_model_id()
             if (
-                self.tokenizer_option == "HuggingFace Tokenizer"
-                and self.hf_tokenizer_model_id
+                self.tokenizer_option == "HuggingFace Tokenizer" and self.hf_tokenizer_model_id
             ) or inferred_id:
                 try:
-                    prompt_tokens = len(
-                        tokenizer.encode(prompt, add_special_tokens=False)
-                    )
+                    prompt_tokens = len(tokenizer.encode(prompt, add_special_tokens=False))
                     completion_tokens = len(
-                        tokenizer.encode(
-                            full_response_content, add_special_tokens=False
-                        )
+                        tokenizer.encode(full_response_content, add_special_tokens=False)
                     )
 
                     method_id = (
@@ -1729,20 +2199,14 @@ class BenchmarkRunner:
             if is_transformers:
                 token_calc_method = "transformers (GPT-2)"
                 try:
-                    prompt_tokens = len(
-                        tokenizer.encode(prompt, add_special_tokens=False)
-                    )
+                    prompt_tokens = len(tokenizer.encode(prompt, add_special_tokens=False))
                     completion_tokens = len(
-                        tokenizer.encode(
-                            full_response_content, add_special_tokens=False
-                        )
+                        tokenizer.encode(full_response_content, add_special_tokens=False)
                     )
                 except Exception:
                     pass
             else:
-                token_calc_method = (
-                    f"tiktoken ({getattr(tokenizer, 'name', 'unknown')})"
-                )
+                token_calc_method = f"tiktoken ({getattr(tokenizer, 'name', 'unknown')})"
                 try:
                     prompt_tokens = len(tokenizer.encode(prompt))
                     completion_tokens = len(tokenizer.encode(full_response_content))
@@ -1757,9 +2221,7 @@ class BenchmarkRunner:
             api_usage,
         )
 
-    async def get_completion(
-        self, client, session_id, prompt, max_tokens, barrier=None
-    ):
+    async def get_completion(self, client, session_id, prompt, max_tokens, barrier=None):
         """Get completion from the configured provider."""
         # Update dashboard - request starting
         if self.dashboard:
@@ -1785,6 +2247,21 @@ class BenchmarkRunner:
             kwargs["thinking_budget"] = self.thinking_budget
         if self.reasoning_effort is not None:
             kwargs["reasoning_effort"] = self.reasoning_effort
+        if self.temperature is not None:
+            kwargs["temperature"] = self.temperature
+        # User-defined custom params. Top-level params pass through as kwargs
+        # (provider merges them into payload); extra_body params are bundled.
+        extra_body_params = {}
+        for cp in self.custom_params or []:
+            name = cp.get("name")
+            if not name:
+                continue
+            if cp.get("location") == "extra_body":
+                extra_body_params[name] = cp.get("value")
+            else:
+                kwargs[name] = cp.get("value")
+        if extra_body_params:
+            kwargs["_custom_extra_body"] = extra_body_params
         if barrier is not None:
             kwargs["_barrier"] = barrier
 
@@ -1885,9 +2362,7 @@ class BenchmarkRunner:
         ttft, tps, tpot, tpot_p95, tpot_p99, generation_time = self._calculate_metrics(
             start_time, first_token_time, end_time, completion_tokens, token_timestamps
         )
-        decode_tokens_for_tps = self._decode_tokens_for_tps(
-            completion_tokens, token_timestamps
-        )
+        decode_tokens_for_tps = self._decode_tokens_for_tps(completion_tokens, token_timestamps)
 
         # Log success with metrics
         api_p = api_usage.get("prompt_tokens")
@@ -1898,9 +2373,7 @@ class BenchmarkRunner:
             "tps": tps,
             "tpot": tpot,
             "prefill": f"{prompt_tokens} (API:{api_p})" if api_p else prompt_tokens,
-            "decode": (
-                f"{completion_tokens} (API:{api_d})" if api_d else completion_tokens
-            ),
+            "decode": (f"{completion_tokens} (API:{api_d})" if api_d else completion_tokens),
             "total_time": max(0.000001, (end_time - start_time) - self.latency_offset),
         }
         self._update_log(
@@ -1947,9 +2420,7 @@ class BenchmarkRunner:
 
     def update_ui(self):
         self.progress_bar.progress(
-            self.completed_requests / self.total_requests
-            if self.total_requests > 0
-            else 0
+            self.completed_requests / self.total_requests if self.total_requests > 0 else 0
         )
 
         if not self.results_list:
@@ -1997,9 +2468,7 @@ class BenchmarkRunner:
             pause = is_pause_requested()
             # 每次检查都打印调试信息
             if stop or pause:
-                self._update_log(
-                    f"[SIGNAL] stop={stop}, pause={pause}", level=LogLevel.INFO
-                )
+                self._update_log(f"[SIGNAL] stop={stop}, pause={pause}", level=LogLevel.INFO)
             if stop:
                 return "stop"
             if pause:
@@ -2128,9 +2597,7 @@ class BenchmarkRunner:
 
             client = httpx.AsyncClient(
                 transport=httpx.AsyncHTTPTransport(
-                    limits=httpx.Limits(
-                        max_connections=2048, max_keepalive_connections=256
-                    ),
+                    limits=httpx.Limits(max_connections=2048, max_keepalive_connections=256),
                 ),
                 timeout=600.0,
             )
@@ -2200,9 +2667,7 @@ class BenchmarkRunner:
 
         # Apply calibration to batch total duration
         # Effectively assuming all requests started 'offset' seconds later
-        batch_total_duration = max(
-            0.001, (max_end_time - min_start_time) - self.latency_offset
-        )
+        batch_total_duration = max(0.001, (max_end_time - min_start_time) - self.latency_offset)
 
         # Output Throughput (Decode Phase Only)
         if min_first_token_time != float("inf"):
@@ -2224,9 +2689,7 @@ class BenchmarkRunner:
         uncached_input_tokens = max(0, total_input_tokens - total_cache_hit_tokens)
         system_output_throughput = total_output_tokens / decode_duration
         system_input_throughput = uncached_input_tokens / prefill_duration
-        system_throughput = (
-            total_input_tokens + total_output_tokens
-        ) / batch_total_duration
+        system_throughput = (total_input_tokens + total_output_tokens) / batch_total_duration
         rps = successful_requests / batch_total_duration
 
         for res in results:
@@ -2291,9 +2754,7 @@ class BenchmarkRunner:
 
                 req_start_time = time.time()
                 try:
-                    res = await self.get_completion(
-                        client, session_id, prompt, max_tokens
-                    )
+                    res = await self.get_completion(client, session_id, prompt, max_tokens)
                 except asyncio.CancelledError:
                     return None
 
@@ -2327,18 +2788,16 @@ class BenchmarkRunner:
                     # Output Throughput (Decode Phase Only)
                     # Duration = Current Time - Earliest First Token Time
                     if stats["min_first_token_time"] != float("inf"):
-                        decode_elapsed = max(
-                            0.001, current_time - stats["min_first_token_time"]
-                        )
+                        decode_elapsed = max(0.001, current_time - stats["min_first_token_time"])
                     else:
                         decode_elapsed = total_elapsed  # Fallback
 
                     # Input Throughput (Prefill Phase Only)
                     # Duration = Latest First Token Time - Earliest Start Time
                     # Note: For continuous test, this window grows.
-                    if stats["max_first_token_time"] > 0 and stats[
-                        "min_start_time"
-                    ] != float("inf"):
+                    if stats["max_first_token_time"] > 0 and stats["min_start_time"] != float(
+                        "inf"
+                    ):
                         prefill_elapsed = max(
                             0.001,
                             stats["max_first_token_time"] - stats["min_start_time"],
@@ -2349,9 +2808,7 @@ class BenchmarkRunner:
                     if res.get("error") != "UserCancelled" and res.get("error") is None:
                         stats["total_output_tokens"] += res.get("decode_tokens", 0)
                         stats["total_input_tokens"] += res.get("prefill_tokens", 0)
-                        stats["total_cache_hit_tokens"] += (
-                            res.get("cache_hit_tokens", 0) or 0
-                        )
+                        stats["total_cache_hit_tokens"] += res.get("cache_hit_tokens", 0) or 0
                         stats["successful_requests"] += 1
 
                     stats["completed_requests"] += 1
@@ -2361,12 +2818,8 @@ class BenchmarkRunner:
                     uncached_input_tokens = max(
                         0, stats["total_input_tokens"] - stats["total_cache_hit_tokens"]
                     )
-                    res["system_output_throughput"] = (
-                        stats["total_output_tokens"] / decode_elapsed
-                    )
-                    res["system_input_throughput"] = (
-                        uncached_input_tokens / prefill_elapsed
-                    )
+                    res["system_output_throughput"] = stats["total_output_tokens"] / decode_elapsed
+                    res["system_input_throughput"] = uncached_input_tokens / prefill_elapsed
                     res["rps"] = (
                         stats["successful_requests"] / total_elapsed
                     )  # RPS is still Total Time based
@@ -2416,9 +2869,7 @@ class BenchmarkRunner:
         # Recalculate final system throughput using precise request timestamps
         # This excludes framework overhead (like UI updates) that happens outside the request window
         if stats["max_end_time"] > stats["min_start_time"]:
-            effective_duration = max(
-                0.001, stats["max_end_time"] - stats["min_start_time"]
-            )
+            effective_duration = max(0.001, stats["max_end_time"] - stats["min_start_time"])
 
             # 1. Input Throughput: Total Input / (Max First Token - Min Start)
             # 仅use未缓存 token 数
@@ -2426,9 +2877,7 @@ class BenchmarkRunner:
                 0, stats["total_input_tokens"] - stats["total_cache_hit_tokens"]
             )
             if stats["max_first_token_time"] > 0:
-                prefill_dur = max(
-                    0.001, stats["max_first_token_time"] - stats["min_start_time"]
-                )
+                prefill_dur = max(0.001, stats["max_first_token_time"] - stats["min_start_time"])
                 final_system_input_throughput = uncached_input_tokens / prefill_dur
 
                 # 2. Output Throughput: Total Output / (Max End - Min First Token)
@@ -2436,9 +2885,7 @@ class BenchmarkRunner:
                 if min_ftt == float("inf"):
                     min_ftt = stats["min_start_time"]  # Fallback
                 decode_dur = max(0.001, stats["max_end_time"] - min_ftt)
-                final_system_output_throughput = (
-                    stats["total_output_tokens"] / decode_dur
-                )
+                final_system_output_throughput = stats["total_output_tokens"] / decode_dur
             else:
                 final_system_input_throughput = 0
                 final_system_output_throughput = 0
@@ -2450,9 +2897,7 @@ class BenchmarkRunner:
 
         else:
             effective_duration = max(0.001, time.time() - start_test_time)
-            final_system_throughput = (
-                stats["total_output_tokens"] / effective_duration
-            )  # Fallback
+            final_system_throughput = stats["total_output_tokens"] / effective_duration  # Fallback
             final_system_input_throughput = 0
             final_system_output_throughput = 0
 
@@ -2512,6 +2957,7 @@ class BenchmarkRunner:
             "cache_hit_tokens",
             "token_calc_method",
             "input_tokens_target",
+            "prompt_source",
             "error",
         ]
         initialize_csv(csv_columns, self.csv_file)
@@ -2550,9 +2996,7 @@ class BenchmarkRunner:
 
         # Generate Calibrated Prompt if target > 0
         if input_tokens_target > 0:
-            self.status_text.info(
-                f"currentlyGenerate {input_tokens_target} Token 校准 Prompt..."
-            )
+            self.status_text.info(f"currentlyGenerate {input_tokens_target} Token 校准 Prompt...")
             # We don't need to store a single 'calibrated_prompt' anymore as we generate per-request
             pass
 
@@ -2631,31 +3075,49 @@ class BenchmarkRunner:
                     f"ConcurrencyTest: {concurrency} Concurrency,  {r + 1}/{rounds_per_level} 轮..."
                 )
 
+                # 自适应：超 KV 预算的 cell 跳过（留痕 error 列，不静默消失）
+                cell_ctx = input_tokens_target if input_tokens_target > 0 else base_target_tokens
+                skip, skip_reason = self.should_skip_cell(concurrency, cell_ctx, max_tokens)
+                if skip:
+                    self._show(
+                        "warning", f"  跳过 conc={concurrency} ctx={cell_ctx}：{skip_reason}"
+                    )
+                    for _ in range(concurrency):
+                        self._add_result(
+                            {
+                                "concurrency": concurrency,
+                                "round": r + 1,
+                                "input_tokens_target": input_tokens_target,
+                                "error": skip_reason,
+                            },
+                            csv_columns,
+                        )
+                    session_counter += concurrency
+                    continue
+
                 # Generate UNIQUE prompts for this batch to avoid Cache Hits
                 # We use _calibrate_prompt to generate distinct random content of the SAME target length
                 # Pre-load tokenizer in main thread to avoid thread-safety issues with Streamlit
                 target_tokens = self._prompt_generation_target(
-                    input_tokens_target
-                    if input_tokens_target > 0
-                    else base_target_tokens
+                    input_tokens_target if input_tokens_target > 0 else base_target_tokens
                 )
-                cached_tokenizer = (
-                    self._get_tokenizer()
-                )  # Load tokenizer in main thread
+                cached_tokenizer = self._get_tokenizer()  # Load tokenizer in main thread
 
                 # Parallelize prompt generation using thread pool with pre-loaded tokenizer
                 loop = asyncio.get_event_loop()
                 prompt_tasks = [
                     loop.run_in_executor(
                         None,
-                        self._calibrate_prompt,
+                        self._calibrate_prompt_with_source,
                         target_tokens,
                         "",
                         cached_tokenizer,
                     )
                     for _ in range(concurrency)
                 ]
-                batch_prompts = await asyncio.gather(*prompt_tasks)
+                batch_pairs = await asyncio.gather(*prompt_tasks)
+                batch_prompts = [p for p, _ in batch_pairs]
+                batch_sources = [s for _, s in batch_pairs]
 
                 results = await self._run_concurrency_batch(
                     None, batch_prompts, max_tokens, concurrency, session_counter
@@ -2664,10 +3126,13 @@ class BenchmarkRunner:
                 session_counter += concurrency
 
                 # Assign Round info and save
-                for res in results:
+                for i, res in enumerate(results):
                     if res and res.get("error") != "UserCancelled":
                         res["concurrency"] = concurrency
                         res["round"] = r + 1
+                        res["prompt_source"] = (
+                            batch_sources[i] if i < len(batch_sources) else "generic"
+                        )
                         self._add_result(res, csv_columns)
 
                 self.update_ui()
@@ -2703,6 +3168,7 @@ class BenchmarkRunner:
             "end_time",
             "cache_hit_tokens",
             "token_calc_method",
+            "prompt_source",
             "error",
         ]
         initialize_csv(csv_columns, self.csv_file)
@@ -2745,26 +3211,20 @@ class BenchmarkRunner:
 
             # Precision Mode for Ultra-Short Contexts
             if tokens_target < 20:
-                self.status_text.info(
-                    f"currentlyTest (目标: {tokens_target}, 精细模式)..."
-                )
+                self.status_text.info(f"currentlyTest (目标: {tokens_target}, 精细模式)...")
 
                 for i in range(requests_per_level):
                     # Generate fresh random prompt of exact length
                     # Sync with Strict Calibration Logic
                     if tokens_target <= 32:
-                        raw_prompt = self._calibrate_prompt(
-                            self._prompt_generation_target(
-                                tokens_target, PREFILL_PROMPT_OVERHEAD
-                            ),
+                        raw_prompt, _prompt_source = self._calibrate_prompt_with_source(
+                            self._prompt_generation_target(tokens_target, PREFILL_PROMPT_OVERHEAD),
                             suffix="",
                         )
                     else:
                         suffix_inst = "\n\n请先Statistics前文都多少字数然后尽你所能直接创作一越长越好超长篇科幻小说。"
-                        raw_prompt = self._calibrate_prompt(
-                            self._prompt_generation_target(
-                                tokens_target, PREFILL_PROMPT_OVERHEAD
-                            ),
+                        raw_prompt, _prompt_source = self._calibrate_prompt_with_source(
+                            self._prompt_generation_target(tokens_target, PREFILL_PROMPT_OVERHEAD),
                             suffix=suffix_inst,
                         )
 
@@ -2772,6 +3232,7 @@ class BenchmarkRunner:
 
                     if res and res.get("error") != "UserCancelled":
                         res["input_tokens_target"] = tokens_target
+                        res["prompt_source"] = _prompt_source
 
                         # Ensure prefill_tokens is used
                         actual_prompt_tokens = res.get("prefill_tokens", 0)
@@ -2784,9 +3245,7 @@ class BenchmarkRunner:
 
                         # 仅use未缓存 token Calculate输入速度
                         cache_hit = res.get("cache_hit_tokens", 0) or 0
-                        uncached_prompt_tokens = max(
-                            0, actual_prompt_tokens - cache_hit
-                        )
+                        uncached_prompt_tokens = max(0, actual_prompt_tokens - cache_hit)
 
                         if res["ttft"] > 0:
                             res["prefill_speed"] = uncached_prompt_tokens / res["ttft"]
@@ -2807,9 +3266,7 @@ class BenchmarkRunner:
                         res["system_output_throughput"] = (
                             self._result_decode_tokens_for_tps(res) / decode_dur
                         )
-                        res["system_input_throughput"] = (
-                            uncached_prompt_tokens / ttft_dur
-                        )
+                        res["system_input_throughput"] = uncached_prompt_tokens / ttft_dur
 
                         total_time_val = res.get("total_time", 0.001)
                         res["rps"] = 1 / total_time_val if total_time_val > 0 else 0
@@ -2836,24 +3293,27 @@ class BenchmarkRunner:
                 prompt_tasks = [
                     loop.run_in_executor(
                         None,
-                        self._calibrate_prompt,
+                        self._calibrate_prompt_with_source,
                         local_tokens_to_generate,
                         "",
                         cached_tokenizer,
                     )
                     for _ in range(requests_per_level)
                 ]
-                pregen_prompts = await asyncio.gather(*prompt_tasks)
+                pregen_pairs = await asyncio.gather(*prompt_tasks)
+                pregen_prompts = [p for p, _ in pregen_pairs]
+                pregen_sources = [s for _, s in pregen_pairs]
 
                 for i in range(requests_per_level):
                     # Generate fresh prompt for each request
                     prompt_text = pregen_prompts[i]
-                    res = await self._run_prefill_request(
-                        None, prompt_text, max_tokens, i
-                    )
+                    res = await self._run_prefill_request(None, prompt_text, max_tokens, i)
 
                     if res and res.get("error") != "UserCancelled":
                         res["input_tokens_target"] = tokens_target
+                        res["prompt_source"] = (
+                            pregen_sources[i] if i < len(pregen_sources) else "generic"
+                        )
 
                         # Ensure prefill_tokens is used
                         actual_prompt_tokens = res.get("prefill_tokens", 0)
@@ -2866,9 +3326,7 @@ class BenchmarkRunner:
 
                         # 仅use未缓存 token Calculate输入速度
                         cache_hit = res.get("cache_hit_tokens", 0) or 0
-                        uncached_prompt_tokens = max(
-                            0, actual_prompt_tokens - cache_hit
-                        )
+                        uncached_prompt_tokens = max(0, actual_prompt_tokens - cache_hit)
 
                         if res["ttft"] > 0:
                             res["prefill_speed"] = uncached_prompt_tokens / res["ttft"]
@@ -2889,9 +3347,7 @@ class BenchmarkRunner:
                         res["system_output_throughput"] = (
                             self._result_decode_tokens_for_tps(res) / decode_dur
                         )
-                        res["system_input_throughput"] = (
-                            uncached_prompt_tokens / ttft_dur
-                        )
+                        res["system_input_throughput"] = uncached_prompt_tokens / ttft_dur
 
                         total_time_val = res.get("total_time", 0.001)
                         res["rps"] = 1 / total_time_val if total_time_val > 0 else 0
@@ -2998,13 +3454,13 @@ class BenchmarkRunner:
         # Get tokenizer
         tokenizer = self._get_tokenizer()
         if not tokenizer:
-            self._show(
-                "error", "no法Load Tokenizer，Segmented Context Testneed精确 Token 控制"
-            )
+            self._show("error", "no法Load Tokenizer，Segmented Context Testneed精确 Token 控制")
             return pd.DataFrame()
 
         # Generate基础 prompt（最大长度）- 每Concurrencywill话need独立 prompt
-        suffix_inst = "\n\n请先Statistics前文都多少字数然后尽你所能直接创作一越长越好超长篇科幻小说。"
+        suffix_inst = (
+            "\n\n请先Statistics前文都多少字数然后尽你所能直接创作一越长越好超长篇科幻小说。"
+        )
 
         # base_prompts_list: 存储每Concurrencywill话 (base_prompt, base_tokens)
         base_prompts_list = []
@@ -3020,9 +3476,7 @@ class BenchmarkRunner:
                     self._prompt_generation_target(max_segment), suffix=suffix_inst
                 )
                 if hasattr(tokenizer, "encode"):
-                    base_tokens = tokenizer.encode(
-                        base_prompt, add_special_tokens=False
-                    )
+                    base_tokens = tokenizer.encode(base_prompt, add_special_tokens=False)
                 else:
                     base_tokens = tokenizer.encode(base_prompt)
                 base_prompts_list.append((base_prompt, base_tokens))
@@ -3040,9 +3494,7 @@ class BenchmarkRunner:
                 self._show("warning", "Test已停止。")
                 break
 
-            self._update_log(
-                f"开始 {overall_round + 1}/{total_rounds} 轮Test", level=LogLevel.INFO
-            )
+            self._update_log(f"开始 {overall_round + 1}/{total_rounds} 轮Test", level=LogLevel.INFO)
 
             # ifis每轮Independent Mode，每轮重新Generate base_prompts
             if cumulative_mode and per_round_unique:
@@ -3056,9 +3508,7 @@ class BenchmarkRunner:
                         self._prompt_generation_target(max_segment), suffix=suffix_inst
                     )
                     if hasattr(tokenizer, "encode"):
-                        base_tokens = tokenizer.encode(
-                            base_prompt, add_special_tokens=False
-                        )
+                        base_tokens = tokenizer.encode(base_prompt, add_special_tokens=False)
                     else:
                         base_tokens = tokenizer.encode(base_prompt)
                     base_prompts_list.append((base_prompt, base_tokens))
@@ -3084,9 +3534,7 @@ class BenchmarkRunner:
                     segment_prompts = []
                     for c_idx in range(concurrency):
                         base_prompt, base_tokens = base_prompts_list[c_idx]
-                        segment_token_length = self._prompt_generation_target(
-                            segment_length
-                        )
+                        segment_token_length = self._prompt_generation_target(segment_length)
                         if segment_token_length >= len(base_tokens):
                             segment_prompts.append(base_prompt)
                         else:
@@ -3098,9 +3546,7 @@ class BenchmarkRunner:
                                 # fallback: truncate by char estimate
                                 char_ratio = len(base_prompt) / len(base_tokens)
                                 segment_prompts.append(
-                                    base_prompt[
-                                        : int(segment_token_length * char_ratio)
-                                    ]
+                                    base_prompt[: int(segment_token_length * char_ratio)]
                                 )
                 else:
                     # Independent Mode：每分段独立Generate
@@ -3121,7 +3567,9 @@ class BenchmarkRunner:
                     tasks = []
                     for c_idx in range(concurrency):
                         segment_prompt = segment_prompts[c_idx]
-                        session_id = f"R{overall_round + 1}_S{seg_idx + 1}_C{c_idx + 1}_R{req_idx + 1}"
+                        session_id = (
+                            f"R{overall_round + 1}_S{seg_idx + 1}_C{c_idx + 1}_R{req_idx + 1}"
+                        )
 
                         task = self._run_segmented_request(
                             segment_prompt,
@@ -3142,9 +3590,7 @@ class BenchmarkRunner:
                     # ProcessResult
                     for result in results:
                         if isinstance(result, BaseException):
-                            self._update_log(
-                                f"请求异常: {result}", level=LogLevel.ERROR
-                            )
+                            self._update_log(f"请求异常: {result}", level=LogLevel.ERROR)
                         elif (
                             isinstance(result, dict)
                             and result
@@ -3191,9 +3637,7 @@ class BenchmarkRunner:
                 # Calculate cache_hit_tokens（从 API ReturninGet）
                 if "cache_hit_tokens" not in res or res["cache_hit_tokens"] is None:
                     res["cache_hit_tokens"] = 0
-                res["cache_hit_source"] = (
-                    "API" if res["cache_hit_tokens"] > 0 else "none"
-                )
+                res["cache_hit_source"] = "API" if res["cache_hit_tokens"] > 0 else "none"
 
                 # === 优先use API usage Data，回退到 tokenizer Statistics ===
                 # api_prefill / api_decode is API Return原始 usage 字段
@@ -3241,9 +3685,7 @@ class BenchmarkRunner:
                 # CalculateSystem Throughput (Input Throughput仅use未缓存 token 数)
                 res["system_output_throughput"] = effective_decode / decode_dur
                 res["system_input_throughput"] = uncached_prefill / ttft_dur
-                res["system_total_throughput"] = (
-                    effective_prefill + effective_decode
-                ) / total_time
+                res["system_total_throughput"] = (effective_prefill + effective_decode) / total_time
 
                 # Calculate TPS (tokens per second) - 仅 decode 阶段Generate速率
                 res["tps"] = effective_decode / decode_dur if decode_dur > 0 else 0
@@ -3252,9 +3694,7 @@ class BenchmarkRunner:
                 res["rps"] = 1 / total_time if total_time > 0 else 0
 
                 # Calculate TPOT (time per output token)
-                res["tpot"] = (
-                    decode_dur / effective_decode if effective_decode > 0 else 0
-                )
+                res["tpot"] = decode_dur / effective_decode if effective_decode > 0 else 0
 
                 # token_calc_method 记录实际useCalculate方法
                 base_method = res.get("token_calc_method", self.tokenizer_option)
@@ -3276,11 +3716,7 @@ class BenchmarkRunner:
                             level=LogLevel.INFO,
                         )
 
-                elif (
-                    cumulative_mode
-                    and res["cache_hit_tokens"] == 0
-                    and c_idx in baseline_speeds
-                ):
+                elif cumulative_mode and res["cache_hit_tokens"] == 0 and c_idx in baseline_speeds:
                     # 非首次请求且 API 没hason报 cache_hit → 尝试 TTFT 推断
                     baseline_speed = baseline_speeds[c_idx]
                     if baseline_speed > 0 and effective_prefill > 0 and res["ttft"] > 0:
@@ -3295,9 +3731,7 @@ class BenchmarkRunner:
                             # uncached_tokens = actual_ttft * baseline_speed
                             # cached_tokens = effective_prefill - uncached_tokens
                             uncached_tokens = actual_ttft * baseline_speed
-                            inferred_cache = max(
-                                0, int(effective_prefill - uncached_tokens)
-                            )
+                            inferred_cache = max(0, int(effective_prefill - uncached_tokens))
                             res["cache_hit_tokens"] = inferred_cache
                             res["cache_hit_source"] = "TTFT_inferred"
 
@@ -3315,9 +3749,7 @@ class BenchmarkRunner:
                             )
 
                             # use推断缓存信息重新Calculate输入相关速度指标
-                            uncached_prefill = max(
-                                0, effective_prefill - inferred_cache
-                            )
+                            uncached_prefill = max(0, effective_prefill - inferred_cache)
                             if res["ttft"] > 0:
                                 res["prefill_speed"] = uncached_prefill / res["ttft"]
                             ttft_dur = res.get("ttft", 0.001)
@@ -3362,9 +3794,7 @@ class BenchmarkRunner:
                 "token_calc_method": self.tokenizer_option,
             }
 
-    async def run_long_context_test(
-        self, context_lengths, rounds_per_level, max_tokens
-    ):
+    async def run_long_context_test(self, context_lengths, rounds_per_level, max_tokens):
         self.total_requests = len(context_lengths) * rounds_per_level
         csv_columns = [
             "context_length_target",
@@ -3382,6 +3812,7 @@ class BenchmarkRunner:
             "decode_tokens",
             "cache_hit_tokens",
             "token_calc_method",
+            "prompt_source",
             "error",
         ]
         initialize_csv(csv_columns, self.csv_file)
@@ -3402,11 +3833,9 @@ class BenchmarkRunner:
 
             # Precision Mode for Ultra-Short Contexts
             if length_target < 20:
-                self.status_text.info(
-                    f"currentlyTest (目标: {length_target}, 精细模式)..."
-                )
+                self.status_text.info(f"currentlyTest (目标: {length_target}, 精细模式)...")
                 for r in range(rounds_per_level):
-                    raw_prompt, _, _ = self._get_text_for_token_count(
+                    raw_prompt, _, _, _prompt_source = self._get_text_for_token_count(
                         self._prompt_generation_target(length_target)
                     )
                     res = await self.get_completion(None, 0, raw_prompt, max_tokens)
@@ -3425,14 +3854,13 @@ class BenchmarkRunner:
                                 "test_type": "long_context",
                                 "context_length_target": length_target,
                                 "round": r + 1,
+                                "prompt_source": _prompt_source,
                             }
                         )
 
                         # 仅use未缓存 token Calculate输入速度
                         cache_hit = res.get("cache_hit_tokens", 0) or 0
-                        uncached_prompt_tokens = max(
-                            0, actual_prompt_tokens - cache_hit
-                        )
+                        uncached_prompt_tokens = max(0, actual_prompt_tokens - cache_hit)
 
                         if res["ttft"] > 0:
                             res["prefill_speed"] = uncached_prompt_tokens / res["ttft"]
@@ -3456,9 +3884,7 @@ class BenchmarkRunner:
                         res["system_output_throughput"] = (
                             self._result_decode_tokens_for_tps(res) / decode_dur
                         )
-                        res["system_input_throughput"] = (
-                            uncached_prompt_tokens / ttft_dur
-                        )
+                        res["system_input_throughput"] = uncached_prompt_tokens / ttft_dur
                         res["system_throughput"] = (
                             res.get("prefill_tokens", 0) + res.get("decode_tokens", 0)
                         ) / total_dur
@@ -3486,18 +3912,16 @@ class BenchmarkRunner:
                     )
                     # Generate unique prompt per request
                     if length_target <= 32:
-                        long_prompt = self._calibrate_prompt(
+                        long_prompt, _prompt_source = self._calibrate_prompt_with_source(
                             self._prompt_generation_target(length_target), suffix=""
                         )  # PREFILL_PROMPT_OVERHEAD removed
                     else:
                         # Use adaptive suffix system
-                        long_prompt = self._calibrate_prompt(
+                        long_prompt, _prompt_source = self._calibrate_prompt_with_source(
                             self._prompt_generation_target(length_target), suffix=""
                         )  # PREFILL_PROMPT_OVERHEAD removed
 
-                    res = await self._run_long_context_request(
-                        None, long_prompt, max_tokens, 0
-                    )
+                    res = await self._run_long_context_request(None, long_prompt, max_tokens, 0)
 
                     if res and res.get("error") != "UserCancelled":
                         actual_prompt_tokens = res.get("prefill_tokens", 0)
@@ -3513,14 +3937,13 @@ class BenchmarkRunner:
                                 "test_type": "long_context",
                                 "context_length_target": length_target,
                                 "round": r + 1,
+                                "prompt_source": _prompt_source,
                             }
                         )
 
                         # 仅use未缓存 token Calculate输入速度
                         cache_hit = res.get("cache_hit_tokens", 0) or 0
-                        uncached_prompt_tokens = max(
-                            0, actual_prompt_tokens - cache_hit
-                        )
+                        uncached_prompt_tokens = max(0, actual_prompt_tokens - cache_hit)
 
                         if res["ttft"] > 0:
                             res["prefill_speed"] = uncached_prompt_tokens / res["ttft"]
@@ -3544,9 +3967,7 @@ class BenchmarkRunner:
                         res["system_output_throughput"] = (
                             self._result_decode_tokens_for_tps(res) / decode_dur
                         )
-                        res["system_input_throughput"] = (
-                            uncached_prompt_tokens / ttft_dur
-                        )
+                        res["system_input_throughput"] = uncached_prompt_tokens / ttft_dur
                         res["system_throughput"] = (
                             res.get("prefill_tokens", 0) + res.get("decode_tokens", 0)
                         ) / total_dur
@@ -3591,6 +4012,7 @@ class BenchmarkRunner:
             "end_time",
             "cache_hit_tokens",
             "token_calc_method",
+            "prompt_source",
             "error",
             "gpu_util_peak",
             "gpu_power_peak_w",
@@ -3623,11 +4045,28 @@ class BenchmarkRunner:
                     f"currentlyTest: {concurrency} Concurrency, {length_target} Context Length..."
                 )
 
+                # 自适应：超 KV 预算的 cell 跳过（留痕 error 列，不静默消失）
+                skip, skip_reason = self.should_skip_cell(concurrency, length_target, max_tokens)
+                if skip:
+                    self._show(
+                        "warning", f"  跳过 conc={concurrency} ctx={length_target}：{skip_reason}"
+                    )
+                    total_reqs_for_level = concurrency * rounds
+                    for _ in range(total_reqs_for_level):
+                        self._add_result(
+                            {
+                                "test_type": "matrix",
+                                "concurrency": concurrency,
+                                "context_length_target": length_target,
+                                "error": skip_reason,
+                            },
+                            csv_columns,
+                        )
+                    session_counter += total_reqs_for_level
+                    continue
+
                 # Adjust multiplier based on tokenizer
-                if (
-                    self.tokenizer_option == "HuggingFace Tokenizer"
-                    or self._infer_hf_model_id()
-                ):
+                if self.tokenizer_option == "HuggingFace Tokenizer" or self._infer_hf_model_id():
                     pass
 
                 # Pre-generate all prompts in parallel for speed
@@ -3637,11 +4076,17 @@ class BenchmarkRunner:
                 loop = asyncio.get_event_loop()
                 prompt_tasks = [
                     loop.run_in_executor(
-                        None, self._calibrate_prompt, target_len, "", cached_tokenizer
+                        None,
+                        self._calibrate_prompt_with_source,
+                        target_len,
+                        "",
+                        cached_tokenizer,
                     )
                     for _ in range(total_reqs_for_level)
                 ]
-                pregen_prompts = await asyncio.gather(*prompt_tasks)
+                pregen_pairs = await asyncio.gather(*prompt_tasks)
+                pregen_prompts = [p for p, _ in pregen_pairs]
+                pregen_sources = [s for _, s in pregen_pairs]
 
                 # Per-cell 资源监控:每个 (并发×上下文) cell 独立采样,峰值得以按 cell 归因。
                 # 失败不影响测试（与 _start_resource_monitor 同防御）。
@@ -3691,14 +4136,15 @@ class BenchmarkRunner:
                                 "concurrency": concurrency,
                                 "context_length_target": length_target,
                                 "round": (i // concurrency) + 1,
+                                "prompt_source": (
+                                    pregen_sources[i] if i < len(pregen_sources) else "generic"
+                                ),
                             }
                         )
 
                         # 仅use未缓存 token Calculate输入速度
                         cache_hit = res.get("cache_hit_tokens", 0) or 0
-                        uncached_prompt_tokens = max(
-                            0, actual_prompt_tokens - cache_hit
-                        )
+                        uncached_prompt_tokens = max(0, actual_prompt_tokens - cache_hit)
 
                         if res["ttft"] > 0:
                             res["prefill_speed"] = uncached_prompt_tokens / res["ttft"]
@@ -3734,7 +4180,23 @@ class BenchmarkRunner:
         suffix_instruction,
         max_tokens,
         avoid_cache=True,
+        context_length=0,
+        base_prompt_source="custom_text",
+        selected_problems=None,
     ):
+        """Custom Text Test.
+
+        Prompt sources (mutually managed by caller):
+          - base_prompt: a single base text (manual input or uploaded file content)
+          - selected_problems: list of (source_id, text) chosen from test pools;
+            when provided, each request rotates through them (one problem per request).
+        Context filling:
+          - context_length > 0: pad each prompt with random noise to exactly that many
+            tokens (avoids cache hits). Uses _calibrate_prompt_with_source.
+          - context_length == 0: send the problem/base text verbatim (no padding; may
+            hit cache — intended for "only care about output" runs).
+        base_prompt_source: source id used when selected_problems is not provided.
+        """
         self.total_requests = sum(c * rounds_per_level for c in selected_concurrencies)
         csv_columns = [
             "session_id",
@@ -3754,6 +4216,7 @@ class BenchmarkRunner:
             "end_time",
             "cache_hit_tokens",
             "token_calc_method",
+            "prompt_source",
             "error",
         ]
         initialize_csv(csv_columns, self.csv_file)
@@ -3763,12 +4226,20 @@ class BenchmarkRunner:
             "selected_concurrencies": selected_concurrencies,
             "rounds_per_level": rounds_per_level,
             "base_prompt": (
-                base_prompt[:100] + "..." if len(base_prompt) > 100 else base_prompt
+                (base_prompt or "")[:100] + "..."
+                if base_prompt and len(base_prompt) > 100
+                else (base_prompt or "")
             ),
             "max_tokens": max_tokens,
             "avoid_cache": avoid_cache,
+            "context_length": context_length,
+            "num_selected_problems": len(selected_problems) if selected_problems else 0,
         }
         self._start_db_run("custom_text", config)
+
+        # Normalize selected_problems (rotation pool). Each entry: (source_id, text).
+        problems = list(selected_problems) if selected_problems else []
+        suffix_instruction = (suffix_instruction or "").strip()
 
         session_counter = 0
         # No client needed - requests library creates connections per-request
@@ -3777,13 +4248,22 @@ class BenchmarkRunner:
                 f"currently以 {concurrency} Concurrency运行Custom Text Test (总请求: {concurrency * rounds_per_level})..."
             )
 
-            full_prompt = f"{base_prompt}\n\n{suffix_instruction}"
             total_reqs_for_level = concurrency * rounds_per_level
 
-            # Use continuous execution
+            # Build per-request (prompt, source_id) list
+            prompts, sources = self._build_custom_prompts(
+                total_reqs_for_level,
+                base_prompt,
+                suffix_instruction,
+                context_length,
+                base_prompt_source,
+                problems,
+            )
+
+            # Use continuous execution with a prompt list
             results = await self._run_continuous_batch(
                 None,
-                full_prompt,
+                prompts,
                 max_tokens,
                 concurrency,
                 total_reqs_for_level,
@@ -3795,6 +4275,7 @@ class BenchmarkRunner:
                 if res and res.get("error") != "UserCancelled":
                     res["concurrency"] = concurrency
                     res["round"] = (i // concurrency) + 1
+                    res["prompt_source"] = sources[i] if i < len(sources) else base_prompt_source
                     append_to_csv(res, csv_columns, self.csv_file)
                     self.results_list.append(res)
 
@@ -3803,6 +4284,56 @@ class BenchmarkRunner:
         self._complete_db_run(success=True)
 
         return pd.DataFrame(self.results_list)
+
+    def _build_custom_prompts(
+        self,
+        n,
+        base_prompt,
+        suffix_instruction,
+        context_length,
+        base_prompt_source,
+        problems,
+    ):
+        """Build a list of (prompt, source_id) of length n for custom text test."""
+        prompts = []
+        sources = []
+
+        if context_length and context_length > 0:
+            # Pad each prompt to exactly context_length tokens with random noise
+            # (avoids cache hits). Problems rotate one-per-request when provided.
+            cached_tokenizer = self._get_tokenizer()
+            for i in range(n):
+                if problems:
+                    sid, text = problems[i % len(problems)]
+                    full = text + (("\n\n" + suffix_instruction) if suffix_instruction else "")
+                else:
+                    sid = base_prompt_source
+                    full = (base_prompt or "") + (
+                        ("\n\n" + suffix_instruction) if suffix_instruction else ""
+                    )
+                prompt, _ = self._calibrate_prompt_with_source(
+                    context_length,
+                    suffix=full,
+                    _tokenizer=cached_tokenizer,
+                    source_override=sid,
+                )
+                prompts.append(prompt)
+                sources.append(sid)
+            return prompts, sources
+
+        # No padding: verbatim text, rotate through problems
+        for i in range(n):
+            if problems:
+                sid, text = problems[i % len(problems)]
+                full = text + (("\n\n" + suffix_instruction) if suffix_instruction else "")
+            else:
+                sid = base_prompt_source
+                full = (base_prompt or "") + (
+                    ("\n\n" + suffix_instruction) if suffix_instruction else ""
+                )
+            prompts.append(full)
+            sources.append(sid)
+        return prompts, sources
 
     async def _run_dataset_batch(
         self, client, batch: list[dict[str, Any]], max_tokens, session_id_start
@@ -3872,9 +4403,7 @@ class BenchmarkRunner:
                     f"currently运行DatasetTest: 轮数 {r + 1}/{rounds}, 进度 {i}/{len(dataset_rows)} (Concurrency: {current_concurrency})..."
                 )
 
-                results = await self._run_dataset_batch(
-                    None, batch, max_tokens, session_counter
-                )
+                results = await self._run_dataset_batch(None, batch, max_tokens, session_counter)
                 session_counter += current_concurrency
 
                 for res in results:
@@ -3925,9 +4454,7 @@ class BenchmarkRunner:
         }
         self._start_db_run("all_tests", config)
 
-        concurrencies = [
-            int(c.strip()) for c in concurrencies_csv.split(",") if c.strip()
-        ]
+        concurrencies = [int(c.strip()) for c in concurrencies_csv.split(",") if c.strip()]
 
         # 1. Concurrency Test
         self.status_text.info("开始Concurrency Test...")
@@ -3946,27 +4473,32 @@ class BenchmarkRunner:
                 prompt_tasks = [
                     loop.run_in_executor(
                         None,
-                        self._calibrate_prompt,
+                        self._calibrate_prompt_with_source,
                         self._prompt_generation_target(input_tokens_c),
                         "",
                         cached_tokenizer,
                     )
                     for _ in range(concurrency)
                 ]
-                batch_prompts = await asyncio.gather(*prompt_tasks)
+                batch_pairs = await asyncio.gather(*prompt_tasks)
+                batch_prompts = [p for p, _ in batch_pairs]
+                batch_sources = [s for _, s in batch_pairs]
 
                 results = await self._run_concurrency_batch(
                     None, batch_prompts, max_tokens_c, concurrency, session_counter
                 )
                 session_counter += concurrency
 
-                for res in results:
+                for i, res in enumerate(results):
                     if res and res.get("error") != "UserCancelled":
                         res.update(
                             {
                                 "test_type": "concurrency",
                                 "concurrency": concurrency,
                                 "round": r + 1,
+                                "prompt_source": (
+                                    batch_sources[i] if i < len(batch_sources) else "generic"
+                                ),
                             }
                         )
                         append_to_csv(res, self.combined_csv_columns, self.csv_file)
@@ -3987,7 +4519,7 @@ class BenchmarkRunner:
                 self._show("warning", f"目标 Token {tokens_target} 太小，跳过。")
                 self.completed_requests += req_per_level_p
                 continue
-            prompt_text, local_token_estimate, q_summary = (
+            prompt_text, local_token_estimate, q_summary, _prompt_source = (
                 self._get_text_for_token_count(local_tokens_to_generate)
             )
             long_prompt = prompt_text
@@ -3997,9 +4529,7 @@ class BenchmarkRunner:
                 status_msg += f"\n{q_summary}"
             self.status_text.info(status_msg)
             for i in range(req_per_level_p):
-                res = await self._run_prefill_request(
-                    None, long_prompt, max_tokens_p, i
-                )
+                res = await self._run_prefill_request(None, long_prompt, max_tokens_p, i)
 
                 if res and res.get("error") != "UserCancelled":
                     actual_prompt_tokens = res.get("prefill_tokens", 0)
@@ -4011,7 +4541,11 @@ class BenchmarkRunner:
                         )
 
                     res.update(
-                        {"test_type": "prefill", "input_tokens_target": tokens_target}
+                        {
+                            "test_type": "prefill",
+                            "input_tokens_target": tokens_target,
+                            "prompt_source": _prompt_source,
+                        }
                     )
 
                     # 仅use未缓存 token Calculate输入速度
@@ -4044,19 +4578,19 @@ class BenchmarkRunner:
 
             for r in range(rounds_per_level_l):
                 # Generate unique prompt
-                prompt_text, _, q_summary = self._get_text_for_token_count(
+                prompt_text, _, q_summary, _prompt_source = self._get_text_for_token_count(
                     local_tokens_to_generate, force_random=True
                 )
                 long_prompt = prompt_text
 
-                status_msg = f"currentlyTest (目标: {length_target}, 轮数: {r + 1}/{rounds_per_level_l})..."
+                status_msg = (
+                    f"currentlyTest (目标: {length_target}, 轮数: {r + 1}/{rounds_per_level_l})..."
+                )
                 if q_summary:
                     status_msg += f"\n{q_summary}"
                 self.status_text.info(status_msg)
 
-                res = await self._run_long_context_request(
-                    None, long_prompt, max_tokens_l, 0
-                )
+                res = await self._run_long_context_request(None, long_prompt, max_tokens_l, 0)
 
                 if res and res.get("error") != "UserCancelled":
                     actual_prompt_tokens = res.get("prefill_tokens", 0)
@@ -4072,6 +4606,7 @@ class BenchmarkRunner:
                             "test_type": "long_context",
                             "context_length_target": length_target,
                             "round": r + 1,
+                            "prompt_source": _prompt_source,
                         }
                     )
 
@@ -4141,24 +4676,26 @@ class BenchmarkRunner:
                 session_counter[0] += 1
 
                 # Determine prompt
+                _worker_prompt_source = "generic"
                 if isinstance(prompt_func_or_str, list):
                     prompt = prompt_func_or_str[session_id % len(prompt_func_or_str)]
                 elif callable(prompt_func_or_str):
                     prompt = prompt_func_or_str(session_id)
                 else:
                     prompt = prompt_func_or_str
+                # callable may return (prompt, source_id)
+                if isinstance(prompt, tuple) and len(prompt) == 2:
+                    prompt, _worker_prompt_source = prompt
 
                 req_start_time = time.time()
                 try:
-                    res = await self.get_completion(
-                        client, session_id, prompt, max_tokens
-                    )
+                    res = await self.get_completion(client, session_id, prompt, max_tokens)
+                    if res:
+                        res["_prompt_source"] = _worker_prompt_source
                 except asyncio.CancelledError:
                     break
                 except Exception as e:
-                    self._update_log(
-                        f"Worker {worker_index} error: {e}", level=LogLevel.ERROR
-                    )
+                    self._update_log(f"Worker {worker_index} error: {e}", level=LogLevel.ERROR)
                     res = None
 
                 req_end_time = time.time()
@@ -4187,16 +4724,14 @@ class BenchmarkRunner:
 
                     # Output Throughput
                     if stats["min_first_token_time"] != float("inf"):
-                        decode_elapsed = max(
-                            0.001, current_time - stats["min_first_token_time"]
-                        )
+                        decode_elapsed = max(0.001, current_time - stats["min_first_token_time"])
                     else:
                         decode_elapsed = total_elapsed
 
                     # Input Throughput
-                    if stats["max_first_token_time"] > 0 and stats[
-                        "min_start_time"
-                    ] != float("inf"):
+                    if stats["max_first_token_time"] > 0 and stats["min_start_time"] != float(
+                        "inf"
+                    ):
                         prefill_elapsed = max(
                             0.001,
                             stats["max_first_token_time"] - stats["min_start_time"],
@@ -4207,9 +4742,7 @@ class BenchmarkRunner:
                     if res.get("error") != "UserCancelled" and res.get("error") is None:
                         stats["total_output_tokens"] += res.get("decode_tokens", 0)
                         stats["total_input_tokens"] += res.get("prefill_tokens", 0)
-                        stats["total_cache_hit_tokens"] += (
-                            res.get("cache_hit_tokens", 0) or 0
-                        )
+                        stats["total_cache_hit_tokens"] += res.get("cache_hit_tokens", 0) or 0
                         stats["successful_requests"] += 1
 
                     stats["completed_requests"] += 1
@@ -4219,12 +4752,8 @@ class BenchmarkRunner:
                     uncached_input_tokens = max(
                         0, stats["total_input_tokens"] - stats["total_cache_hit_tokens"]
                     )
-                    res["system_output_throughput"] = (
-                        stats["total_output_tokens"] / decode_elapsed
-                    )
-                    res["system_input_throughput"] = (
-                        uncached_input_tokens / prefill_elapsed
-                    )
+                    res["system_output_throughput"] = stats["total_output_tokens"] / decode_elapsed
+                    res["system_input_throughput"] = uncached_input_tokens / prefill_elapsed
                     res["rps"] = stats["successful_requests"] / total_elapsed
 
                     results.append(res)
@@ -4266,6 +4795,7 @@ class BenchmarkRunner:
             "cache_hit_tokens",
             "token_calc_method",
             "input_tokens_target",
+            "prompt_source",
             "error",
         ]
         initialize_csv(csv_columns, self.csv_file)
@@ -4283,18 +4813,18 @@ class BenchmarkRunner:
             f"currently以 {concurrency} Concurrency运行Stability Test (持续 {duration_seconds} seconds)..."
         )
 
-        # Generator for prompts
+        # Generator for prompts (returns (prompt, source_id))
         if input_tokens_target > 0:
 
             def prompt_source(i):
-                return self._calibrate_prompt(
+                return self._calibrate_prompt_with_source(
                     self._prompt_generation_target(input_tokens_target), suffix=""
                 )
 
         else:
 
             def prompt_source(i):
-                return self._calibrate_prompt(
+                return self._calibrate_prompt_with_source(
                     self._prompt_generation_target(64), suffix=""
                 )
 
@@ -4311,6 +4841,7 @@ class BenchmarkRunner:
             if res and res.get("error") != "UserCancelled":
                 res["concurrency"] = concurrency
                 res["timestamp"] = res.get("end_time")
+                res["prompt_source"] = res.pop("_prompt_source", "generic")
                 append_to_csv(res, csv_columns, self.csv_file)
                 self.results_list.append(res)
 

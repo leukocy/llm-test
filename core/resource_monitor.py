@@ -58,6 +58,7 @@ class ResourceMonitor:
         self._end_ts: float | None = None
         self._nvml_ok = False
         self._nvml_handles: list[Any] = []
+        self._gpu_static_info: list[dict[str, Any]] = []  # 一次性:power_limit/max_clock
 
     # ------------------------------------------------------------------
     # 生命周期
@@ -79,9 +80,7 @@ class ResourceMonitor:
             pass
 
         self._init_nvml()
-        self._thread = threading.Thread(
-            target=self._run, name="ResourceMonitor", daemon=True
-        )
+        self._thread = threading.Thread(target=self._run, name="ResourceMonitor", daemon=True)
         self._thread.start()
 
     def stop(self) -> dict[str, Any]:
@@ -167,9 +166,7 @@ class ResourceMonitor:
                 except Exception:  # noqa: BLE001
                     pass
                 try:
-                    tc = pynvml.nvmlDeviceGetTemperature(
-                        handle, pynvml.NVML_TEMPERATURE_GPU
-                    )
+                    tc = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
                     temp_c = max(temp_c, tc)
                     g["temp_c"] = int(tc)
                 except Exception:  # noqa: BLE001
@@ -192,9 +189,7 @@ class ResourceMonitor:
                     pass
                 try:
                     g["pcie_rx_mbs"] = round(
-                        pynvml.nvmlDeviceGetPcieThroughput(
-                            handle, pynvml.NVML_PCIE_UTIL_RX_BYTES
-                        )
+                        pynvml.nvmlDeviceGetPcieThroughput(handle, pynvml.NVML_PCIE_UTIL_RX_BYTES)
                         / 1024.0,
                         2,
                     )
@@ -202,9 +197,7 @@ class ResourceMonitor:
                     pass
                 try:
                     g["pcie_tx_mbs"] = round(
-                        pynvml.nvmlDeviceGetPcieThroughput(
-                            handle, pynvml.NVML_PCIE_UTIL_TX_BYTES
-                        )
+                        pynvml.nvmlDeviceGetPcieThroughput(handle, pynvml.NVML_PCIE_UTIL_TX_BYTES)
                         / 1024.0,
                         2,
                     )
@@ -214,6 +207,26 @@ class ResourceMonitor:
                     g["throttle"] = _decode_throttle(
                         pynvml.nvmlDeviceGetCurrentClocksThrottleReasons(handle)
                     )
+                except Exception:  # noqa: BLE001
+                    pass
+                # NVLink 吞吐量(每条 link 求和;无 NVLink 时跳过)
+                try:
+                    nvlink_rx = 0.0
+                    nvlink_tx = 0.0
+                    for link in range(pynvml.nvmlDeviceGetNvLinkVersion(handle) and 1 or 0):
+                        try:
+                            nvlink_rx += pynvml.nvmlDeviceGetNvLinkUtilizationCounter(
+                                handle, link, 0
+                            )
+                            nvlink_tx += pynvml.nvmlDeviceGetNvLinkUtilizationCounter(
+                                handle, link, 1
+                            )
+                        except Exception:  # noqa: BLE001
+                            pass
+                    if nvlink_rx or nvlink_tx:
+                        g["nvlink_throughput"] = round(
+                            (nvlink_rx + nvlink_tx) / 1e6, 2
+                        )  # MB/s approx
                 except Exception:  # noqa: BLE001
                     pass
                 per_gpu.append(g)
@@ -243,6 +256,8 @@ class ResourceMonitor:
                 pynvml.nvmlDeviceGetHandleByIndex(i) for i in indices if 0 <= i < count
             ]
             self._nvml_ok = bool(self._nvml_handles)
+            # 一次性采集静态 GPU 信息:功耗上限 / 最大 SM/mem 时钟
+            self._gpu_static_info = self._capture_gpu_static_info(pynvml)
         except Exception as e:  # noqa: BLE001
             # 无 GPU / 无驱动 / 无 nvidia-ml-py：降级为仅 CPU/内存
             logger.debug(f"NVML 不可用，仅采样 CPU/内存: {e}")
@@ -259,6 +274,32 @@ class ResourceMonitor:
         except Exception:  # noqa: BLE001
             pass
 
+    def _capture_gpu_static_info(self, pynvml) -> list[dict[str, Any]]:
+        """一次性采集每张卡的功耗上限与最大时钟(不随采样循环变化)。"""
+        info: list[dict[str, Any]] = []
+        for i, h in enumerate(self._nvml_handles):
+            entry: dict[str, Any] = {"index": i}
+            try:
+                entry["power_limit_w"] = round(
+                    pynvml.nvmlDeviceGetPowerManagementLimit(h) / 1000.0, 1
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                entry["max_sm_clock_mhz"] = pynvml.nvmlDeviceGetMaxClockInfo(
+                    h, pynvml.NVML_CLOCK_SM
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                entry["max_mem_clock_mhz"] = pynvml.nvmlDeviceGetMaxClockInfo(
+                    h, pynvml.NVML_CLOCK_MEM
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            info.append(entry)
+        return info
+
     # ------------------------------------------------------------------
     # 汇总
     # ------------------------------------------------------------------
@@ -273,9 +314,7 @@ class ResourceMonitor:
 
     def _summarize(self) -> dict[str, Any]:
         samples = self._samples
-        duration = (self._end_ts or time.monotonic()) - (
-            self._start_ts or time.monotonic()
-        )
+        duration = (self._end_ts or time.monotonic()) - (self._start_ts or time.monotonic())
 
         if not samples:
             return self._empty_summary(duration)
@@ -300,11 +339,7 @@ class ResourceMonitor:
                 t
                 for s in samples
                 for g in (s.get("per_gpu") or [])
-                for t in (
-                    [g["throttle"]]
-                    if g.get("throttle") and g["throttle"] != "none"
-                    else []
-                )
+                for t in ([g["throttle"]] if g.get("throttle") and g["throttle"] != "none" else [])
                 if t
             }
         )
@@ -321,6 +356,7 @@ class ResourceMonitor:
             "means": means,
             "per_gpu_peaks": per_gpu_peaks,
             "throttle_reasons_seen": throttle_seen,
+            "gpu_static_info": self._gpu_static_info,
             "timeline": timeline,
         }
 

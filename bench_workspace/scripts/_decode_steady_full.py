@@ -58,9 +58,7 @@ provider = OpenAIProvider("http://localhost:10814/v1", "EMPTY", "Kimi-K2.7-Code"
 
 def gpu_count():
     try:
-        out = subprocess.check_output(
-            ["nvidia-smi", "-L"], text=True, stderr=subprocess.DEVNULL
-        )
+        out = subprocess.check_output(["nvidia-smi", "-L"], text=True, stderr=subprocess.DEVNULL)
         return len([l for l in out.splitlines() if l.startswith("GPU ")])
     except:
         return -1
@@ -120,9 +118,7 @@ async def main():
         for conc in concs:
             for ctx in ctxs:
                 # 258000 时 max_tokens 受限(262144-258000=4144, 4096 ok)
-                actual_max = (
-                    min(MAX_TOKENS, 262144 - ctx) if ctx > 250000 else MAX_TOKENS
-                )
+                actual_max = min(MAX_TOKENS, 262144 - ctx) if ctx > 250000 else MAX_TOKENS
                 if actual_max < 100:
                     print(
                         f"  conc={conc} ctx={ctx}: max_tokens too small ({actual_max}), skip",
@@ -136,9 +132,7 @@ async def main():
                 )
                 prompts = [runner._calibrate_prompt(ctx, "", tok) for _ in range(conc)]
                 t0 = time.monotonic()
-                results = await asyncio.gather(
-                    *[one_req(i, p) for i, p in enumerate(prompts)]
-                )
+                results = await asyncio.gather(*[one_req(i, p) for i, p in enumerate(prompts)])
                 elapsed = time.monotonic() - t0
                 ok = [x for x in results if not x.get("error")]
                 for x in ok:
@@ -169,9 +163,7 @@ async def main():
         if n2 != 8:
             print(f"[WARN] 掉卡({n2}),后续取消", flush=True)
             break
-    print(
-        f"\n[ALL DONE] {len(all_rows)} 行 → raw_data/decode_steady_full.csv", flush=True
-    )
+    print(f"\n[ALL DONE] {len(all_rows)} 行 → raw_data/decode_steady_full.csv", flush=True)
 
 
 if __name__ == "__main__":

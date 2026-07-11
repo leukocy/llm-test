@@ -218,6 +218,13 @@ def main():
         from ui.warehouse_browser import render_warehouse_browser
 
         render_warehouse_browser()
+    elif test_type == "环境信息":
+        from ui.env_overview import render_env_overview
+
+        render_env_overview(
+            sidebar_config.get("api_base_url", ""),
+            sidebar_config.get("model_id", ""),
+        )
     else:
         # 9. Render test control panel (provides Stop button)
         from ui.test_control_panel import render_test_control_panel
@@ -299,18 +306,12 @@ def render_custom_config():
 
         with tab1:
             st.markdown("**Add Custom Provider**")
-            custom_provider_name = st.text_input(
-                "Provider Name", key="custom_provider_name"
-            )
-            custom_provider_url = st.text_input(
-                "API Base URL", key="custom_provider_url"
-            )
+            custom_provider_name = st.text_input("Provider Name", key="custom_provider_name")
+            custom_provider_url = st.text_input("API Base URL", key="custom_provider_url")
 
             if st.button("Add Provider", key="add_provider"):
                 if custom_provider_name and custom_provider_url:
-                    if custom_config.add_custom_provider(
-                        custom_provider_name, custom_provider_url
-                    ):
+                    if custom_config.add_custom_provider(custom_provider_name, custom_provider_url):
                         st.success(f"Added: {custom_provider_name}")
                     else:
                         st.error("Add failed")

@@ -26,9 +26,7 @@ def csv_rows():
 
 def process_alive():
     try:
-        r = subprocess.run(
-            ["pgrep", "-f", "_live_test_full"], capture_output=True, text=True
-        )
+        r = subprocess.run(["pgrep", "-f", "_live_test_full"], capture_output=True, text=True)
         return bool(r.stdout.strip())
     except Exception:
         return True

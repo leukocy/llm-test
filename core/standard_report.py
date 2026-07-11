@@ -68,56 +68,51 @@ class EnvironmentInfo:
 
     @classmethod
     def capture(cls) -> "EnvironmentInfo":
-        """捕获当前环境信息"""
+        """捕获当前环境信息。委托给 capture_system_info()(含 hardware_fingerprint +
+        library_versions + git/project version),保留原字段名兼容。"""
         info = cls()
-
-        # Python Version
-        info.python_version = platform.python_version()
-
-        # 操作系统
-        info.os_name = platform.system()
-        info.os_version = platform.release()
-
-        # 主机名
         try:
-            info.hostname = platform.node()
-        except Exception:
-            pass
+            from core.system_info import capture_system_info, get_library_versions
 
-        # Git hash
-        try:
-            result = subprocess.run(
-                ["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0:
-                info.git_hash = result.stdout.strip()[:8]
-        except Exception:
-            pass
-
-        # 关键库Version
-        try:
-            import torch
-
-            info.library_versions["torch"] = torch.__version__
-        except ImportError:
-            pass
-
-        try:
-            import transformers
-
-            info.library_versions["transformers"] = transformers.__version__
-        except ImportError:
-            pass
-
-        try:
-            import datasets
-
-            info.library_versions["datasets"] = getattr(
-                datasets, "__version__", "unknown"
-            )
-        except ImportError:
-            pass
-
+            si = capture_system_info()
+            info.python_version = si.get("python_version", "")
+            info.os_name = si.get("os_name", "")
+            info.os_version = si.get("os_version", "")
+            info.hostname = si.get("hostname", "")
+            info.git_hash = si.get("git_hash", "")
+            # library_versions:capture_system_info 现在已含 get_library_versions() 的全量结果
+            lv = si.get("library_versions") or get_library_versions()
+            info.library_versions = dict(lv) if isinstance(lv, dict) else {}
+        except Exception:  # noqa: BLE001
+            # 降级:直接用 platform(原逻辑)
+            info.python_version = platform.python_version()
+            info.os_name = platform.system()
+            info.os_version = platform.release()
+            try:
+                info.hostname = platform.node()
+            except Exception:
+                pass
+            try:
+                result = subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    info.git_hash = result.stdout.strip()[:8]
+            except Exception:
+                pass
+            for mod_name, display in [
+                ("torch", "torch"),
+                ("transformers", "Transformers"),
+                ("datasets", "Datasets"),
+            ]:
+                try:
+                    mod = __import__(mod_name)
+                    info.library_versions[display] = getattr(mod, "__version__", "unknown")
+                except ImportError:
+                    pass
         return info
 
     def to_dict(self) -> dict[str, Any]:
@@ -180,9 +175,7 @@ class FailureCase:
         return {
             "sample_id": self.sample_id,
             "question": (
-                self.question[:200] + "..."
-                if len(self.question) > 200
-                else self.question
+                self.question[:200] + "..." if len(self.question) > 200 else self.question
             ),
             "expected": self.expected_answer,
             "predicted": self.predicted_answer,
@@ -440,9 +433,7 @@ class ReportExporter:
 
             # Add额外指标
             if metrics.normalized_accuracy > 0:
-                lm_eval_result["results"][name][
-                    "acc_norm"
-                ] = metrics.normalized_accuracy
+                lm_eval_result["results"][name]["acc_norm"] = metrics.normalized_accuracy
 
             # Version信息
             lm_eval_result["versions"][name] = 1
@@ -518,11 +509,7 @@ class ReportExporter:
         lines.append("|--------|--------|----------|--------|--------|")
 
         for name, metrics in self.report.results.items():
-            stderr_str = (
-                f"±{metrics.accuracy_stderr:.4f}"
-                if metrics.accuracy_stderr > 0
-                else "-"
-            )
+            stderr_str = f"±{metrics.accuracy_stderr:.4f}" if metrics.accuracy_stderr > 0 else "-"
             lines.append(
                 f"| {name} | {metrics.accuracy:.4f} | {stderr_str} | "
                 f"{metrics.total_samples} | {metrics.correct_samples} |"
@@ -537,12 +524,8 @@ class ReportExporter:
             lines.append(
                 f"- **AverageAccuracy**: {self.report.aggregate.get('avg_accuracy', 0):.4f}"
             )
-            lines.append(
-                f"- **总Sample count**: {self.report.aggregate.get('total_samples', 0)}"
-            )
-            lines.append(
-                f"- **Dataset数量**: {self.report.aggregate.get('num_datasets', 0)}"
-            )
+            lines.append(f"- **总Sample count**: {self.report.aggregate.get('total_samples', 0)}")
+            lines.append(f"- **Dataset数量**: {self.report.aggregate.get('num_datasets', 0)}")
             lines.append("")
 
         # 失败案例分析
@@ -651,9 +634,7 @@ class ReportExporter:
 # ============================================
 
 
-def generate_failure_analysis(
-    failures: list[FailureCase], top_n: int = 10
-) -> dict[str, Any]:
+def generate_failure_analysis(failures: list[FailureCase], top_n: int = 10) -> dict[str, Any]:
     """
     Generate详细失败分析报告
 
@@ -715,9 +696,7 @@ def export_lm_eval_format(result, filepath: str) -> str:
     return exporter.to_lm_eval_format(filepath)
 
 
-def export_all_formats(
-    result, output_dir: str, prefix: str = "report"
-) -> dict[str, str]:
+def export_all_formats(result, output_dir: str, prefix: str = "report") -> dict[str, str]:
     """Export所has格式"""
     report = StandardReport.from_evaluation_result(result)
     exporter = ReportExporter(report)
@@ -726,9 +705,7 @@ def export_all_formats(
 
     return {
         "json": exporter.to_json(os.path.join(output_dir, f"{prefix}.json")),
-        "lm_eval": exporter.to_lm_eval_format(
-            os.path.join(output_dir, f"{prefix}_lm_eval.json")
-        ),
+        "lm_eval": exporter.to_lm_eval_format(os.path.join(output_dir, f"{prefix}_lm_eval.json")),
         "markdown": exporter.to_markdown(os.path.join(output_dir, f"{prefix}.md")),
         "csv": exporter.to_csv(os.path.join(output_dir, f"{prefix}.csv")),
     }
@@ -790,9 +767,9 @@ def compare_reports(report1: StandardReport, report2: StandardReport) -> dict[st
 
     # 汇总
     if common_datasets:
-        avg_diff = sum(
-            comparison["datasets"][ds]["difference"] for ds in common_datasets
-        ) / len(common_datasets)
+        avg_diff = sum(comparison["datasets"][ds]["difference"] for ds in common_datasets) / len(
+            common_datasets
+        )
 
         comparison["summary"] = {
             "common_datasets": len(common_datasets),

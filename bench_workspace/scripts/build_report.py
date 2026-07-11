@@ -22,9 +22,7 @@ EXPORT_DIR = "raw_data/export"
 OUT_HTML = os.path.join(EXPORT_DIR, "kimi_baseline_report.html")
 OUT_ZIP = "raw_data/kimi_baseline_export.zip"
 
-plt.rcParams.update(
-    {"font.size": 10, "axes.grid": True, "grid.alpha": 0.3, "figure.dpi": 110}
-)
+plt.rcParams.update({"font.size": 10, "axes.grid": True, "grid.alpha": 0.3, "figure.dpi": 110})
 
 df = pd.read_csv(BASELINE)
 df["ok"] = df["error"].isna()
@@ -50,18 +48,14 @@ if _os.path.exists(_spath):
     _ctx_map[260000] = _ctx_map.get(260000, 260008)
     sfull["prefill_tokens"] = sfull["context_length_target"].map(_ctx_map)
     sfull["prefill_speed"] = sfull.apply(
-        lambda r: (
-            r["prefill_tokens"] / r["ttft"] if r.get("ttft") and r["ttft"] > 0 else None
-        ),
+        lambda r: (r["prefill_tokens"] / r["ttft"] if r.get("ttft") and r["ttft"] > 0 else None),
         axis=1,
     )
     sfull["agg_decode_steady"] = sfull["concurrency"] * sfull["steady_state_tps"]
     sfull["squeeze_ratio"] = sfull.apply(
         lambda r: (
             (r["tps_0_100"] / r["steady_state_tps"] * 100)
-            if r.get("steady_state_tps")
-            and r.get("tps_0_100")
-            and r["steady_state_tps"] > 0
+            if r.get("steady_state_tps") and r.get("tps_0_100") and r["steady_state_tps"] > 0
             else None
         ),
         axis=1,
@@ -71,10 +65,7 @@ else:
 
 # 实际 prefill token 数(_calibrate_prompt 欠生成,~0.65 比例;用实际 token 作上下文轴,
 # TTFT 才与真实 prefill 对应)。ACT[target] = 该 cell 成功行的实际 token 中位数。
-ACT = {
-    tgt: int(ok[ok.context_length_target == tgt]["prefill_tokens"].median())
-    for tgt in CTX_ALL
-}
+ACT = {tgt: int(ok[ok.context_length_target == tgt]["prefill_tokens"].median()) for tgt in CTX_ALL}
 
 
 def lbl(tgt):
@@ -93,11 +84,7 @@ def svg(fig) -> str:
 # ---------- 图1: 系统吞吐 vs 并发(饱和曲线) ----------
 fig, ax = plt.subplots(figsize=(7, 4.2))
 for ctx in [64, 4096, 32768, 131072]:
-    sub = (
-        ok[ok["context_length_target"] == ctx]
-        .groupby("concurrency")["agg_decode"]
-        .median()
-    )
+    sub = ok[ok["context_length_target"] == ctx].groupby("concurrency")["agg_decode"].median()
     if len(sub):
         ax.plot(sub.index, sub.values, marker="o", label=f"ctx={lbl(ctx)} tok")
 ax.set_xlabel("Concurrency")
@@ -127,9 +114,7 @@ chart2 = svg(fig)
 # ---------- 图3: TTFT vs 上下文 ----------
 fig, ax = plt.subplots(figsize=(7, 4.2))
 for conc in [1, 4, 8]:
-    sub = (
-        ok[ok["concurrency"] == conc].groupby("context_length_target")["ttft"].median()
-    )
+    sub = ok[ok["concurrency"] == conc].groupby("context_length_target")["ttft"].median()
     if len(sub):
         ax.plot(sub.index, sub.values, marker="o", label=f"conc={conc}")
 ax.set_xlabel("Context length (tokens)")
@@ -177,9 +162,7 @@ if _os.path.exists(steady_path):
     sdf["squeeze_ratio"] = sdf.apply(
         lambda r: (
             (r["tps_0_100"] / r["steady_state_tps"] * 100)
-            if r.get("steady_state_tps")
-            and r.get("tps_0_100")
-            and r["steady_state_tps"] > 0
+            if r.get("steady_state_tps") and r.get("tps_0_100") and r["steady_state_tps"] > 0
             else None
         ),
         axis=1,
@@ -206,12 +189,7 @@ if _os.path.exists(steady_path):
                     * 1000
                     for i in range(min_len)
                 ]
-                smooth = (
-                    pd.Series(med_itl)
-                    .rolling(10, center=True, min_periods=1)
-                    .mean()
-                    .tolist()
-                )
+                smooth = pd.Series(med_itl).rolling(10, center=True, min_periods=1).mean().tolist()
                 ax.plot(range(min_len), smooth, label=f"conc={conc}", alpha=0.8)
     ax.set_xlabel("Token index (first 150)")
     ax.set_ylabel("Inter-token latency (ms)")
@@ -229,9 +207,7 @@ if _os.path.exists(steady_path):
             .median()
         )
         if len(sub):
-            ax.plot(
-                sub.index, sub.values, marker="o", label=f"ctx={lbl(ctx)}", alpha=0.8
-            )
+            ax.plot(sub.index, sub.values, marker="o", label=f"ctx={lbl(ctx)}", alpha=0.8)
     ax.set_xlabel("Concurrency")
     ax.set_ylabel("Steady-state decode TPS (tok/s)")
     ax.set_title("Steady-state Decode TPS vs Concurrency")
@@ -250,18 +226,14 @@ if _os.path.exists(steady_path):
         if "context_length_target" in sdf.columns
         else CTX_ALL
     )
-    STEADY_CONC = (
-        sorted(sdf["concurrency"].unique()) if "concurrency" in sdf.columns else CONC
-    )
+    STEADY_CONC = sorted(sdf["concurrency"].unique()) if "concurrency" in sdf.columns else CONC
 
     def steady_matrix(metric, fmt="{:.1f}"):
         rows = ""
         for ctx in STEADY_CTX:
             cells = ""
             for conc in STEADY_CONC:
-                sub = sdf[
-                    (sdf.concurrency == conc) & (sdf.context_length_target == ctx)
-                ]
+                sub = sdf[(sdf.concurrency == conc) & (sdf.context_length_target == ctx)]
                 v = (
                     sub[metric].median()
                     if len(sub) and metric in sub.columns and sub[metric].notna().any()
@@ -331,9 +303,7 @@ def matrix_table(metric, fmt="{:.1f}"):
         for conc in CONC:
             sub = ok[(ok.concurrency == conc) & (ok.context_length_target == ctx)]
             v = sub[metric].median() if len(sub) else None
-            cells += (
-                f"<td>{fmt.format(v) if v is not None and pd.notna(v) else '—'}</td>"
-            )
+            cells += f"<td>{fmt.format(v) if v is not None and pd.notna(v) else '—'}</td>"
         label = lbl(ctx)
         rows += f"<tr><th>{label}</th>{cells}</tr>"
     head = "".join(f"<th>conc={c}</th>" for c in CONC)
@@ -367,18 +337,13 @@ def steady_matrix(metric, fmt="{:.1f}"):
         for conc in CONC:
             # 258000≈260000
             lookup_ctx = 258000 if ctx == 260000 else ctx
-            sub = sfull[
-                (sfull.concurrency == conc)
-                & (sfull.context_length_target == lookup_ctx)
-            ]
+            sub = sfull[(sfull.concurrency == conc) & (sfull.context_length_target == lookup_ctx)]
             v = (
                 sub[metric].median()
                 if len(sub) and metric in sub.columns and sub[metric].notna().any()
                 else None
             )
-            cells += (
-                f"<td>{fmt.format(v) if v is not None and pd.notna(v) else '—'}</td>"
-            )
+            cells += f"<td>{fmt.format(v) if v is not None and pd.notna(v) else '—'}</td>"
         rows += f"<tr><th>{lbl(ctx)}</th>{cells}</tr>"
     head = "".join(f"<th>conc={c}</th>" for c in CONC)
     return f'<table class="matrix"><thead><tr><th>ctx＼conc</th>{head}</tr></thead><tbody>{rows}</tbody></table>'
@@ -403,12 +368,7 @@ rate_table = f'<table class="matrix rate"><thead><tr><th>ctx＼conc</th>{rate_he
 
 # 关键数字
 # 峰值系统吞吐:max_num_seqs=64 下 conc=32 仍未饱和(482 tok/s),取测区内最大
-sat_tps = (
-    ok[(ok.context_length_target == 64)]
-    .groupby("concurrency")["agg_decode"]
-    .median()
-    .max()
-)
+sat_tps = ok[(ok.context_length_target == 64)].groupby("concurrency")["agg_decode"].median().max()
 peak_tps = ok[ok.concurrency == 1][ok.context_length_target == 64]["tps"].median()
 n_total = len(df)
 n_ok = int(df["ok"].sum())

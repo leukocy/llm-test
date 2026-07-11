@@ -61,9 +61,7 @@ df = asyncio.run(
         max_tokens=2048,
     )
 )
-print(
-    f"\n=== 矩阵完成 {len(df)} 行（{len(CONCURRENCIES)}并发 × {len(CONTEXT_LENGTHS)}上下文）==="
-)
+print(f"\n=== 矩阵完成 {len(df)} 行（{len(CONCURRENCIES)}并发 × {len(CONTEXT_LENGTHS)}上下文）===")
 print(
     df[
         [
