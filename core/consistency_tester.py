@@ -407,6 +407,8 @@ class ConsistencyTester:
         return recommendations
 
 
-def create_consistency_tester(runs: int = 3, threshold: float = 0.8) -> ConsistencyTester:
+def create_consistency_tester(
+    runs: int = 3, threshold: float = 0.8
+) -> ConsistencyTester:
     """Factory函数：CreateConsistency Tester"""
     return ConsistencyTester(runs_per_sample=runs, stability_threshold=threshold)

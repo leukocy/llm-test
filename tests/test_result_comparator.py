@@ -186,7 +186,9 @@ class TestResultComparator(unittest.TestCase):
                 sample_id=str(i),
                 question=f"Question {i}",
                 correct_answer=(
-                    "A" if i % 4 == 0 else "B" if i % 4 == 1 else "C" if i % 4 == 2 else "D"
+                    "A"
+                    if i % 4 == 0
+                    else "B" if i % 4 == 1 else "C" if i % 4 == 2 else "D"
                 ),
                 model_response="A" if is_correct else "B",
                 predicted_answer="A" if is_correct else "B",

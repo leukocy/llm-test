@@ -91,7 +91,9 @@ class ServingConfig:
     # runtime
     cuda_version: str = ""
     torch_version: str = ""
-    env_flags: dict[str, Any] = field(default_factory=dict)  # VLLM_ATTENTION_BACKEND=... 等
+    env_flags: dict[str, Any] = field(
+        default_factory=dict
+    )  # VLLM_ATTENTION_BACKEND=... 等
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

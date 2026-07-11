@@ -21,7 +21,9 @@ def test_calculate_request_metrics():
     end_time = 1005.0
     completion_tokens = 101
 
-    m = calculate_request_metrics(start_time, first_token_time, end_time, completion_tokens)
+    m = calculate_request_metrics(
+        start_time, first_token_time, end_time, completion_tokens
+    )
 
     assert m.ttft == 1.0
     assert m.total_time == 5.0
@@ -37,7 +39,9 @@ def test_calculate_request_metrics_zero_decode():
     end_time = 1001.0
     completion_tokens = 1
 
-    m = calculate_request_metrics(start_time, first_token_time, end_time, completion_tokens)
+    m = calculate_request_metrics(
+        start_time, first_token_time, end_time, completion_tokens
+    )
     assert m.tps == 0.0
     assert m.tpot == 0.0
 
@@ -55,7 +59,9 @@ def test_calculate_tokens():
     usage_info = {"prompt_tokens": 10, "completion_tokens": 20}
 
     # Method 1: usage_info
-    prefill, decode, method = calculate_tokens(prompt, response, usage_info, mock_tokenizer)
+    prefill, decode, method = calculate_tokens(
+        prompt, response, usage_info, mock_tokenizer
+    )
     assert prefill == 10
     assert decode == 20
     assert method == "api_usage"

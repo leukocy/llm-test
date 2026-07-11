@@ -107,7 +107,9 @@ def extract_vllm_runtime(parsed: dict[str, Any]) -> dict[str, Any]:
             "block_size": _to_int(cache_cfg.get("block_size")),
             "num_gpu_blocks": _to_int(cache_cfg.get("num_gpu_blocks")),
             "num_cpu_blocks": _to_int(cache_cfg.get("num_cpu_blocks")),
-            "gpu_memory_utilization": _to_float(cache_cfg.get("gpu_memory_utilization")),
+            "gpu_memory_utilization": _to_float(
+                cache_cfg.get("gpu_memory_utilization")
+            ),
         },
     }
 
@@ -126,7 +128,9 @@ def extract_sglang_runtime(parsed: dict[str, Any]) -> dict[str, Any]:
 
 def detect_engine_family(parsed: dict[str, Any]) -> str:
     """根据出现的指标前缀判断引擎族（vllm / sglang / unknown）。"""
-    names = set(parsed["values"]) | set(parsed["labeled"]) | set(parsed["histograms"] or {})
+    names = (
+        set(parsed["values"]) | set(parsed["labeled"]) | set(parsed["histograms"] or {})
+    )
     if any(n.startswith("vllm:") for n in names):
         return "vllm"
     if any(n.startswith("sglang:") for n in names):

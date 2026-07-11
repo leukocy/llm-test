@@ -42,7 +42,9 @@ class TestRetryHandler:
     def test_calculate_delay_exponential_backoff(self):
         """Test指数退避"""
         handler = RetryHandler(
-            RetryConfig(base_delay=1.0, exponential_base=2.0, max_delay=100.0, jitter=False)
+            RetryConfig(
+                base_delay=1.0, exponential_base=2.0, max_delay=100.0, jitter=False
+            )
         )
 
         # 0次: 1 * 2^0 = 1
@@ -55,7 +57,9 @@ class TestRetryHandler:
     def test_calculate_delay_with_max(self):
         """Test最大延迟限制"""
         handler = RetryHandler(
-            RetryConfig(base_delay=10.0, exponential_base=3.0, max_delay=20.0, jitter=False)
+            RetryConfig(
+                base_delay=10.0, exponential_base=3.0, max_delay=20.0, jitter=False
+            )
         )
 
         # 10 * 3^2 = 90 > 20，应该被限制is 20
@@ -63,7 +67,9 @@ class TestRetryHandler:
 
     def test_calculate_delay_with_retry_after(self):
         """Testuse Retry-After 值"""
-        handler = RetryHandler(RetryConfig(base_delay=1.0, exponential_base=2.0, jitter=False))
+        handler = RetryHandler(
+            RetryConfig(base_delay=1.0, exponential_base=2.0, jitter=False)
+        )
 
         # retry_after=10 > base_delay=1，应该use 10
         delay = handler._calculate_delay(0, retry_after=10.0)
@@ -71,7 +77,9 @@ class TestRetryHandler:
 
     def test_calculate_delay_with_jitter(self):
         """Test随机抖动"""
-        handler = RetryHandler(RetryConfig(base_delay=1.0, jitter=True, jitter_range=(0.5, 1.5)))
+        handler = RetryHandler(
+            RetryConfig(base_delay=1.0, jitter=True, jitter_range=(0.5, 1.5))
+        )
 
         delay = handler._calculate_delay(0)
         # 应该in 0.5 到 1.5 之间
@@ -81,7 +89,9 @@ class TestRetryHandler:
         """TestNetwork error可重试"""
         handler = RetryHandler()
 
-        is_retryable, status_code, retry_after = handler._is_retryable_error(ConnectionError())
+        is_retryable, status_code, retry_after = handler._is_retryable_error(
+            ConnectionError()
+        )
         assert is_retryable is True
         assert status_code is None
 
@@ -89,7 +99,9 @@ class TestRetryHandler:
         """Test超时可重试"""
         handler = RetryHandler()
 
-        is_retryable, status_code, retry_after = handler._is_retryable_error(TimeoutError())
+        is_retryable, status_code, retry_after = handler._is_retryable_error(
+            TimeoutError()
+        )
         assert is_retryable is True
 
     def test_is_retryable_error_status_code(self):

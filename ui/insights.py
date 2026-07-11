@@ -203,7 +203,9 @@ def _analyze_concurrency(df, model_id):
     n_levels = len(df)
 
     # --- 1. Throughput: Peak, Absolute Level, and Scaling ---
-    tp_col = _get_col(df, "Max_System_Output_Throughput") or _get_col(df, "Max_System_Throughput")
+    tp_col = _get_col(df, "Max_System_Output_Throughput") or _get_col(
+        df, "Max_System_Throughput"
+    )
 
     if tp_col:
         peak_idx = df[tp_col].idxmax()
@@ -322,7 +324,9 @@ def _analyze_concurrency(df, model_id):
             sla_breach = valid_tpot[valid_tpot[tpot_p99_col] > sla_limit]
 
             if not sla_breach.empty:
-                safe_conc = valid_tpot[valid_tpot[tpot_p99_col] <= sla_limit]["concurrency"].max()
+                safe_conc = valid_tpot[valid_tpot[tpot_p99_col] <= sla_limit][
+                    "concurrency"
+                ].max()
                 if pd.isna(safe_conc):
                     insights.append(
                         f"**High Latency**: Even at lowest concurrency, P99 TPOT exceeds {sla_limit}ms, poor real-time interaction experience."
@@ -402,7 +406,9 @@ def _analyze_concurrency(df, model_id):
                     )
                     severities.append(SEVERITY_WARNING)
                 elif min_ttft <= 0.3:
-                    insights.append(f"**Fast First Token**: Best TTFT only {min_ttft:.3f}s.")
+                    insights.append(
+                        f"**Fast First Token**: Best TTFT only {min_ttft:.3f}s."
+                    )
                     severities.append(SEVERITY_POSITIVE)
                 else:
                     insights.append(
@@ -868,22 +874,33 @@ def get_performance_grade(insights, severities=None):
         warning_emojis = ["⚠️", "🐢", "📉", "🎢"]
         critical_emojis = ["❌", "🛑"]
 
-        positive_count = sum(1 for i in insights if any(e in i for e in positive_emojis))
+        positive_count = sum(
+            1 for i in insights if any(e in i for e in positive_emojis)
+        )
         neutral_count = sum(
             1
             for i in insights
             if any(e in i for e in neutral_emojis)
-            and not any(e in i for e in positive_emojis + warning_emojis + critical_emojis)
+            and not any(
+                e in i for e in positive_emojis + warning_emojis + critical_emojis
+            )
         )
         warning_count = sum(1 for i in insights if any(e in i for e in warning_emojis))
-        critical_count = sum(1 for i in insights if any(e in i for e in critical_emojis))
+        critical_count = sum(
+            1 for i in insights if any(e in i for e in critical_emojis)
+        )
 
     total_scored = positive_count + neutral_count + warning_count + critical_count
     if total_scored == 0:
         return "B", "#6c757d", "Performance adequate"
 
     # Weighted score: positive=+2, neutral=0, warning=-1, critical=-3
-    score = positive_count * 2 + neutral_count * 0 + warning_count * (-1) + critical_count * (-3)
+    score = (
+        positive_count * 2
+        + neutral_count * 0
+        + warning_count * (-1)
+        + critical_count * (-3)
+    )
     # Normalize to a per-insight score
     avg_score = score / total_scored
 

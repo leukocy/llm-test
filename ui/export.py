@@ -85,7 +85,11 @@ def export_to_excel(df_dict, filename="benchmark_results.xlsx"):
                         # Calculate max width
                         max_len = (
                             max(
-                                (df[col].astype(str).map(len).max() if len(df) > 0 else 10),
+                                (
+                                    df[col].astype(str).map(len).max()
+                                    if len(df) > 0
+                                    else 10
+                                ),
                                 len(str(col)),
                             )
                             + 2
@@ -112,7 +116,7 @@ def export_to_excel(df_dict, filename="benchmark_results.xlsx"):
 
 
 def create_excel_download_link(
-    df_dict, filename="benchmark_results.xlsx", link_text="📗 Download Excel Report"
+    df_dict, filename="benchmark_results.xlsx", link_text="Download Excel Report"
 ):
     """
     Create Streamlit download link for Excel file.
@@ -286,7 +290,7 @@ def export_interactive_html(
         html_parts.append(
             """
             <div class="insights">
-                <h3>📊 Performance Insights</h3>
+                <h3>Performance Insights</h3>
                 <ul>
         """
         )
@@ -303,7 +307,9 @@ def export_interactive_html(
             # Use 'cdn' for the first chart to include the library, 'False' for others to reuse it
             include_js = "cdn" if i == 0 else False
             html_parts.append(
-                fig.to_html(include_plotlyjs=include_js, full_html=False, div_id=f"chart{i}")
+                fig.to_html(
+                    include_plotlyjs=include_js, full_html=False, div_id=f"chart{i}"
+                )
             )
 
     # Add tables
@@ -334,7 +340,7 @@ def export_interactive_html(
 
 
 def create_html_download_link(
-    html_content, filename="benchmark_report.html", link_text="🌐 Download HTML Report"
+    html_content, filename="benchmark_report.html", link_text="Download HTML Report"
 ):
     """
     Create download link for HTML report.
@@ -371,19 +377,19 @@ def export_enhanced_markdown(df, insights=None, charts_description=""):
 
     # Insights
     if insights:
-        md_parts.append("## 📊 Performance Insights\n\n")
+        md_parts.append("## Performance Insights\n\n")
         for insight in insights:
             md_parts.append(f"- {insight}\n")
         md_parts.append("\n")
 
     # Data table
-    md_parts.append("## 📋 Results Summary\n\n")
+    md_parts.append("## Results Summary\n\n")
     md_parts.append(df.to_markdown(index=False))
     md_parts.append("\n\n")
 
     # Charts description
     if charts_description:
-        md_parts.append("## 📈 Charts\n\n")
+        md_parts.append("## Charts\n\n")
         md_parts.append(charts_description)
         md_parts.append("\n")
 
@@ -474,7 +480,9 @@ def export_prefill_decode_report(
         from ui.static_chart_generator import StaticChartGenerator
 
         generator = StaticChartGenerator(dpi=150)
-        fig = generator.create_performance_report_image(test_results, system_info, test_time)
+        fig = generator.create_performance_report_image(
+            test_results, system_info, test_time
+        )
         return generator.save_figure_to_bytes(fig, "png")
 
     except Exception as e:
@@ -485,7 +493,7 @@ def export_prefill_decode_report(
 def create_static_chart_download_link(
     chart_bytes: BytesIO,
     filename: str = "chart.png",
-    link_text: str = "📷 Download Static Chart",
+    link_text: str = "Download Static Chart",
 ) -> str:
     """
     Create static chart download link
@@ -595,7 +603,9 @@ def export_benchmark_summary_chart(
         if system_info:
             title = base_title + full_label
         else:
-            title = f"{base_title}{full_label}\nModel: {model_id} | Provider: {provider}"
+            title = (
+                f"{base_title}{full_label}\nModel: {model_id} | Provider: {provider}"
+            )
 
         # ---- matrix test → multi-line chart (special handling, has concurrency dimension) ----
         if test_type == "matrix":
@@ -791,7 +801,9 @@ def export_benchmark_summary_chart(
         if len(charts) == 0:
             return None
 
-        fig = generator.draw_quad_chart(x_data, charts, title, x_label, system_info=system_info)
+        fig = generator.draw_quad_chart(
+            x_data, charts, title, x_label, system_info=system_info
+        )
         return generator.save_figure_to_bytes(fig, "png")
 
     except Exception as e:

@@ -123,7 +123,13 @@ def reorder_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     # Construct final order based on what exists in the dataframe
     all_defined = (
-        identity_cols + config_cols + input_cols + output_cols + system_cols + time_cols + meta_cols
+        identity_cols
+        + config_cols
+        + input_cols
+        + output_cols
+        + system_cols
+        + time_cols
+        + meta_cols
     )
 
     final_order = []

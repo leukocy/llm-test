@@ -62,20 +62,30 @@ class CertificationReportGenerator:
         s1_df = results_df[results_df["test_type"].str.startswith("mqc_s1_")]
         if not s1_df.empty:
             # 1.1 Zero/Short
-            if success_mask_from_error(s1_df[s1_df["test_type"] == "mqc_s1_zero"]["error"]).all():
-                met.append("Stage 1 - Zero/Short: Successfully handled 10-token prompt.")
+            if success_mask_from_error(
+                s1_df[s1_df["test_type"] == "mqc_s1_zero"]["error"]
+            ).all():
+                met.append(
+                    "Stage 1 - Zero/Short: Successfully handled 10-token prompt."
+                )
             else:
                 status = "FAIL"
                 failed.append("Stage 1 - Zero/Short: Failed basic connectivity test.")
 
             # 1.2 Boundaries - use configurable threshold
-            boundary_errors = s1_df[s1_df["test_type"].str.contains("boundary")]["error"]
+            boundary_errors = s1_df[s1_df["test_type"].str.contains("boundary")][
+                "error"
+            ]
             boundary_fails = (~success_mask_from_error(boundary_errors)).sum()
             if boundary_fails <= MQC_THRESHOLDS["boundary_max_failures"]:
-                met.append("Stage 1 - Boundaries: Passed all fill levels (50%, 80%, 95%, 100%).")
+                met.append(
+                    "Stage 1 - Boundaries: Passed all fill levels (50%, 80%, 95%, 100%)."
+                )
             else:
                 status = "FAIL"
-                failed.append(f"Stage 1 - Boundaries: {boundary_fails} boundary levels failed.")
+                failed.append(
+                    f"Stage 1 - Boundaries: {boundary_fails} boundary levels failed."
+                )
 
             # 1.3 Overflow
             ov_res = s1_df[s1_df["test_type"] == "mqc_s1_overflow"]
@@ -94,7 +104,9 @@ class CertificationReportGenerator:
             if not niah_res.empty:
                 niah_total = len(niah_res)
                 niah_passed = (
-                    niah_res["niah_correct"].sum() if "niah_correct" in niah_res.columns else 0
+                    niah_res["niah_correct"].sum()
+                    if "niah_correct" in niah_res.columns
+                    else 0
                 )
                 niah_pass_rate = niah_passed / niah_total if niah_total > 0 else 0
                 metrics["niah_pass_rate"] = niah_pass_rate
@@ -223,7 +235,9 @@ class CertificationReportGenerator:
                 )
             else:
                 status = "FAIL"
-                failed.append("Stage 2 - Mixed Load: Failed in mixed-load batch processing.")
+                failed.append(
+                    "Stage 2 - Mixed Load: Failed in mixed-load batch processing."
+                )
 
         # Stage 3: Multi-round Dialogue Stability Analysis
         s3_df = results_df[results_df["test_type"].str.startswith("mqc_s3_")]
@@ -232,7 +246,9 @@ class CertificationReportGenerator:
                 v_df = s3_df[s3_df["test_type"] == f"mqc_s3_dialogue_{version}"]
                 if not v_df.empty:
                     last_round = v_df.iloc[-1]
-                    last_round_success = success_mask_from_error([last_round["error"]]).iloc[0]
+                    last_round_success = success_mask_from_error(
+                        [last_round["error"]]
+                    ).iloc[0]
                     if last_round_success and last_round["semantic_correct"]:
                         met.append(
                             f"Stage 3 - Sessions {version}: Maintained secret key across {len(v_df)} rounds."

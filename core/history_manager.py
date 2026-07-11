@@ -21,7 +21,9 @@ class HistoryManager:
             return []
 
         # Find all CSV files recursively
-        csv_files = glob.glob(os.path.join(self.base_dir, "**", "*.csv"), recursive=True)
+        csv_files = glob.glob(
+            os.path.join(self.base_dir, "**", "*.csv"), recursive=True
+        )
 
         history = []
         for path in csv_files:

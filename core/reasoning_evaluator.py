@@ -181,22 +181,32 @@ class ReasoningQualityEvaluator:
 
         # 3. 评估各维度
         if reasoning and reasoning.strip():
-            result.quality_score.coherence = self._evaluate_coherence(reasoning, result.steps)
+            result.quality_score.coherence = self._evaluate_coherence(
+                reasoning, result.steps
+            )
             result.quality_score.completeness = self._evaluate_completeness(
                 reasoning, question, final_answer
             )
-            result.quality_score.relevance = self._evaluate_relevance(reasoning, question)
+            result.quality_score.relevance = self._evaluate_relevance(
+                reasoning, question
+            )
             result.quality_score.correctness = self._evaluate_correctness(
                 result.steps, result.final_answer_correct
             )
-            result.quality_score.efficiency = self._evaluate_efficiency(reasoning, result.steps)
+            result.quality_score.efficiency = self._evaluate_efficiency(
+                reasoning, result.steps
+            )
         else:
             # 没hasReasoning process
             result.quality_score.coherence = 0.0
             result.quality_score.completeness = 0.0
             result.quality_score.relevance = 0.0
-            result.quality_score.correctness = 5.0 if result.final_answer_correct else 0.0
-            result.quality_score.efficiency = 10.0 if result.final_answer_correct else 0.0
+            result.quality_score.correctness = (
+                5.0 if result.final_answer_correct else 0.0
+            )
+            result.quality_score.efficiency = (
+                10.0 if result.final_answer_correct else 0.0
+            )
             result.quality_score.weaknesses.append("没has提供Reasoning process")
 
         # 4. Calculate综合分
@@ -233,7 +243,9 @@ class ReasoningQualityEvaluator:
                 continue
 
             # 进一步按句子分割长段落
-            sentences = re.split(r"(?<=[.。!?！？])\s*", para) if len(para) > 200 else [para]
+            sentences = (
+                re.split(r"(?<=[.。!?！？])\s*", para) if len(para) > 200 else [para]
+            )
 
             for sentence in sentences:
                 sentence = sentence.strip()
@@ -268,7 +280,10 @@ class ReasoningQualityEvaluator:
                 return "calculation"
 
         # Checkis否is观察/引用
-        if any(word in text_lower for word in ["given", "according to", "based on", "Questionin"]):
+        if any(
+            word in text_lower
+            for word in ["given", "according to", "based on", "Questionin"]
+        ):
             return "observation"
 
         return "reasoning"
@@ -313,7 +328,9 @@ class ReasoningQualityEvaluator:
 
         return min(10.0, score)
 
-    def _evaluate_completeness(self, reasoning: str, question: str, final_answer: str) -> float:
+    def _evaluate_completeness(
+        self, reasoning: str, question: str, final_answer: str
+    ) -> float:
         """评估步骤完整性"""
         score = 5.0
 
@@ -363,12 +380,16 @@ class ReasoningQualityEvaluator:
         reasoning_numbers = set(re.findall(r"\d+(?:\.\d+)?", reasoning))
 
         if question_numbers:
-            number_overlap = len(question_numbers & reasoning_numbers) / len(question_numbers)
+            number_overlap = len(question_numbers & reasoning_numbers) / len(
+                question_numbers
+            )
             score += number_overlap * 2.0
 
         return min(10.0, score)
 
-    def _evaluate_correctness(self, steps: list[ReasoningStep], final_correct: bool) -> float:
+    def _evaluate_correctness(
+        self, steps: list[ReasoningStep], final_correct: bool
+    ) -> float:
         """评估Reasoning Steps正确性"""
         # 这里use启发式方法，真正正确性Validateneed LLM
 
@@ -506,7 +527,9 @@ class ReasoningQualityEvaluator:
         if qs.completeness < 7:
             qs.suggestions.append("Suggestion展示更多in间步骤andCalculate过程")
         if not result.final_answer_correct:
-            qs.suggestions.append(f"AnswerError，失败原因可能is：{result.failure_analysis}")
+            qs.suggestions.append(
+                f"AnswerError，失败原因可能is：{result.failure_analysis}"
+            )
 
     async def evaluate_with_llm(
         self,
@@ -532,7 +555,9 @@ class ReasoningQualityEvaluator:
             ReasoningEvaluationResult
         """
         # 先进行规则评估
-        result = self.evaluate(question, reasoning, final_answer, correct_answer, is_answer_correct)
+        result = self.evaluate(
+            question, reasoning, final_answer, correct_answer, is_answer_correct
+        )
 
         if not reasoning or len(reasoning.strip()) < 50:
             return result
@@ -564,7 +589,9 @@ class ReasoningQualityEvaluator:
 
             # Add LLM 反馈
             if llm_eval.get("feedback"):
-                result.quality_score.suggestions.append(f"[AI评价] {llm_eval['feedback']}")
+                result.quality_score.suggestions.append(
+                    f"[AI评价] {llm_eval['feedback']}"
+                )
 
             result.evaluation_method = "hybrid"
             result.evaluation_confidence = 0.85

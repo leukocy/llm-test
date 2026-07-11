@@ -97,17 +97,25 @@ class Report:
             "model_type": self.model_type,
             "provider": self.provider,
             "model_info_json": (
-                json.dumps(self.model_info, ensure_ascii=False) if self.model_info else None
+                json.dumps(self.model_info, ensure_ascii=False)
+                if self.model_info
+                else None
             ),
             "environment_json": (
-                json.dumps(self.environment, ensure_ascii=False) if self.environment else None
+                json.dumps(self.environment, ensure_ascii=False)
+                if self.environment
+                else None
             ),
-            "config_json": (json.dumps(self.config, ensure_ascii=False) if self.config else None),
+            "config_json": (
+                json.dumps(self.config, ensure_ascii=False) if self.config else None
+            ),
             "results_json": (
                 json.dumps(self.results, ensure_ascii=False) if self.results else None
             ),
             "aggregate_json": (
-                json.dumps(self.aggregate, ensure_ascii=False) if self.aggregate else None
+                json.dumps(self.aggregate, ensure_ascii=False)
+                if self.aggregate
+                else None
             ),
             "failure_analysis_json": (
                 json.dumps(self.failure_analysis, ensure_ascii=False)
@@ -120,7 +128,9 @@ class Report:
                 else None
             ),
             "token_metrics_json": (
-                json.dumps(self.token_metrics, ensure_ascii=False) if self.token_metrics else None
+                json.dumps(self.token_metrics, ensure_ascii=False)
+                if self.token_metrics
+                else None
             ),
             "quality_metrics_json": (
                 json.dumps(self.quality_metrics, ensure_ascii=False)
@@ -128,7 +138,9 @@ class Report:
                 else None
             ),
             "cost_metrics_json": (
-                json.dumps(self.cost_metrics, ensure_ascii=False) if self.cost_metrics else None
+                json.dumps(self.cost_metrics, ensure_ascii=False)
+                if self.cost_metrics
+                else None
             ),
             "json_path": self.json_path,
             "html_path": self.html_path,

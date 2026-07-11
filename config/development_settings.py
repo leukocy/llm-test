@@ -28,7 +28,9 @@ def get_development_providers():
     # Use environment variables when possible
     DEVELOPMENT_PROVIDERS = {
         name: url
-        for name, url in {f"Dev{i}": os.getenv(f"DEV{i}_URL") for i in range(1, 10)}.items()
+        for name, url in {
+            f"Dev{i}": os.getenv(f"DEV{i}_URL") for i in range(1, 10)
+        }.items()
         if url
     }
 

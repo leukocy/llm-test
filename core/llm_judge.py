@@ -118,7 +118,9 @@ class LLMJudge:
         ]
 
         for criterion in request.criteria:
-            prompt_parts.append(f"- **{criterion.value}**: {criteria_desc[criterion]}\n")
+            prompt_parts.append(
+                f"- **{criterion.value}**: {criteria_desc[criterion]}\n"
+            )
 
         prompt_parts.append(f"\nScore范围: 0-{request.max_score} 分\n")
 
@@ -137,7 +139,9 @@ class LLMJudge:
         prompt_parts.append(request.answer)
 
         prompt_parts.append("\n\n---")
-        prompt_parts.append("\n请以 JSON 格式ReturnEvaluation result，包含以under字段：")
+        prompt_parts.append(
+            "\n请以 JSON 格式ReturnEvaluation result，包含以under字段："
+        )
         prompt_parts.append("```json")
         prompt_parts.append("{")
         prompt_parts.append(f'  "total_score": <总分, 0-{request.max_score}>,')
@@ -202,7 +206,9 @@ class LLMJudge:
             return JudgeResult(
                 score=float(data.get("total_score", 0)),
                 reasoning=data.get("reasoning", ""),
-                category_scores={k: float(v) for k, v in data.get("category_scores", {}).items()},
+                category_scores={
+                    k: float(v) for k, v in data.get("category_scores", {}).items()
+                },
                 confidence=float(data.get("confidence", 0.8)),
                 suggestion=data.get("suggestion"),
             )
@@ -251,7 +257,9 @@ class LLMJudge:
             response_content = result.get("full_response_content", "")
 
             # Parse result
-            judge_result = self._parse_judge_response(response_content, request.max_score)
+            judge_result = self._parse_judge_response(
+                response_content, request.max_score
+            )
 
             if log_callback:
                 log_callback(

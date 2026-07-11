@@ -39,7 +39,9 @@ def test_tokenizer_manager_auto(mock_transformers):
     # Assuming Qwen2.5-7B-Instruct matches something or fallback.
 
     # Let's mock HF_MODEL_MAPPING via patch
-    with patch("engine.tokenizer.HF_MODEL_MAPPING", {"qwen2.5-7b": "Qwen/Qwen2.5-7B-Instruct"}):
+    with patch(
+        "engine.tokenizer.HF_MODEL_MAPPING", {"qwen2.5-7b": "Qwen/Qwen2.5-7B-Instruct"}
+    ):
         tok = TokenizerManager.get_tokenizer(config)
         assert tok is not None
         mock_transformers.from_pretrained.assert_called()

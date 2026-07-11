@@ -113,7 +113,9 @@ class HumanEvalEvaluator(BaseEvaluator):
             }
         ]
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """Format the sample as code prompt."""
         prompt = sample.get("prompt", "")
         if include_answer:
@@ -140,7 +142,9 @@ class HumanEvalEvaluator(BaseEvaluator):
 
         for ex in self.few_shot_examples[: self.num_shots]:
             messages.append({"role": "user", "content": ex.get("prompt", "")})
-            messages.append({"role": "assistant", "content": ex.get("canonical_solution", "")})
+            messages.append(
+                {"role": "assistant", "content": ex.get("canonical_solution", "")}
+            )
 
         messages.append({"role": "user", "content": sample.get("prompt", "")})
         return messages
@@ -182,7 +186,9 @@ class HumanEvalEvaluator(BaseEvaluator):
             chat_messages = self.build_chat_messages(sample)
             start_time = time.time()
             # Use chat messages if they contain more than a single user message
-            if len(chat_messages) > 1 or any(m.get("role") == "system" for m in chat_messages):
+            if len(chat_messages) > 1 or any(
+                m.get("role") == "system" for m in chat_messages
+            ):
                 response_data = await get_response_func(messages=chat_messages)
             else:
                 response_data = await get_response_func(full_prompt)
@@ -205,7 +211,9 @@ class HumanEvalEvaluator(BaseEvaluator):
             full_code = base_prompt + generated_code
 
             # Sanity check: code execution
-            is_correct, error_msg = self._execute_code(full_code, test_code, entry_point)
+            is_correct, error_msg = self._execute_code(
+                full_code, test_code, entry_point
+            )
 
             return SampleResult(
                 sample_id=task_id,
@@ -238,7 +246,9 @@ class HumanEvalEvaluator(BaseEvaluator):
                 error=str(e),
             )
 
-    def _execute_code(self, code: str, test_code: str, entry_point: str) -> tuple[bool, str | None]:
+    def _execute_code(
+        self, code: str, test_code: str, entry_point: str
+    ) -> tuple[bool, str | None]:
         """Safely execute code (mocked for security in this environment)."""
         full_code = code + "\n" + test_code
         try:

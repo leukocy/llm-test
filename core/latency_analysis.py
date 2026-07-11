@@ -88,11 +88,19 @@ def compute_client_vs_engine_latency(
     return {
         "client_ttft_s": round(client_ttft, 4) if client_ttft is not None else None,
         "engine_ttft_s": round(engine_ttft, 4) if engine_ttft is not None else None,
-        "ttft_overhead_s": (round(ttft_overhead, 4) if ttft_overhead is not None else None),
+        "ttft_overhead_s": (
+            round(ttft_overhead, 4) if ttft_overhead is not None else None
+        ),
         "ttft_overhead_pct": ttft_overhead_pct,
-        "client_tpot_ms": (round(client_tpot_ms, 3) if client_tpot_ms is not None else None),
-        "engine_tpot_ms": (round(engine_tpot_ms, 3) if engine_tpot_ms is not None else None),
-        "tpot_overhead_ms": (round(tpot_overhead, 3) if tpot_overhead is not None else None),
+        "client_tpot_ms": (
+            round(client_tpot_ms, 3) if client_tpot_ms is not None else None
+        ),
+        "engine_tpot_ms": (
+            round(engine_tpot_ms, 3) if engine_tpot_ms is not None else None
+        ),
+        "tpot_overhead_ms": (
+            round(tpot_overhead, 3) if tpot_overhead is not None else None
+        ),
         "verdict": _verdict(client_ttft, engine_ttft, ttft_overhead),
     }
 

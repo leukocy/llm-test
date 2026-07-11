@@ -13,11 +13,15 @@ import os
 
 import streamlit as st
 
+from ui.icons import icon
+
 # ----------------------------------------------------------------------------
 # Onboarding State Management
 # ----------------------------------------------------------------------------
 
-_ONBOARDING_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".onboarding_state")
+_ONBOARDING_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), ".onboarding_state"
+)
 
 
 def _load_onboarding_file():
@@ -107,33 +111,33 @@ def _dismiss_onboarding(permanently: bool = True):
 
 ONBOARDING_CONTENT = {
     "welcome": {
-        "title": "👋 Welcome to the LLM Benchmark Platform",
+        "title": "Welcome to the LLM Benchmark Platform",
         "content": """
         ### This is a professional LLM performance testing tool
 
         **Main Features:**
 
-        - ⚡ **Concurrency Test** - Test model performance at different concurrency levels
-        - 🔥 **Prefill Stress Test** - Evaluate model long input processing capability
-        - 📏 **Long Context Test** - Test model performance in long context scenarios
-        - 🔬 **Matrix Test** - Multi-dimensional comprehensive model evaluation
-        - 📄 **Custom Test** - Test using custom text
-        - 🎯 **All Tests** - Run all test types with one click
+        - **Concurrency Test** - Test model performance at different concurrency levels
+        - **Prefill Stress Test** - Evaluate model long input processing capability
+        - **Long Context Test** - Test model performance in long context scenarios
+        - **Matrix Test** - Multi-dimensional comprehensive model evaluation
+        - **Custom Test** - Test using custom text
+        - **All Tests** - Run all test types with one click
 
         **Test Metrics:**
 
-        - 🚀 **TTFT** (Time To First Token) - First token latency
-        - ⚡ **TPS** (Tokens Per Second) - Generation speed
-        - 💾 **Token usage** - Input/output token statistics
-        - ⏱️ **Total duration** - Complete request duration
+        - **TTFT** (Time To First Token) - First token latency
+        - **TPS** (Tokens Per Second) - Generation speed
+        - **Token usage** - Input/output token statistics
+        - **Total duration** - Complete request duration
         """,
         "tips": [
-            "💡 Tip: You can reopen this guide anytime from the sidebar",
-            "💡 Tip: Test results are automatically saved and can be viewed in History",
+            "**Tip**: You can reopen this guide anytime from the sidebar",
+            "**Tip**: Test results are automatically saved and can be viewed in History",
         ],
     },
     "api_config": {
-        "title": "🔧 Configure API Connect",
+        "title": "Configure API Connect",
         "content": """
         ### Step 1:Configure your API connection
 
@@ -154,16 +158,16 @@ ONBOARDING_CONTENT = {
            - or use API-returned token counts
 
         **Security tips:**
-        - 🔒 API Key is only stored in local session, never uploaded
-        - 🔒 Recommend using a restricted API Key for testing
+        - API Key is only stored in local session, never uploaded
+        - Recommend using a restricted API Key for testing
         """,
         "tips": [
-            "💡 Tip: Click 'Get Model List' to validate API connection",
-            "💡 Tip: Common configurations can be saved as presets for future use",
+            "**Tip**: Click 'Get Model List' to validate API connection",
+            "**Tip**: Common configurations can be saved as presets for future use",
         ],
     },
     "test_selection": {
-        "title": "🎯 Select Test Type",
+        "title": "Select Test Type",
         "content": """
         ### Step 2:Choose the test to run
 
@@ -171,11 +175,11 @@ ONBOARDING_CONTENT = {
 
         | Test Type | Description | Use Case |
         |---------|------|---------|
-        | ⚡ Concurrency Test | Test performance at different concurrency levels | Evaluate concurrency processing capability |
-        | 🔥 Prefill Stress Test | Test long input processing capability | Evaluate prefill performance |
-        | 📏 Long Context Test | Test long context processing | Evaluate long text comprehension |
-        | 🔬 Matrix Test | Concurrency + context combination test | Comprehensive performance evaluation |
-        | 📄 Custom Test | Use custom text | Specific scenario test |
+        | Concurrency Test | Test performance at different concurrency levels | Evaluate concurrency processing capability |
+        | Prefill Stress Test | Test long input processing capability | Evaluate prefill performance |
+        | Long Context Test | Test long context processing | Evaluate long text comprehension |
+        | Matrix Test | Concurrency + context combination test | Comprehensive performance evaluation |
+        | Custom Test | Use custom text | Specific scenario test |
 
         **Parameter Configuration:**
         - Concurrency: Number of simultaneous requests
@@ -184,24 +188,24 @@ ONBOARDING_CONTENT = {
         - Thinking mode: enable model reasoning
         """,
         "tips": [
-            "💡 Tip: First-time users should start with the 'Quick Test' preset",
-            "💡 Tip: Stress tests consume more API quota",
+            "**Tip**: First-time users should start with the 'Quick Test' preset",
+            "**Tip**: Stress tests consume more API quota",
         ],
     },
     "run_test": {
-        "title": "🚀 Run Test",
+        "title": "Run Test",
         "content": """
         ### Step 3:Start Test
 
         **In the unified test control panel:**
 
         1. **Confirm configuration** - Review configuration summary to ensure correct parameters
-        2. **Start Test** - Click the '🚀 Start Test' button
+        2. **Start Test** - Click the 'Start Test' button
         3. **Monitor progress** - View test progress and status in real-time
 
         **Test control:**
-        - ⏹️ Stop - Interrupt current test
-        - ▶️ Resume - Continue from where it was stopped
+        - Stop - Interrupt current test
+        - Resume - Continue from where it was stopped
 
         **Real-time Monitoring:**
         - Progress bar shows current test progress
@@ -209,12 +213,12 @@ ONBOARDING_CONTENT = {
         - Dynamic charts display performance metrics
         """,
         "tips": [
-            "💡 Tip: You can stop the test anytime without losing saved results",
-            "💡 Tip: Recommend running a small test first to validate configuration",
+            "**Tip**: You can stop the test anytime without losing saved results",
+            "**Tip**: Recommend running a small test first to validate configuration",
         ],
     },
     "results": {
-        "title": "📊 View Results",
+        "title": "View Results",
         "content": """
         ### Step 4:Analyze Test Results
 
@@ -240,28 +244,28 @@ ONBOARDING_CONTENT = {
            - Compare different configuration effects
         """,
         "tips": [
-            "💡 Tip: Use result comparison to visually compare multiple tests",
-            "💡 Tip: History is automatically saved in the project directory",
+            "**Tip**: Use result comparison to visually compare multiple tests",
+            "**Tip**: History is automatically saved in the project directory",
         ],
     },
     "complete": {
-        "title": "🎉 Congratulations!",
+        "title": "Congratulations!",
         "content": """
         ### You have completed the onboarding!
 
         **You have learned:**
 
-        - ✅ Configure API Connect
-        - ✅ Select Test Type
-        - ✅ Run Test
-        - ✅ View and analyze results
+        - Configure API Connect
+        - Select Test Type
+        - Run Test
+        - View and analyze results
 
         **Next:**
 
-        - 🚀 Try different test configurations
-        - 📁 Save your common configurations as presets
-        - 📊 Compare different model performances
-        - 🔬 Deep dive into test results
+        - Try different test configurations
+        - Save your common configurations as presets
+        - Compare different model performances
+        - Deep dive into test results
 
         **Need help?**
 
@@ -269,8 +273,8 @@ ONBOARDING_CONTENT = {
         - Check the project README for more information
         """,
         "tips": [
-            "🎉 Happy testing!",
-            "💡 Tip: Saving common configurations can significantly improve testing efficiency",
+            "Happy testing!",
+            "**Tip**: Saving common configurations can significantly improve testing efficiency",
         ],
     },
 }
@@ -321,6 +325,7 @@ def render_compact_welcome_banner():
         return False
 
     with st.container():
+        welcome_icon = icon("hand", color="#ffffff")
         st.markdown(
             """
             <style>
@@ -343,20 +348,22 @@ def render_compact_welcome_banner():
             }
             </style>
             <div class="welcome-banner">
-                <h4>👋 Welcome to LLM Benchmark Platform</h4>
+                <h4>__WELCOME_ICON__ Welcome to LLM Benchmark Platform</h4>
                 <p>A professional LLM performance &amp; quality testing tool. Not familiar? View the guide or get started directly.</p>
             </div>
-            """,
+            """.replace(
+                "__WELCOME_ICON__", welcome_icon
+            ),
             unsafe_allow_html=True,
         )
 
         c1, c2, c3 = st.columns([1, 1, 4])
         with c1:
-            if st.button("🏃 Quick Guide", use_container_width=True, key="btn_open_guide"):
+            if st.button("Quick Guide", use_container_width=True, key="btn_open_guide"):
                 st.session_state.show_onboarding_guide = True
                 st.rerun()
         with c2:
-            if st.button("✓ Got it", use_container_width=True, key="btn_dismiss_guide"):
+            if st.button("Got it", use_container_width=True, key="btn_dismiss_guide"):
                 _dismiss_onboarding(permanently=True)
                 st.rerun()
 
@@ -374,7 +381,9 @@ def render_onboarding_guide():
 
     with st.container(border=True):
         # Header with progress
-        st.progress(state.progress, text=f"Step {state.current_step + 1} / {len(state.STEPS)}")
+        st.progress(
+            state.progress, text=f"Step {state.current_step + 1} / {len(state.STEPS)}"
+        )
 
         # Current step content
         step_name = state.current_step_name
@@ -391,27 +400,27 @@ def render_onboarding_guide():
         with prev_col:
             if state.current_step > 0:
                 st.button(
-                    "⬅️ Previous",
+                    "Previous",
                     on_click=_show_previous_onboarding_step,
                     key="onb_prev",
                 )
         with next_col:
             if state.current_step < len(OnboardingState.STEPS) - 1:
                 st.button(
-                    "Next ➡️",
+                    "Next",
                     type="primary",
                     on_click=_show_next_onboarding_step,
                     key="onb_next",
                 )
             else:
                 st.button(
-                    "Done ✅",
+                    "Done",
                     type="primary",
                     on_click=_complete_onboarding,
                     key="onb_done",
                 )
         with skip_col:
-            st.button("Skip Onboarding ⏭️", on_click=_skip_onboarding, key="onb_skip")
+            st.button("Skip Onboarding", on_click=_skip_onboarding, key="onb_skip")
 
 
 def render_onboarding_modal():
@@ -423,7 +432,7 @@ def render_onboarding_trigger():
     """Render onboarding trigger in the sidebar."""
     with st.sidebar:
         st.markdown("---")
-        if st.button("❓ Help / Guide", use_container_width=True, key="sidebar_help"):
+        if st.button("Help / Guide", use_container_width=True, key="sidebar_help"):
             _reset_onboarding()
             st.rerun()
 
@@ -450,30 +459,36 @@ def render_quick_reference():
     )
 
     with st.container():
+        rocket_icon = icon("rocket", color="#ffffff")
+        hand_icon = icon("hand-pointing-up", color="#ffffff")
         st.markdown(
             """
         <div class="quick-ref">
-            <h3>🚀 Quick Start</h3>
+            <h3>__ROCKET_ICON__ Quick Start</h3>
             <p><strong>1.</strong> Configure API on the left</p>
             <p><strong>2.</strong> Select Test Type</p>
             <p><strong>3.</strong> Click 'Start Test'</p>
             <p><strong>4.</strong> View and analyze results</p>
-            <p style="margin-bottom: 0;">👆 need <a href="#" onclick="Streamlit.setComponentValue('onboarding_trigger', true)">detailed help</a>?</p>
+            <p style="margin-bottom: 0;">__HAND_ICON__ need <a href="#" onclick="Streamlit.setComponentValue('onboarding_trigger', true)">detailed help</a>?</p>
         </div>
-        """,
+        """.replace(
+                "__ROCKET_ICON__", rocket_icon
+            ).replace(
+                "__HAND_ICON__", hand_icon
+            ),
             unsafe_allow_html=True,
         )
 
 
 def render_feature_highlights():
     """Render feature highlights"""
-    with st.expander("✨ Feature Highlights", expanded=False):
+    with st.expander("Feature Highlights", expanded=False):
         col1, col2 = st.columns(2)
 
         with col1:
             st.markdown(
                 """
-            **🎯 Precise Testing**
+            **Precise Testing**
             - Supports 7 test types
             - Multi-dimensional performance metrics
             - Reproducible test environment
@@ -482,7 +497,7 @@ def render_feature_highlights():
 
             st.markdown(
                 """
-            **📊 Deep Analysis**
+            **Deep Analysis**
             - Real-time progress monitoring
             - Visualization chart display
             - Automatic report generation
@@ -492,7 +507,7 @@ def render_feature_highlights():
         with col2:
             st.markdown(
                 """
-            **💾 Smart Management**
+            **Smart Management**
             - Configuration preset saving
             - Test progress persistence
             - History query
@@ -501,7 +516,7 @@ def render_feature_highlights():
 
             st.markdown(
                 """
-            **🔧 Flexible Configuration**
+            **Flexible Configuration**
             - Multi API provider support
             - Custom test parameters
             - Thinking mode testing
@@ -511,7 +526,7 @@ def render_feature_highlights():
 
 def render_faqs():
     """Render FAQ"""
-    with st.expander("❓ FAQ", expanded=False):
+    with st.expander("FAQ", expanded=False):
         faqs = [
             {
                 "q": "How to choose the right concurrency?",

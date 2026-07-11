@@ -176,7 +176,9 @@ class DatabaseManager:
         Returns:
             Insert记录数
         """
-        results = [TestResult.from_api_result(cast(int, run.id), d) for d in results_data]
+        results = [
+            TestResult.from_api_result(cast(int, run.id), d) for d in results_data
+        ]
         return self._result_repo.insert_batch(results)
 
     def complete_test_run(
@@ -271,7 +273,9 @@ class DatabaseManager:
             return False
         return self._run_repo.update_by(data, "id = ?", (run_id,)) > 0
 
-    def update_run_progress(self, run: TestRun, completed: int, total: int, failed: int = 0):
+    def update_run_progress(
+        self, run: TestRun, completed: int, total: int, failed: int = 0
+    ):
         """UpdateTest进度"""
         run.update_progress(completed, total)
         self._run_repo.update_progress(cast(int, run.id), completed, total, failed)
@@ -332,7 +336,9 @@ class DatabaseManager:
         **kwargs,
     ) -> Report:
         """Create报告"""
-        report = Report.create(model_id=model_id, report_type=report_type, run_id=run_id, **kwargs)
+        report = Report.create(
+            model_id=model_id, report_type=report_type, run_id=run_id, **kwargs
+        )
         report.id = self._report_repo.insert(report)
         return report
 
@@ -449,7 +455,9 @@ class DatabaseManager:
     # 便捷方法：ImportExport
     # ============================================
 
-    def import_csv(self, csv_path: str, model_id: str | None = None, test_type: str | None = None):
+    def import_csv(
+        self, csv_path: str, model_id: str | None = None, test_type: str | None = None
+    ):
         """Import CSV 文件"""
         return self._import_service.import_csv_file(csv_path, model_id, test_type)
 

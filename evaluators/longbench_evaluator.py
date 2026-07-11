@@ -131,7 +131,9 @@ class LongBenchEvaluator(BaseEvaluator):
         samples = self._normalize_samples(samples)
         random.shuffle(samples)
 
-        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
+        total_needed = self.num_shots + (
+            self.max_samples if self.max_samples else len(samples)
+        )
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
@@ -209,7 +211,9 @@ class LongBenchEvaluator(BaseEvaluator):
             },
         ]
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """Format LongBench 样本"""
         context = sample.get("context", "")
 
@@ -230,7 +234,9 @@ class LongBenchEvaluator(BaseEvaluator):
         elif "code" in task:
             instruction = "Complete the following code:\n\n"
         else:
-            instruction = "Answer the following question based on the given context:\n\n"
+            instruction = (
+                "Answer the following question based on the given context:\n\n"
+            )
 
         return instruction + self.format_prompt(sample, include_answer=False)
 
@@ -254,7 +260,9 @@ class LongBenchEvaluator(BaseEvaluator):
 
         predicted_lower = normalize_text(predicted.lower())
 
-        return any(normalize_text(ans.lower()) in predicted_lower for ans in correct_list)
+        return any(
+            normalize_text(ans.lower()) in predicted_lower for ans in correct_list
+        )
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
         """GetCorrect answer"""

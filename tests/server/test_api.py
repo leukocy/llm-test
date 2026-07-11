@@ -21,7 +21,9 @@ def test_health_check():
     assert isinstance(data, dict)
     # Check if some known strategy exists (e.g. prefill)
     if not data:
-        pytest.skip("No strategies registered yet? Strategies should auto-register on import.")
+        pytest.skip(
+            "No strategies registered yet? Strategies should auto-register on import."
+        )
     assert "prefill" in data
     assert "concurrency" in data
 

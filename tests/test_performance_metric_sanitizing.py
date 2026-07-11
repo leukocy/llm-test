@@ -107,11 +107,15 @@ def test_grouped_extreme_ignores_zero_performance_values():
     assert best_ttft.loc[best_ttft["concurrency"] == 1, "Best_TTFT"].item() == 1.25
     assert pd.isna(best_ttft.loc[best_ttft["concurrency"] == 2, "Best_TTFT"].item())
     assert (
-        max_output.loc[max_output["concurrency"] == 1, "Max_System_Output_Throughput"].item()
+        max_output.loc[
+            max_output["concurrency"] == 1, "Max_System_Output_Throughput"
+        ].item()
         == 550.0
     )
     assert pd.isna(
-        max_output.loc[max_output["concurrency"] == 2, "Max_System_Output_Throughput"].item()
+        max_output.loc[
+            max_output["concurrency"] == 2, "Max_System_Output_Throughput"
+        ].item()
     )
 
 
@@ -142,8 +146,12 @@ def test_concurrency_report_table_uses_valid_values_instead_of_zero_extremes(
     st.metric = MagicMock()
     st.subheader = MagicMock()
 
-    monkeypatch.setattr(reports, "export_benchmark_summary_chart", lambda *args, **kwargs: None)
-    monkeypatch.setattr(reports, "generate_performance_insights", lambda *args, **kwargs: ([], []))
+    monkeypatch.setattr(
+        reports, "export_benchmark_summary_chart", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        reports, "generate_performance_insights", lambda *args, **kwargs: ([], [])
+    )
 
     df = pd.DataFrame(
         {
@@ -192,8 +200,12 @@ def test_concurrency_report_success_rate_uses_percent_and_blank_errors(monkeypat
     st.metric = MagicMock()
     st.subheader = MagicMock()
 
-    monkeypatch.setattr(reports, "export_benchmark_summary_chart", lambda *args, **kwargs: None)
-    monkeypatch.setattr(reports, "generate_performance_insights", lambda *args, **kwargs: ([], []))
+    monkeypatch.setattr(
+        reports, "export_benchmark_summary_chart", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        reports, "generate_performance_insights", lambda *args, **kwargs: ([], [])
+    )
 
     df = pd.DataFrame(
         {

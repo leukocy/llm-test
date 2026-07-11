@@ -381,7 +381,9 @@ class SmartAnswerParser:
             rule_result.error = f"LLM fallback failed: {e}"
             return rule_result
 
-    async def _llm_parse(self, response: str, answer_type: AnswerType, llm_func) -> ParseResult:
+    async def _llm_parse(
+        self, response: str, answer_type: AnswerType, llm_func
+    ) -> ParseResult:
         """use LLM ParseAnswer"""
         type_instruction = {
             AnswerType.NUMBER: "Extract the final numerical answer. Return ONLY the number, nothing else. If the answer is a fraction, convert it to decimal.",
@@ -463,7 +465,11 @@ def compare_answers(
 
     if answer_type == AnswerType.NUMBER:
         try:
-            pred_val = float(predicted) if not isinstance(predicted, (int, float)) else predicted
+            pred_val = (
+                float(predicted)
+                if not isinstance(predicted, (int, float))
+                else predicted
+            )
             exp_val = float(str(expected).replace(",", ""))
 
             # 完全相etc.

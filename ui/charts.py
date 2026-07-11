@@ -60,7 +60,9 @@ def generate_color_gradient(base_hex, n_steps):
 
     base_rgb = hex_to_rgb(base_hex)
     # Convert to HSV to manipulate saturation/value
-    h, s, v = colorsys.rgb_to_hsv(base_rgb[0] / 255.0, base_rgb[1] / 255.0, base_rgb[2] / 255.0)
+    h, s, v = colorsys.rgb_to_hsv(
+        base_rgb[0] / 255.0, base_rgb[1] / 255.0, base_rgb[2] / 255.0
+    )
 
     colors = []
     # Strategy: Vary Saturation and Value to create distinct shades.
@@ -206,7 +208,9 @@ def plot_plotly_bar(
                 # Create custom text with value and token count
                 custom_text = df.apply(
                     lambda row: (
-                        f"{row[y]:.2f}<br>({int(row[decode_col])} tok)" if pd.notna(row[y]) else ""
+                        f"{row[y]:.2f}<br>({int(row[decode_col])} tok)"
+                        if pd.notna(row[y])
+                        else ""
                     ),
                     axis=1,
                 )
@@ -237,7 +241,9 @@ def plot_plotly_bar(
         # Improved axis normalization
         y_values = pd.to_numeric(df[y], errors="coerce").to_numpy()
         if error_y_col:
-            err_values = pd.to_numeric(df[error_y_col], errors="coerce").fillna(0).to_numpy()
+            err_values = (
+                pd.to_numeric(df[error_y_col], errors="coerce").fillna(0).to_numpy()
+            )
             y_values = np.concatenate([y_values, y_values + err_values])
         finite_y = y_values[np.isfinite(y_values)]
         y_max = np.max(finite_y) if len(finite_y) > 0 else 1
@@ -387,7 +393,9 @@ def plot_plotly_line(
         # Improved axis normalization
         y_values = pd.to_numeric(df[y], errors="coerce").to_numpy()
         if error_y_col:
-            err_values = pd.to_numeric(df[error_y_col], errors="coerce").fillna(0).to_numpy()
+            err_values = (
+                pd.to_numeric(df[error_y_col], errors="coerce").fillna(0).to_numpy()
+            )
             y_values = np.concatenate([y_values, y_values + err_values])
         finite_y = y_values[np.isfinite(y_values)]
         y_max = np.max(finite_y) if len(finite_y) > 0 else 1
@@ -492,7 +500,9 @@ def plot_plotly_line(
         return None
 
 
-def plot_relative_performance_bar(df, x, y, title, xlabel, ylabel, model_id, total_runs):
+def plot_relative_performance_bar(
+    df, x, y, title, xlabel, ylabel, model_id, total_runs
+):
     """Dedicated bar chart for displaying relative performance comparison"""
     try:
         df_rel = sanitize_performance_metrics(df, [y])

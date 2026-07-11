@@ -62,7 +62,9 @@ class TestTestExecutor:
         assert executor.test_running == False
 
     @patch("core.benchmark_runner.BenchmarkRunner")
-    def test_capture_system_info(self, mock_runner_class, executor, clean_session_state):
+    def test_capture_system_info(
+        self, mock_runner_class, executor, clean_session_state
+    ):
         """TestSystem info capture"""
         import streamlit as st
 
@@ -116,7 +118,9 @@ class TestTestExecutor:
         assert sys_info["model_name"] == "test-model"
 
     @patch("core.benchmark_runner.BenchmarkRunner")
-    def test_capture_system_info_fallbacks(self, mock_runner_class, executor, clean_session_state):
+    def test_capture_system_info_fallbacks(
+        self, mock_runner_class, executor, clean_session_state
+    ):
         """TestSystem info capture时回退值"""
         import streamlit as st
 
@@ -203,7 +207,9 @@ class TestTestExecutor:
 
         dummy_func.__name__ = "run_long_context_test"
 
-        executor._calculate_total_requests(dummy_func, mock_runner, (context_lengths, rounds, 1000))
+        executor._calculate_total_requests(
+            dummy_func, mock_runner, (context_lengths, rounds, 1000)
+        )
 
         # 3 * 5 = 15
         assert mock_runner.total_requests == 15

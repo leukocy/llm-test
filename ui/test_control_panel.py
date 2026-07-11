@@ -16,6 +16,8 @@ from typing import Any
 
 import streamlit as st
 
+from ui.components import status_icon
+
 # ============================================================================
 # Test status definitions
 # ============================================================================
@@ -261,9 +263,9 @@ class ProgressManager:
                         "test_type": data.get("test_type", "Unknown"),
                         "status": data.get("status", TestStatus.IDLE),
                         "progress": f"{data.get('completed_samples', 0)}/{data.get('total_samples', 0)}",
-                        "file_time": datetime.fromtimestamp(progress_file.stat().st_mtime).strftime(
-                            "%Y-%m-%d %H:%M:%S"
-                        ),
+                        "file_time": datetime.fromtimestamp(
+                            progress_file.stat().st_mtime
+                        ).strftime("%Y-%m-%d %H:%M:%S"),
                     }
                 )
             except Exception:
@@ -355,22 +357,15 @@ def render_test_control_panel():
     col_status, col_buttons = st.columns([1, 2])
 
     with col_status:
-        st.subheader("📊 Status")
+        st.subheader("Status")
 
         # Current status display
         current_status = st.session_state.get("test_status", TestStatus.IDLE)
 
-        # Status color mapping
-        status_colors = {
-            TestStatus.IDLE: "🔵",
-            TestStatus.RUNNING: "🟢",
-            TestStatus.PAUSED: "🟡",
-            TestStatus.COMPLETED: "✅",
-            TestStatus.FAILED: "❌",
-            TestStatus.CANCELLED: "⏹️",
-        }
-
-        st.metric("Status", f"{status_colors.get(current_status, '⚪')} {current_status}")
+        status_html = status_icon(current_status)
+        st.markdown(
+            f"**Status:** {status_html} {current_status}", unsafe_allow_html=True
+        )
 
         # Progress display(ifhas)
         if "current_progress" in st.session_state:
@@ -391,21 +386,21 @@ def render_test_control_panel():
             # Time information
             if progress.start_time:
                 elapsed = progress.elapsed_time
-                st.caption(f"⏱️ Elapsed: {format_time(elapsed)}")
+                st.caption(f"Elapsed: {format_time(elapsed)}")
 
                 remaining = progress.estimated_remaining_time
                 if remaining:
-                    st.caption(f"⏳ Est. remaining: {format_time(remaining)}")
+                    st.caption(f"Est. remaining: {format_time(remaining)}")
 
     with col_buttons:
-        st.subheader("🎮 Test Control")
+        st.subheader("Test Control")
 
         # Control buttons - 只有 Pause, Resume, Stop
         col_pause, col_continue, col_stop = st.columns(3)
 
         with col_pause:
             pause_button = st.button(
-                "⏸️ Pause",
+                "Pause",
                 disabled=not test_running,
                 key="control_pause_btn",
                 use_container_width=True,
@@ -454,7 +449,9 @@ def render_test_control_panel():
 
                         # 保存 resume_data（已完成的请求）
                         completed_count = (
-                            len(runner.results_list) if hasattr(runner, "results_list") else 0
+                            len(runner.results_list)
+                            if hasattr(runner, "results_list")
+                            else 0
                         )
                         st.session_state.resume_data = {
                             "completed_results": (
@@ -467,7 +464,6 @@ def render_test_control_panel():
                         }
                         st.toast(
                             f"Paused: {completed_count} requests completed, will resume from index {completed_count}",
-                            icon="⏸️",
                         )
 
                 # 4. 更新状态为 Paused
@@ -475,12 +471,12 @@ def render_test_control_panel():
                 st.session_state.test_paused = True
                 st.session_state.test_status = "Paused"
 
-                st.toast("Test paused.", icon="⏸️")
+                st.toast("Test paused.")
                 st.rerun()
 
         with col_continue:
             continue_button = st.button(
-                "▶️ Resume",
+                "Resume",
                 disabled=not test_paused,
                 key="control_continue_btn",
                 use_container_width=True,
@@ -588,12 +584,12 @@ def render_test_control_panel():
                     else:
                         st.warning(f"Resume not supported for: {test_type}")
 
-                st.toast("Resuming test...", icon="▶️")
+                st.toast("Resuming test...")
                 st.rerun()
 
         with col_stop:
             stop_button = st.button(
-                "⏹️ Stop",
+                "Stop",
                 disabled=not (test_running or test_paused),
                 key="control_stop_btn",
                 type="secondary",
@@ -608,7 +604,11 @@ def render_test_control_panel():
                 # 2. 尝试从当前 runner 实例获取结果（如果有）
                 if "_current_runner_instance" in st.session_state:
                     runner = st.session_state._current_runner_instance
-                    if runner and hasattr(runner, "results_list") and runner.results_list:
+                    if (
+                        runner
+                        and hasattr(runner, "results_list")
+                        and runner.results_list
+                    ):
                         import pandas as pd
 
                         from utils.helpers import reorder_dataframe_columns
@@ -631,7 +631,7 @@ def render_test_control_panel():
                 if "_current_runner_instance" in st.session_state:
                     del st.session_state._current_runner_instance
 
-                st.toast("Test stopped.", icon="⏹️")
+                st.toast("Test stopped.")
                 st.rerun()
 
     return {
@@ -643,7 +643,7 @@ def render_test_control_panel():
 
 def render_progress_history():
     """Render progress history panel"""
-    with st.expander("📜 Test History", expanded=False):
+    with st.expander("Test History", expanded=False):
         saved_progress_list = progress_manager.list_saved_progress()
 
         if not saved_progress_list:
@@ -664,7 +664,11 @@ def render_progress_history():
                     st.caption(item["progress"])
 
                 with col4:
-                    if st.button("🗑️", key=f"del_{item['test_id']}", help="Delete this progress"):
+                    if st.button(
+                        "Delete",
+                        key=f"del_{item['test_id']}",
+                        help="Delete this progress",
+                    ):
                         if progress_manager.delete_progress(item["test_id"]):
                             st.rerun()
 
@@ -682,13 +686,15 @@ def render_resumable_tests():
 
     # Filter resumable tests
     resumable = [
-        p for p in saved_progress_list if p["status"] in [TestStatus.PAUSED, TestStatus.CANCELLED]
+        p
+        for p in saved_progress_list
+        if p["status"] in [TestStatus.PAUSED, TestStatus.CANCELLED]
     ]
 
     if not resumable:
         return None
 
-    with st.expander("🔄 Resumable Tests", expanded=True):
+    with st.expander("Resumable Tests", expanded=True):
         st.caption("The following tests can be resumed:")
 
         selected_test_id = None
@@ -701,15 +707,15 @@ def render_resumable_tests():
                 st.caption(f"Save: {prog['file_time']}")
 
             with col2:
-                status_icon = "🟡" if prog["status"] == TestStatus.PAUSED else "⏹️"
-                st.write(f"{status_icon} {prog['status']}")
+                status_html = status_icon(prog["status"])
+                st.markdown(f"{status_html} {prog['status']}", unsafe_allow_html=True)
 
             with col3:
                 st.write(prog["progress"])
 
             with col4:
                 if st.button(
-                    "▶️ Restore",
+                    "Restore",
                     key=f"resume_{prog['test_id']}",
                     use_container_width=True,
                 ):

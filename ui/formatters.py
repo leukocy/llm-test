@@ -323,7 +323,9 @@ FORMAT_RULES = {
 }
 
 
-def format_results_for_display(df: pd.DataFrame, test_type: str | None = None) -> pd.DataFrame:
+def format_results_for_display(
+    df: pd.DataFrame, test_type: str | None = None
+) -> pd.DataFrame:
     """Unified formatting for all test type display data
 
     Args:
@@ -378,7 +380,11 @@ def format_results_for_display(df: pd.DataFrame, test_type: str | None = None) -
     display_df = sanitize_performance_metrics(display_df, copy=False)
 
     # 2. Rename columns
-    rename = {col: COLUMN_DISPLAY_NAMES[col] for col in final_cols if col in COLUMN_DISPLAY_NAMES}
+    rename = {
+        col: COLUMN_DISPLAY_NAMES[col]
+        for col in final_cols
+        if col in COLUMN_DISPLAY_NAMES
+    }
     display_df = display_df.rename(columns=rename)
 
     # 3. Numeric formatting
@@ -393,7 +399,9 @@ def format_results_for_display(df: pd.DataFrame, test_type: str | None = None) -
             )
         elif col in FORMAT_RULES["int"]:
             display_df[col] = display_df[col].apply(
-                lambda x: (int(x) if isinstance(x, (int, float)) and not pd.isna(x) else x)
+                lambda x: (
+                    int(x) if isinstance(x, (int, float)) and not pd.isna(x) else x
+                )
             )
 
     return display_df

@@ -6,13 +6,15 @@ from core.dataset_loader import DatasetLoader
 
 def render_dataset_manager():
     """Render the Dataset Management UI."""
-    st.header("📂 Dataset Management")
+    st.header("Dataset Management")
 
     loader = DatasetLoader()
 
     # --- Upload Section ---
-    with st.expander("📤 Upload New Dataset", expanded=False):
-        uploaded_file = st.file_uploader("Select a CSV or JSON file", type=["csv", "json"])
+    with st.expander("Upload New Dataset", expanded=False):
+        uploaded_file = st.file_uploader(
+            "Select a CSV or JSON file", type=["csv", "json"]
+        )
         if uploaded_file is not None and st.button("Save Dataset"):
             with st.spinner("Validating and saving..."):
                 error = loader.save_dataset(uploaded_file, uploaded_file.name)
@@ -23,7 +25,7 @@ def render_dataset_manager():
                     st.rerun()
 
         st.info(
-            "💡 Dataset must contain a 'prompt' column. Optional columns: 'expected_output', 'id'."
+            "Dataset must contain a 'prompt' column. Optional columns: 'expected_output', 'id'."
         )
 
     st.markdown("---")
@@ -44,14 +46,16 @@ def render_dataset_manager():
             col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
 
             with col1:
-                st.markdown(f"**📄 {row['filename']}**")
+                st.markdown(f"**{row['filename']}**")
             with col2:
                 st.caption(f"{row['type']} • {row['size']}")
             with col3:
-                if st.button("👀 Preview", key=f"preview_{row['filename']}"):
+                if st.button("Preview", key=f"preview_{row['filename']}"):
                     st.session_state.preview_dataset = row["filename"]
             with col4:
-                if st.button("🗑️ Delete", key=f"delete_{row['filename']}", type="secondary"):
+                if st.button(
+                    "Delete", key=f"delete_{row['filename']}", type="secondary"
+                ):
                     if loader.delete_dataset(row["filename"]):
                         st.success(f"Deleted {row['filename']}")
                         if (
@@ -66,7 +70,7 @@ def render_dataset_manager():
     # --- Preview Section ---
     if "preview_dataset" in st.session_state:
         st.markdown("---")
-        st.subheader(f"👀 Preview: {st.session_state.preview_dataset}")
+        st.subheader(f"Preview: {st.session_state.preview_dataset}")
         preview_df = loader.get_dataset_preview(st.session_state.preview_dataset)
         if preview_df is not None:
             st.dataframe(preview_df, width="stretch")

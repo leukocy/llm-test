@@ -83,7 +83,9 @@ class TestBenchmarkRunner:
         assert metrics["token_calc_method"] == "Error"
 
     @pytest.mark.asyncio
-    async def test_get_completion_decode_time_uses_skip_first_token_window(self, runner):
+    async def test_get_completion_decode_time_uses_skip_first_token_window(
+        self, runner
+    ):
         class FakeProvider:
             async def get_completion(self, *args, **kwargs):
                 return {
@@ -140,7 +142,9 @@ class TestBenchmarkRunner:
         assert df.loc[0, "system_output_throughput"] == pytest.approx(3.75)
 
     @pytest.mark.asyncio
-    async def test_concurrency_prompt_generation_subtracts_template_tokens(self, tmp_path):
+    async def test_concurrency_prompt_generation_subtracts_template_tokens(
+        self, tmp_path
+    ):
         runner = BenchmarkRunner(
             placeholder=MagicMock(),
             progress_bar=MagicMock(),
@@ -166,7 +170,9 @@ class TestBenchmarkRunner:
             [2], rounds_per_level=1, max_tokens=4, input_tokens_target=20
         )
 
-        calibrated_targets = [call.args[0] for call in runner._calibrate_prompt.call_args_list]
+        calibrated_targets = [
+            call.args[0] for call in runner._calibrate_prompt.call_args_list
+        ]
         assert calibrated_targets == [15, 15]
 
 
@@ -251,7 +257,9 @@ class TestBenchmarkRunnerSystemInfo:
         """update_ui 把实时结果交给注入的 render_progress 回调，不直接调 st.*（模式 F）"""
         runner.results_list = [{"session_id": 7, "tps": 50.0, "error": None}]
         captured = []
-        runner.render_progress = lambda df, out, sid: captured.append((len(df), out, sid))
+        runner.render_progress = lambda df, out, sid: captured.append(
+            (len(df), out, sid)
+        )
         runner.output_placeholder = None  # 不触发 latest_output
 
         runner.update_ui()
@@ -750,8 +758,12 @@ class TestBenchmarkRunnerResume:
         runner._calibrate_prompt = MagicMock(return_value="prompt")
         runner._run_concurrency_batch = AsyncMock(
             side_effect=[
-                [{"session_id": 4 + i, "error": None} for i in range(4)],  # conc=4 round0
-                [{"session_id": 8 + i, "error": None} for i in range(4)],  # conc=4 round1
+                [
+                    {"session_id": 4 + i, "error": None} for i in range(4)
+                ],  # conc=4 round0
+                [
+                    {"session_id": 8 + i, "error": None} for i in range(4)
+                ],  # conc=4 round1
             ]
         )
 
@@ -784,7 +796,9 @@ class TestBenchmarkRunnerResume:
         def side_effect(*args, **kwargs):
             nonlocal call_count
             call_count += 1
-            return [{"session_id": call_count * 2 - 2 + i, "error": None} for i in range(2)]
+            return [
+                {"session_id": call_count * 2 - 2 + i, "error": None} for i in range(2)
+            ]
 
         runner._run_concurrency_batch = AsyncMock(side_effect=side_effect)
 

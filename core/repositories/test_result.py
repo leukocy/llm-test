@@ -119,7 +119,9 @@ class TestResultRepository(BaseRepository[TestResult]):
         """based on运行 ID 查找所hasResult"""
         return self.find_by("run_id = ?", (run_id,), limit)
 
-    def find_errors(self, run_id: int | None = None, limit: int = 100) -> list[TestResult]:
+    def find_errors(
+        self, run_id: int | None = None, limit: int = 100
+    ) -> list[TestResult]:
         """查找ErrorResult"""
         if run_id:
             return self.find_by("run_id = ? AND error IS NOT NULL", (run_id,), limit)
@@ -196,7 +198,9 @@ class TestResultRepository(BaseRepository[TestResult]):
             FROM test_results
             WHERE run_id = ? AND {column} IS NOT NULL
         """
-        row = self.db.fetch_one(sql, (run_id, run_id, run_id, run_id, run_id, run_id, run_id))
+        row = self.db.fetch_one(
+            sql, (run_id, run_id, run_id, run_id, run_id, run_id, run_id)
+        )
         return row if row else {}
 
     def delete_by_run(self, run_id: int) -> int:

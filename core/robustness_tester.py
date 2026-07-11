@@ -111,7 +111,9 @@ class TextPerturber:
             "Calculate": ["算", "求", "得出"],
         }
 
-    def perturb(self, text: str, perturbation_type: PerturbationType) -> PerturbedSample:
+    def perturb(
+        self, text: str, perturbation_type: PerturbationType
+    ) -> PerturbedSample:
         """
         对文本Apply扰动
 
@@ -171,7 +173,9 @@ class TextPerturber:
             original_question=text,
             perturbed_question=perturbed,
             perturbation_type=PerturbationType.SYNONYM_REPLACE,
-            perturbation_details=(", ".join(replaced) if replaced else "No synonyms found"),
+            perturbation_details=(
+                ", ".join(replaced) if replaced else "No synonyms found"
+            ),
         )
 
     def _insert_typo(self, text: str) -> PerturbedSample:
@@ -186,7 +190,9 @@ class TextPerturber:
             )
 
         # 选择一长度>=4单词
-        long_words = [(i, w) for i, w in enumerate(words) if len(w) >= 4 and w.isalpha()]
+        long_words = [
+            (i, w) for i, w in enumerate(words) if len(w) >= 4 and w.isalpha()
+        ]
         if not long_words:
             return PerturbedSample(
                 original_question=text,
@@ -328,7 +334,9 @@ class RobustnessTester:
         print(result.robustness_score)
     """
 
-    def __init__(self, perturbation_types: list[PerturbationType] | None = None, seed: int = 42):
+    def __init__(
+        self, perturbation_types: list[PerturbationType] | None = None, seed: int = 42
+    ):
         self.perturber = TextPerturber(seed)
         self.perturbation_types = perturbation_types or [
             PerturbationType.SYNONYM_REPLACE,
@@ -358,8 +366,12 @@ class RobustnessTester:
         # 1. Test原始问题
         try:
             original_response = await get_response_func(question)
-            result.original_answer = self._extract_answer(original_response, answer_parser)
-            result.original_correct = self._check_answer(result.original_answer, correct_answer)
+            result.original_answer = self._extract_answer(
+                original_response, answer_parser
+            )
+            result.original_correct = self._check_answer(
+                result.original_answer, correct_answer
+            )
         except Exception as e:
             result.original_answer = f"Error: {e}"
             result.original_correct = False
@@ -367,7 +379,9 @@ class RobustnessTester:
         # 2. Test各种扰动
         consistent_count = 0
         correct_after_perturbation = 0
-        type_results: dict[str, list[bool]] = {t.value: [] for t in self.perturbation_types}
+        type_results: dict[str, list[bool]] = {
+            t.value: [] for t in self.perturbation_types
+        }
 
         for ptype in self.perturbation_types:
             perturbed = self.perturber.perturb(question, ptype)
@@ -397,11 +411,15 @@ class RobustnessTester:
                     correct_after_perturbation += 1
 
             except Exception as e:
-                result.perturbed_results.append({"perturbation_type": ptype.value, "error": str(e)})
+                result.perturbed_results.append(
+                    {"perturbation_type": ptype.value, "error": str(e)}
+                )
 
         # 3. Calculated metrics
         if self.perturbation_types:
-            result.robustness_score = correct_after_perturbation / len(self.perturbation_types)
+            result.robustness_score = correct_after_perturbation / len(
+                self.perturbation_types
+            )
             result.consistency_score = consistent_count / len(self.perturbation_types)
 
         # 按类型敏感性
@@ -416,7 +434,9 @@ class RobustnessTester:
         if parser:
             return str(parser(response))
 
-        content = response.get("content", "") if isinstance(response, dict) else str(response)
+        content = (
+            response.get("content", "") if isinstance(response, dict) else str(response)
+        )
 
         # 简单提取最后一数字
         numbers = re.findall(r"[-+]?\d+(?:\.\d+)?", content)
@@ -538,5 +558,9 @@ def create_robustness_tester(
     perturbation_types: list[str] | None = None,
 ) -> RobustnessTester:
     """Factory函数：CreateRobustness Tester"""
-    types = [PerturbationType(t) for t in perturbation_types] if perturbation_types else None
+    types = (
+        [PerturbationType(t) for t in perturbation_types]
+        if perturbation_types
+        else None
+    )
     return RobustnessTester(perturbation_types=types)

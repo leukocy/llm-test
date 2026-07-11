@@ -58,8 +58,14 @@ def _run_poller(url, samples_text, duration=0.25, interval=0.05):
 
 
 def test_default_metrics_url_strips_path():
-    assert default_metrics_url("http://localhost:8000/v1") == "http://localhost:8000/metrics"
-    assert default_metrics_url("https://gpu-host:443/openai/v1") == "https://gpu-host:443/metrics"
+    assert (
+        default_metrics_url("http://localhost:8000/v1")
+        == "http://localhost:8000/metrics"
+    )
+    assert (
+        default_metrics_url("https://gpu-host:443/openai/v1")
+        == "https://gpu-host:443/metrics"
+    )
     assert default_metrics_url("localhost:8000") == "http://localhost:8000/metrics"
     assert default_metrics_url(None) is None
     assert default_metrics_url("") is None

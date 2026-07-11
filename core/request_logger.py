@@ -152,7 +152,9 @@ class LogIndex:
         """based onFile pathDeleteIndex条目"""
         with self._lock:
             to_remove = [
-                log_id for log_id, entry in self._entries.items() if entry.filepath == filepath
+                log_id
+                for log_id, entry in self._entries.items()
+                if entry.filepath == filepath
             ]
             for log_id in to_remove:
                 del self._entries[log_id]
@@ -216,7 +218,9 @@ class LogIndex:
         }
 
         for entry in self._entries.values():
-            stats["by_status"][entry.status] = stats["by_status"].get(entry.status, 0) + 1
+            stats["by_status"][entry.status] = (
+                stats["by_status"].get(entry.status, 0) + 1
+            )
             stats["by_test_type"][entry.test_type] = (
                 stats["by_test_type"].get(entry.test_type, 0) + 1
             )
@@ -348,10 +352,14 @@ class RequestLogger:
         milliseconds = f"{int((created_at % 1) * 1000):03d}"
 
         # Cleanup model_id in特殊字符
-        safe_model_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in model_id)
+        safe_model_id = "".join(
+            c if c.isalnum() or c in "-_" else "_" for c in model_id
+        )
 
         # Cleanup provider 名称
-        safe_provider = "".join(c if c.isalnum() or c in "-_" else "_" for c in provider)
+        safe_provider = "".join(
+            c if c.isalnum() or c in "-_" else "_" for c in provider
+        )
 
         return f"{time_str}_{milliseconds}_{status}_{test_type}_{safe_provider}_{safe_model_id}_{session_id}.json"
 
@@ -448,7 +456,9 @@ class RequestLogger:
 
         if deleted_count > 0:
             freed_mb = freed_bytes / (1024 * 1024)
-            logger.info(f"Cleaned up {deleted_count} old log files, freed {freed_mb:.2f} MB")
+            logger.info(
+                f"Cleaned up {deleted_count} old log files, freed {freed_mb:.2f} MB"
+            )
 
         return deleted_count
 
@@ -650,7 +660,9 @@ class RequestLogger:
                     if first_token_time is not None and end_time is not None:
                         generation_time = end_time - first_token_time
                         if generation_time > 0:
-                            metrics["tpot_avg"] = round(generation_time / metrics["token_count"], 3)
+                            metrics["tpot_avg"] = round(
+                                generation_time / metrics["token_count"], 3
+                            )
 
             # Build响应信息
             response_info: dict[str, Any] = {
@@ -661,7 +673,9 @@ class RequestLogger:
 
             # Add流式响应样本（只Save前几 chunk）
             if raw_stream_chunks:
-                response_info["stream_sample"] = raw_stream_chunks[: self.max_stream_samples]
+                response_info["stream_sample"] = raw_stream_chunks[
+                    : self.max_stream_samples
+                ]
 
             # CreateLog条目
             entry = RequestLogEntry(
@@ -735,7 +749,9 @@ class RequestLogger:
 _request_logger: RequestLogger | None = None
 
 
-def init_request_logger(log_dir: str = "api_logs", enabled: bool = True, **kwargs) -> RequestLogger:
+def init_request_logger(
+    log_dir: str = "api_logs", enabled: bool = True, **kwargs
+) -> RequestLogger:
     """
     Initialize全局Request Logs记录器
 

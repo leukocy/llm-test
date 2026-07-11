@@ -196,7 +196,9 @@ class TestConfigLoader:
             markdown_export=output_data.get("markdown_export", True),
             html_export=output_data.get("html_export", True),
             include_raw_responses=output_data.get("include_raw_responses", False),
-            include_reasoning_content=output_data.get("include_reasoning_content", True),
+            include_reasoning_content=output_data.get(
+                "include_reasoning_content", True
+            ),
         )
 
         return TestConfig(
@@ -232,7 +234,9 @@ class TestConfigLoader:
         data = self._config_to_dict(config)
 
         with open(path, "w", encoding="utf-8") as f:
-            yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            yaml.dump(
+                data, f, default_flow_style=False, allow_unicode=True, sort_keys=False
+            )
 
     def _config_to_dict(self, config: TestConfig) -> dict[str, Any]:
         """willConfigureConvertis字典"""

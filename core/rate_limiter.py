@@ -169,10 +169,14 @@ class PerEndpointLimiter:
         """Get or create limiter for an endpoint."""
         with self._lock:
             if endpoint not in self.limiters:
-                self.limiters[endpoint] = RateLimiter(self.default_rate, self.default_burst)
+                self.limiters[endpoint] = RateLimiter(
+                    self.default_rate, self.default_burst
+                )
             return self.limiters[endpoint]
 
-    def acquire(self, endpoint: str, blocking: bool = True, timeout: float | None = None) -> bool:
+    def acquire(
+        self, endpoint: str, blocking: bool = True, timeout: float | None = None
+    ) -> bool:
         """Acquire a token for a specific endpoint."""
         limiter = self.get_limiter(endpoint)
         return limiter.acquire(blocking=blocking, timeout=timeout)

@@ -351,7 +351,9 @@ def icon(
     try:
         inner = ICONS[name]
     except KeyError:
-        raise KeyError(f"Unknown icon name: {name!r}. Add it to ICONS in ui/icons.py.") from None
+        raise KeyError(
+            f"Unknown icon name: {name!r}. Add it to ICONS in ui/icons.py."
+        ) from None
     stroke = color if color else "currentColor"
     return (
         f'<svg class="{escape(class_name)}" xmlns="http://www.w3.org/2000/svg" '
@@ -385,7 +387,9 @@ def status_badge(
         level = "muted"
     parts = [f'<span class="ui-badge ui-badge-{level}">']
     if icon_name:
-        parts.append(icon(icon_name, size=size, color="currentColor", vertical_align="baseline"))
+        parts.append(
+            icon(icon_name, size=size, color="currentColor", vertical_align="baseline")
+        )
     if text:
         parts.append(escape(text))
     parts.append("</span>")

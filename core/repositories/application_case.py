@@ -83,4 +83,6 @@ class ApplicationCaseRepository(BaseRepository[ApplicationCase]):
             clauses.append("source = ?")
             params.append(source)
         where = " AND ".join(clauses) if clauses else "1=1"
-        return self.find_by(where, tuple(params), limit=limit, order_by="created_at DESC")
+        return self.find_by(
+            where, tuple(params), limit=limit, order_by="created_at DESC"
+        )

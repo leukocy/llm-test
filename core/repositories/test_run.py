@@ -77,7 +77,9 @@ class TestRunRepository(BaseRepository[TestRun]):
         """based onTest Type查找"""
         return self.find_by("test_type = ?", (test_type,), limit)
 
-    def find_by_date_range(self, start: datetime, end: datetime, limit: int = 100) -> list[TestRun]:
+    def find_by_date_range(
+        self, start: datetime, end: datetime, limit: int = 100
+    ) -> list[TestRun]:
         """based on日期范围查找"""
         return self.find_by(
             "created_at BETWEEN ? AND ?", (start.isoformat(), end.isoformat()), limit
@@ -95,7 +97,9 @@ class TestRunRepository(BaseRepository[TestRun]):
         """查找最近Test"""
         return self.find_all(limit=limit, order_by="created_at DESC")
 
-    def update_status(self, run_id: int, status: str, progress: float | None = None) -> bool:
+    def update_status(
+        self, run_id: int, status: str, progress: float | None = None
+    ) -> bool:
         """
         UpdateStatus（轻量级Update）
 
@@ -114,7 +118,9 @@ class TestRunRepository(BaseRepository[TestRun]):
 
         return self.update_by(data, "id = ?", (run_id,)) > 0
 
-    def update_progress(self, run_id: int, completed: int, total: int, failed: int = 0) -> bool:
+    def update_progress(
+        self, run_id: int, completed: int, total: int, failed: int = 0
+    ) -> bool:
         """
         Update进度
 
@@ -172,7 +178,9 @@ class TestRunRepository(BaseRepository[TestRun]):
 
         return self.update_by(data, "id = ?", (run_id,)) > 0
 
-    def complete(self, run_id: int, success: bool = True, stats: dict | None = None) -> bool:
+    def complete(
+        self, run_id: int, success: bool = True, stats: dict | None = None
+    ) -> bool:
         """
         标记完成
 
@@ -184,7 +192,9 @@ class TestRunRepository(BaseRepository[TestRun]):
         Returns:
             is否succeeded
         """
-        status = TestRunStatus.COMPLETED.value if success else TestRunStatus.FAILED.value
+        status = (
+            TestRunStatus.COMPLETED.value if success else TestRunStatus.FAILED.value
+        )
         data = {
             "status": status,
             "completed_at": datetime.now().isoformat(),

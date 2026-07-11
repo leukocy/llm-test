@@ -126,7 +126,9 @@ class GeminiProvider(LLMProvider):
         if client is None:
             client = httpx.AsyncClient(
                 transport=httpx.AsyncHTTPTransport(
-                    limits=httpx.Limits(max_connections=2048, max_keepalive_connections=256),
+                    limits=httpx.Limits(
+                        max_connections=2048, max_keepalive_connections=256
+                    ),
                 ),
                 timeout=request_timeout_seconds,
             )
@@ -180,7 +182,11 @@ class GeminiProvider(LLMProvider):
                         try:
                             chunk = json.loads(line_data)
                             if "candidates" in chunk and len(chunk["candidates"]) > 0:
-                                parts = chunk["candidates"][0].get("content", {}).get("parts", [])
+                                parts = (
+                                    chunk["candidates"][0]
+                                    .get("content", {})
+                                    .get("parts", [])
+                                )
                                 for part in parts:
                                     text = part.get("text") or ""
                                     thought = part.get("thought") or ""
@@ -220,7 +226,9 @@ class GeminiProvider(LLMProvider):
         except httpx.TimeoutException as e:
             if log_callback:
                 log_callback(f"Session {session_id} (Gemini): ERROR: {str(e)}")
-            error_info = get_error_info(e, context=f"Model: {self.model_id}", language="zh")
+            error_info = get_error_info(
+                e, context=f"Model: {self.model_id}", language="zh"
+            )
             return {
                 "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
                 "error_info": error_info,
@@ -228,7 +236,9 @@ class GeminiProvider(LLMProvider):
         except httpx.NetworkError as e:
             if log_callback:
                 log_callback(f"Session {session_id} (Gemini): ERROR: {str(e)}")
-            error_info = get_error_info(e, context=f"Model: {self.model_id}", language="zh")
+            error_info = get_error_info(
+                e, context=f"Model: {self.model_id}", language="zh"
+            )
             return {
                 "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
                 "error_info": error_info,
@@ -236,7 +246,9 @@ class GeminiProvider(LLMProvider):
         except httpx.HTTPStatusError as e:
             if log_callback:
                 log_callback(f"Session {session_id} (Gemini): ERROR: {str(e)}")
-            error_info = get_error_info(e, context=f"Model: {self.model_id}", language="zh")
+            error_info = get_error_info(
+                e, context=f"Model: {self.model_id}", language="zh"
+            )
             return {
                 "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
                 "error_info": error_info,
@@ -247,7 +259,9 @@ class GeminiProvider(LLMProvider):
         except Exception as e:
             if log_callback:
                 log_callback(f"Session {session_id} (Gemini): ERROR: {str(e)}")
-            error_info = get_error_info(e, context=f"Model: {self.model_id}", language="zh")
+            error_info = get_error_info(
+                e, context=f"Model: {self.model_id}", language="zh"
+            )
             return {
                 "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
                 "error_info": error_info,

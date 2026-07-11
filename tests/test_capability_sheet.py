@@ -30,7 +30,9 @@ def test_groups_by_customer_scenario_model():
     cases = [
         _case(customer_type="金融", scenario="coding", model_name="M1", success=True),
         _case(customer_type="金融", scenario="coding", model_name="M1", success=False),
-        _case(customer_type="金融", scenario="retrieval", model_name="M1", success=True),
+        _case(
+            customer_type="金融", scenario="retrieval", model_name="M1", success=True
+        ),
         _case(customer_type="制造", scenario="coding", model_name="M1", success=True),
     ]
     sheet = build_capability_sheet(cases)

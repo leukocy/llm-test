@@ -81,7 +81,7 @@ def apply_custom_css():
         flex-shrink: 0;
     }
 
-    /* Semantic badges (replaces status emoji like ✅❌⚠️) */
+    /* Semantic badges for status indicators (success/info/warning/danger/muted) */
     .ui-badge {
         display: inline-flex;
         align-items: center;
@@ -100,7 +100,7 @@ def apply_custom_css():
     .ui-badge-danger  { background: rgba(220,53,69,.15);  color: var(--ui-danger);  border-color: rgba(220,53,69,.35); }
     .ui-badge-muted   { background: rgba(108,117,125,.15); color: var(--ui-muted);  border-color: rgba(108,117,125,.35); }
 
-    /* Section titles with a colored accent bar (replaces "📊 Title" headers) */
+    /* Section titles with a colored accent bar and optional leading icon */
     .ui-section-title {
         display: flex;
         align-items: center;
@@ -201,7 +201,7 @@ def render_results_section(test_type=None):
     """
     if not st.session_state.results_df.empty:
         st.markdown("---")
-        st.header("📊 Test Results")
+        st.header("Test Results")
 
         raw_df = st.session_state.results_df
 
@@ -217,13 +217,13 @@ def render_results_section(test_type=None):
         st.dataframe(display_df, use_container_width=True, height=400)
 
         # Expand to view raw data
-        with st.expander("🔍 View Full Raw Data", expanded=False):
+        with st.expander("View Full Raw Data", expanded=False):
             st.dataframe(raw_df, use_container_width=True, height=300)
 
         # Download button (always downloads full raw data)
         csv = raw_df.to_csv(index=False).encode("utf-8")
         st.download_button(
-            label="📥 Download Results CSV (Full Data)",
+            label="Download Results CSV (Full Data)",
             data=csv,
             file_name=f"results_{st.session_state.get('current_csv_file', 'results')}",
             mime="text/csv",
@@ -233,7 +233,9 @@ def render_results_section(test_type=None):
         try:
             from ui.warehouse_report import render_warehouse_panel
 
-            render_warehouse_panel(display_type, st.session_state.get("current_model_id", ""))
+            render_warehouse_panel(
+                display_type, st.session_state.get("current_model_id", "")
+            )
         except Exception:
             pass
 
@@ -247,7 +249,7 @@ def render_report_section(test_type):
     """
     if not st.session_state.results_df.empty:
         st.markdown("---")
-        st.header("📄 Test Report")
+        st.header("Test Report")
 
         # Extract context. After a browser refresh, results can be restored from
         # disk while sidebar widgets return their defaults, so prefer restored
@@ -263,9 +265,15 @@ def render_report_section(test_type):
         provider = restored_context.get("provider") or st.session_state.get(
             "current_provider", "Unknown"
         )
-        duration = restored_context.get("duration", st.session_state.get("test_duration", 0))
-        test_config = restored_context.get("test_config") or st.session_state.get("test_config", {})
-        system_info = restored_context.get("system_info") or st.session_state.get("system_info", {})
+        duration = restored_context.get(
+            "duration", st.session_state.get("test_duration", 0)
+        )
+        test_config = restored_context.get("test_config") or st.session_state.get(
+            "test_config", {}
+        )
+        system_info = restored_context.get("system_info") or st.session_state.get(
+            "system_info", {}
+        )
         test_type = restored_context.get("test_type") or test_type
 
         # Infer the *actual* test type from the data itself so that switching
@@ -342,7 +350,7 @@ def render_report_section(test_type):
 
         # Download report
         st.download_button(
-            label="📥 Download Report (Markdown)",
+            label="Download Report (Markdown)",
             data=st.session_state.report,
             file_name=f"report_{st.session_state.get('current_csv_file', 'report')}.md",
             mime="text/markdown",
@@ -353,9 +361,9 @@ def render_log_section():
     """Render log viewer area"""
     if st.session_state.get("logger") and st.session_state.logger.entries:
         st.markdown("---")
-        st.header("📋 Log Viewer")
+        st.header("Log Viewer")
 
-        if st.button("🔍 Open Log Viewer"):
+        if st.button("Open Log Viewer"):
             from ui.log_viewer import render_log_viewer
 
             render_log_viewer(st.session_state.logger)
@@ -369,23 +377,23 @@ class PageLayout:
         """Render empty state prompt"""
         st.info(
             """
-        ### 👋 Welcome to LLM Performance Benchmark Platform V2
+        ### Welcome to LLM Performance Benchmark Platform V2
 
         Please configure test parameters in the left sidebar, then select a test type to begin.
 
         **Features:**
-        - ⚡ Concurrency Test
-        - 🔥 Prefill Stress Test
-        - 📏 Long Context Test
-        - 🔬 Matrix Test
-        - 📄 Custom Text Test
-        - 🎯 All Tests
-        - ⏱️ Stability Test
+        - **Concurrency Test**
+        - **Prefill Stress Test**
+        - **Long Context Test**
+        - **Matrix Test**
+        - **Custom Text Test**
+        - **All Tests**
+        - **Stability Test**
 
         **V2 New Features:**
-        - 📦 Modular Architecture
-        - 🔧 Cleaner Code Organization
-        - 🚀 Better Maintainability
+        - **Modular Architecture**
+        - **Cleaner Code Organization**
+        - **Better Maintainability**
         """
         )
 

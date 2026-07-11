@@ -28,7 +28,9 @@ except ImportError:  # pragma: no cover
 
 def _run(args: list[str], timeout: float = 12.0) -> str | None:
     try:
-        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
+        r = subprocess.run(
+            args, capture_output=True, text=True, timeout=timeout, check=False
+        )
         return r.stdout if r.returncode == 0 else None
     except (OSError, subprocess.SubprocessError):
         return None
@@ -68,9 +70,13 @@ class EngineCaptureAdapter:
     cmd_keywords: tuple[str, ...] = ()
 
     @classmethod
-    def detect(cls, image: str, launch_cmd: str, api_model: dict | None) -> bool:  # noqa: ARG003
+    def detect(
+        cls, image: str, launch_cmd: str, api_model: dict | None
+    ) -> bool:  # noqa: ARG003
         s = f"{image} {launch_cmd}".lower()
-        return any(k in s for k in cls.image_keywords) or any(k in s for k in cls.cmd_keywords)
+        return any(k in s for k in cls.image_keywords) or any(
+            k in s for k in cls.cmd_keywords
+        )
 
     @classmethod
     def parse_logs(cls, logs: str) -> dict[str, Any]:  # noqa: ARG003
@@ -99,7 +105,9 @@ class VLLMAdapter(EngineCaptureAdapter):
     def parse_logs(cls, logs: str) -> dict[str, Any]:
         out: dict[str, Any] = {}
         # non-default args
-        matches = re.findall(r"non-default args: (\{.*?\})\s*(?=\[|\n|$)", logs, re.DOTALL)
+        matches = re.findall(
+            r"non-default args: (\{.*?\})\s*(?=\[|\n|$)", logs, re.DOTALL
+        )
         if matches:
             raw = matches[-1]
             args: dict[str, Any] = {}
@@ -197,7 +205,9 @@ class SGLangAdapter(EngineCaptureAdapter):
             v = _last(logs, pat)
             if v:
                 runtime[k] = float(v) if "." in v else int(v)
-        kv = _last(logs, r"max_total_num_token *= *(\d+)") or _last(logs, r"KV cache size: (\d+)")
+        kv = _last(logs, r"max_total_num_token *= *(\d+)") or _last(
+            logs, r"KV cache size: (\d+)"
+        )
         if kv:
             runtime["kv_cache_tokens"] = int(kv)
         if runtime:
@@ -205,7 +215,9 @@ class SGLangAdapter(EngineCaptureAdapter):
         return out
 
     @classmethod
-    def normalize_params(cls, launch_cmd: str, parsed: dict[str, Any]) -> dict[str, Any]:
+    def normalize_params(
+        cls, launch_cmd: str, parsed: dict[str, Any]
+    ) -> dict[str, Any]:
         # SGLang 参数从 launch_cmd 解析(--tp, --max-running-requests, --mem-fraction-static)
         def flag(name: str) -> str | None:
             m = re.search(rf"--{name}[ =](\S+)", launch_cmd)
@@ -246,7 +258,9 @@ class LlamaCppAdapter(EngineCaptureAdapter):
         return out
 
     @classmethod
-    def normalize_params(cls, launch_cmd: str, parsed: dict[str, Any]) -> dict[str, Any]:
+    def normalize_params(
+        cls, launch_cmd: str, parsed: dict[str, Any]
+    ) -> dict[str, Any]:
         def flag(name: str) -> str | None:
             m = re.search(rf"-{name}\s+(\S+)", launch_cmd)
             return m.group(1) if m else None
@@ -255,7 +269,9 @@ class LlamaCppAdapter(EngineCaptureAdapter):
         ctx = flag("c")
         if ctx and ctx.isdigit():
             out["schedule"]["context_length"] = int(ctx)
-            out["runtime"] = {"kv_cache_tokens_est": int(ctx)}  # llama.cpp KV ≈ 上下文容量
+            out["runtime"] = {
+                "kv_cache_tokens_est": int(ctx)
+            }  # llama.cpp KV ≈ 上下文容量
         ngl = flag("ngl")
         if ngl:
             out["schedule"]["gpu_layers"] = int(ngl) if ngl.isdigit() else ngl
@@ -275,7 +291,9 @@ class KTransformersAdapter(EngineCaptureAdapter):
         cls, launch_cmd: str, parsed: dict[str, Any]
     ) -> dict[str, Any]:  # noqa: ARG003
         # ktransformers 配置在 yaml/gguf,API 暴露有限;记 launch_cmd 即可
-        return {"parallel": {"note": "ktransformers 配置见 yaml(本采集仅记 launch_cmd)"}}
+        return {
+            "parallel": {"note": "ktransformers 配置见 yaml(本采集仅记 launch_cmd)"}
+        }
 
 
 class FastLLMAdapter(EngineCaptureAdapter):
@@ -314,7 +332,9 @@ def get_adapters() -> list[str]:
 # ---------------------------------------------------------------------------
 # 主入口
 # ---------------------------------------------------------------------------
-def capture_engine_config(api_base_url: str, container_name: str | None = None) -> dict[str, Any]:
+def capture_engine_config(
+    api_base_url: str, container_name: str | None = None
+) -> dict[str, Any]:
     """自动采集推理引擎配置(docker inspect + 日志 + /v1/models + 引擎适配器)。永不抛异常。"""
     result: dict[str, Any] = {
         "captured_at": datetime.now().isoformat(),

@@ -79,7 +79,9 @@ class RealtimeDashboard:
 
         # Update request state if session_id provided
         if session_id is not None:
-            self.request_states[session_id] = "completed" if status == "success" else "failed"
+            self.request_states[session_id] = (
+                "completed" if status == "success" else "failed"
+            )
 
     def update_request_state(self, session_id: int, state: str):
         """
@@ -114,7 +116,8 @@ class RealtimeDashboard:
             "avg_ttft": avg_ttft,
             "avg_tps": avg_tps,
             "success_rate": (
-                self.completed_requests / max(1, self.completed_requests + self.failed_requests)
+                self.completed_requests
+                / max(1, self.completed_requests + self.failed_requests)
             )
             * 100,
         }

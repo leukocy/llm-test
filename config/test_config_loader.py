@@ -32,6 +32,8 @@ def load_test_config(config_name="deepseek_test"):
         "api_base_url": config[config_name].get("api_base_url", ""),
         "model_id": config[config_name].get("model_id", ""),
         "api_key": config[config_name].get("api_key", ""),
-        "tokenizer_option": config[config_name].get("tokenizer_option", "API (usage field)"),
+        "tokenizer_option": config[config_name].get(
+            "tokenizer_option", "API (usage field)"
+        ),
         "template_tokens": config[config_name].getint("template_tokens", fallback=0),
     }

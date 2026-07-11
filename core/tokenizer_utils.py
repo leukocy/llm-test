@@ -21,9 +21,9 @@ def _get_auto_tokenizer():
 
 
 def _is_extra_special_tokens_list_error(error: Exception) -> bool:
-    return isinstance(error, AttributeError) and "'list' object has no attribute 'keys'" in str(
-        error
-    )
+    return isinstance(
+        error, AttributeError
+    ) and "'list' object has no attribute 'keys'" in str(error)
 
 
 def _from_pretrained_with_compat(AutoTokenizer, model_path, **kwargs):
@@ -148,7 +148,9 @@ def _download_tokenizer_from_hf(hf_repo_id: str, local_dir: str) -> bool:
             logger.info(f"Removing broken symlink before download: {local_dir}")
             os.remove(local_dir)
         os.makedirs(local_dir, exist_ok=True)
-        logger.info(f"Downloading tokenizer from HuggingFace: {hf_repo_id} -> {local_dir}")
+        logger.info(
+            f"Downloading tokenizer from HuggingFace: {hf_repo_id} -> {local_dir}"
+        )
 
         # Load from hub and save locally
         tokenizer = _from_pretrained_with_compat(
@@ -260,14 +262,18 @@ def get_cached_tokenizer(model_path):
         candidates.append(os.path.join(".", "tokenizers", model_path))
         # Handle "repo/model" -> "./tokenizers/model"
         if "/" in model_path:
-            candidates.append(os.path.join(".", "tokenizers", model_path.split("/")[-1]))
+            candidates.append(
+                os.path.join(".", "tokenizers", model_path.split("/")[-1])
+            )
 
     # 3. Fuzzy match in tokenizers directory (if directory exists)
     tokenizers_dir = os.path.join(".", "tokenizers")
     if os.path.exists(tokenizers_dir):
         try:
             target_name = (
-                model_path.split("/")[-1].lower() if "/" in model_path else model_path.lower()
+                model_path.split("/")[-1].lower()
+                if "/" in model_path
+                else model_path.lower()
             )
             for item in os.listdir(tokenizers_dir):
                 if target_name in item.lower() or item.lower() in target_name:
@@ -328,7 +334,9 @@ def get_cached_tokenizer(model_path):
         last_error = e
 
     if last_error:
-        logger.warning(f"Failed to load tokenizer '{model_path}'. Last error: {last_error}")
+        logger.warning(
+            f"Failed to load tokenizer '{model_path}'. Last error: {last_error}"
+        )
 
     return None
 

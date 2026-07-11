@@ -79,7 +79,9 @@ class ResourceMonitor:
             pass
 
         self._init_nvml()
-        self._thread = threading.Thread(target=self._run, name="ResourceMonitor", daemon=True)
+        self._thread = threading.Thread(
+            target=self._run, name="ResourceMonitor", daemon=True
+        )
         self._thread.start()
 
     def stop(self) -> dict[str, Any]:
@@ -165,7 +167,9 @@ class ResourceMonitor:
                 except Exception:  # noqa: BLE001
                     pass
                 try:
-                    tc = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+                    tc = pynvml.nvmlDeviceGetTemperature(
+                        handle, pynvml.NVML_TEMPERATURE_GPU
+                    )
                     temp_c = max(temp_c, tc)
                     g["temp_c"] = int(tc)
                 except Exception:  # noqa: BLE001
@@ -188,7 +192,9 @@ class ResourceMonitor:
                     pass
                 try:
                     g["pcie_rx_mbs"] = round(
-                        pynvml.nvmlDeviceGetPcieThroughput(handle, pynvml.NVML_PCIE_UTIL_RX_BYTES)
+                        pynvml.nvmlDeviceGetPcieThroughput(
+                            handle, pynvml.NVML_PCIE_UTIL_RX_BYTES
+                        )
                         / 1024.0,
                         2,
                     )
@@ -196,7 +202,9 @@ class ResourceMonitor:
                     pass
                 try:
                     g["pcie_tx_mbs"] = round(
-                        pynvml.nvmlDeviceGetPcieThroughput(handle, pynvml.NVML_PCIE_UTIL_TX_BYTES)
+                        pynvml.nvmlDeviceGetPcieThroughput(
+                            handle, pynvml.NVML_PCIE_UTIL_TX_BYTES
+                        )
                         / 1024.0,
                         2,
                     )
@@ -265,7 +273,9 @@ class ResourceMonitor:
 
     def _summarize(self) -> dict[str, Any]:
         samples = self._samples
-        duration = (self._end_ts or time.monotonic()) - (self._start_ts or time.monotonic())
+        duration = (self._end_ts or time.monotonic()) - (
+            self._start_ts or time.monotonic()
+        )
 
         if not samples:
             return self._empty_summary(duration)
@@ -290,7 +300,11 @@ class ResourceMonitor:
                 t
                 for s in samples
                 for g in (s.get("per_gpu") or [])
-                for t in ([g["throttle"]] if g.get("throttle") and g["throttle"] != "none" else [])
+                for t in (
+                    [g["throttle"]]
+                    if g.get("throttle") and g["throttle"] != "none"
+                    else []
+                )
                 if t
             }
         )

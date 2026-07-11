@@ -15,6 +15,8 @@ from typing import Any
 import plotly.graph_objects as go
 import streamlit as st
 
+from ui.icons import icon
+
 # Try importing core modules
 try:
     from core.evaluation_report import EvaluationReport, ReportBuilder
@@ -29,7 +31,7 @@ except ImportError:
 def render_reasoning_expander(
     reasoning_content: str,
     content: str,
-    title: str = "🧠 Reasoning process",
+    title: str = "Reasoning process",
     expanded: bool = False,
     max_height: int = 400,
 ):
@@ -44,7 +46,9 @@ def render_reasoning_expander(
         max_height: Maximum height (px)
     """
     if reasoning_content:
-        with st.expander(f"{title} ({len(reasoning_content)} chars)", expanded=expanded):
+        with st.expander(
+            f"{title} ({len(reasoning_content)} chars)", expanded=expanded
+        ):
             st.markdown(
                 f"""
                 <div style="
@@ -67,7 +71,7 @@ def render_reasoning_expander(
             )
 
     if content:
-        st.markdown("**📝 Final Output:**")
+        st.markdown("**Final Output:**")
         st.markdown(
             f"""
             <div style="
@@ -99,18 +103,24 @@ def render_thinking_metrics_cards(metrics: dict[str, Any], cols: int = 4):
 
     # Define metrics to display
     display_metrics = [
-        ("TTFT", metrics.get("ttft_ms"), "ms", "⚡", "#eab308"),
-        ("TTUT", metrics.get("ttut_ms"), "ms", "⏱️", "#22c55e"),
-        ("Reasoning Tokens", metrics.get("reasoning_tokens"), "", "🧠", "#60a5fa"),
-        ("Reasoning Ratio", metrics.get("reasoning_ratio"), "%", "📊", "#a855f7"),
-        ("Total Tokens", metrics.get("total_tokens"), "", "📝", "#64748b"),
-        ("Est. Cost", metrics.get("estimated_cost_usd"), "$", "💰", "#f97316"),
+        ("TTFT", metrics.get("ttft_ms"), "ms", "zap", "#eab308"),
+        ("TTUT", metrics.get("ttut_ms"), "ms", "timer", "#22c55e"),
+        ("Reasoning Tokens", metrics.get("reasoning_tokens"), "", "brain", "#60a5fa"),
+        (
+            "Reasoning Ratio",
+            metrics.get("reasoning_ratio"),
+            "%",
+            "chart-bar",
+            "#a855f7",
+        ),
+        ("Total Tokens", metrics.get("total_tokens"), "", "file-text", "#64748b"),
+        ("Est. Cost", metrics.get("estimated_cost_usd"), "$", "coins", "#f97316"),
     ]
 
     # Create columns
     columns = st.columns(cols)
 
-    for i, (label, value, unit, icon, color) in enumerate(display_metrics):
+    for i, (label, value, unit, icon_name, color) in enumerate(display_metrics):
         with columns[i % cols]:
             if value is not None:
                 if unit == "%":
@@ -120,9 +130,13 @@ def render_thinking_metrics_cards(metrics: dict[str, Any], cols: int = 4):
                 elif unit == "ms":
                     display_value = f"{value:.0f}ms"
                 else:
-                    display_value = f"{value:,}" if isinstance(value, int) else f"{value}"
+                    display_value = (
+                        f"{value:,}" if isinstance(value, int) else f"{value}"
+                    )
             else:
                 display_value = "N/A"
+
+            icon_html = icon(icon_name, size=28, color=color)
 
             st.markdown(
                 f"""
@@ -134,7 +148,7 @@ def render_thinking_metrics_cards(metrics: dict[str, Any], cols: int = 4):
                     text-align: center;
                     margin-bottom: 12px;
                 ">
-                    <div style="font-size: 24px; margin-bottom: 8px;">{icon}</div>
+                    <div style="margin-bottom: 8px;">{icon_html}</div>
                     <div style="font-size: 24px; font-weight: 700; color: {color};">{display_value}</div>
                     <div style="font-size: 12px; color: #94a3b8; text-transform: uppercase;">{label}</div>
                 </div>
@@ -143,7 +157,9 @@ def render_thinking_metrics_cards(metrics: dict[str, Any], cols: int = 4):
             )
 
 
-def render_latency_gauge(ttft: float, ttut: float, total: float, max_value: float = 10000):
+def render_latency_gauge(
+    ttft: float, ttut: float, total: float, max_value: float = 10000
+):
     """
     Render latency gauge dashboard
 
@@ -228,7 +244,9 @@ def render_latency_gauge(ttft: float, ttut: float, total: float, max_value: floa
     st.plotly_chart(fig, use_container_width=True)
 
 
-def render_token_pie_chart(reasoning_tokens: int, content_tokens: int, prompt_tokens: int = 0):
+def render_token_pie_chart(
+    reasoning_tokens: int, content_tokens: int, prompt_tokens: int = 0
+):
     """
     Render token distribution pie chart
 
@@ -308,10 +326,21 @@ def render_platform_info(platform: str):
 
     name = features.get("name", platform)
     location = features.get("thinking_param_location", "unknown")
-    supports_budget = "✅" if features.get("supports_budget") else "❌"
-    supports_effort = "✅" if features.get("supports_effort") else "❌"
+    supports_budget = (
+        icon("check", color="#28a745")
+        if features.get("supports_budget")
+        else icon("x", color="#dc3545")
+    )
+    supports_effort = (
+        icon("check", color="#28a745")
+        if features.get("supports_effort")
+        else icon("x", color="#dc3545")
+    )
     reasoning_field = features.get("reasoning_output_field", "N/A")
     notes = features.get("notes", "")
+
+    platform_icon = icon("building", size=20)
+    notes_icon = icon("lightbulb", size=14, color="#ffc107")
 
     st.markdown(
         f"""
@@ -321,7 +350,7 @@ def render_platform_info(platform: str):
             border-radius: 12px;
             border: 1px solid #334155;
         ">
-            <h3 style="margin: 0 0 16px 0; color: #e2e8f0;">🏢 {name}</h3>
+            <h3 style="margin: 0 0 16px 0; color: #e2e8f0;">{platform_icon} {name}</h3>
             <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
                 <div>
                     <span style="color: #94a3b8;">Param Location:</span>
@@ -340,7 +369,7 @@ def render_platform_info(platform: str):
                     <span style="margin-left: 8px;">{supports_effort}</span>
                 </div>
             </div>
-            {f'<p style="margin: 16px 0 0 0; color: #94a3b8; font-size: 13px;">💡 {notes}</p>' if notes else ''}
+            {f'<p style="margin: 16px 0 0 0; color: #94a3b8; font-size: 13px;">{notes_icon} {notes}</p>' if notes else ''}
         </div>
         """,
         unsafe_allow_html=True,
@@ -357,19 +386,21 @@ def render_export_buttons(
         report_builder: Report builder instance
         filename_prefix: Filename prefix
     """
-    st.markdown("### 📥 Export Report")
+    st.markdown("### Export Report")
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        if st.button("📄 JSON", use_container_width=True):
-            json_str = json.dumps(report_builder.to_dict(), ensure_ascii=False, indent=2)
+        if st.button("JSON", use_container_width=True):
+            json_str = json.dumps(
+                report_builder.to_dict(), ensure_ascii=False, indent=2
+            )
             b64 = base64.b64encode(json_str.encode()).decode()
             href = f'<a href="data:application/json;base64,{b64}" download="{filename_prefix}.json">Click to download JSON</a>'
             st.markdown(href, unsafe_allow_html=True)
 
     with col2:
-        if st.button("📑 Markdown", use_container_width=True):
+        if st.button("Markdown", use_container_width=True):
             # Temporary file
             import tempfile
 
@@ -385,7 +416,7 @@ def render_export_buttons(
             st.markdown(href, unsafe_allow_html=True)
 
     with col3:
-        if st.button("🌐 HTML", use_container_width=True):
+        if st.button("HTML", use_container_width=True):
             import tempfile
 
             with tempfile.NamedTemporaryFile(
@@ -415,12 +446,12 @@ def render_stream_preview(
         show_reasoning: Whether to show reasoning content
     """
     # Status indicator
-    status = "🔄 Receiving..." if is_streaming else "✅ Complete"
+    status = "Receiving..." if is_streaming else "Complete"
     st.markdown(f"**Status:** {status}")
 
     # Reasoning preview
     if show_reasoning and reasoning_content:
-        st.markdown("**🧠 Reasoning process:**")
+        st.markdown("**Reasoning process:**")
         reasoning_container = st.container()
         with reasoning_container:
             st.markdown(
@@ -449,7 +480,7 @@ def render_stream_preview(
 
     # Content preview
     if full_content:
-        st.markdown("**📝 Output Content:**")
+        st.markdown("**Output Content:**")
         st.markdown(
             f"""
             <div style="

@@ -157,7 +157,9 @@ class MATH500Evaluator(BaseEvaluator):
             }
         ]
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """Format sample using CoT (Chain-of-Thought) pattern."""
         problem = sample.get("problem", "")
         prompt_lines = [f"Problem: {problem}"]
@@ -311,7 +313,11 @@ class MATH500Evaluator(BaseEvaluator):
 
         answer = answer.strip()
         # Remove common LaTeX markers
-        answer = answer.replace("^\\circ", "").replace("^{\\circ}", "").replace("\\degree", "")
+        answer = (
+            answer.replace("^\\circ", "")
+            .replace("^{\\circ}", "")
+            .replace("\\degree", "")
+        )
         answer = answer.replace("$", "").replace("\\%", "")
 
         # Handle \text{}, \mathrm{}, etc.

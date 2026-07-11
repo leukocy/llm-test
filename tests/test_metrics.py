@@ -120,7 +120,9 @@ class TestTextSimilarityMetrics:
         # ref: hello, world, example
         # common: hello, world (2)
         # precision = 2/3, recall = 2/3, f1 = 2/3
-        assert f1_score("hello world test", "hello world example") == pytest.approx(2 / 3)
+        assert f1_score("hello world test", "hello world example") == pytest.approx(
+            2 / 3
+        )
 
     def test_f1_score_batch(self):
         """批量F1Calculate"""
@@ -360,7 +362,9 @@ class TestConvenienceFunctions:
 
     def test_compute_accuracy_with_ci(self):
         """CalculateAccuracyand其Confidence Interval"""
-        results = compute_accuracy_with_ci(predictions=["A", "B"] * 10, references=["A", "B"] * 10)
+        results = compute_accuracy_with_ci(
+            predictions=["A", "B"] * 10, references=["A", "B"] * 10
+        )
         assert "accuracy" in results
         assert "stderr" in results
         assert "ci_lower" in results

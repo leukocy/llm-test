@@ -33,7 +33,9 @@ logger = logging.getLogger(__name__)
 # 字符串 system_info 解析（纯函数）
 # ===========================================================================
 
-_ENGINE_RE = re.compile(r"(vllm|sglang|tensorrt-?llm|trtllm|lmdeploy|llama\.cpp)", re.IGNORECASE)
+_ENGINE_RE = re.compile(
+    r"(vllm|sglang|tensorrt-?llm|trtllm|lmdeploy|llama\.cpp)", re.IGNORECASE
+)
 _VERSION_RE = re.compile(r"v?(\d+\.\d+(?:\.\d+)?)")
 _MTP_RE = re.compile(r"[-_]?\s*mtp\s*(\d+)", re.IGNORECASE)
 
@@ -113,9 +115,14 @@ def build_legacy_fingerprint(sys_info: dict[str, Any]) -> dict[str, Any]:
     gpus = parse_gpu_str(sys_info.get("gpu"))
     mem = parse_memory_str(sys_info.get("memory"))
     fp_key = (
-        "|".join(sorted(g["name"] for g in gpus if g.get("name"))) + f"|mem={mem.get('total_gb')}"
+        "|".join(sorted(g["name"] for g in gpus if g.get("name")))
+        + f"|mem={mem.get('total_gb')}"
     )
-    machine_id = hashlib.sha1(fp_key.encode()).hexdigest()[:16] if fp_key != "|mem=None" else None
+    machine_id = (
+        hashlib.sha1(fp_key.encode()).hexdigest()[:16]
+        if fp_key != "|mem=None"
+        else None
+    )
     return {
         "machine_id": machine_id,
         "gpus": gpus,
@@ -243,7 +250,9 @@ def import_meta_group(
         try:
             with csv_path.open(encoding="utf-8-sig", newline="") as f:
                 reader = csv.DictReader(f)
-                results = [row_to_test_result(row, run_id, i) for i, row in enumerate(reader)]
+                results = [
+                    row_to_test_result(row, run_id, i) for i, row in enumerate(reader)
+                ]
             if results:
                 db.results.insert_batch(results)
                 result_count = len(results)

@@ -63,16 +63,26 @@ async def test_execute(strategy, mock_event_bus):
 
         # Mock run_continuous return values for each call
 
-        results_c1_l10 = [TestResult(session_id=i, ttft=0.1, prefill_tokens=10) for i in range(2)]
-        results_c1_l20 = [TestResult(session_id=i, ttft=0.1, prefill_tokens=20) for i in range(2)]
-        results_c2_l10 = [TestResult(session_id=i, ttft=0.1, prefill_tokens=10) for i in range(4)]
-        results_c2_l20 = [TestResult(session_id=i, ttft=0.1, prefill_tokens=20) for i in range(4)]
+        results_c1_l10 = [
+            TestResult(session_id=i, ttft=0.1, prefill_tokens=10) for i in range(2)
+        ]
+        results_c1_l20 = [
+            TestResult(session_id=i, ttft=0.1, prefill_tokens=20) for i in range(2)
+        ]
+        results_c2_l10 = [
+            TestResult(session_id=i, ttft=0.1, prefill_tokens=10) for i in range(4)
+        ]
+        results_c2_l20 = [
+            TestResult(session_id=i, ttft=0.1, prefill_tokens=20) for i in range(4)
+        ]
 
         mock_engine.run_continuous = AsyncMock(
             side_effect=[results_c1_l10, results_c1_l20, results_c2_l10, results_c2_l20]
         )
 
-        results = await strategy.execute(config, params, mock_provider, mock_tokenizer, mock_pg)
+        results = await strategy.execute(
+            config, params, mock_provider, mock_tokenizer, mock_pg
+        )
 
         # Total results = 2 + 2 + 4 + 4 = 12
         assert len(results) == 12

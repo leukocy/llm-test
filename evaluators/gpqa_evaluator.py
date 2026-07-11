@@ -75,7 +75,9 @@ class GPQAEvaluator(BaseEvaluator):
         try:
             from core.dataset_manager import get_dataset
 
-            samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
+            samples = get_dataset(
+                self.dataset_name, split="test", max_samples=None, seed=self.seed
+            )
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for GPQA: {e}")
 
@@ -122,7 +124,9 @@ class GPQAEvaluator(BaseEvaluator):
         random.shuffle(samples)
 
         # Calculate总需Sample count
-        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
+        total_needed = self.num_shots + (
+            self.max_samples if self.max_samples else len(samples)
+        )
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
@@ -168,13 +172,17 @@ class GPQAEvaluator(BaseEvaluator):
                     answer = int(answer)
 
             # Process领域
-            domain = sample.get("domain", sample.get("Domain", sample.get("subdomain", "unknown")))
+            domain = sample.get(
+                "domain", sample.get("Domain", sample.get("subdomain", "unknown"))
+            )
 
             normalized.append(
                 {
                     "question": question,
                     "choices": (
-                        choices[:4] if len(choices) >= 4 else choices + [""] * (4 - len(choices))
+                        choices[:4]
+                        if len(choices) >= 4
+                        else choices + [""] * (4 - len(choices))
                     ),
                     "answer": answer,
                     "domain": domain,
@@ -257,7 +265,9 @@ class GPQAEvaluator(BaseEvaluator):
                     "content": self.format_prompt(ex, include_answer=False),
                 }
             )
-            messages.append({"role": "assistant", "content": self.get_correct_answer(ex)})
+            messages.append(
+                {"role": "assistant", "content": self.get_correct_answer(ex)}
+            )
 
         messages.append(
             {
@@ -267,7 +277,9 @@ class GPQAEvaluator(BaseEvaluator):
         )
         return messages
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """
         Format GPQA 样本is Prompt
         """

@@ -121,7 +121,9 @@ class TestResult:
         result = {}
         for k, v in asdict(self).items():
             if k == "extra_metrics":
-                result["extra_metrics"] = json.dumps(v, ensure_ascii=False) if v else None
+                result["extra_metrics"] = (
+                    json.dumps(v, ensure_ascii=False) if v else None
+                )
             elif k == "created_at":
                 result["created_at"] = v.isoformat() if v else None
             else:

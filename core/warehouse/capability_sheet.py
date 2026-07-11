@@ -78,7 +78,9 @@ def build_capability_sheet(
 
         successes = [c.success for c in group if c.success is not None]
         success_rate = (
-            round(sum(1 for s in successes if s) / len(successes), 3) if successes else None
+            round(sum(1 for s in successes if s) / len(successes), 3)
+            if successes
+            else None
         )
         sales = next((c.sales_summary for c in group if c.sales_summary), "")
         tasks = sorted({c.task_name for c in group if c.task_name})
@@ -116,14 +118,18 @@ def build_capability_markdown(sheet: list[dict[str, Any]]) -> str:
         return "# 客户能力表\n\n（暂无可用数据——跑应用用例测试或手动录入后会生成。）\n"
 
     lines = ["# 客户能力表", ""]
-    lines.append("> 数据源：数据仓库 application_cases；只含 external_level 达标的切片。")
+    lines.append(
+        "> 数据源：数据仓库 application_cases；只含 external_level 达标的切片。"
+    )
     lines.append("> 缺测项记为 —（手册：缺测本身就是决策信息）。")
     lines.append("")
 
     # 按 customer_type 分节
     by_customer: dict[str, list[dict[str, Any]]] = {}
     for row in sheet:
-        by_customer.setdefault(str(row.get("customer_type") or "未分类"), []).append(row)
+        by_customer.setdefault(str(row.get("customer_type") or "未分类"), []).append(
+            row
+        )
 
     for customer, group in by_customer.items():
         lines.append(f"## {customer}")

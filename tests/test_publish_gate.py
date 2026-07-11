@@ -131,7 +131,9 @@ def test_gate_from_run_case03_blocks_when_required_fields_missing():
     run = {
         "tester": "bob",
         "machine_id": "m1",
-        "system_info": {"hardware_fingerprint": {"machine_id": "m1"}},  # 缺 PCIe/通道/频率
+        "system_info": {
+            "hardware_fingerprint": {"machine_id": "m1"}
+        },  # 缺 PCIe/通道/频率
         "config": {"random_seed": 42},
         "resource_monitor_json": '{"peaks": {}}',
         "external_level": "publishable",

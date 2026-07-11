@@ -55,7 +55,9 @@ class SampleResult:
     tokens_used: int = 0
     error: str | None = None
     is_judge_corrected: bool = False  # Whether it was corrected by an AI judge
-    evaluation_method: str = "regex"  # Evaluation method: regex, llm_judge, smart_parser
+    evaluation_method: str = (
+        "regex"  # Evaluation method: regex, llm_judge, smart_parser
+    )
 
     # Performance Metrics
     input_tokens: int = 0  # Input token count
@@ -65,7 +67,9 @@ class SampleResult:
     total_time_ms: float = 0.0  # Total time (milliseconds)
 
     # Reasoning-related fields
-    reasoning_content: str = ""  # Reasoning process (extracted from thought tag or field)
+    reasoning_content: str = (
+        ""  # Reasoning process (extracted from thought tag or field)
+    )
     reasoning_tokens: int = 0  # Reasoning token count
     ttut_ms: float = 0.0  # Time To User Text (first non-reasoning token)
 
@@ -149,8 +153,12 @@ class EvaluationResult:
             # Token Statistics
             "total_input_tokens": sum(input_tokens) if input_tokens else 0,
             "total_output_tokens": sum(output_tokens) if output_tokens else 0,
-            "avg_input_tokens": (sum(input_tokens) / len(input_tokens) if input_tokens else 0),
-            "avg_output_tokens": (sum(output_tokens) / len(output_tokens) if output_tokens else 0),
+            "avg_input_tokens": (
+                sum(input_tokens) / len(input_tokens) if input_tokens else 0
+            ),
+            "avg_output_tokens": (
+                sum(output_tokens) / len(output_tokens) if output_tokens else 0
+            ),
             # TTFT Statistics
             "avg_ttft_ms": sum(ttft_values) / len(ttft_values) if ttft_values else 0,
             "min_ttft_ms": min(ttft_values) if ttft_values else 0,
@@ -164,7 +172,9 @@ class EvaluationResult:
             "min_latency_ms": min(latencies) if latencies else 0,
             "max_latency_ms": max(latencies) if latencies else 0,
             # Success Rate
-            "success_rate": (len(valid_results) / len(self.details) if self.details else 0),
+            "success_rate": (
+                len(valid_results) / len(self.details) if self.details else 0
+            ),
             "error_count": len(self.details) - len(valid_results),
         }
 
@@ -184,7 +194,9 @@ class EvaluationResult:
             )
 
             # Collect correct/incorrect scores
-            is_correct = [1.0 if d.is_correct else 0.0 for d in self.details if not d.error]
+            is_correct = [
+                1.0 if d.is_correct else 0.0 for d in self.details if not d.error
+            ]
 
             if not is_correct:
                 return
@@ -196,7 +208,9 @@ class EvaluationResult:
             ci = bootstrap_confidence_interval(is_correct, confidence=0.95)
 
             # Compute Wilson score interval
-            wilson_ci = wilson_score_interval(self.correct_samples, self.total_samples, 0.95)
+            wilson_ci = wilson_score_interval(
+                self.correct_samples, self.total_samples, 0.95
+            )
 
             self.extended_metrics = {
                 "stderr": stderr,
@@ -341,7 +355,9 @@ class BaseEvaluator(ABC):
         pass
 
     @abstractmethod
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """
         Format a single sample into a prompt string.
 
@@ -428,7 +444,9 @@ class BaseEvaluator(ABC):
         Returns:
             List of message dictionaries.
         """
-        if self._prompt_template is not None and hasattr(self._prompt_template, "render_messages"):
+        if self._prompt_template is not None and hasattr(
+            self._prompt_template, "render_messages"
+        ):
             try:
                 result = self._prompt_template.render_messages(
                     sample, self.few_shot_examples[: self.num_shots]
@@ -683,7 +701,9 @@ class BaseEvaluator(ABC):
             return 0.0, {}
 
         # Filter out empty responses
-        valid_results = [r for r in results if r.model_response and r.model_response.strip()]
+        valid_results = [
+            r for r in results if r.model_response and r.model_response.strip()
+        ]
 
         if not valid_results:
             return 0.0, {}

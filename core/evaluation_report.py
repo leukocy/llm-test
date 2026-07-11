@@ -371,7 +371,8 @@ class ReportBuilder:
             "",
             "```",
             (
-                raw.reasoning_content[:1000] + ("..." if len(raw.reasoning_content) > 1000 else "")
+                raw.reasoning_content[:1000]
+                + ("..." if len(raw.reasoning_content) > 1000 else "")
                 if raw.reasoning_content
                 else "(no)"
             ),
@@ -381,7 +382,8 @@ class ReportBuilder:
             "",
             "```",
             (
-                raw.final_content[:1000] + ("..." if len(raw.final_content) > 1000 else "")
+                raw.final_content[:1000]
+                + ("..." if len(raw.final_content) > 1000 else "")
                 if raw.final_content
                 else "(no)"
             ),

@@ -57,7 +57,9 @@ class GSM8KEvaluator(BaseEvaluator):
             print(f"[WARNING] GSM8K load failed: {e}")
             return []
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """Format GSM8K sample into a prompt."""
         question = sample.get("question", "")
         prompt = f"Question: {question}\nAnswer:"

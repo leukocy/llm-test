@@ -52,7 +52,9 @@ class WinoGrandeEvaluator(BaseEvaluator):
         try:
             from core.dataset_manager import get_dataset
 
-            samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
+            samples = get_dataset(
+                self.dataset_name, split="test", max_samples=None, seed=self.seed
+            )
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for WinoGrande: {e}")
 
@@ -92,7 +94,9 @@ class WinoGrandeEvaluator(BaseEvaluator):
         samples = self._normalize_samples(samples)
         random.shuffle(samples)
 
-        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
+        total_needed = self.num_shots + (
+            self.max_samples if self.max_samples else len(samples)
+        )
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
@@ -174,7 +178,9 @@ class WinoGrandeEvaluator(BaseEvaluator):
         """Build structured chat messages with system prompt, few-shot turns, and user question."""
         messages = []
 
-        system_instruction = "Fill in the blank (_) with the correct option based on the context."
+        system_instruction = (
+            "Fill in the blank (_) with the correct option based on the context."
+        )
         messages.append({"role": "system", "content": system_instruction})
 
         for ex in self.few_shot_examples[: self.num_shots]:
@@ -184,7 +190,9 @@ class WinoGrandeEvaluator(BaseEvaluator):
                     "content": self.format_prompt(ex, include_answer=False),
                 }
             )
-            messages.append({"role": "assistant", "content": self.get_correct_answer(ex)})
+            messages.append(
+                {"role": "assistant", "content": self.get_correct_answer(ex)}
+            )
 
         messages.append(
             {
@@ -194,7 +202,9 @@ class WinoGrandeEvaluator(BaseEvaluator):
         )
         return messages
 
-    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
+    def format_prompt(
+        self, sample: dict[str, Any], include_answer: bool = False
+    ) -> str:
         """Format WinoGrande 样本"""
         sentence = sample.get("sentence", "")
         choices = sample.get("choices", [])
@@ -213,7 +223,9 @@ class WinoGrandeEvaluator(BaseEvaluator):
         if include_answer:
             answer_idx = sample.get("answer", 0)
             answer_letter = (
-                chr(ord("A") + answer_idx) if isinstance(answer_idx, int) else answer_idx
+                chr(ord("A") + answer_idx)
+                if isinstance(answer_idx, int)
+                else answer_idx
             )
             prompt_lines.append(f"Answer: {answer_letter}")
         else:
@@ -223,7 +235,9 @@ class WinoGrandeEvaluator(BaseEvaluator):
 
     def build_full_prompt(self, sample: dict[str, Any]) -> str:
         """Build完整 prompt"""
-        instruction = "Fill in the blank (_) with the correct option based on the context.\n\n"
+        instruction = (
+            "Fill in the blank (_) with the correct option based on the context.\n\n"
+        )
 
         examples = []
         for example in self.few_shot_examples[: self.num_shots]:

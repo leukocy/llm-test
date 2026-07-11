@@ -24,7 +24,9 @@ def test_init_session_state_normalizes_legacy_prefill_test_type(clean_streamlit_
     assert "test_type_selector" not in clean_streamlit_state._data
 
 
-def test_apply_prefill_preset_updates_selectbox_key(clean_streamlit_state, tmp_path, monkeypatch):
+def test_apply_prefill_preset_updates_selectbox_key(
+    clean_streamlit_state, tmp_path, monkeypatch
+):
     from utils import test_config_manager
 
     manager = test_config_manager.TestConfigManager(str(tmp_path))
@@ -43,11 +45,16 @@ def test_apply_prefill_preset_updates_selectbox_key(clean_streamlit_state, tmp_p
     assert test_config_manager.apply_preset("Prefill")
 
     assert clean_streamlit_state._data["current_test_type"] == "Prefill Stress Test"
-    assert clean_streamlit_state._data["_force_test_type_selector"] == "Prefill Stress Test"
+    assert (
+        clean_streamlit_state._data["_force_test_type_selector"]
+        == "Prefill Stress Test"
+    )
     assert clean_streamlit_state._data["prefill_isolation_mode"] is True
 
 
-def test_pending_prefill_forces_selector_back_before_rerun(clean_streamlit_state, monkeypatch):
+def test_pending_prefill_forces_selector_back_before_rerun(
+    clean_streamlit_state, monkeypatch
+):
     from ui import test_panels
 
     class RerunCalled(Exception):
@@ -71,8 +78,14 @@ def test_pending_prefill_forces_selector_back_before_rerun(clean_streamlit_state
 
     assert clean_streamlit_state._data["current_test_type"] == "Prefill Stress Test"
     assert clean_streamlit_state._data["test_type_selector"] == "Concurrency Test"
-    assert clean_streamlit_state._data["_force_test_type_selector"] == "Prefill Stress Test"
-    assert clean_streamlit_state._data["_pending_test"]["test_type"] == "Prefill Stress Test"
+    assert (
+        clean_streamlit_state._data["_force_test_type_selector"]
+        == "Prefill Stress Test"
+    )
+    assert (
+        clean_streamlit_state._data["_pending_test"]["test_type"]
+        == "Prefill Stress Test"
+    )
 
 
 def test_can_update_current_test_type_without_rewriting_widget_key(
@@ -119,5 +132,8 @@ def test_forced_test_type_updates_selector_before_widget_creation(
 
     assert selected == "Prefill Stress Test"
     assert clean_streamlit_state._data["current_test_type"] == "Prefill Stress Test"
-    assert clean_streamlit_state._data["test_type_selector_widget_1"] == "Prefill Stress Test"
+    assert (
+        clean_streamlit_state._data["test_type_selector_widget_1"]
+        == "Prefill Stress Test"
+    )
     assert clean_streamlit_state._data["_force_test_type_selector"] is None

@@ -131,7 +131,9 @@ class EnhancedEvaluator:
                 final_content, answer_type, llm_func, correct_answer
             )
         else:
-            parse_result = self.answer_parser.parse(final_content, answer_type, correct_answer)
+            parse_result = self.answer_parser.parse(
+                final_content, answer_type, correct_answer
+            )
 
         # 3. 比较Answer
         is_correct, similarity = compare_answers(
@@ -199,10 +201,14 @@ class EnhancedEvaluator:
         reasoning = reasoning_content or ""
 
         # ParseAnswer
-        parse_result = self.answer_parser.parse(final_content, answer_type, correct_answer)
+        parse_result = self.answer_parser.parse(
+            final_content, answer_type, correct_answer
+        )
 
         # 比较Answer
-        is_correct, _ = compare_answers(parse_result.normalized_value, correct_answer, answer_type)
+        is_correct, _ = compare_answers(
+            parse_result.normalized_value, correct_answer, answer_type
+        )
 
         # 评估推理质量
         reasoning_eval = None

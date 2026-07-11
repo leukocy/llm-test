@@ -68,7 +68,9 @@ class ApplicationCase:
 
     # 元数据
     created_at: datetime | None = None
-    extra: dict[str, Any] = field(default_factory=dict)  # reasoning_quality/failure_category/...
+    extra: dict[str, Any] = field(
+        default_factory=dict
+    )  # reasoning_quality/failure_category/...
 
     def to_dict(self) -> dict[str, Any]:
         """序列化为 application_cases 行（extra → extra_json）。"""

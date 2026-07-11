@@ -211,12 +211,14 @@ class UnifiedTestRunner:
             model_key = f"{model_config.platform}:{model_config.model_id}"
 
             if progress_callback:
-                progress_callback(current_task, total_tasks, f"Testing {model_config.model_id}...")
+                progress_callback(
+                    current_task, total_tasks, f"Testing {model_config.model_id}..."
+                )
 
             # Get响应函数
-            response_func = get_response_funcs.get(model_config.model_id) or get_response_funcs.get(
-                model_config.platform
-            )
+            response_func = get_response_funcs.get(
+                model_config.model_id
+            ) or get_response_funcs.get(model_config.platform)
 
             if not response_func:
                 print(f"Warning: No response function for {model_key}")
@@ -354,7 +356,9 @@ class UnifiedTestRunner:
             start_time = time.time()
 
             # 调用 API（带重试）
-            response_data = await self.retry_handler.execute_async(get_response_func, question)
+            response_data = await self.retry_handler.execute_async(
+                get_response_func, question
+            )
 
             latency_ms = (time.time() - start_time) * 1000
             result.latency_ms = latency_ms
@@ -414,7 +418,9 @@ class UnifiedTestRunner:
             return
 
         # Accuracy
-        model_result.accuracy = model_result.correct_samples / model_result.total_samples
+        model_result.accuracy = (
+            model_result.correct_samples / model_result.total_samples
+        )
 
         # Latency
         latencies = [r.latency_ms for r in valid_results if r.latency_ms > 0]
@@ -434,11 +440,17 @@ class UnifiedTestRunner:
         # Tokens
         model_result.total_input_tokens = sum(r.input_tokens for r in valid_results)
         model_result.total_output_tokens = sum(r.output_tokens for r in valid_results)
-        model_result.total_reasoning_tokens = sum(r.reasoning_tokens for r in valid_results)
+        model_result.total_reasoning_tokens = sum(
+            r.reasoning_tokens for r in valid_results
+        )
 
-        total_output = model_result.total_output_tokens + model_result.total_reasoning_tokens
+        total_output = (
+            model_result.total_output_tokens + model_result.total_reasoning_tokens
+        )
         if total_output > 0:
-            model_result.avg_reasoning_ratio = model_result.total_reasoning_tokens / total_output
+            model_result.avg_reasoning_ratio = (
+                model_result.total_reasoning_tokens / total_output
+            )
 
         # TPS
         tps_values = []
@@ -449,9 +461,13 @@ class UnifiedTestRunner:
             model_result.avg_tps = sum(tps_values) / len(tps_values)
 
         # 推理质量
-        quality_scores = [r.reasoning_quality for r in valid_results if r.reasoning_quality > 0]
+        quality_scores = [
+            r.reasoning_quality for r in valid_results if r.reasoning_quality > 0
+        ]
         if quality_scores:
-            model_result.avg_reasoning_quality = sum(quality_scores) / len(quality_scores)
+            model_result.avg_reasoning_quality = sum(quality_scores) / len(
+                quality_scores
+            )
 
     def _calculate_comparison(self, result: TestSuiteResult):
         """CalculateModel比较Result"""

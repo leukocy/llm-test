@@ -153,8 +153,12 @@ def test_filter_by_engine_fuzzy_and_test_type():
             _run(test_id="t2", engine="sglang", test_type="prefill"),
         ]
     )
-    assert {r.test_id for r in query_runs(db, WarehouseFilter(engine="sglang"))} == {"t2"}
-    assert {r.test_id for r in query_runs(db, WarehouseFilter(test_type="prefill"))} == {"t2"}
+    assert {r.test_id for r in query_runs(db, WarehouseFilter(engine="sglang"))} == {
+        "t2"
+    }
+    assert {
+        r.test_id for r in query_runs(db, WarehouseFilter(test_type="prefill"))
+    } == {"t2"}
 
 
 def test_filter_search_across_fields():
@@ -165,7 +169,9 @@ def test_filter_search_across_fields():
         ]
     )
     # search 命中 model_name
-    assert {r.test_id for r in query_runs(db, WarehouseFilter(search="deepseek"))} == {"t1"}
+    assert {r.test_id for r in query_runs(db, WarehouseFilter(search="deepseek"))} == {
+        "t1"
+    }
     # search 命中 tester
     assert {r.test_id for r in query_runs(db, WarehouseFilter(search="bob"))} == {"t2"}
 

@@ -68,11 +68,15 @@ MIGRATIONS: dict[str, list[MigrationFunc]] = {
         _add_column("test_runs", "resource_monitor_json", "TEXT"),
         _add_column("test_runs", "status_detail", "TEXT"),
         # 索引
-        _exec("CREATE INDEX IF NOT EXISTS idx_test_runs_machine ON test_runs(machine_id)"),
+        _exec(
+            "CREATE INDEX IF NOT EXISTS idx_test_runs_machine ON test_runs(machine_id)"
+        ),
         _exec(
             "CREATE INDEX IF NOT EXISTS idx_test_runs_external_level ON test_runs(external_level)"
         ),
-        _exec("CREATE INDEX IF NOT EXISTS idx_test_runs_comparison ON test_runs(comparison_group)"),
+        _exec(
+            "CREATE INDEX IF NOT EXISTS idx_test_runs_comparison ON test_runs(comparison_group)"
+        ),
     ],
     # 1.2.0 -> 1.3.0: 推理引擎运行时（/metrics 轮询 + KV 实况）
     "1.3.0": [
@@ -130,13 +134,21 @@ MIGRATIONS: dict[str, list[MigrationFunc]] = {
         _exec(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_app_cases_case_id ON application_cases(case_id)"
         ),
-        _exec("CREATE INDEX IF NOT EXISTS idx_app_cases_run ON application_cases(run_id)"),
-        _exec("CREATE INDEX IF NOT EXISTS idx_app_cases_scenario ON application_cases(scenario)"),
-        _exec("CREATE INDEX IF NOT EXISTS idx_app_cases_model ON application_cases(model_name)"),
+        _exec(
+            "CREATE INDEX IF NOT EXISTS idx_app_cases_run ON application_cases(run_id)"
+        ),
+        _exec(
+            "CREATE INDEX IF NOT EXISTS idx_app_cases_scenario ON application_cases(scenario)"
+        ),
+        _exec(
+            "CREATE INDEX IF NOT EXISTS idx_app_cases_model ON application_cases(model_name)"
+        ),
         _exec(
             "CREATE INDEX IF NOT EXISTS idx_app_cases_external ON application_cases(external_level)"
         ),
-        _exec("CREATE INDEX IF NOT EXISTS idx_app_cases_machine ON application_cases(machine_id)"),
+        _exec(
+            "CREATE INDEX IF NOT EXISTS idx_app_cases_machine ON application_cases(machine_id)"
+        ),
     ],
 }
 

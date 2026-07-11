@@ -65,14 +65,18 @@ async def test_execute_cumulative(strategy, mock_event_bus):
         # actual=0.1s. expected > actual * 2 (0.2 !> 0.2). Not hit.
         # Let's make it very fast. 0.01s. expected=0.2 > 0.02. Hit.
 
-        results_seg10 = [TestResult(session_id=1, ttft=0.1, prefill_tokens=10, decode_tokens=5)]
+        results_seg10 = [
+            TestResult(session_id=1, ttft=0.1, prefill_tokens=10, decode_tokens=5)
+        ]
         results_seg20 = [
             TestResult(session_id=2, ttft=0.01, prefill_tokens=20, decode_tokens=5)
         ]  # Fast!
 
         mock_engine.run_batch = AsyncMock(side_effect=[results_seg10, results_seg20])
 
-        results = await strategy.execute(config, params, mock_provider, mock_tokenizer, mock_pg)
+        results = await strategy.execute(
+            config, params, mock_provider, mock_tokenizer, mock_pg
+        )
 
         assert len(results) == 2
 

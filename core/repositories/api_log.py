@@ -44,7 +44,9 @@ class ApiLogRepository(BaseRepository[ApiLog]):
         """based on session_id 查找"""
         return self.find_by("session_id = ?", (session_id,))
 
-    def find_by_date_range(self, start: datetime, end: datetime, limit: int = 1000) -> list[ApiLog]:
+    def find_by_date_range(
+        self, start: datetime, end: datetime, limit: int = 1000
+    ) -> list[ApiLog]:
         """based on日期范围查找"""
         return self.find_by(
             "created_at BETWEEN ? AND ?", (start.isoformat(), end.isoformat()), limit
@@ -71,7 +73,9 @@ class ApiLogRepository(BaseRepository[ApiLog]):
     def cleanup_old_logs(self, days: int = 30) -> int:
         """Cleanup旧Log"""
         cutoff = datetime.now().timestamp() - (days * 86400)
-        return self.delete_by("created_at < ?", (datetime.fromtimestamp(cutoff).isoformat(),))
+        return self.delete_by(
+            "created_at < ?", (datetime.fromtimestamp(cutoff).isoformat(),)
+        )
 
     def get_error_summary(self, limit: int = 20) -> list[dict[str, Any]]:
         """GetError摘要"""

@@ -48,7 +48,9 @@ class LogServer:
                 return
 
             self.running = True
-            self.thread = threading.Thread(target=self._run_server, args=(host, port), daemon=True)
+            self.thread = threading.Thread(
+                target=self._run_server, args=(host, port), daemon=True
+            )
             self.thread.start()
 
     def _run_server(self, host, port):
@@ -60,11 +62,15 @@ class LogServer:
             async def server_routine():
                 try:
                     async with websockets.serve(self._handler, host, port):
-                        _safe_print(f"📡 WebSocket Log Server running on ws://{host}:{port}")
+                        _safe_print(
+                            f"📡 WebSocket Log Server running on ws://{host}:{port}"
+                        )
                         await asyncio.Future()  # run forever
                 except OSError as e:
                     if e.errno == 10048:  # Address already in use (Windows)
-                        _safe_print(f"⚠️ Port {port} is busy. Assuming server is already running.")
+                        _safe_print(
+                            f"⚠️ Port {port} is busy. Assuming server is already running."
+                        )
                     else:
                         raise e
 
@@ -84,7 +90,9 @@ class LogServer:
         try:
             # Send a welcome message
             await websocket.send(
-                json.dumps({"type": "system", "message": "Connected to Benchmark Log Stream"})
+                json.dumps(
+                    {"type": "system", "message": "Connected to Benchmark Log Stream"}
+                )
             )
             await websocket.wait_closed()
         except Exception:
@@ -101,7 +109,9 @@ class LogServer:
             try:
                 # Ensure log_entry is JSON serializable
                 message = json.dumps(log_entry, default=str, ensure_ascii=False)
-                asyncio.run_coroutine_threadsafe(self._broadcast_message(message), self.loop)
+                asyncio.run_coroutine_threadsafe(
+                    self._broadcast_message(message), self.loop
+                )
             except Exception:
                 # Silent failure to avoid spamming stdout
                 pass
@@ -110,7 +120,9 @@ class LogServer:
         """Async method to send message to all clients."""
         if self.clients:
             # Create tasks for all clients
-            tasks = [asyncio.create_task(client.send(message)) for client in self.clients]
+            tasks = [
+                asyncio.create_task(client.send(message)) for client in self.clients
+            ]
             if tasks:
                 await asyncio.wait(tasks, timeout=1.0)
 

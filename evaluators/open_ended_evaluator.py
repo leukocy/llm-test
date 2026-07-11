@@ -156,14 +156,20 @@ class OpenEndedEvaluator:
                     log_callback(f"Warning: {model_name} 回答数量与问题数量not匹配")
                 continue
 
-            for i, (question, answer) in enumerate(zip(questions, answers, strict=True)):
-                result = await self.evaluate_answer(question, answer, log_callback=log_callback)
+            for i, (question, answer) in enumerate(
+                zip(questions, answers, strict=True)
+            ):
+                result = await self.evaluate_answer(
+                    question, answer, log_callback=log_callback
+                )
 
                 results.append(
                     {
                         "model": model_name,
                         "question_index": i,
-                        "question": (question[:100] + "..." if len(question) > 100 else question),
+                        "question": (
+                            question[:100] + "..." if len(question) > 100 else question
+                        ),
                         "answer": answer[:100] + "..." if len(answer) > 100 else answer,
                         "score": result.score,
                         "reasoning": (
@@ -201,7 +207,9 @@ class OpenEndedEvaluator:
 
         if "model" in results.columns:
             report.append("\n## 按ModelStatistics\n")
-            model_stats = results.groupby("model")["score"].agg(["mean", "std", "count"])
+            model_stats = results.groupby("model")["score"].agg(
+                ["mean", "std", "count"]
+            )
             for model, row in model_stats.iterrows():
                 report.append(f"\n### {model}\n")
                 report.append(f"- 平均分: {row['mean']:.2f}\n")

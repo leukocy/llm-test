@@ -13,7 +13,7 @@ from utils.helpers import reorder_dataframe_columns
 
 def render_comparison_page():
     """Render the Historical Comparison UI."""
-    st.header("📈 Historical Comparison")
+    st.header("Historical Comparison")
 
     manager = HistoryManager()
     history = manager.list_history()
@@ -71,7 +71,7 @@ def render_comparison_page():
     st.markdown("---")
 
     # --- Visualizations ---
-    st.subheader("📊 Comparison Charts")
+    st.subheader("Comparison Charts")
 
     # 1. Radar Chart Comparison
     st.markdown("### Overall Performance Comparison (Radar Chart)")
@@ -139,7 +139,9 @@ def render_comparison_page():
     else:
         # Group by source_file and calculate mean/median
         agg_df = (
-            combined_df.groupby("source_file")[metric].agg(["mean", "median", "std"]).reset_index()
+            combined_df.groupby("source_file")[metric]
+            .agg(["mean", "median", "std"])
+            .reset_index()
         )
 
         # Bar Chart
@@ -165,7 +167,7 @@ def render_comparison_page():
         st.plotly_chart(fig_box)
 
     # --- Data Table ---
-    with st.expander("📋 View Detailed Data", expanded=False):
+    with st.expander("View Detailed Data", expanded=False):
         if not combined_df.empty:
             combined_df = reorder_dataframe_columns(combined_df)
 
@@ -176,18 +178,29 @@ def render_comparison_page():
                 combined_df,
                 width="stretch",
                 column_config={
-                    **{k: st.column_config.Column(help=v) for k, v in COLUMN_TOOLTIPS.items()},
+                    **{
+                        k: st.column_config.Column(help=v)
+                        for k, v in COLUMN_TOOLTIPS.items()
+                    },
                     "ttft": st.column_config.ProgressColumn(
                         "TTFT (s)",
                         format="%.4f s",
                         min_value=0,
-                        max_value=(combined_df["ttft"].max() * 1.2 if "ttft" in combined_df else 1),
+                        max_value=(
+                            combined_df["ttft"].max() * 1.2
+                            if "ttft" in combined_df
+                            else 1
+                        ),
                     ),
                     "tps": st.column_config.ProgressColumn(
                         "TPS (t/s)",
                         format="%d t/s",
                         min_value=0,
-                        max_value=(combined_df["tps"].max() * 1.1 if "tps" in combined_df else 100),
+                        max_value=(
+                            combined_df["tps"].max() * 1.1
+                            if "tps" in combined_df
+                            else 100
+                        ),
                     ),
                     "system_output_throughput": st.column_config.ProgressColumn(
                         "Sys Output Thrpt",

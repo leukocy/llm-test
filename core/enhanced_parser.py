@@ -186,7 +186,9 @@ class EnhancedAnswerParser:
         else:
             return self._parse_text(response, log)
 
-    def _parse_numeric(self, response: str, answer_type: AnswerType, log: list[str]) -> ParseResult:
+    def _parse_numeric(
+        self, response: str, answer_type: AnswerType, log: list[str]
+    ) -> ParseResult:
         """Parse数值/数学表达式"""
         candidates = []
 
@@ -254,7 +256,9 @@ class EnhancedAnswerParser:
 
             # 对于整数类型，额外Validate
             if answer_type == AnswerType.INTEGER:
-                normalized = int(round(best[1])) if isinstance(best[1], float) else best[1]
+                normalized = (
+                    int(round(best[1])) if isinstance(best[1], float) else best[1]
+                )
             else:
                 normalized = best[1]
 
@@ -277,7 +281,9 @@ class EnhancedAnswerParser:
             error="No numeric answer found",
         )
 
-    def _parse_choice(self, response: str, choices: list[str], log: list[str]) -> ParseResult:
+    def _parse_choice(
+        self, response: str, choices: list[str], log: list[str]
+    ) -> ParseResult:
         """Parse选择题"""
         response_clean = response.strip()
         choices_upper = [c.upper() for c in choices]
@@ -515,7 +521,9 @@ class EnhancedAnswerParser:
 
             # Process科学计数法
             if "e" in clean.lower() or "×" in clean or "*" in clean:
-                clean = clean.lower().replace("×", "e").replace("*", "e").replace(" ", "")
+                clean = (
+                    clean.lower().replace("×", "e").replace("*", "e").replace(" ", "")
+                )
 
             return float(clean)
         except Exception:
@@ -587,7 +595,9 @@ class EnhancedAnswerParser:
 
         # LLM 兜底
         try:
-            llm_result = await self._llm_extract(response, answer_type, llm_func, choices)
+            llm_result = await self._llm_extract(
+                response, answer_type, llm_func, choices
+            )
 
             if llm_result.confidence > rule_result.confidence:
                 llm_result.parse_log = (
@@ -705,10 +715,14 @@ def compare_answers(
         return _compare_text(predicted, expected, ignore_case)
 
 
-def _compare_numeric(predicted: Any, expected: Any, tolerance: float) -> tuple[bool, float, str]:
+def _compare_numeric(
+    predicted: Any, expected: Any, tolerance: float
+) -> tuple[bool, float, str]:
     """比较数值"""
     try:
-        pred_val = float(predicted) if not isinstance(predicted, (int, float)) else predicted
+        pred_val = (
+            float(predicted) if not isinstance(predicted, (int, float)) else predicted
+        )
         exp_val = float(str(expected).replace(",", "").replace("$", ""))
 
         # 完全相etc.
@@ -767,7 +781,9 @@ def _compare_boolean(predicted: Any, expected: Any) -> tuple[bool, float, str]:
     return False, 0.0, "mismatch"
 
 
-def _compare_text(predicted: Any, expected: Any, ignore_case: bool) -> tuple[bool, float, str]:
+def _compare_text(
+    predicted: Any, expected: Any, ignore_case: bool
+) -> tuple[bool, float, str]:
     """比较文本"""
     pred_str = str(predicted).strip()
     exp_str = str(expected).strip()

@@ -34,7 +34,9 @@ class RetryConfig:
     exponential_base: float = 2.0  # 指数基数
     jitter: bool = True  # is否Add随机抖动
     jitter_range: tuple[float, float] = (0.5, 1.5)  # 抖动范围倍数
-    retryable_status_codes: set[int] = field(default_factory=lambda: {429, 500, 502, 503, 504})
+    retryable_status_codes: set[int] = field(
+        default_factory=lambda: {429, 500, 502, 503, 504}
+    )
     retryable_exceptions: tuple = (ConnectionError, TimeoutError)
 
 
@@ -107,7 +109,9 @@ class RetryHandler:
 
         return delay
 
-    def _is_retryable_error(self, error: Exception) -> tuple[bool, int | None, float | None]:
+    def _is_retryable_error(
+        self, error: Exception
+    ) -> tuple[bool, int | None, float | None]:
         """
         判断is否is可重试Error
 
