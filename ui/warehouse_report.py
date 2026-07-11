@@ -102,13 +102,17 @@ def render_resource_timeline() -> None:
         )
     if "gpu_util_percent" in df:
         fig.add_trace(
-            go.Scatter(x=df["t"], y=df["gpu_util_percent"], name="GPU%", line={"width": 1}),
+            go.Scatter(
+                x=df["t"], y=df["gpu_util_percent"], name="GPU%", line={"width": 1}
+            ),
             secondary_y=False,
         )
     # 容量（右轴）
     if "gpu_vram_gb" in df:
         fig.add_trace(
-            go.Scatter(x=df["t"], y=df["gpu_vram_gb"], name="显存(GB)", line={"dash": "dot"}),
+            go.Scatter(
+                x=df["t"], y=df["gpu_vram_gb"], name="显存(GB)", line={"dash": "dot"}
+            ),
             secondary_y=True,
         )
     if "system_memory_gb" in df:
@@ -223,7 +227,9 @@ def render_engine_runtime() -> None:
         margin={"l": 10, "r": 10, "t": 40, "b": 10},
     )
     fig.update_xaxes(title_text="时间 (s)")
-    fig.update_yaxes(title_text="KV cache 占用 (0~1)", secondary_y=False, range=[0, 1.05])
+    fig.update_yaxes(
+        title_text="KV cache 占用 (0~1)", secondary_y=False, range=[0, 1.05]
+    )
     fig.update_yaxes(title_text="请求数", secondary_y=True)
 
     peaks = eng.get("peaks") or {}
@@ -236,7 +242,9 @@ def render_engine_runtime() -> None:
         c3.metric("运行队列峰值", peaks.get("num_requests_running") or "—")
         c4.metric(
             "KV 容量(tokens)",
-            cc.get("kv_capacity_tokens") or st.session_state.get("kv_cache_capacity_tokens") or "—",
+            cc.get("kv_capacity_tokens")
+            or st.session_state.get("kv_cache_capacity_tokens")
+            or "—",
         )
         if cc.get("num_gpu_blocks"):
             st.caption(
@@ -255,7 +263,9 @@ def render_client_vs_engine_analysis() -> None:
 
     df = st.session_state.get("results_df")
     eng = st.session_state.get("engine_metrics")
-    if (df is None or getattr(df, "empty", True)) and not (eng or {}).get("engine_means"):
+    if (df is None or getattr(df, "empty", True)) and not (eng or {}).get(
+        "engine_means"
+    ):
         return
 
     r = compute_client_vs_engine_latency(df, eng)
@@ -289,7 +299,11 @@ def render_client_vs_engine_analysis() -> None:
         )
         c6.metric(
             "TPOT 开销",
-            (f"{r['tpot_overhead_ms']:.1f} ms" if r["tpot_overhead_ms"] is not None else "—"),
+            (
+                f"{r['tpot_overhead_ms']:.1f} ms"
+                if r["tpot_overhead_ms"] is not None
+                else "—"
+            ),
         )
         st.caption(r["verdict"])
 
@@ -396,14 +410,18 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
     topo = fp.get("gpu_topology") or {}
     if topo:
         nvlink = "有" if topo.get("has_nvlink") else "无"
-        lines.append(f"- GPU 互联: NVLink {nvlink}（{len(topo.get('matrix') or [])} 节点拓扑）")
+        lines.append(
+            f"- GPU 互联: NVLink {nvlink}（{len(topo.get('matrix') or [])} 节点拓扑）"
+        )
     for d in fp.get("disks") or []:
         disk_type = "SSD/NVMe" if d.get("is_ssd") else "HDD"
         lines.append(
             f"- 磁盘: {d.get('model') or d.get('name')} {d.get('size_tb')}TB ({disk_type})"
         )
     cuda = fp.get("cuda") or {}
-    lines.append(f"- CUDA/驱动: {cuda.get('cuda_version') or '—'} / {cuda.get('driver') or '—'}")
+    lines.append(
+        f"- CUDA/驱动: {cuda.get('cuda_version') or '—'} / {cuda.get('driver') or '—'}"
+    )
     lines.append("")
 
     lines.append("## 配置快照\n")
@@ -414,7 +432,9 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
     lines.append("## 服务配置（复现必需）\n")
     sc = ctx.get("serving_config") or {}
     if sc:
-        lines.append(f"- 引擎: {sc.get('engine') or '—'} {sc.get('engine_version') or ''}")
+        lines.append(
+            f"- 引擎: {sc.get('engine') or '—'} {sc.get('engine_version') or ''}"
+        )
         lines.append(
             f"- 并行: TP={sc.get('tp_size') or '—'} DP={sc.get('dp_size') or '—'} EP={sc.get('ep_size') or '—'} PP={sc.get('pp_size') or '—'}"
         )
@@ -487,8 +507,12 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
         ep = eng.get("peaks") or {}
         cc = eng.get("cache_config") or {}
         em_means = eng.get("engine_means") or {}
-        lines.append(f"- 引擎: {eng.get('engine_family', '?')} @ {eng.get('metrics_url', '?')}")
-        lines.append(f"- KV cache 占用峰值: {(ep.get('gpu_cache_usage_perc') or 0) * 100:.0f}%")
+        lines.append(
+            f"- 引擎: {eng.get('engine_family', '?')} @ {eng.get('metrics_url', '?')}"
+        )
+        lines.append(
+            f"- KV cache 占用峰值: {(ep.get('gpu_cache_usage_perc') or 0) * 100:.0f}%"
+        )
         lines.append(
             f"- 运行队列峰值: {ep.get('num_requests_running') or '—'} / "
             f"等待峰值: {ep.get('num_requests_waiting') or '—'}"
@@ -499,9 +523,13 @@ def build_single_test_report(ctx: dict[str, Any]) -> str:
             f"(block_size={cc.get('block_size') or '?'})"
         )
         if em_means.get("spec_token_acceptance_rate") is not None:
-            lines.append(f"- MTP 接受率: {em_means['spec_token_acceptance_rate'] * 100:.1f}%")
+            lines.append(
+                f"- MTP 接受率: {em_means['spec_token_acceptance_rate'] * 100:.1f}%"
+            )
         if em_means.get("gpu_prefix_cache_hit_rate") is not None:
-            lines.append(f"- 前缀缓存命中率: {em_means['gpu_prefix_cache_hit_rate'] * 100:.1f}%")
+            lines.append(
+                f"- 前缀缓存命中率: {em_means['gpu_prefix_cache_hit_rate'] * 100:.1f}%"
+            )
     else:
         lines.append("- 未采集到引擎运行时（未配置 /metrics 端点或端点不可达）。")
     lines.append("")
@@ -585,7 +613,9 @@ def render_warehouse_panel(test_type: str, model_id: str) -> None:
 def _client_vs_engine_for_report(ss) -> dict[str, Any]:
     from core.latency_analysis import compute_client_vs_engine_latency
 
-    return compute_client_vs_engine_latency(ss.get("results_df"), ss.get("engine_metrics"))
+    return compute_client_vs_engine_latency(
+        ss.get("results_df"), ss.get("engine_metrics")
+    )
 
 
 def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
@@ -618,12 +648,18 @@ def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
 
                     base_sc = (
                         ServingConfig(
-                            **{k: v for k, v in sc.items() if k in ServingConfig.model_fields and v}
+                            **{
+                                k: v
+                                for k, v in sc.items()
+                                if k in ServingConfig.model_fields and v
+                            }
                         )
                         if sc
                         else None
                     )
-                    sc = (merge_serving_configs(base_sc, auto_sc) if base_sc else auto_sc).to_dict()
+                    sc = (
+                        merge_serving_configs(base_sc, auto_sc) if base_sc else auto_sc
+                    ).to_dict()
                     sc["engine_capture"] = auto
                     if auto.get("launch_cmd"):
                         sc["launch_cmd"] = auto["launch_cmd"]
@@ -646,7 +682,8 @@ def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
         tester=tm.get("tester"),
         machine_id=fp.get("machine_id") or sys_info.get("machine_id"),
         has_hardware_fingerprint=bool(fp),
-        seed_recorded=(st.session_state.get("test_config") or {}).get("random_seed") is not None,
+        seed_recorded=(st.session_state.get("test_config") or {}).get("random_seed")
+        is not None,
         insights=st.session_state.get("insights"),
         success_rate=_success_rate(),
         has_monitor=bool(mon and mon.get("timeline")),
@@ -657,7 +694,8 @@ def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
         "model_id": model_id,
         "tester": tm.get("tester"),
         "machine_id": fp.get("machine_id"),
-        "status_detail": st.session_state.get("status_detail") or tm.get("status_detail"),
+        "status_detail": st.session_state.get("status_detail")
+        or tm.get("status_detail"),
         "bottleneck": st.session_state.get("bottleneck"),
         "hardware_fingerprint": fp,
         "test_config": st.session_state.get("test_config") or {},

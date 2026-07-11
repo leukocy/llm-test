@@ -15,12 +15,14 @@ from typing import Any
 
 import streamlit as st
 
-from config.session_state import normalize_test_type, set_current_test_type
+from config.session_state import set_current_test_type
+from config.test_types import normalize_test_type as normalize_test_type_id
 from ui.design_system import material_icon
 
 # ============================================================================
 # Config预设类
 # ============================================================================
+
 
 class ConfigPreset:
     """Config PresetsData类"""
@@ -31,7 +33,7 @@ class ConfigPreset:
         description: str,
         config: dict[str, Any],
         tags: list[str] | None = None,
-        created_at: str | None = None
+        created_at: str | None = None,
     ):
         self.name = name
         self.description = description
@@ -46,7 +48,7 @@ class ConfigPreset:
             "description": self.description,
             "config": self.config,
             "tags": self.tags,
-            "created_at": self.created_at
+            "created_at": self.created_at,
         }
 
     @classmethod
@@ -57,13 +59,14 @@ class ConfigPreset:
             description=data.get("description", ""),
             config=data["config"],
             tags=data.get("tags", []),
-            created_at=data.get("created_at")
+            created_at=data.get("created_at"),
         )
 
 
 # ============================================================================
 # Config管理器
 # ============================================================================
+
 
 class TestConfigManager:
     """Test Configuration管理器"""
@@ -84,8 +87,10 @@ class TestConfigManager:
         """
         try:
             # use安全Filename
-            safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in preset.name)
-            filename = safe_name.lower().replace(' ', '_') + ".json"
+            safe_name = "".join(
+                c if c.isalnum() or c in (" ", "-", "_") else "_" for c in preset.name
+            )
+            filename = safe_name.lower().replace(" ", "_") + ".json"
             filepath = self.config_dir / filename
 
             # 确保Filename唯一
@@ -95,7 +100,7 @@ class TestConfigManager:
                 filepath = self.config_dir / filename
                 counter += 1
 
-            with open(filepath, 'w', encoding='utf-8') as f:
+            with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(preset.to_dict(), f, ensure_ascii=False, indent=2)
 
             return True
@@ -115,15 +120,17 @@ class TestConfigManager:
         """
         try:
             # 查找匹配文件
-            safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in name)
-            pattern = safe_name.lower().replace(' ', '_') + "*.json"
+            safe_name = "".join(
+                c if c.isalnum() or c in (" ", "-", "_") else "_" for c in name
+            )
+            pattern = safe_name.lower().replace(" ", "_") + "*.json"
             matching_files = list(self.config_dir.glob(pattern))
 
             if not matching_files:
                 return None
 
             # use一匹配文件
-            with open(matching_files[0], encoding='utf-8') as f:
+            with open(matching_files[0], encoding="utf-8") as f:
                 data = json.load(f)
 
             return ConfigPreset.from_dict(data)
@@ -141,16 +148,18 @@ class TestConfigManager:
         presets = []
         for config_file in self.config_dir.glob("*.json"):
             try:
-                with open(config_file, encoding='utf-8') as f:
+                with open(config_file, encoding="utf-8") as f:
                     data = json.load(f)
 
-                presets.append({
-                    "name": data.get("name", config_file.stem),
-                    "description": data.get("description", ""),
-                    "tags": data.get("tags", []),
-                    "created_at": data.get("created_at", ""),
-                    "file_path": str(config_file)
-                })
+                presets.append(
+                    {
+                        "name": data.get("name", config_file.stem),
+                        "description": data.get("description", ""),
+                        "tags": data.get("tags", []),
+                        "created_at": data.get("created_at", ""),
+                        "file_path": str(config_file),
+                    }
+                )
             except Exception:
                 continue
 
@@ -167,8 +176,10 @@ class TestConfigManager:
             is否Deletesucceeded
         """
         try:
-            safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in name)
-            pattern = safe_name.lower().replace(' ', '_') + "*.json"
+            safe_name = "".join(
+                c if c.isalnum() or c in (" ", "-", "_") else "_" for c in name
+            )
+            pattern = safe_name.lower().replace(" ", "_") + "*.json"
             matching_files = list(self.config_dir.glob(pattern))
 
             for filepath in matching_files:
@@ -199,7 +210,7 @@ class TestConfigManager:
             export_file = Path(export_path)
             export_file.parent.mkdir(parents=True, exist_ok=True)
 
-            with open(export_file, 'w', encoding='utf-8') as f:
+            with open(export_file, "w", encoding="utf-8") as f:
                 json.dump(preset.to_dict(), f, ensure_ascii=False, indent=2)
 
             return True
@@ -223,7 +234,7 @@ class TestConfigManager:
                 st.error(f"File not found: {import_path}")
                 return None
 
-            with open(import_file, encoding='utf-8') as f:
+            with open(import_file, encoding="utf-8") as f:
                 data = json.load(f)
 
             preset = ConfigPreset.from_dict(data)
@@ -245,6 +256,7 @@ config_manager = TestConfigManager()
 # 预设Configure模板
 # ============================================================================
 
+
 def get_builtin_presets() -> list[ConfigPreset]:
     """GetBuilt-in PresetsConfigure"""
     return [
@@ -256,9 +268,9 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "concurrency": 1,
                 "max_tokens": 256,
                 "temperature": 0.0,
-                "thinking_enabled": False
+                "thinking_enabled": False,
             },
-            tags=["quick", "baseline"]
+            tags=["quick", "baseline"],
         ),
         ConfigPreset(
             name="Standard Test",
@@ -268,9 +280,9 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "concurrency": 4,
                 "max_tokens": 512,
                 "temperature": 0.0,
-                "thinking_enabled": False
+                "thinking_enabled": False,
             },
-            tags=["standard", "recommended"]
+            tags=["standard", "recommended"],
         ),
         ConfigPreset(
             name="Stress Test",
@@ -280,9 +292,9 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "concurrency": 16,
                 "max_tokens": 1024,
                 "temperature": 0.0,
-                "thinking_enabled": False
+                "thinking_enabled": False,
             },
-            tags=["stress", "performance"]
+            tags=["stress", "performance"],
         ),
         ConfigPreset(
             name="Reasoning Test",
@@ -294,9 +306,9 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "temperature": 0.0,
                 "thinking_enabled": True,
                 "thinking_budget": 10000,
-                "reasoning_effort": "high"
+                "reasoning_effort": "high",
             },
-            tags=["reasoning", "quality"]
+            tags=["reasoning", "quality"],
         ),
         ConfigPreset(
             name="Long Context Test",
@@ -307,9 +319,9 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "max_tokens": 512,
                 "context_length": 32768,
                 "temperature": 0.0,
-                "thinking_enabled": False
+                "thinking_enabled": False,
             },
-            tags=["long-context", "performance"]
+            tags=["long-context", "performance"],
         ),
         ConfigPreset(
             name="Prefill Stress Test",
@@ -319,9 +331,9 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "concurrency": 4,
                 "max_tokens": 1,
                 "temperature": 0.0,
-                "thinking_enabled": False
+                "thinking_enabled": False,
             },
-            tags=["prefill", "stress"]
+            tags=["prefill", "stress"],
         ),
         ConfigPreset(
             name="Comprehensive Test",
@@ -331,9 +343,9 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "concurrency": 4,
                 "max_tokens": 512,
                 "temperature": 0.0,
-                "thinking_enabled": False
+                "thinking_enabled": False,
             },
-            tags=["matrix", "comprehensive"]
+            tags=["matrix", "comprehensive"],
         ),
         ConfigPreset(
             name="Creative Test",
@@ -343,10 +355,10 @@ def get_builtin_presets() -> list[ConfigPreset]:
                 "concurrency": 2,
                 "max_tokens": 1024,
                 "temperature": 0.8,
-                "thinking_enabled": False
+                "thinking_enabled": False,
             },
-            tags=["creative", "high-temperature"]
-        )
+            tags=["creative", "high-temperature"],
+        ),
     ]
 
 
@@ -363,6 +375,7 @@ def init_builtin_presets():
 # ============================================================================
 # UI 组件
 # ============================================================================
+
 
 def render_preset_manager():
     """Render预设管理界面"""
@@ -411,7 +424,7 @@ def render_preset_manager():
                             key=f"load_{preset['name']}",
                             icon=material_icon("check"),
                         ):
-                            if apply_preset(preset['name']):
+                            if apply_preset(preset["name"]):
                                 st.success(f"Applied preset: {preset['name']}")
                                 st.rerun()
 
@@ -422,15 +435,19 @@ def render_preset_manager():
                             help="Delete preset",
                             icon=material_icon("delete"),
                         ):
-                            if config_manager.delete_preset(preset['name']):
+                            if config_manager.delete_preset(preset["name"]):
                                 st.rerun()
 
     with tab_by_tag:
         for tag, presets in sorted(tag_groups.items()):
             st.markdown(f"**`{tag}`**")
             for preset in presets:
-                if st.button(preset['name'], key=f"tag_{tag}_{preset['name']}", use_container_width=True):
-                    if apply_preset(preset['name']):
+                if st.button(
+                    preset["name"],
+                    key=f"tag_{tag}_{preset['name']}",
+                    use_container_width=True,
+                ):
+                    if apply_preset(preset["name"]):
                         st.success(f"Applied preset: {preset['name']}")
                         st.rerun()
             st.markdown("---")
@@ -439,7 +456,9 @@ def render_preset_manager():
 def render_save_preset_form():
     """RenderSave预设表单"""
     with st.expander("Save Current Configuration as Preset", expanded=False):
-        name = st.text_input("Preset name", key="preset_name", placeholder="For example: Custom Test")
+        name = st.text_input(
+            "Preset name", key="preset_name", placeholder="For example: Custom Test"
+        )
         description = st.text_area(
             "Description (optional)",
             key="preset_desc",
@@ -467,14 +486,18 @@ def render_save_preset_form():
                     current_config = get_current_config()
 
                     # ProcessLabel
-                    tags = [t.strip() for t in tags_input.split(',') if t.strip()] if tags_input else []
+                    tags = (
+                        [t.strip() for t in tags_input.split(",") if t.strip()]
+                        if tags_input
+                        else []
+                    )
 
                     # Create预设
                     preset = ConfigPreset(
                         name=name,
                         description=description,
                         config=current_config,
-                        tags=tags
+                        tags=tags,
                     )
 
                     if config_manager.save_preset(preset):
@@ -502,7 +525,7 @@ def apply_preset(name: str) -> bool:
     selected_test_type = None
     if "test_type" in config:
         selected_test_type = set_current_test_type(config["test_type"])
-        st.session_state['_force_test_type_selector'] = selected_test_type
+        st.session_state["_force_test_type_selector"] = selected_test_type
 
     # 映射Configure到 session_state
     config_mapping = {
@@ -533,9 +556,11 @@ def _as_positive_int(value):
     return value if value > 0 else None
 
 
-def _apply_preset_to_widget_state(config: dict[str, Any], selected_test_type: str | None) -> None:
+def _apply_preset_to_widget_state(
+    config: dict[str, Any], selected_test_type: str | None
+) -> None:
     """Sync preset values to the Streamlit widget keys used by the panels."""
-    test_type = normalize_test_type(selected_test_type or config.get("test_type"))
+    test_type = normalize_test_type_id(selected_test_type or config.get("test_type"))
 
     max_tokens = _as_positive_int(config.get("max_tokens"))
     concurrency = _as_positive_int(config.get("concurrency"))
@@ -543,7 +568,9 @@ def _apply_preset_to_widget_state(config: dict[str, Any], selected_test_type: st
 
     if "template_tokens" in config:
         try:
-            st.session_state.template_tokens_input = max(0, int(config.get("template_tokens") or 0))
+            st.session_state.template_tokens_input = max(
+                0, int(config.get("template_tokens") or 0)
+            )
         except (TypeError, ValueError):
             st.session_state.template_tokens_input = 0
 
@@ -582,9 +609,7 @@ def _apply_preset_to_widget_state(config: dict[str, Any], selected_test_type: st
 
 def get_current_config() -> dict[str, Any]:
     """Get当前Configure"""
-    test_type = normalize_test_type(
-        st.session_state.get("current_test_type")
-    )
+    test_type = normalize_test_type_id(st.session_state.get("current_test_type"))
 
     return {
         "test_type": test_type,
@@ -595,7 +620,7 @@ def get_current_config() -> dict[str, Any]:
         "thinking_budget": st.session_state.get("thinking_budget", 0),
         "reasoning_effort": st.session_state.get("reasoning_effort", "medium"),
         "context_length": st.session_state.get("current_context_length", 4096),
-        "template_tokens": st.session_state.get("template_tokens", 0)
+        "template_tokens": st.session_state.get("template_tokens", 0),
     }
 
 
@@ -610,7 +635,7 @@ def render_config_import_export():
                 "Select configuration file (JSON)",
                 type=["json"],
                 key="import_config",
-                help="Upload a previously exported configuration file"
+                help="Upload a previously exported configuration file",
             )
 
             if uploaded_file:
@@ -621,7 +646,7 @@ def render_config_import_export():
                 ):
                     # Save临时文件
                     temp_path = Path(f"temp_import_{uploaded_file.name}")
-                    with open(temp_path, 'wb') as f:
+                    with open(temp_path, "wb") as f:
                         f.write(uploaded_file.getvalue())
 
                     # Import预设
@@ -652,12 +677,14 @@ def render_config_import_export():
                     preset_data = config_manager.load_preset(selected_preset)
 
                     if preset_data:
-                        json_data = json.dumps(preset_data.to_dict(), ensure_ascii=False, indent=2)
+                        json_data = json.dumps(
+                            preset_data.to_dict(), ensure_ascii=False, indent=2
+                        )
                         st.download_button(
                             label="Download Configuration File",
                             icon=material_icon("download"),
                             data=json_data,
                             file_name=export_filename,
                             mime="application/json",
-                            use_container_width=True
+                            use_container_width=True,
                         )

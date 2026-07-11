@@ -209,7 +209,8 @@ def main(argv: list[str] | None = None) -> int:
     size_kb = out.stat().st_size / 1024
     print(f"已生成: {out}（{size_kb:.1f} KB）", file=sys.stderr)
     print(
-        f"裸机用法: scp {out} host: && ssh host 'python {out.name} -o snap.json'", file=sys.stderr
+        f"裸机用法: scp {out} host: && ssh host 'python {out.name} -o snap.json'",
+        file=sys.stderr,
     )
     return 0
 

@@ -94,7 +94,9 @@ def _make_cm(metrics_resp: str | None, models_resp: dict | None = None):
 def test_probe_kv_capacity_from_metrics_vllm():
     """vLLM /metrics cache_config: block_size=16 × num_gpu_blocks=32096 = 513536 tokens。"""
     _install_fake_httpx(lambda *a, **kw: _make_cm(_VLLM_METRICS))
-    with patch("core.engine_metrics.default_metrics_url", return_value="http://x/metrics"):
+    with patch(
+        "core.engine_metrics.default_metrics_url", return_value="http://x/metrics"
+    ):
         r = probe_kv_capacity("http://x/v1")
     assert r["kv_capacity_tokens"] == 16 * 32096
     assert r["source"] == "metrics"
@@ -104,9 +106,13 @@ def test_probe_kv_capacity_from_metrics_vllm():
 def test_probe_kv_capacity_falls_back_to_models_max_model_len():
     """/metrics 不可达 → /v1/models 的 max_model_len 兜底。"""
     _install_fake_httpx(
-        lambda *a, **kw: _make_cm(None, {"data": [{"id": "m", "max_model_len": 131072}]})
+        lambda *a, **kw: _make_cm(
+            None, {"data": [{"id": "m", "max_model_len": 131072}]}
+        )
     )
-    with patch("core.engine_metrics.default_metrics_url", return_value="http://x/metrics"):
+    with patch(
+        "core.engine_metrics.default_metrics_url", return_value="http://x/metrics"
+    ):
         r = probe_kv_capacity("http://x/v1")
     assert r["kv_capacity_tokens"] == 131072
     assert r["source"] == "models"
@@ -116,7 +122,9 @@ def test_probe_kv_capacity_falls_back_to_models_max_model_len():
 def test_probe_kv_capacity_none_when_both_fail():
     """都不可达 → kv_capacity_tokens=None（调用方回退到全跑，不跳过）。"""
     _install_fake_httpx(lambda *a, **kw: _make_cm(None, None))
-    with patch("core.engine_metrics.default_metrics_url", return_value="http://x/metrics"):
+    with patch(
+        "core.engine_metrics.default_metrics_url", return_value="http://x/metrics"
+    ):
         r = probe_kv_capacity("http://x/v1")
     assert r["kv_capacity_tokens"] is None
     assert r["source"] is None
@@ -138,9 +146,13 @@ def test_probe_kv_capacity_no_exception_on_unreachable():
 def test_probe_kv_capacity_metrics_preferred_over_models():
     """/metrics 有值时不用 /v1/models 兜底（source=metrics）。"""
     _install_fake_httpx(
-        lambda *a, **kw: _make_cm(_VLLM_METRICS, {"data": [{"id": "m", "max_model_len": 131072}]})
+        lambda *a, **kw: _make_cm(
+            _VLLM_METRICS, {"data": [{"id": "m", "max_model_len": 131072}]}
+        )
     )
-    with patch("core.engine_metrics.default_metrics_url", return_value="http://x/metrics"):
+    with patch(
+        "core.engine_metrics.default_metrics_url", return_value="http://x/metrics"
+    ):
         r = probe_kv_capacity("http://x/v1")
     assert r["kv_capacity_tokens"] == 16 * 32096  # 用 /metrics，非 131072
     assert r["source"] == "metrics"

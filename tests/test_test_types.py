@@ -45,7 +45,10 @@ def test_registry_has_stable_order_and_plain_labels():
     )
     assert test_type_label("concurrency") == "Concurrency Test"
     assert test_type_label("unknown") == "Concurrency Test"
-    assert all(not re.search(r"[\U0001F300-\U0001FAFF\u2600-\u27BF]", test_type_label(item)) for item in TEST_TYPE_IDS)
+    assert all(
+        not re.search(r"[\U0001F300-\U0001FAFF\u2600-\u27BF]", test_type_label(item))
+        for item in TEST_TYPE_IDS
+    )
 
 
 def test_registry_exposes_native_material_icon_names():
@@ -60,4 +63,6 @@ def test_allowed_options_fall_back_to_first_available_id():
     from config.test_types import normalize_test_type
 
     assert normalize_test_type("missing", ("prefill", "matrix")) == "prefill"
-    assert normalize_test_type("Prefill Stress Test", ("prefill", "matrix")) == "prefill"
+    assert (
+        normalize_test_type("Prefill Stress Test", ("prefill", "matrix")) == "prefill"
+    )

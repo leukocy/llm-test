@@ -118,11 +118,7 @@ def verify_custom_prompt_flow(at: AppTest) -> None:
     source_mode.set_value("Manual Input").run(timeout=30)
 
     prompt_area = next(
-        (
-            area
-            for area in at.main.text_area
-            if area.label and "prompt" in area.label.casefold()
-        ),
+        (area for area in at.main.text_area if area.label and "prompt" in area.label.casefold()),
         None,
     )
     assert prompt_area is not None, "Custom prompt input is missing"

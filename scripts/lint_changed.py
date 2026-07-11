@@ -10,7 +10,9 @@ import sys
 def parse_changed_python_files(output: str) -> list[str]:
     """Return normalized Python paths from ``git diff --name-only`` output."""
 
-    return [line.strip() for line in output.splitlines() if line.strip().endswith(".py")]
+    return [
+        line.strip() for line in output.splitlines() if line.strip().endswith(".py")
+    ]
 
 
 def changed_python_files(base: str) -> list[str]:
@@ -33,13 +35,17 @@ def changed_python_files(base: str) -> list[str]:
         check=False,
     )
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.strip() or "Unable to collect changed Python files")
+        raise RuntimeError(
+            result.stderr.strip() or "Unable to collect changed Python files"
+        )
     return parse_changed_python_files(result.stdout)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base", default="master", help="Git base ref (default: master)")
+    parser.add_argument(
+        "--base", default="master", help="Git base ref (default: master)"
+    )
     args = parser.parse_args(argv)
 
     paths = changed_python_files(args.base)
