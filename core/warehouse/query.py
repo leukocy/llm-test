@@ -188,11 +188,14 @@ def project_run(run: TestRun) -> dict[str, Any]:
         "top_k": spec.get("num_experts_per_tok"),
         "quantization": serving.get("serving_quant") or spec.get("quant_method") or "",
         "dtype": spec.get("weight_dtype") or "",
-        "max_context": spec.get("max_position_embeddings") or serving.get("max_model_len"),
+        "max_context": spec.get("max_position_embeddings")
+        or serving.get("max_model_len"),
         # ---- 测试配置 ----
         "concurrency": run.concurrency,
         "usecase_set_version": config.get("usecase_set_version") or "",
-        "prompt_tokens": config.get("prompt_tokens") or config.get("total_prefill_tokens") or "",
+        "prompt_tokens": config.get("prompt_tokens")
+        or config.get("total_prefill_tokens")
+        or "",
         "output_tokens": config.get("output_tokens") or run.max_tokens,
         "load_time_s": _num(config.get("load_time_s")),
         # ---- 性能 ----
@@ -205,7 +208,9 @@ def project_run(run: TestRun) -> dict[str, Any]:
         "p99_latency_s": _num(run.p99_ttft),
         # ---- 资源峰值 ----
         "gpu_vram_peak_gb": _num(run.gpu_vram_peak_gb or peaks.get("gpu_vram_gb")),
-        "system_memory_peak_gb": _num(run.system_memory_peak_gb or peaks.get("system_memory_gb")),
+        "system_memory_peak_gb": _num(
+            run.system_memory_peak_gb or peaks.get("system_memory_gb")
+        ),
         "effective_bandwidth_gbps": _num(run.effective_bandwidth_gbps),
         "bandwidth_utilization_pct": _num(run.bandwidth_utilization_pct),
         "cpu_threads_used": config.get("cpu_threads") or "",
@@ -242,7 +247,8 @@ def project_run(run: TestRun) -> dict[str, Any]:
         "gpu_bandwidth_gbps": gpu0.get("nominal_bandwidth_gbps"),
         "pcie_gen": gpu0.get("pcie_gen"),
         "pcie_width": gpu0.get("pcie_width"),
-        "ssd_model": config.get("ssd_model") or _largest_ssd_model(fp.get("disks") or []),
+        "ssd_model": config.get("ssd_model")
+        or _largest_ssd_model(fp.get("disks") or []),
         "ssd_capacity_tb": config.get("ssd_capacity_tb")
         or _largest_ssd_size(fp.get("disks") or []),
         "os": fp.get("os") or sysinfo.get("os") or "",
@@ -521,7 +527,9 @@ def build_cross_matrix(
             chosen = max(numeric) if numeric else None
         else:
             # latest：按 created_at 取最新；None created_at 退化为列表最后一个
-            samples_sorted = sorted(samples, key=lambda x: x[0] or datetime.min, reverse=True)
+            samples_sorted = sorted(
+                samples, key=lambda x: x[0] or datetime.min, reverse=True
+            )
             chosen = samples_sorted[0][1] if samples_sorted else None
         cells.setdefault(rv, {})[cv] = chosen
 

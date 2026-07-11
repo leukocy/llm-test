@@ -24,7 +24,9 @@ def test_init_session_state_normalizes_legacy_prefill_test_type(clean_streamlit_
     assert "test_type_selector" not in clean_streamlit_state._data
 
 
-def test_apply_prefill_preset_updates_selectbox_key(clean_streamlit_state, tmp_path, monkeypatch):
+def test_apply_prefill_preset_updates_selectbox_key(
+    clean_streamlit_state, tmp_path, monkeypatch
+):
     from utils import test_config_manager
 
     manager = test_config_manager.TestConfigManager(str(tmp_path))
@@ -47,7 +49,9 @@ def test_apply_prefill_preset_updates_selectbox_key(clean_streamlit_state, tmp_p
     assert clean_streamlit_state._data["prefill_isolation_mode"] is True
 
 
-def test_pending_prefill_forces_selector_back_before_rerun(clean_streamlit_state, monkeypatch):
+def test_pending_prefill_forces_selector_back_before_rerun(
+    clean_streamlit_state, monkeypatch
+):
     from ui import test_panels
 
     class RerunCalled(Exception):
@@ -75,7 +79,9 @@ def test_pending_prefill_forces_selector_back_before_rerun(clean_streamlit_state
     assert clean_streamlit_state._data["_pending_test"]["test_type"] == "prefill"
 
 
-def test_can_update_current_test_type_without_rewriting_widget_key(clean_streamlit_state):
+def test_can_update_current_test_type_without_rewriting_widget_key(
+    clean_streamlit_state,
+):
     from config import session_state
 
     clean_streamlit_state.test_type_selector = "prefill"
@@ -90,7 +96,9 @@ def test_can_update_current_test_type_without_rewriting_widget_key(clean_streaml
     assert clean_streamlit_state._data["test_type_selector"] == "prefill"
 
 
-def test_forced_test_type_updates_selector_before_widget_creation(clean_streamlit_state):
+def test_forced_test_type_updates_selector_before_widget_creation(
+    clean_streamlit_state,
+):
     from config import session_state
 
     clean_streamlit_state["test_type_selector_widget_0"] = "concurrency"

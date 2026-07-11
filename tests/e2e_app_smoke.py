@@ -92,7 +92,11 @@ def verify_provider_and_model(at: AppTest) -> None:
     providers = list(provider_select.options)
     assert providers, "Provider selector has no options"
     target_provider = next(
-        (provider for provider in providers if provider != "Custom (OpenAI Compatible)"),
+        (
+            provider
+            for provider in providers
+            if provider != "Custom (OpenAI Compatible)"
+        ),
         providers[0],
     )
     provider_select.set_value(target_provider).run()
@@ -127,7 +131,9 @@ def verify_custom_prompt_flow(at: AppTest) -> None:
     )
     assert prompt_area is not None, "Custom prompt input is missing"
     prompt_area.set_value("Hello, benchmark test!").run()
-    assert not at.exception, f"Entering a custom prompt crashed the app:\n{at.exception}"
+    assert (
+        not at.exception
+    ), f"Entering a custom prompt crashed the app:\n{at.exception}"
     print("PASS: Custom prompt flow verified")
 
 

@@ -9,7 +9,7 @@
 ### 1. GPQA (Graduate-Level Google-Proof Q&A)
 
 **难度**: 5/5 (研究生级别)
-**领域**: 物理、化学、生物  
+**领域**: 物理、化学、生物
 **数据量**: ~450 题 (Diamond 子集)
 
 **下载方式**:
@@ -42,7 +42,7 @@ ds['train'].to_json('datasets/gpqa/gpqa_diamond.json')
 ### 2. ARC-Challenge (AI2 Reasoning Challenge)
 
 **难度**: 4/5 (中学科学)
-**领域**: 科学常识推理  
+**领域**: 科学常识推理
 **数据量**: ~2,500 题 (Challenge 子集)
 
 **下载方式**:
@@ -80,7 +80,7 @@ ds['test'].to_json('datasets/arc/ARC-Challenge-Test.jsonl', orient='records', li
 ### 3. TruthfulQA (真实性测试)
 
 **难度**: 4/5 (常见误解)
-**领域**: 迷信、阴谋论、健康、法律等  
+**领域**: 迷信、阴谋论、健康、法律等
 **数据量**: 817 题
 
 **下载方式**:
@@ -179,11 +179,11 @@ if __name__ == "__main__":
     print("=" * 50)
     print("开始下载新增测试集...")
     print("=" * 50)
-    
+
     download_gpqa()
     download_arc()
     download_truthfulqa()
-    
+
     print("\n 下载完成!")
 ```
 

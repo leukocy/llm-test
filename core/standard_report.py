@@ -110,7 +110,9 @@ class EnvironmentInfo:
             ]:
                 try:
                     mod = __import__(mod_name)
-                    info.library_versions[display] = getattr(mod, "__version__", "unknown")
+                    info.library_versions[display] = getattr(
+                        mod, "__version__", "unknown"
+                    )
                 except ImportError:
                     pass
         return info
@@ -175,7 +177,9 @@ class FailureCase:
         return {
             "sample_id": self.sample_id,
             "question": (
-                self.question[:200] + "..." if len(self.question) > 200 else self.question
+                self.question[:200] + "..."
+                if len(self.question) > 200
+                else self.question
             ),
             "expected": self.expected_answer,
             "predicted": self.predicted_answer,
@@ -433,7 +437,9 @@ class ReportExporter:
 
             # Add额外指标
             if metrics.normalized_accuracy > 0:
-                lm_eval_result["results"][name]["acc_norm"] = metrics.normalized_accuracy
+                lm_eval_result["results"][name][
+                    "acc_norm"
+                ] = metrics.normalized_accuracy
 
             # Version信息
             lm_eval_result["versions"][name] = 1
@@ -509,7 +515,11 @@ class ReportExporter:
         lines.append("|--------|--------|----------|--------|--------|")
 
         for name, metrics in self.report.results.items():
-            stderr_str = f"±{metrics.accuracy_stderr:.4f}" if metrics.accuracy_stderr > 0 else "-"
+            stderr_str = (
+                f"±{metrics.accuracy_stderr:.4f}"
+                if metrics.accuracy_stderr > 0
+                else "-"
+            )
             lines.append(
                 f"| {name} | {metrics.accuracy:.4f} | {stderr_str} | "
                 f"{metrics.total_samples} | {metrics.correct_samples} |"
@@ -524,8 +534,12 @@ class ReportExporter:
             lines.append(
                 f"- **AverageAccuracy**: {self.report.aggregate.get('avg_accuracy', 0):.4f}"
             )
-            lines.append(f"- **总Sample count**: {self.report.aggregate.get('total_samples', 0)}")
-            lines.append(f"- **Dataset数量**: {self.report.aggregate.get('num_datasets', 0)}")
+            lines.append(
+                f"- **总Sample count**: {self.report.aggregate.get('total_samples', 0)}"
+            )
+            lines.append(
+                f"- **Dataset数量**: {self.report.aggregate.get('num_datasets', 0)}"
+            )
             lines.append("")
 
         # 失败案例分析
@@ -634,7 +648,9 @@ class ReportExporter:
 # ============================================
 
 
-def generate_failure_analysis(failures: list[FailureCase], top_n: int = 10) -> dict[str, Any]:
+def generate_failure_analysis(
+    failures: list[FailureCase], top_n: int = 10
+) -> dict[str, Any]:
     """
     Generate详细失败分析报告
 
@@ -696,7 +712,9 @@ def export_lm_eval_format(result, filepath: str) -> str:
     return exporter.to_lm_eval_format(filepath)
 
 
-def export_all_formats(result, output_dir: str, prefix: str = "report") -> dict[str, str]:
+def export_all_formats(
+    result, output_dir: str, prefix: str = "report"
+) -> dict[str, str]:
     """Export所has格式"""
     report = StandardReport.from_evaluation_result(result)
     exporter = ReportExporter(report)
@@ -705,7 +723,9 @@ def export_all_formats(result, output_dir: str, prefix: str = "report") -> dict[
 
     return {
         "json": exporter.to_json(os.path.join(output_dir, f"{prefix}.json")),
-        "lm_eval": exporter.to_lm_eval_format(os.path.join(output_dir, f"{prefix}_lm_eval.json")),
+        "lm_eval": exporter.to_lm_eval_format(
+            os.path.join(output_dir, f"{prefix}_lm_eval.json")
+        ),
         "markdown": exporter.to_markdown(os.path.join(output_dir, f"{prefix}.md")),
         "csv": exporter.to_csv(os.path.join(output_dir, f"{prefix}.csv")),
     }
@@ -767,9 +787,9 @@ def compare_reports(report1: StandardReport, report2: StandardReport) -> dict[st
 
     # 汇总
     if common_datasets:
-        avg_diff = sum(comparison["datasets"][ds]["difference"] for ds in common_datasets) / len(
-            common_datasets
-        )
+        avg_diff = sum(
+            comparison["datasets"][ds]["difference"] for ds in common_datasets
+        ) / len(common_datasets)
 
         comparison["summary"] = {
             "common_datasets": len(common_datasets),

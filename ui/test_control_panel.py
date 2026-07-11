@@ -321,8 +321,9 @@ def render_test_control_panel():
 
     # Import abort functions
     try:
-        from core.providers.openai import is_pause_requested, set_stop_requested
+        from core.providers.openai import is_pause_requested
         from core.providers.openai import set_pause_requested as set_global_pause
+        from core.providers.openai import set_stop_requested
     except ImportError:
 
         def set_stop_requested(value: bool):

@@ -68,7 +68,9 @@ class ModelSpec:
     num_kv_heads: int | None = None
     head_dim: int | None = None
     intermediate_size: int | None = None
-    moe_intermediate_size: int | None = None  # MoE 专家的 intermediate size(可与 dense 层不同)
+    moe_intermediate_size: int | None = (
+        None  # MoE 专家的 intermediate size(可与 dense 层不同)
+    )
     vocab_size: int | None = None
     attention_type: str = ""  # "mha" | "gqa" | "mla" | ""
 
@@ -77,7 +79,9 @@ class ModelSpec:
 
     # modality
     is_multimodal: bool = False
-    modalities: list[str] = field(default_factory=list)  # ["text","vision","audio","video"]
+    modalities: list[str] = field(
+        default_factory=list
+    )  # ["text","vision","audio","video"]
     vision_encoder: str = ""
 
     # precision
@@ -133,7 +137,11 @@ class ModelSpec:
         """
         if self.bytes_per_token_read_override is not None:
             return self.bytes_per_token_read_override
-        active = self.active_params_b if self.active_params_b is not None else self.total_params_b
+        active = (
+            self.active_params_b
+            if self.active_params_b is not None
+            else self.total_params_b
+        )
         bpp = self.bytes_per_param
         if active is None or bpp is None:
             return None
@@ -469,7 +477,9 @@ def _normalize_key(model_id: str) -> str:
     return (model_id or "").lower().strip()
 
 
-def resolve_spec(model_id: str, override: dict[str, Any] | None = None) -> ModelSpec | None:
+def resolve_spec(
+    model_id: str, override: dict[str, Any] | None = None
+) -> ModelSpec | None:
     """按 model_id 模糊匹配注册表；override 中的字段覆盖命中规格。未命中返回 None。"""
     key = _normalize_key(model_id)
     if not key:
@@ -485,7 +495,8 @@ def resolve_spec(model_id: str, override: dict[str, Any] | None = None) -> Model
     if base is None:
         # 没有命中注册表：若 override 给了关键架构字段，仍构造一个（供用户自填）
         if override and any(
-            override.get(k) for k in ("active_params_b", "total_params_b", "weight_dtype")
+            override.get(k)
+            for k in ("active_params_b", "total_params_b", "weight_dtype")
         ):
             base = ModelSpec(name=model_id)
         else:
@@ -514,15 +525,26 @@ def _detect_multimodal(cfg: dict) -> tuple[bool, list[str], str]:
     modalities: list[str] = []
     vision_encoder = ""
     # 显式字段
-    if cfg.get("multi_modal_projector") or cfg.get("vision_config") or cfg.get("image_token_id"):
+    if (
+        cfg.get("multi_modal_projector")
+        or cfg.get("vision_config")
+        or cfg.get("image_token_id")
+    ):
         modalities = ["text", "vision"]
         vc = cfg.get("vision_config") or {}
         vision_encoder = (
-            vc.get("model_type") or vc.get("architectures", [""])[0] if isinstance(vc, dict) else ""
+            vc.get("model_type") or vc.get("architectures", [""])[0]
+            if isinstance(vc, dict)
+            else ""
         )
     # 架构名暗示
     arch_str = " ".join(str(a).lower() for a in (cfg.get("architectures") or []))
-    if "vl" in arch_str or "vision" in arch_str or "visual" in arch_str or "multimodal" in arch_str:
+    if (
+        "vl" in arch_str
+        or "vision" in arch_str
+        or "visual" in arch_str
+        or "multimodal" in arch_str
+    ):
         if "vision" not in modalities:
             modalities = ["text", "vision"]
     is_mm = bool(modalities)
@@ -668,7 +690,8 @@ def from_local_config(config_path: str | Path) -> ModelSpec | None:
         name=cfg.get("model_type", path.parent.name),
         architecture="moe" if is_moe else "dense",
         num_experts=cfg.get("num_experts") or cfg.get("n_routed_experts"),
-        num_experts_per_tok=cfg.get("num_experts_per_tok") or cfg.get("num_selected_experts"),
+        num_experts_per_tok=cfg.get("num_experts_per_tok")
+        or cfg.get("num_selected_experts"),
         num_shared_experts=cfg.get("num_shared_experts") or cfg.get("n_shared_experts"),
         routed_scaling=cfg.get("routed_scaling_factor"),
         num_layers=cfg.get("num_hidden_layers") or cfg.get("n_layers"),

@@ -128,7 +128,9 @@ def _render_hardware(hw: dict):
         st.text(
             f"{cpu.get('sockets', '?')}s × {cpu.get('cores_per_socket', '?')}c × {cpu.get('threads_per_core', '?')}t"
         )
-        st.text(f"NUMA: {cpu.get('numa_nodes', '?')} | 逻辑核: {cpu.get('logical_cores', '?')}")
+        st.text(
+            f"NUMA: {cpu.get('numa_nodes', '?')} | 逻辑核: {cpu.get('logical_cores', '?')}"
+        )
     with col2:
         st.markdown("**内存**")
         st.text(f"{mem.get('total_gb', '?')} GB {mem.get('type', '')}")
@@ -168,7 +170,9 @@ def _render_system(si: dict):
         st.text(f"Python: {si.get('python_version', '?')}")
         st.text(f"OS: {si.get('os_name', '?')} {si.get('os_version', '')}")
         st.text(f"hostname: {si.get('hostname', '?')}")
-        st.text(f"git: {si.get('git_hash', '?')} | 版本: {si.get('project_version', '?')}")
+        st.text(
+            f"git: {si.get('git_hash', '?')} | 版本: {si.get('project_version', '?')}"
+        )
     with col2:
         lv = si.get("library_versions") or {}
         if lv:
@@ -186,7 +190,9 @@ def _render_engine(ec: dict, container: str | None):
     """渲染引擎配置。"""
     st.subheader("引擎")
     sources = ec.get("capture_source") or []
-    st.caption(f"采集来源: {', '.join(sources) or '无'} | 容器: {container or '未找到'}")
+    st.caption(
+        f"采集来源: {', '.join(sources) or '无'} | 容器: {container or '未找到'}"
+    )
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -200,7 +206,9 @@ def _render_engine(ec: dict, container: str | None):
     with col2:
         st.markdown("**并行 / 调度**")
         par = ec.get("parallel_strategy") or {}
-        st.text(f"TP: {par.get('tp', '?')} | DCP: {par.get('dcp', '?')} | EP: {par.get('ep', '?')}")
+        st.text(
+            f"TP: {par.get('tp', '?')} | DCP: {par.get('dcp', '?')} | EP: {par.get('ep', '?')}"
+        )
         sched = ec.get("schedule") or {}
         st.text(f"max_seqs: {sched.get('max_num_seqs', '?')}")
         st.text(f"gpu_mem: {sched.get('gpu_memory_utilization', '?')}")
@@ -266,7 +274,9 @@ def _render_model(ms: dict, source: str):
     with col2:
         st.text(f"总参: {ms.get('total_params_b', '?')}B")
         st.text(f"激活: {ms.get('active_params_b', '?')}B")
-        st.text(f"专家: {ms.get('num_experts', '?')} top{ms.get('num_experts_per_tok', '?')}")
+        st.text(
+            f"专家: {ms.get('num_experts', '?')} top{ms.get('num_experts_per_tok', '?')}"
+        )
         st.text(f"shared: {ms.get('num_shared_experts', '?')}")
         st.text(f"vocab: {ms.get('vocab_size', '?')}")
     with col3:

@@ -91,7 +91,9 @@ class ServingConfig:
     # runtime
     cuda_version: str = ""
     torch_version: str = ""
-    env_flags: dict[str, Any] = field(default_factory=dict)  # VLLM_ATTENTION_BACKEND=... 等
+    env_flags: dict[str, Any] = field(
+        default_factory=dict
+    )  # VLLM_ATTENTION_BACKEND=... 等
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -245,7 +247,9 @@ def _flag_value(cmd: str, flag: str) -> str | None:
     return m.group(1).strip("'\"") if m else None
 
 
-def merge_serving_configs(base: ServingConfig, override: ServingConfig) -> ServingConfig:
+def merge_serving_configs(
+    base: ServingConfig, override: ServingConfig
+) -> ServingConfig:
     """用 override 的非空字段覆盖 base 的对应字段(override 优先)。
 
     布尔字段:override 显式设了 True 或 False 都覆盖 base(只有 None 才跳过)。
