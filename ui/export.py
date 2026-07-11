@@ -95,7 +95,7 @@ def export_to_excel(df_dict, filename='benchmark_results.xlsx'):
         return None
 
 
-def create_excel_download_link(df_dict, filename='benchmark_results.xlsx', link_text='📗 Download Excel Report'):
+def create_excel_download_link(df_dict, filename='benchmark_results.xlsx', link_text='Download Excel report'):
     """
     Create Streamlit download link for Excel file.
 
@@ -263,7 +263,7 @@ def export_interactive_html(figures_list, tables_list, insights_list=None, title
     if insights_list and len(insights_list) > 0:
         html_parts.append("""
             <div class="insights">
-                <h3>📊 Performance Insights</h3>
+                <h3>Performance insights</h3>
                 <ul>
         """)
         for insight in insights_list:
@@ -304,7 +304,7 @@ def export_interactive_html(figures_list, tables_list, insights_list=None, title
     return ''.join(html_parts)
 
 
-def create_html_download_link(html_content, filename='benchmark_report.html', link_text='🌐 Download HTML Report'):
+def create_html_download_link(html_content, filename='benchmark_report.html', link_text='Download HTML report'):
     """
     Create download link for HTML report.
 
@@ -340,19 +340,19 @@ def export_enhanced_markdown(df, insights=None, charts_description=""):
 
     # Insights
     if insights:
-        md_parts.append("## 📊 Performance Insights\n\n")
+        md_parts.append("## Performance insights\n\n")
         for insight in insights:
             md_parts.append(f"- {insight}\n")
         md_parts.append("\n")
 
     # Data table
-    md_parts.append("## 📋 Results Summary\n\n")
+    md_parts.append("## Results summary\n\n")
     md_parts.append(df.to_markdown(index=False))
     md_parts.append("\n\n")
 
     # Charts description
     if charts_description:
-        md_parts.append("## 📈 Charts\n\n")
+        md_parts.append("## Charts\n\n")
         md_parts.append(charts_description)
         md_parts.append("\n")
 
@@ -453,7 +453,7 @@ def export_prefill_decode_report(
 def create_static_chart_download_link(
     chart_bytes: BytesIO,
     filename: str = 'chart.png',
-    link_text: str = '📷 Download Static Chart'
+    link_text: str = 'Download static chart'
 ) -> str:
     """
     Create static chart download link

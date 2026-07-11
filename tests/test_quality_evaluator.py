@@ -440,7 +440,7 @@ class TestQualityEvaluatorResults:
         df = evaluator.get_summary_df()
         assert not df.empty
         # CheckThinking mode列包含正确信息
-        assert "✅" in df.iloc[0]["Thinking mode"]
+        assert df.iloc[0]["Thinking mode"] == "Enabled (HIGH)"
 
 
 class TestConvenienceFunctions:

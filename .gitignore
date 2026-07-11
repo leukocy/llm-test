@@ -58,6 +58,7 @@ web/node_modules/
 
 # Temp / working files
 temp/
+.worktrees/
 *.lnk
 
 # OS

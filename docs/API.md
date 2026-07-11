@@ -6,7 +6,7 @@
 
 ---
 
-## 📚 Table of Contents
+##  Table of Contents
 
 1. [Tests & Execution](#tests--execution)
 2. [Results & Persistence](#results--persistence)
@@ -19,7 +19,7 @@
 
 ## Tests & Execution
 
-### 🚀 Run Test
+###  Run Test
 Starts a new benchmark test in the background.
 
 - **URL**: `/api/tests/run`
@@ -27,7 +27,7 @@ Starts a new benchmark test in the background.
 - **Body**: `TestRunConfig` (JSON)
 - **Response**: `{"run_id": "8c2f1b", "status": "started"}`
 
-### 📜 Test History
+###  Test History
 Retrieves recent test runs from the database.
 
 - **URL**: `/api/tests/history`
@@ -35,21 +35,21 @@ Retrieves recent test runs from the database.
 - **Query Params**: `limit=20`
 - **Response**: List of `TestRunModel` summaries.
 
-### 📊 Test Status
+###  Test Status
 Gets in-memory status of an active test run.
 
 - **URL**: `/api/tests/{run_id}/status`
 - **Method**: `GET`
 - **Response**: `{"run_id": "...", "status": "running", "results_count": 12}`
 
-### 🛑 Control Operations
+###  Control Operations
 Interrupt or manage active test runs.
 
 - **Stop**: `POST /api/tests/{run_id}/stop`
 - **Pause**: `POST /api/tests/{run_id}/pause`
 - **Resume**: `POST /api/tests/{run_id}/resume`
 
-### 🧩 Strategies
+###  Strategies
 Lists all available test strategies and their dynamic parameter schemas.
 
 - **URL**: `/api/strategies`
@@ -60,14 +60,14 @@ Lists all available test strategies and their dynamic parameter schemas.
 
 ## Results & Persistence
 
-### 📥 Download CSV
+###  Download CSV
 Downloads the CSV results file for a specific run.
 
 - **URL**: `/api/results/{run_id}/csv`
 - **Method**: `GET`
 - **Response**: File stream (`text/csv`)
 
-### 📦 Get Raw Results
+###  Get Raw Results
 Returns the full result set as JSON.
 
 - **URL**: `/api/results/{run_id}`
@@ -78,14 +78,14 @@ Returns the full result set as JSON.
 
 ## Reporting & Analysis
 
-### 📝 Report Summary
+###  Report Summary
 Generates a structured report summary (stats, metadata, sections).
 
 - **URL**: `/api/reports/{run_id}/summary`
 - **Method**: `GET`
 - **Response**: `BaseReportData` object.
 
-### 💡 Performance Analysis
+###  Performance Analysis
 Generates nuanced performance insights and an A+…D grade.
 
 - **URL**: `/api/reports/{run_id}/analysis`
@@ -96,13 +96,13 @@ Generates nuanced performance insights and an A+…D grade.
 
 ## Providers & Models
 
-### 🏢 List Providers
+###  List Providers
 Returns available LLM provider options.
 
 - **URL**: `/api/providers/`
 - **Method**: `GET`
 
-### 🤖 List Models
+###  List Models
 Returns a list of pre-configured model IDs.
 
 - **URL**: `/api/providers/models`
@@ -112,13 +112,13 @@ Returns a list of pre-configured model IDs.
 
 ## Evaluators & Datasets
 
-### 📋 List Evaluators
+###  List Evaluators
 Lists all registered quality evaluators (MMLU, GSM8K, etc.).
 
 - **URL**: `/api/evaluators/`
 - **Method**: `GET`
 
-### 📂 List Datasets
+###  List Datasets
 Lists available local dataset folders for custom evaluation.
 
 - **URL**: `/api/evaluators/datasets`
@@ -128,7 +128,7 @@ Lists available local dataset folders for custom evaluation.
 
 ## WebSockets
 
-### 🔄 Real-time Updates
+###  Real-time Updates
 Subscribe to live progress and logs for a specific run.
 
 - **URL**: `/ws/{run_id}`

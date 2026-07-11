@@ -9,106 +9,12 @@ import time
 import pandas as pd
 import streamlit as st
 
-DEFAULT_TEST_TYPE = "Concurrency Test"
+from config.test_types import DEFAULT_TEST_TYPE, normalize_test_type
 
 
 def _touch_test_running_timestamp():
     """Refresh the test state timestamp using the public session_state API."""
     st.session_state['_test_running_timestamp'] = time.time()
-
-_TEST_TYPE_ALIASES = {
-    "concurrency": "Concurrency Test",
-    "concurrency_test": "Concurrency Test",
-    "prefill": "Prefill Stress Test",
-    "prefill_test": "Prefill Stress Test",
-    "prefill_stress": "Prefill Stress Test",
-    "prefill_stress_test": "Prefill Stress Test",
-    "segmented": "Segmented Context Test",
-    "segmented_context": "Segmented Context Test",
-    "segmented_context_test": "Segmented Context Test",
-    "segmented_prefill": "Segmented Context Test",
-    "long_context": "Long Context Test",
-    "long_context_test": "Long Context Test",
-    "matrix": "Concurrency-Context Matrix Test",
-    "throughput_matrix": "Concurrency-Context Matrix Test",
-    "concurrency_context_matrix": "Concurrency-Context Matrix Test",
-    "concurrency_context_matrix_test": "Concurrency-Context Matrix Test",
-    "custom": "Custom Text Test",
-    "custom_text": "Custom Text Test",
-    "custom_text_test": "Custom Text Test",
-    "all": "All Tests",
-    "all_tests": "All Tests",
-    "stability": "Stability Test",
-    "stability_test": "Stability Test",
-}
-
-
-def _test_type_key(value):
-    """Return a stable comparison key for a test type value."""
-    return (
-        str(value or "")
-        .strip()
-        .lower()
-        .replace("/", " ")
-        .replace("-", "_")
-        .replace(" ", "_")
-    )
-
-
-def _match_allowed_test_type(label, allowed_options=None):
-    """Prefer the exact option object from the active selectbox options."""
-    if not allowed_options:
-        return label
-
-    if label in allowed_options:
-        return label
-
-    target_key = _test_type_key(label)
-    for option in allowed_options:
-        option_key = _test_type_key(option)
-        if option_key == target_key or option_key.endswith(target_key):
-            return option
-
-    label_lower = str(label).lower()
-    for option in allowed_options:
-        option_lower = str(option).lower()
-        if "batch" in label_lower and "batch test" in option_lower:
-            return option
-        if "quality" in label_lower and "model quality test" in option_lower:
-            return option
-        if "comparison" in label_lower and "a/b model comparison" in option_lower:
-            return option
-        if "advanced" in label_lower and "advanced evaluation" in option_lower:
-            return option
-
-    return DEFAULT_TEST_TYPE if DEFAULT_TEST_TYPE in allowed_options else allowed_options[0]
-
-
-def normalize_test_type(value, allowed_options=None):
-    """
-    Normalize legacy/internal test type names to the UI label used by widgets.
-    """
-    key = _test_type_key(value)
-    label = _TEST_TYPE_ALIASES.get(key)
-
-    if not label:
-        text = str(value or "")
-        lower_text = text.lower()
-        if "batch test" in lower_text:
-            label = "Batch Test"
-        elif "model quality test" in lower_text:
-            label = "Model Quality Test"
-        elif "a/b model comparison" in lower_text:
-            label = "A/B Model Comparison"
-        elif "advanced evaluation" in lower_text:
-            label = "Advanced Evaluation"
-        elif text:
-            label = text
-        else:
-            label = DEFAULT_TEST_TYPE
-
-    return _match_allowed_test_type(label, allowed_options)
-
 
 def set_current_test_type(value, allowed_options=None, sync_widget_key=False):
     """

@@ -17,6 +17,7 @@ import traceback
 import pandas as pd
 import streamlit as st
 
+from config.test_types import test_type_label
 from core.result_persistence import save_last_result_snapshot
 from utils.helpers import reorder_dataframe_columns
 
@@ -83,7 +84,10 @@ class TestExecutor:
         resume_data = st.session_state.get('resume_data', None)
 
         if is_resuming and resume_data:
-            st.info(f"🔄 Resuming test from saved progress: {resume_data.get('test_type', 'Unknown')}")
+            st.info(
+                "Resuming test from saved progress: "
+                f"{test_type_label(resume_data.get('test_type'))}"
+            )
             # Restore completed results
             preloaded_results = resume_data.get('completed_results', [])
         else:
@@ -103,16 +107,18 @@ class TestExecutor:
 
         log_container = st.empty()
         with log_container.container():
-            with st.expander("📋 Real-time logging (Live Request Log)", expanded=True):
+            with st.expander("Real-time logging", expanded=True):
                 log_placeholder = st.empty()
-                log_placeholder.info("ℹ️ Log window initialized... waiting for test to start")
+                log_placeholder.info("Log window initialized; waiting for the test to start.")
 
         result_container = st.empty()
         placeholder = result_container
 
         output_container = st.empty()
         output_placeholder = output_container.empty()
-        output_placeholder.info("📝 Output preview area ready, waiting for first request to complete...")
+        output_placeholder.info(
+            "Output preview is ready and will appear after the first request completes."
+        )
 
         # 实时进度渲染回调：core 不再直接调 st.*，由本闭包在后台线程渲染到 placeholder。
         # 后台线程无 script run context，需附上主线程捕获的 ctx 才能调 st.*。
@@ -139,7 +145,7 @@ class TestExecutor:
                     st.dataframe(display_df, width="stretch")
                 if latest_output:
                     with output_placeholder.container():
-                        with st.expander(f"📝 最新输出预览 (Session {session_id})", expanded=False):
+                        with st.expander(f"Latest Output: 最新输出预览 (Session {session_id})", expanded=False):
                             st.code(latest_output, language=None, wrap_lines=True)
             except Exception:
                 # 后台线程渲染失败不应中断测试

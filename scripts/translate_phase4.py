@@ -2,24 +2,24 @@
 Phase 4: Deep file-specific translation targeting all remaining Chinese in UI files.
 This script uses precise, long-phrase-first replacements specific to each file.
 """
-import re
 import os
+import re
 
 
 def translate_file(filepath, replacements):
     """Apply replacements to a file, longest-first."""
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, encoding='utf-8') as f:
             content = f.read()
-    except:
+    except (OSError, UnicodeError):
         return -1
-    
+
     original = content
     # Sort by length (longest first) to avoid partial match issues
     sorted_reps = sorted(replacements, key=lambda x: -len(x[0]))
     for old, new in sorted_reps:
         content = content.replace(old, new)
-    
+
     if content != original:
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
@@ -55,7 +55,7 @@ CHARTS = [
 # =====================================================================
 ONBOARDING = [
     # ONBOARDING_CONTENT - welcome
-    ('👋 Welcome to LLM 基准Test平台', '👋 Welcome to the LLM Benchmark Platform'),
+    (' Welcome to LLM 基准Test平台', ' Welcome to the LLM Benchmark Platform'),
     ('这is一专业 LLM 性能Test工具', 'This is a professional LLM performance testing tool'),
     ('**主要功能：**', '**Main Features:**'),
     ('TestModelinnot同Concurrency级别under性能表现', 'Test model performance at different concurrency levels'),
@@ -119,7 +119,7 @@ ONBOARDING = [
     ('in统一Test控制面板in：', 'In the unified test control panel:'),
     ('ConfirmConfigure', 'Confirm configuration'),
     ('查看Configure摘要确保参数正确', 'Review configuration summary to ensure correct parameters'),
-    ("点击 '🚀 启动Test' 按钮", "Click the '🚀 Start Test' button"),
+    ("点击 ' 启动Test' 按钮", "Click the ' Start Test' button"),
     ('监控进度', 'Monitor progress'),
     ('实时查看Test进度andStatus', 'View test progress and status in real-time'),
     ('Test控制：', 'Test control:'),
@@ -153,7 +153,7 @@ ONBOARDING = [
     ('useResult对比功能可直观比较多次Test', 'Use result comparison to visually compare multiple tests'),
     ('Historywill自动Savein items目in', 'History is automatically saved in the project directory'),
     # complete
-    ('🎉 恭喜！', '🎉 Congratulations!'),
+    (' 恭喜！', ' Congratulations!'),
     ('您CompletedOnboarding！', 'You have completed the onboarding!'),
     ('您already学will：', 'You have learned:'),
     ('查看andAnalyze results', 'View and analyze results'),
@@ -176,7 +176,7 @@ ONBOARDING = [
     ('当前Step内容', 'Current step content'),
     ('标题and内容', 'Title and content'),
     ('导航按钮', 'Navigation buttons'),
-    ('完成 ✅', 'Done ✅'),
+    ('完成 [OK]', 'Done [OK]'),
     ('Render引导Trigger器（侧边栏）', 'Render onboarding trigger (sidebar)'),
     ('DisplayTrigger按钮', 'Display trigger button'),
     ('Reset引导Status', 'Reset onboarding state'),
@@ -239,7 +239,7 @@ ONBOARDING = [
 ]
 
 # =====================================================================
-# FILE: ui/test_control_panel.py  
+# FILE: ui/test_control_panel.py
 # =====================================================================
 CONTROL_PANEL = [
     ('TestStatus常量', 'Test status constants'),
@@ -282,7 +282,7 @@ CONTROL_PANEL = [
     ('Configure摘要', 'Configuration Summary'),
     ('Display关键Configure', 'Display key configuration'),
     ('温度', 'Temperature'),
-    ('Thinking mode: ✅ (预算:', 'Thinking mode: ✅ (budget:'),
+    ('Thinking mode: [OK] (预算:', 'Thinking mode: [OK] (budget:'),
     ('GetCurrent Status', 'Get current status'),
     ('控制按钮组 - 4按钮：开始、暂停、继续、停止', 'Control button group - 4 buttons: start, pause, resume, stop'),
     ('开始按钮：Idle时可用', 'Start button: available when idle'),

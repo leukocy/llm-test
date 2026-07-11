@@ -122,7 +122,7 @@ jobs:
 
             // Check for breaking changes
             if (description.toLowerCase().includes('!') || description.includes('BREAKING')) {
-              comment += '⚠️ **Breaking Change Detected**\n\nThis PR contains breaking changes. Please ensure:\n';
+              comment += '[WARNING] **Breaking Change Detected**\n\nThis PR contains breaking changes. Please ensure:\n';
               comment += '- Migration guide is included\n';
               comment += '- Version is bumped appropriately\n\n';
             }
@@ -139,7 +139,7 @@ jobs:
             );
 
             if (!hasTestChanges) {
-              comment += '🧪 **No Test Changes**\n\nThis PR does not include test changes. ';
+              comment += '[TEST] **No Test Changes**\n\nThis PR does not include test changes. ';
               comment += 'Please add tests for new functionality or bug fixes.\n\n';
             }
 

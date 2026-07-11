@@ -53,18 +53,18 @@ class LogServer:
             async def server_routine():
                 try:
                     async with websockets.serve(self._handler, host, port):
-                        _safe_print(f"📡 WebSocket Log Server running on ws://{host}:{port}")
+                        _safe_print(f"WebSocket Log Server running on ws://{host}:{port}")
                         await asyncio.Future()  # run forever
                 except OSError as e:
                     if e.errno == 10048: # Address already in use (Windows)
-                        _safe_print(f"⚠️ Port {port} is busy. Assuming server is already running.")
+                        _safe_print(f"Port {port} is busy. Assuming server is already running.")
                     else:
                         raise e
 
             self.loop.run_until_complete(server_routine())
 
         except Exception as e:
-            _safe_print(f"❌ WebSocket Server Error: {e}")
+            _safe_print(f"WebSocket Server Error: {e}")
             traceback.print_exc()
             self.running = False
         finally:

@@ -28,7 +28,7 @@ def test_save_and_restore_last_result_snapshot(tmp_path):
 
     assert restored is True
     assert state["current_csv_file"] == str(csv_path)
-    assert state["current_test_type"] == "Prefill Stress Test"
+    assert state["current_test_type"] == "prefill"
     assert state["current_model_id"] == "model-a"
     assert state["current_provider"] == "OpenAI Compatible"
     assert state["test_duration"] == 12.5
@@ -36,7 +36,7 @@ def test_save_and_restore_last_result_snapshot(tmp_path):
     assert state["system_info"] == {"gpu": "RTX"}
     assert state["results_df"].loc[0, "ttft"] == 1.23
     assert state["restored_from_csv"] is True
-    assert state["restored_result_context"]["test_type"] == "Prefill Stress Test"
+    assert state["restored_result_context"]["test_type"] == "prefill"
     assert csv_path.with_suffix(".csv.meta.json").exists()
 
 
@@ -64,7 +64,7 @@ def test_restore_latest_csv_when_last_snapshot_is_missing(tmp_path):
 
     assert restored is True
     assert state["current_csv_file"] == str(new_csv)
-    assert state["current_test_type"] == "Long Context Test"
+    assert state["current_test_type"] == "long_context"
     assert state["current_model_id"] == "model-b"
     assert state["results_df"].loc[0, "session_id"] == "new"
 
@@ -98,14 +98,14 @@ def test_list_and_restore_specific_saved_result_with_metadata(tmp_path):
     results = list_saved_results(base_dir=base_dir)
 
     assert [item["path"] for item in results] == [str(second_csv), str(first_csv)]
-    assert results[0]["test_type"] == "Segmented Context Test"
+    assert results[0]["test_type"] == "segmented"
     assert results[0]["model_id"] == "model-b"
 
     state = {}
     restored = restore_result_file_to_session(state, second_csv, base_dir=base_dir)
 
     assert restored is True
-    assert state["current_test_type"] == "Segmented Context Test"
+    assert state["current_test_type"] == "segmented"
     assert state["current_model_id"] == "model-b"
     assert state["current_provider"] == "Provider B"
     assert state["test_config"] == {"Segment Levels": "[1024, 2048]"}
@@ -156,7 +156,7 @@ def test_delete_saved_result_removes_csv_metadata_and_repairs_last_pointer(tmp_p
 
     assert restored is True
     assert state["current_csv_file"] == str(first_csv)
-    assert state["current_test_type"] == "Concurrency Test"
+    assert state["current_test_type"] == "concurrency"
 
 
 def test_delete_last_remaining_saved_result_removes_last_pointer(tmp_path):

@@ -16,6 +16,8 @@ from typing import Any
 
 import streamlit as st
 
+from config.test_types import test_type_label
+from ui.design_system import material_icon, status_badge_html
 
 # ============================================================================
 # Test status definitions
@@ -319,24 +321,14 @@ def render_test_control_panel():
     col_status, col_buttons = st.columns([1, 2])
 
     with col_status:
-        st.subheader("📊 Status")
+        st.subheader("Run status")
 
         # Current status display
         current_status = st.session_state.get("test_status", TestStatus.IDLE)
 
-        # Status color mapping
-        status_colors = {
-            TestStatus.IDLE: "🔵",
-            TestStatus.RUNNING: "🟢",
-            TestStatus.PAUSED: "🟡",
-            TestStatus.COMPLETED: "✅",
-            TestStatus.FAILED: "❌",
-            TestStatus.CANCELLED: "⏹️"
-        }
-
-        st.metric(
-            "Status",
-            f"{status_colors.get(current_status, '⚪')} {current_status}"
+        st.markdown(
+            status_badge_html(current_status),
+            unsafe_allow_html=True,
         )
 
         # Progress display(ifhas)
@@ -356,24 +348,25 @@ def render_test_control_panel():
             # Time information
             if progress.start_time:
                 elapsed = progress.elapsed_time
-                st.caption(f"⏱️ Elapsed: {format_time(elapsed)}")
+                st.caption(f"Elapsed: {format_time(elapsed)}")
 
                 remaining = progress.estimated_remaining_time
                 if remaining:
-                    st.caption(f"⏳ Est. remaining: {format_time(remaining)}")
+                    st.caption(f"Estimated remaining: {format_time(remaining)}")
 
     with col_buttons:
-        st.subheader("🎮 Test Control")
+        st.subheader("Controls")
 
         # Control buttons - 只有 Pause, Resume, Stop
         col_pause, col_continue, col_stop = st.columns(3)
 
         with col_pause:
             pause_button = st.button(
-                "⏸️ Pause",
+                "Pause",
                 disabled=not test_running,
                 key="control_pause_btn",
-                use_container_width=True
+                icon=material_icon("pause"),
+                use_container_width=True,
             )
             if pause_button:
                 # 1. 设置暂停标志（benchmark_runner 会检测这个标志）
@@ -423,22 +416,27 @@ def render_test_control_panel():
                             'current_index': completed_count,  # 使用已完成数量作为跳过索引
                             'total_samples': getattr(runner, 'total_requests', 0)
                         }
-                        st.toast(f"Paused: {completed_count} requests completed, will resume from index {completed_count}", icon="⏸️")
+                        st.toast(
+                            f"Paused: {completed_count} requests completed, "
+                            f"will resume from index {completed_count}",
+                            icon=material_icon("pause"),
+                        )
 
                 # 4. 更新状态为 Paused
                 st.session_state.test_running = False
                 st.session_state.test_paused = True
                 st.session_state.test_status = "Paused"
 
-                st.toast("Test paused.", icon="⏸️")
+                st.toast("Test paused.", icon=material_icon("pause"))
                 st.rerun()
 
         with col_continue:
             continue_button = st.button(
-                "▶️ Resume",
+                "Resume",
                 disabled=not test_paused,
                 key="control_continue_btn",
-                use_container_width=True
+                icon=material_icon("play_arrow"),
+                use_container_width=True,
             )
             if continue_button:
                 # Resume: 从暂停处继续测试
@@ -468,7 +466,7 @@ def render_test_control_panel():
                 if test_type and saved_config:
                     # 构造 _pending_test 来重新触发测试
                     # 注意：benchmark_runner 会检测 is_resuming 标志并跳过已完成的请求
-                    if test_type == "Concurrency Test":
+                    if test_type == "concurrency":
                         from core.benchmark_runner import BenchmarkRunner
                         st.session_state['_pending_test'] = {
                             'test_type': test_type,
@@ -481,7 +479,7 @@ def render_test_control_panel():
                                 saved_config.get('input_tokens', 64)
                             )
                         }
-                    elif test_type == "Prefill Stress Test":
+                    elif test_type == "prefill":
                         from core.benchmark_runner import BenchmarkRunner
                         st.session_state['_pending_test'] = {
                             'test_type': test_type,
@@ -493,7 +491,7 @@ def render_test_control_panel():
                                 saved_config.get('max_tokens', 1)
                             )
                         }
-                    elif test_type == "Long Context Test":
+                    elif test_type == "long_context":
                         from core.benchmark_runner import BenchmarkRunner
                         st.session_state['_pending_test'] = {
                             'test_type': test_type,
@@ -505,7 +503,7 @@ def render_test_control_panel():
                                 saved_config.get('max_tokens', 512)
                             )
                         }
-                    elif test_type == "Segmented Context Test":
+                    elif test_type == "segmented":
                         from core.benchmark_runner import BenchmarkRunner
                         st.session_state['_pending_test'] = {
                             'test_type': test_type,
@@ -521,7 +519,7 @@ def render_test_control_panel():
                                 saved_config.get('concurrency', 1)
                             )
                         }
-                    elif test_type == "Concurrency-Context Matrix Test":
+                    elif test_type == "matrix":
                         from core.benchmark_runner import BenchmarkRunner
                         st.session_state['_pending_test'] = {
                             'test_type': test_type,
@@ -538,16 +536,17 @@ def render_test_control_panel():
                     else:
                         st.warning(f"Resume not supported for: {test_type}")
 
-                st.toast("Resuming test...", icon="▶️")
+                st.toast("Resuming test...", icon=material_icon("play_arrow"))
                 st.rerun()
 
         with col_stop:
             stop_button = st.button(
-                "⏹️ Stop",
+                "Stop",
                 disabled=not (test_running or test_paused),
                 key="control_stop_btn",
                 type="secondary",
-                use_container_width=True
+                icon=material_icon("stop"),
+                use_container_width=True,
             )
             if stop_button:
                 # 1. 先设置全局停止标志
@@ -580,7 +579,7 @@ def render_test_control_panel():
                 if '_current_runner_instance' in st.session_state:
                     del st.session_state._current_runner_instance
 
-                st.toast("Test stopped.", icon="⏹️")
+                st.toast("Test stopped.", icon=material_icon("stop"))
                 st.rerun()
 
     return {
@@ -592,7 +591,7 @@ def render_test_control_panel():
 
 def render_progress_history():
     """Render progress history panel"""
-    with st.expander("📜 Test History", expanded=False):
+    with st.expander("Test history", expanded=False):
         saved_progress_list = progress_manager.list_saved_progress()
 
         if not saved_progress_list:
@@ -604,7 +603,7 @@ def render_progress_history():
                 col1, col2, col3, col4 = st.columns(4)
 
                 with col1:
-                    st.write(f"**{item['test_type']}**")
+                    st.write(f"**{test_type_label(item['test_type'])}**")
 
                 with col2:
                     st.write(item['status'])
@@ -613,7 +612,12 @@ def render_progress_history():
                     st.caption(item['progress'])
 
                 with col4:
-                    if st.button("🗑️", key=f"del_{item['test_id']}", help="Delete this progress"):
+                    if st.button(
+                        "Delete",
+                        key=f"del_{item['test_id']}",
+                        help="Delete this progress",
+                        icon=material_icon("delete"),
+                    ):
                         if progress_manager.delete_progress(item['test_id']):
                             st.rerun()
 
@@ -636,7 +640,7 @@ def render_resumable_tests():
     if not resumable:
         return None
 
-    with st.expander("🔄 Resumable Tests", expanded=True):
+    with st.expander("Resumable tests", expanded=True):
         st.caption("The following tests can be resumed:")
 
         selected_test_id = None
@@ -645,18 +649,25 @@ def render_resumable_tests():
             col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
 
             with col1:
-                st.write(f"**{prog['test_type']}**")
+                st.write(f"**{test_type_label(prog['test_type'])}**")
                 st.caption(f"Save: {prog['file_time']}")
 
             with col2:
-                status_icon = "🟡" if prog['status'] == TestStatus.PAUSED else "⏹️"
-                st.write(f"{status_icon} {prog['status']}")
+                st.markdown(
+                    status_badge_html(prog['status']),
+                    unsafe_allow_html=True,
+                )
 
             with col3:
                 st.write(prog['progress'])
 
             with col4:
-                if st.button("▶️ Restore", key=f"resume_{prog['test_id']}", use_container_width=True):
+                if st.button(
+                    "Restore",
+                    key=f"resume_{prog['test_id']}",
+                    use_container_width=True,
+                    icon=material_icon("restore"),
+                ):
                     selected_test_id = prog['test_id']
 
         return selected_test_id

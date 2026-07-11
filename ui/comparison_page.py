@@ -13,7 +13,7 @@ from utils.helpers import reorder_dataframe_columns
 
 def render_comparison_page():
     """Render the Historical Comparison UI."""
-    st.header("📈 Historical Comparison")
+    st.header("Historical Comparison")
 
     manager = HistoryManager()
     history = manager.list_history()
@@ -69,7 +69,7 @@ def render_comparison_page():
     st.markdown("---")
 
     # --- Visualizations ---
-    st.subheader("📊 Comparison Charts")
+    st.subheader("Comparison Charts")
 
     # 1. Radar Chart Comparison
     st.markdown("### Overall Performance Comparison (Radar Chart)")
@@ -137,7 +137,7 @@ def render_comparison_page():
         st.plotly_chart(fig_box)
 
     # --- Data Table ---
-    with st.expander("📋 View Detailed Data", expanded=False):
+    with st.expander("View Detailed Data", expanded=False):
         if not combined_df.empty:
             combined_df = reorder_dataframe_columns(combined_df)
 

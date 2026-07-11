@@ -32,14 +32,14 @@ _SCENARIO_OPTIONS = ["coding", "long_doc", "retrieval", "dialogue", "agent", "kn
 
 def render_application_case_manager() -> None:
     """渲染应用用例录入 + 列表 + 删除。"""
-    st.subheader("🧪 模型 × 应用用例")
+    st.subheader("Application: 模型 × 应用用例")
     st.caption(
         "手动录入 evaluator 覆盖不到的应用场景（真实 RAG 引用 / Agent 工具链），补 "
         "quality_score / citation_score / tool_success_rate / retrieval_latency_s。"
         "自动采集行（source=auto）也在此列表。"
     )
 
-    tab_form, tab_list = st.tabs(["➕ 录入用例", "📋 用例列表"])
+    tab_form, tab_list = st.tabs(["Add: 录入用例", "List: 用例列表"])
 
     with tab_form:
         _render_form()
@@ -125,7 +125,7 @@ def _render_form() -> None:
         next_action = st.text_input("next_action", key="ac_next")
         sales_summary = st.text_area("sales_summary（对外口径一句话）", key="ac_sales", height=68)
 
-        submitted = st.form_submit_button("💾 保存用例")
+        submitted = st.form_submit_button("Save: 保存用例")
         if submitted:
             if not model_name or not tester:
                 st.error("model_name 和 tester 必填")
@@ -205,7 +205,7 @@ def _render_list() -> None:
     opts = [f"{c.case_id[:12]}… {c.scenario} {c.model_name} {c.date}" for c in cases]
     if opts:
         pick = st.selectbox("选择要删除的用例", opts, key="acl_delete_pick")
-        if st.button("🗑️ 删除", key="acl_delete_btn"):
+        if st.button("Delete: 删除", key="acl_delete_btn"):
             idx = opts.index(pick)
             db.delete_application_case(cases[idx].case_id)
             st.success("已删除")

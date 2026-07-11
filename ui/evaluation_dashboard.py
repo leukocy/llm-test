@@ -13,7 +13,7 @@ import streamlit as st
 
 def render_evaluation_dashboard(
     results: dict[str, Any],
-    title: str = "📊 Evaluation Results Dashboard"
+    title: str = "Evaluation results dashboard"
 ):
     """
     Render full evaluation results dashboard
@@ -55,7 +55,7 @@ def render_evaluation_dashboard(
 
 def render_model_comparison_table(models: dict[str, Any]):
     """Render model comparison table"""
-    st.subheader("📋 Model Performance Comparison")
+    st.subheader("Model performance comparison")
 
     rows = []
     for model_key, data in models.items():
@@ -77,7 +77,7 @@ def render_model_comparison_table(models: dict[str, Any]):
 
 def render_accuracy_comparison(models: dict[str, Any]):
     """Render accuracy comparison chart"""
-    st.subheader("🎯 Accuracy Comparison")
+    st.subheader("Accuracy comparison")
 
     model_names = []
     accuracies = []
@@ -123,7 +123,7 @@ def render_accuracy_comparison(models: dict[str, Any]):
 
 def render_latency_comparison(models: dict[str, Any]):
     """Render latency comparison chart"""
-    st.subheader("⏱️ Latency Comparison")
+    st.subheader("Latency comparison")
 
     model_names = []
     latencies = []
@@ -156,7 +156,7 @@ def render_latency_comparison(models: dict[str, Any]):
 
 def render_failure_analysis_panel(failure_report: dict[str, Any]):
     """Render failure analysis panel"""
-    st.subheader("❌ Failure Analysis")
+    st.subheader("Failure analysis")
 
     # Failure rate
     col1, col2 = st.columns(2)
@@ -196,14 +196,14 @@ def render_failure_analysis_panel(failure_report: dict[str, Any]):
     # Improvement suggestions
     suggestions = failure_report.get('improvement_suggestions', [])
     if suggestions:
-        st.markdown("**💡 Improvement Suggestions:**")
+        st.markdown("**Improvement suggestions:**")
         for i, suggestion in enumerate(suggestions[:5]):
             st.markdown(f"  {i+1}. {suggestion}")
 
 
 def render_consistency_panel(consistency_report: dict[str, Any]):
     """Render consistency test panel"""
-    st.subheader("🔄 Consistency Test")
+    st.subheader("Consistency test")
 
     col1, col2, col3 = st.columns(3)
 
@@ -231,7 +231,7 @@ def render_consistency_panel(consistency_report: dict[str, Any]):
 
 def render_robustness_panel(robustness_report: dict[str, Any]):
     """Render robustness test panel"""
-    st.subheader("🛡️ Robustness Test")
+    st.subheader("Robustness test")
 
     col1, col2, col3 = st.columns(3)
 
@@ -282,7 +282,7 @@ def render_robustness_panel(robustness_report: dict[str, Any]):
 
 def render_reasoning_quality_breakdown(results: list[dict[str, Any]]):
     """Render reasoning quality breakdown"""
-    st.subheader("🧠 Reasoning Quality Analysis")
+    st.subheader("Reasoning quality analysis")
 
     if not results:
         st.info("No reasoning quality data yet")
@@ -328,7 +328,7 @@ def render_reasoning_quality_breakdown(results: list[dict[str, Any]]):
 
 def render_sample_details_table(samples: list[dict[str, Any]], max_display: int = 20):
     """Render sample details table"""
-    st.subheader("📝 Sample Details")
+    st.subheader("Sample details")
 
     # Filter options
     col1, col2 = st.columns(2)
@@ -360,8 +360,9 @@ def render_sample_details_table(samples: list[dict[str, Any]], max_display: int 
 
     # Display
     for sample in filtered[:max_display]:
+        result_label = "Correct" if sample.get('is_correct') else "Incorrect"
         with st.expander(
-            f"{'✅' if sample.get('is_correct') else '❌'} Sample {sample.get('sample_id', 'N/A')}"
+            f"{result_label} · Sample {sample.get('sample_id', 'N/A')}"
         ):
             col1, col2 = st.columns([2, 1])
 
@@ -381,7 +382,7 @@ def render_sample_details_table(samples: list[dict[str, Any]], max_display: int 
 
 def render_export_section(results: dict[str, Any]):
     """Render export section"""
-    st.subheader("📥 Export Report")
+    st.subheader("Export report")
 
     import base64
     import json
@@ -391,7 +392,7 @@ def render_export_section(results: dict[str, Any]):
     with col1:
         json_str = json.dumps(results, ensure_ascii=False, indent=2)
         b64 = base64.b64encode(json_str.encode()).decode()
-        href = f'<a href="data:application/json;base64,{b64}" download="evaluation_report.json">📄 Download JSON</a>'
+        href = f'<a href="data:application/json;base64,{b64}" download="evaluation_report.json">Download JSON</a>'
         st.markdown(href, unsafe_allow_html=True)
 
     with col2:
@@ -408,11 +409,11 @@ def render_export_section(results: dict[str, Any]):
             df = pd.DataFrame(rows)
             csv = df.to_csv(index=False)
             b64 = base64.b64encode(csv.encode()).decode()
-            href = f'<a href="data:text/csv;base64,{b64}" download="evaluation_summary.csv">📊 Download CSV</a>'
+            href = f'<a href="data:text/csv;base64,{b64}" download="evaluation_summary.csv">Download CSV</a>'
             st.markdown(href, unsafe_allow_html=True)
 
     with col3:
-        st.markdown("🔗 [View Full Report]()")
+        st.caption("The full report is available in the sections above.")
 
 
 def render_mini_dashboard(

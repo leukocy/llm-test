@@ -4,10 +4,11 @@ Styled table components for professional data visualization.
 Provides styled pandas DataFrames with conditional formatting,
 highlighting, and custom themes.
 """
+import importlib.util
+
 import numpy as np
 import pandas as pd
 
-import importlib.util
 HAS_MATPLOTLIB = importlib.util.find_spec("matplotlib") is not None
 
 
@@ -229,10 +230,10 @@ def add_statistical_summary(df, metric_cols, group_col=None):
 
         # Fill group column with stat name
         if group_col and group_col in df.columns:
-            row[group_col] = f'📊 {stat_name}'
+            row[group_col] = stat_name
         else:
             # Use first column for stat name
-            row[df.columns[0]] = f'📊 {stat_name}'
+            row[df.columns[0]] = stat_name
 
         # Calculate statistics for metric columns
         for col in df.columns:

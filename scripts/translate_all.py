@@ -2,21 +2,22 @@
 Comprehensive Chinese-to-English translation script for the LLM Benchmark Platform.
 Handles all major UI, config, and core files.
 """
-import re
 import os
+import re
+
 
 def translate_file(filepath, replacements):
     """Apply replacements to a file."""
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, encoding='utf-8') as f:
             content = f.read()
-    except:
+    except (OSError, UnicodeError):
         return 0
-    
+
     original = content
     for old, new in replacements:
         content = content.replace(old, new)
-    
+
     if content != original:
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
@@ -39,7 +40,7 @@ UNIVERSAL = [
     ('自定义文本测试', 'Custom Text Test'),
     ('全部测试', 'All Tests'),
     ('稳定性测试', 'Stability Test'),
-    
+
     # Common UI labels
     ('开始并发测试', 'Start Concurrency Test'),
     ('开始并发性能测试', 'Start Concurrency Test'),
@@ -51,7 +52,7 @@ UNIVERSAL = [
     ('开始全部测试', 'Start All Tests'),
     ('开始稳定性测试', 'Start Stability Test'),
     ('开始测试', 'Start Test'),
-    
+
     # Common status/state
     ('正在启动', 'Starting'),
     ('测试中...', 'Testing...'),
@@ -65,7 +66,7 @@ UNIVERSAL = [
     ('恢复测试', 'Resume Test'),
     ('正在暂停', 'Pausing'),
     ('正在停止', 'Stopping'),
-    
+
     # Common parameter labels
     ('选择并发级别', 'Select Concurrency Levels'),
     ('自定义并发数 (逗号分隔)', 'Custom Concurrency (comma-separated)'),
@@ -80,7 +81,7 @@ UNIVERSAL = [
     ('上下文长度', 'Context Length'),
     ('并发数', 'Concurrency'),
     ('并发', 'Concurrency'),
-    
+
     # Common headers and sections
     ('参数设置', 'Parameter Settings'),
     ('测试参数', 'Test Parameters'),
@@ -91,7 +92,7 @@ UNIVERSAL = [
     ('详细结果', 'Detailed Results'),
     ('图表分析', 'Chart Analysis'),
     ('最佳性能统计', 'Best Performance Stats'),
-    
+
     # Common buttons and actions
     ('下载结果', 'Download Results'),
     ('下载报告', 'Download Report'),
@@ -101,7 +102,7 @@ UNIVERSAL = [
     ('保存配置', 'Save Config'),
     ('加载配置', 'Load Config'),
     ('删除配置', 'Delete Config'),
-    
+
     # Common info/warnings
     ('请确认', 'Please confirm'),
     ('请检查', 'Please check'),
@@ -116,7 +117,7 @@ UNIVERSAL = [
     ('报告失败', 'Report failed'),
     ('数据中缺少', 'Missing in data'),
     ('没有有效的', 'No valid'),
-    
+
     # Common metrics/technical terms
     ('系统吞吐量', 'System Throughput'),
     ('输出吞吐量', 'Output Throughput'),
@@ -129,7 +130,7 @@ UNIVERSAL = [
     ('请求成功率', 'Request Success Rate'),
     ('吞吐量', 'Throughput'),
     ('延迟', 'Latency'),
-    
+
     # Common formatting/display
     ('总请求数', 'Total Requests'),
     ('总输入 Tokens', 'Total Input Tokens'),
@@ -141,13 +142,13 @@ UNIVERSAL = [
     ('最差', 'Worst'),
     ('最高', 'Highest'),
     ('最低', 'Lowest'),
-    
+
     # Streamlit status
     ('测试完成', 'Test completed'),
     ('测试开始', 'Test started'),
     ('测试取消', 'Test cancelled'),
     ('测试错误', 'Test error'),
-    
+
     # Comments - common patterns
     ('# 延迟导入', '# Lazy import'),
     ('# 创建图表', '# Create chart'),
@@ -297,9 +298,9 @@ ONBOARDING = [
     ('开始使用', 'Get Started'),
     ('跳过引导', 'Skip Onboarding'),
     ('帮助与引导', 'Help & Guide'),
-    ('✅ 已完成引导', '✅ Onboarding completed'),
-    ('🔄 重新引导', '🔄 Restart Onboarding'),
-    ('📖 使用帮助', '📖 Help'),
+    ('[OK] 已完成引导', '[OK] Onboarding completed'),
+    (' 重新引导', ' Restart Onboarding'),
+    ('使用帮助', 'Help'),
     ('步骤', 'Step'),
     ('配置 API', 'Configure API'),
     ('选择测试', 'Select Test'),
