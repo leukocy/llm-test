@@ -321,9 +321,8 @@ def render_test_control_panel():
 
     # Import abort functions
     try:
-        from core.providers.openai import is_pause_requested
+        from core.providers.openai import is_pause_requested, set_stop_requested
         from core.providers.openai import set_pause_requested as set_global_pause
-        from core.providers.openai import set_stop_requested
     except ImportError:
 
         def set_stop_requested(value: bool):
@@ -474,9 +473,11 @@ def render_test_control_panel():
                 st.rerun()
 
         with col_continue:
+            active_handle = st.session_state.get("_active_test_handle")
+            worker_running = bool(active_handle and not active_handle.done.is_set())
             continue_button = st.button(
                 "Resume",
-                disabled=not test_paused,
+                disabled=not test_paused or worker_running,
                 key="control_continue_btn",
                 use_container_width=True,
             )
@@ -625,13 +626,10 @@ def render_test_control_panel():
                 st.session_state.stop_requested = False
                 st.session_state.pause_requested = False
 
-                # 4. 清除待执行的测试、runner 实例和 handle
+                # 4. 清除待执行的测试。runner/handle 必须保留到 worker
+                # 真正退出，否则旧 worker 可以覆盖随后启动的新测试状态。
                 if "_pending_test" in st.session_state:
                     st.session_state["_pending_test"] = None
-                if "_current_runner_instance" in st.session_state:
-                    del st.session_state._current_runner_instance
-                if "_active_test_handle" in st.session_state:
-                    del st.session_state["_active_test_handle"]
 
                 st.toast("Test stopped.")
                 st.rerun()
