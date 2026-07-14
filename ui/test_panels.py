@@ -64,6 +64,10 @@ def _execute_pending_test(run_test_func, test_type):
     返回：
         bool: True 如果执行了测试（需要 fragment 接管渲染）
     """
+    # 重入防护：已有测试在后台跑时不重复启动（消除诊断日志里的多次 RUN_TEST）
+    if st.session_state.get("_active_test_handle"):
+        return False
+
     pending = st.session_state.get('_pending_test', None)
     if not pending:
         return False
