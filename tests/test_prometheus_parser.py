@@ -21,7 +21,7 @@ vllm:num_requests_waiting 3
 # TYPE vllm:num_preemption counter
 vllm:num_preemption 12
 # TYPE vllm:cache_config_info gauge
-vllm:cache_config_info{block_size="16",gpu_memory_utilization="0.9",num_gpu_blocks="91750",num_cpu_blocks="0"} 1.0
+vllm:cache_config_info{block_size="16",gpu_memory_utilization="0.9",num_gpu_blocks="91750",num_cpu_blocks="0",kv_cache_size_tokens="6150106",kv_cache_max_concurrency="5.865198"} 1.0
 # TYPE vllm:gpu_prefix_cache_hits_total counter
 vllm:gpu_prefix_cache_hits_total 120
 # TYPE vllm:gpu_prefix_cache_queries_total counter
@@ -84,6 +84,8 @@ def test_extract_vllm_runtime_fields():
     assert rt["tpot_mean_s"] == pytest.approx(0.02)
     assert rt["cache_config"]["block_size"] == 16
     assert rt["cache_config"]["num_gpu_blocks"] == 91750
+    assert rt["cache_config"]["kv_cache_size_tokens"] == 6150106
+    assert rt["cache_config"]["kv_cache_max_concurrency"] == pytest.approx(5.865198)
 
 
 def test_extract_sglang_runtime_fields():

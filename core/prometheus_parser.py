@@ -114,7 +114,8 @@ def extract_vllm_runtime(parsed: dict[str, Any]) -> dict[str, Any]:
     兼容不同 vLLM 版本的指标改名 + 带标签/无标签两种格式。"""
     labeled = parsed["labeled"]
 
-    # cache_config_info 是带标签的 gauge：block_size / num_gpu_blocks / num_cpu_blocks / gpu_memory_utilization
+    # cache_config_info 是带标签的 gauge。新版 vLLM 还会暴露
+    # kv_cache_size_tokens：对 hybrid/grouped KV cache 按 group 折算后的 token 容量。
     cache_cfg = {}
     for item in labeled.get("vllm:cache_config_info", []):
         cache_cfg.update(item["labels"])
@@ -159,6 +160,12 @@ def extract_vllm_runtime(parsed: dict[str, Any]) -> dict[str, Any]:
             "block_size": _to_int(cache_cfg.get("block_size")),
             "num_gpu_blocks": _to_int(cache_cfg.get("num_gpu_blocks")),
             "num_cpu_blocks": _to_int(cache_cfg.get("num_cpu_blocks")),
+            "kv_cache_size_tokens": _to_int(
+                cache_cfg.get("kv_cache_size_tokens")
+            ),
+            "kv_cache_max_concurrency": _to_float(
+                cache_cfg.get("kv_cache_max_concurrency")
+            ),
             "gpu_memory_utilization": _to_float(
                 cache_cfg.get("gpu_memory_utilization")
             ),
