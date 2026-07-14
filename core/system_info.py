@@ -7,9 +7,16 @@
 import os
 import platform
 import subprocess
+import threading
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+_SYSTEM_INFO_CACHE: dict[str, Any] | None = None
+_SYSTEM_INFO_CACHE_LOCK = threading.Lock()
+_SYSTEM_INFO_CACHE_READY = threading.Event()
+_SYSTEM_INFO_CACHE_STARTED = False
 
 
 def capture_system_info(sudo_password: str | None = None) -> dict[str, Any]:
@@ -85,6 +92,53 @@ def capture_system_info(sudo_password: str | None = None) -> dict[str, Any]:
     info["captured_at"] = datetime.now().isoformat()
 
     return info
+
+
+def warm_system_info_cache() -> None:
+    """Start the expensive hardware snapshot in a daemon thread once per process."""
+    global _SYSTEM_INFO_CACHE_STARTED
+
+    with _SYSTEM_INFO_CACHE_LOCK:
+        if _SYSTEM_INFO_CACHE_STARTED or _SYSTEM_INFO_CACHE is not None:
+            return
+        _SYSTEM_INFO_CACHE_STARTED = True
+
+    def _capture() -> None:
+        global _SYSTEM_INFO_CACHE
+        try:
+            snapshot = capture_system_info()
+            with _SYSTEM_INFO_CACHE_LOCK:
+                _SYSTEM_INFO_CACHE = snapshot
+        finally:
+            _SYSTEM_INFO_CACHE_READY.set()
+
+    threading.Thread(
+        target=_capture,
+        name="system-info-prefetch",
+        daemon=True,
+    ).start()
+
+
+def get_cached_system_info(*, wait: bool = True) -> dict[str, Any]:
+    """Return the process snapshot, optionally leaving an unfinished prefetch alone."""
+    global _SYSTEM_INFO_CACHE
+
+    with _SYSTEM_INFO_CACHE_LOCK:
+        cached = _SYSTEM_INFO_CACHE
+        started = _SYSTEM_INFO_CACHE_STARTED
+    if cached is not None:
+        return deepcopy(cached)
+
+    if not started:
+        warm_system_info_cache()
+
+    if not wait:
+        return {}
+
+    _SYSTEM_INFO_CACHE_READY.wait()
+
+    with _SYSTEM_INFO_CACHE_LOCK:
+        return deepcopy(_SYSTEM_INFO_CACHE or {})
 
 
 def _safe_get(func, default=""):

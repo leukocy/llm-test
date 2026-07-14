@@ -30,6 +30,9 @@ from core.prometheus_parser import (
 logger = logging.getLogger(__name__)
 
 _MAX_TIMELINE_POINTS = 3600
+_KV_PROBE_CACHE: dict[str, dict[str, Any]] = {}
+_KV_PROBE_EVENTS: dict[str, threading.Event] = {}
+_KV_PROBE_LOCK = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -110,6 +113,57 @@ def probe_kv_capacity(api_base_url: str | None, timeout: float = 5.0) -> dict[st
             logger.debug(f"probe_kv_capacity /v1/models 失败: {e}")
 
     return result
+
+
+def warm_kv_capacity_cache(api_base_url: str | None) -> None:
+    """Prefetch KV capacity so endpoint probing is off the first-request path."""
+    key = (api_base_url or "").strip().rstrip("/")
+    if not key:
+        return
+
+    with _KV_PROBE_LOCK:
+        if key in _KV_PROBE_CACHE or key in _KV_PROBE_EVENTS:
+            return
+        ready = threading.Event()
+        _KV_PROBE_EVENTS[key] = ready
+
+    def _probe() -> None:
+        try:
+            result = probe_kv_capacity(key)
+            with _KV_PROBE_LOCK:
+                _KV_PROBE_CACHE[key] = result
+        finally:
+            ready.set()
+
+    threading.Thread(
+        target=_probe,
+        name="kv-capacity-prefetch",
+        daemon=True,
+    ).start()
+
+
+def get_cached_kv_capacity(api_base_url: str | None) -> dict[str, Any]:
+    """Return a prefetched probe result, or perform the first probe synchronously."""
+    key = (api_base_url or "").strip().rstrip("/")
+    if not key:
+        return probe_kv_capacity(api_base_url)
+
+    with _KV_PROBE_LOCK:
+        cached = _KV_PROBE_CACHE.get(key)
+        ready = _KV_PROBE_EVENTS.get(key)
+
+    if cached is not None:
+        return dict(cached)
+
+    if ready is not None:
+        ready.wait()
+        with _KV_PROBE_LOCK:
+            return dict(_KV_PROBE_CACHE.get(key, {}))
+
+    result = probe_kv_capacity(key)
+    with _KV_PROBE_LOCK:
+        _KV_PROBE_CACHE[key] = result
+    return dict(result)
 
 
 def estimate_kv_need(concurrency: int, context_tokens: int, max_tokens: int) -> int:

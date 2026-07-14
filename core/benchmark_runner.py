@@ -929,9 +929,11 @@ class BenchmarkRunner:
             self._apply_seed()
 
             # Get自动捕获系统信息
-            from core.system_info import capture_system_info
+            from core.system_info import get_cached_system_info
 
-            auto_sys_info = capture_system_info()
+            # Do not wait for hardware discovery on the first-request path.
+            # Completion persists the prefetched snapshot.
+            auto_sys_info = get_cached_system_info(wait=False)
 
             # Merge用户Custom系统信息(自动优先:手填只补充自动采不到的字段)
             user_sys_info = self.get_system_info()
@@ -1021,6 +1023,7 @@ class BenchmarkRunner:
 
         try:
             db = self._get_db_manager()
+            self._finalize_system_info()
             # 组装八维仓库字段并随完成写入
             extra_fields = self._build_warehouse_extra_fields(
                 monitor_summary, engine_summary
@@ -1040,6 +1043,17 @@ class BenchmarkRunner:
             self._last_run_id = self._db_run.id if self._db_run else None
             self._db_run = None
 
+    def _finalize_system_info(self) -> None:
+        """Collect prefetched hardware metadata after requests leave the critical path."""
+        try:
+            from core.system_info import get_cached_system_info
+
+            auto = get_cached_system_info()
+            user = self.get_system_info()
+            self._last_system_info = {**user, **auto}
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Finalize system information failed: {e}")
+
     def _build_warehouse_extra_fields(
         self, monitor_summary: dict | None, engine_summary: dict | None = None
     ) -> dict:
@@ -1050,6 +1064,14 @@ class BenchmarkRunner:
         import json as _json
 
         extra: dict = {}
+
+        try:
+            if self._last_system_info:
+                extra["system_info_json"] = _json.dumps(
+                    self._last_system_info, ensure_ascii=False
+                )
+        except (TypeError, ValueError):
+            pass
 
         # ---- A. machine_id（硬件指纹）----
         try:
@@ -1335,9 +1357,9 @@ class BenchmarkRunner:
 
         # 2/3. 自动探测（/metrics 优先，/v1/models 兜底）
         try:
-            from core.engine_metrics import probe_kv_capacity
+            from core.engine_metrics import get_cached_kv_capacity
 
-            r = probe_kv_capacity(self.api_base_url)
+            r = get_cached_kv_capacity(self.api_base_url)
             self._kv_budget = r.get("kv_capacity_tokens")
             self._kv_budget_source = r.get("source")
         except Exception as e:  # noqa: BLE001
