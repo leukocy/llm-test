@@ -217,7 +217,9 @@ jobs:
           script: |
             const pr = context.payload.pull_request;
 
-            if (!pr.mergeable) {
+            // GitHub may report null while mergeability is still being calculated.
+            // Only an explicit false means the PR has conflicts.
+            if (pr.mergeable === false) {
               core.setFailed('PR has merge conflicts');
             }
 
