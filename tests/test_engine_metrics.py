@@ -18,7 +18,7 @@ vllm:num_requests_waiting 2
 # TYPE vllm:num_preemption counter
 vllm:num_preemption 5
 # TYPE vllm:cache_config_info gauge
-vllm:cache_config_info{block_size="16",gpu_memory_utilization="0.9",num_gpu_blocks="1000",num_cpu_blocks="0"} 1.0
+vllm:cache_config_info{block_size="16",gpu_memory_utilization="0.9",num_gpu_blocks="1000",num_cpu_blocks="0",kv_cache_size_tokens="6150106",kv_cache_max_concurrency="5.865198"} 1.0
 """
 
 
@@ -83,8 +83,18 @@ def test_poller_captures_peaks_and_timeline():
     assert summary["peaks"]["num_requests_waiting"] == 2
     assert summary["cache_config"]["block_size"] == 16
     assert summary["cache_config"]["num_gpu_blocks"] == 1000
-    assert summary["cache_config"]["kv_capacity_tokens"] == 16000  # 1000 * 16
+    assert summary["cache_config"]["kv_cache_size_tokens"] == 6150106
+    assert summary["cache_config"]["kv_capacity_tokens"] == 6150106
     assert len(summary["timeline"]) >= 2
+
+
+def test_poller_falls_back_to_blocks_for_old_vllm():
+    old_metrics = VLLM_METRICS.replace(
+        ',kv_cache_size_tokens="6150106",kv_cache_max_concurrency="5.865198"', ""
+    )
+    summary = _run_poller("http://h/metrics", old_metrics)
+    assert summary["cache_config"]["kv_cache_size_tokens"] is None
+    assert summary["cache_config"]["kv_capacity_tokens"] == 16000
 
 
 def test_poller_preemption_is_window_delta():

@@ -7,7 +7,7 @@
 - 调度器队列：运行中 / 等待请求数
 - 抢救数（num_preemption，KV 驱逐）——稳定性信号
 - 引擎侧 TTFT / TPOT（直方图均值）——对照客户端测量值
-- cache_config_info：block_size / num_gpu_blocks → KV 容量
+- cache_config_info：优先 kv_cache_size_tokens，旧版回退 block_size × num_gpu_blocks
 
 为什么用线程：与 ResourceMonitor 同理，httpx 同步请求是阻塞的，不能进 async 事件循环。
 端点不可达时优雅降级为 no-op（不影响测试）。
@@ -41,8 +41,8 @@ def probe_kv_capacity(api_base_url: str | None, timeout: float = 5.0) -> dict[st
     """测试前一次性探测 KV 缓存容量（tokens），用于自适应跳过超预算 cell。
 
     优先级：
-      1. 引擎 /metrics 的 cache_config_info（vLLM: block_size×num_gpu_blocks）——最准，
-         反映引擎实际分配的 KV 池。
+      1. 引擎 /metrics 的 cache_config_info：优先使用 vLLM 的
+         kv_cache_size_tokens（group-aware），旧版才回退 block_size×num_gpu_blocks。
       2. /v1/models 的 max_model_len——模型上下文上限，作 KV 预算上界（保守，
          实际 KV 池可能更小，但引擎不在跑 / /metrics 不可达时是唯一来源）。
       3. 都拿不到 → kv_capacity_tokens=None（调用方回退到不跳过，全跑）。
@@ -74,9 +74,14 @@ def probe_kv_capacity(api_base_url: str | None, timeout: float = 5.0) -> dict[st
                         else extract_sglang_runtime(parsed)
                     )
                     cc = rt.get("cache_config") or {}
+                    capacity = cc.get("kv_cache_size_tokens")
                     blocks = cc.get("num_gpu_blocks")
                     bsize = cc.get("block_size")
-                    if blocks and bsize:
+                    if capacity:
+                        result["kv_capacity_tokens"] = int(capacity)
+                        result["source"] = "metrics"
+                        result["metrics_ok"] = True
+                    elif blocks and bsize:
                         result["kv_capacity_tokens"] = int(blocks) * int(bsize)
                         result["source"] = "metrics"
                         result["metrics_ok"] = True
@@ -289,8 +294,12 @@ class EngineMetricsPoller:
             preemption_total = preemption_vals[-1] - preemption_vals[0]
 
         cc = self._cache_config or {}
-        kv_capacity_tokens = None
-        if cc.get("num_gpu_blocks") and cc.get("block_size"):
+        kv_capacity_tokens = cc.get("kv_cache_size_tokens")
+        if (
+            kv_capacity_tokens is None
+            and cc.get("num_gpu_blocks")
+            and cc.get("block_size")
+        ):
             kv_capacity_tokens = cc["num_gpu_blocks"] * cc["block_size"]
 
         return {
@@ -320,6 +329,8 @@ class EngineMetricsPoller:
                 "block_size": cc.get("block_size"),
                 "num_gpu_blocks": cc.get("num_gpu_blocks"),
                 "num_cpu_blocks": cc.get("num_cpu_blocks"),
+                "kv_cache_size_tokens": cc.get("kv_cache_size_tokens"),
+                "kv_cache_max_concurrency": cc.get("kv_cache_max_concurrency"),
                 "kv_capacity_tokens": kv_capacity_tokens,
             },
             "timeline": self._downsample(),
