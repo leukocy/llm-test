@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import time
+import uuid
 from unittest.mock import patch
 
 import pytest
 
-from core.engine_metrics import EngineMetricsPoller, default_metrics_url
+from core.engine_metrics import (
+    EngineMetricsPoller,
+    default_metrics_url,
+    get_cached_kv_capacity,
+    warm_kv_capacity_cache,
+)
 
 VLLM_METRICS = """# TYPE vllm:gpu_cache_usage_perc gauge
 vllm:gpu_cache_usage_perc 0.40
@@ -69,6 +75,32 @@ def test_default_metrics_url_strips_path():
     assert default_metrics_url("localhost:8000") == "http://localhost:8000/metrics"
     assert default_metrics_url(None) is None
     assert default_metrics_url("") is None
+
+
+def test_kv_capacity_prefetch_is_reused(monkeypatch):
+    from core import engine_metrics
+
+    url = f"http://prefetch-{uuid.uuid4().hex}/v1"
+    calls = []
+
+    def fake_probe(api_base_url, timeout=5.0):
+        calls.append(api_base_url)
+        return {
+            "kv_capacity_tokens": 12345,
+            "source": "metrics",
+            "max_model_len": None,
+            "metrics_ok": True,
+        }
+
+    monkeypatch.setattr(engine_metrics, "probe_kv_capacity", fake_probe)
+
+    warm_kv_capacity_cache(url)
+    first = get_cached_kv_capacity(url)
+    second = get_cached_kv_capacity(url + "/")
+
+    assert first == second
+    assert first["kv_capacity_tokens"] == 12345
+    assert calls == [url]
 
 
 # ---------- 轮询与汇总 ----------

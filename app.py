@@ -143,6 +143,12 @@ def main():
 
     apply_design_system()
 
+    # Hardware discovery launches several system commands. Start it while the
+    # user is configuring a test instead of serializing it before request #1.
+    from core.system_info import warm_system_info_cache
+
+    warm_system_info_cache()
+
     # 1. Initialize session state
     init_session_state()
 
@@ -155,6 +161,12 @@ def main():
 
     # 4. Render sidebar and get configuration
     sidebar_config = render_sidebar()
+
+    # The adaptive KV probe can issue /metrics and /models requests. Cache it
+    # per endpoint while the user is still on the configuration screen.
+    from core.engine_metrics import warm_kv_capacity_cache
+
+    warm_kv_capacity_cache(sidebar_config["api_base_url"])
 
     # 5. Save configuration to session_state
     st.session_state.current_provider = sidebar_config["provider"]
