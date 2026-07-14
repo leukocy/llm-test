@@ -332,3 +332,66 @@ class TestCreateTestExecutor:
 
         assert isinstance(executor, TestExecutor)
         assert executor.config == mock_config
+
+
+class TestRunHandleOwnership:
+    """Regression coverage for old-worker/new-worker lifecycle races."""
+
+    def test_old_handle_cannot_release_new_handle(self):
+        from ui.test_runner import _release_active_test_handle, _TestRunHandle
+
+        old_runner = object()
+        new_runner = object()
+        old_handle = _TestRunHandle(runner_ref=[old_runner])
+        new_handle = _TestRunHandle(runner_ref=[new_runner])
+        state = {
+            "_active_test_handle": new_handle,
+            "_current_runner_instance": new_runner,
+        }
+
+        assert _release_active_test_handle(old_handle, state) is False
+        assert state["_active_test_handle"] is new_handle
+        assert state["_current_runner_instance"] is new_runner
+
+    def test_current_handle_releases_only_its_runner(self):
+        from ui.test_runner import _release_active_test_handle, _TestRunHandle
+
+        runner = object()
+        handle = _TestRunHandle(runner_ref=[runner])
+        state = {
+            "_active_test_handle": handle,
+            "_current_runner_instance": runner,
+        }
+
+        assert _release_active_test_handle(handle, state) is True
+        assert "_active_test_handle" not in state
+        assert "_current_runner_instance" not in state
+
+    def test_done_is_signalled_even_when_session_cleanup_fails(self):
+        from ui.test_runner import _finish_worker_handle, _TestRunHandle
+
+        class BrokenState:
+            def get(self, key, default=None):
+                raise RuntimeError("session context expired")
+
+        handle = _TestRunHandle()
+        _finish_worker_handle(handle, object(), BrokenState())
+
+        assert handle.done.is_set()
+
+    def test_old_worker_cannot_delete_new_runner(self):
+        from ui.test_runner import _finish_worker_handle, _TestRunHandle
+
+        old_runner = object()
+        new_runner = object()
+        old_handle = _TestRunHandle(runner_ref=[old_runner])
+        new_handle = _TestRunHandle(runner_ref=[new_runner])
+        state = {
+            "_active_test_handle": new_handle,
+            "_current_runner_instance": new_runner,
+        }
+
+        _finish_worker_handle(old_handle, old_runner, state)
+
+        assert old_handle.done.is_set()
+        assert state["_current_runner_instance"] is new_runner

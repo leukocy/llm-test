@@ -57,6 +57,51 @@ class _TestRunHandle:
     start_time: float = 0.0
 
 
+def _is_active_test_handle(handle: _TestRunHandle, session_state=None) -> bool:
+    """Return whether *handle* still owns this Streamlit session's active run."""
+    state = st.session_state if session_state is None else session_state
+    try:
+        return state.get("_active_test_handle") is handle
+    except Exception:
+        return False
+
+
+def _finish_worker_handle(
+    handle: _TestRunHandle, runner_instance, session_state=None
+) -> None:
+    """Release the worker-only runner reference and always signal completion.
+
+    The active handle remains installed until the fragment consumes the final
+    result.  Identity checks prevent an old worker from deleting a newer run.
+    """
+    state = st.session_state if session_state is None else session_state
+    try:
+        if (
+            state.get("_active_test_handle") is handle
+            and state.get("_current_runner_instance") is runner_instance
+        ):
+            state.pop("_current_runner_instance", None)
+    except Exception:
+        pass
+    finally:
+        handle.done.set()
+
+
+def _release_active_test_handle(handle: _TestRunHandle, session_state=None) -> bool:
+    """Remove *handle* only if it still owns the active-run slot."""
+    state = st.session_state if session_state is None else session_state
+    try:
+        if state.get("_active_test_handle") is not handle:
+            return False
+        runner = handle.runner_ref[0] if handle.runner_ref else None
+        if state.get("_current_runner_instance") is runner:
+            state.pop("_current_runner_instance", None)
+        state.pop("_active_test_handle", None)
+        return True
+    except Exception:
+        return False
+
+
 class SessionStateBridge:
     """把 streamlit session_state 适配成 core 期望的 ui_state 桥（get/set）。
 
@@ -319,56 +364,59 @@ class TestExecutor:
             df = self._execute_test_async(test_function, runner_instance, args)
             end_time = time.time()
             duration_sec = end_time - start_time
-            st.session_state.test_duration = duration_sec
+            if _is_active_test_handle(handle):
+                st.session_state.test_duration = duration_sec
 
         except asyncio.CancelledError:
-            set_test_cancelled()
+            if _is_active_test_handle(handle):
+                set_test_cancelled()
             df = pd.DataFrame(runner_instance.results_list)
         except Exception as e:
             handle.error = e
             handle.error_trace = traceback.format_exc()
-            set_test_completed()
+            if _is_active_test_handle(handle):
+                st.session_state.test_running = False
+                st.session_state.test_status = "Failed"
         finally:
             try:
                 if not df.empty:
                     df = reorder_dataframe_columns(df)
                 handle.result_df = df
-                st.session_state.results_df = df
+                if _is_active_test_handle(handle):
+                    st.session_state.results_df = df
 
-                if not df.empty and handle.csv_filename:
-                    save_last_result_snapshot(
-                        csv_path=handle.csv_filename,
-                        test_type=st.session_state.get("current_test_type", test_type),
-                        model_id=self.config.get("model_id", ""),
-                        provider=self.config.get("provider", ""),
-                        duration=st.session_state.get("test_duration", 0),
-                        test_config=st.session_state.get("test_config", {}),
-                        system_info=st.session_state.get("system_info", {}),
-                    )
+                    if not df.empty and handle.csv_filename:
+                        save_last_result_snapshot(
+                            csv_path=handle.csv_filename,
+                            test_type=st.session_state.get("current_test_type", test_type),
+                            model_id=self.config.get("model_id", ""),
+                            provider=self.config.get("provider", ""),
+                            duration=st.session_state.get("test_duration", 0),
+                            test_config=st.session_state.get("test_config", {}),
+                            system_info=st.session_state.get("system_info", {}),
+                        )
 
-                test_status = st.session_state.get("test_status", "Idle")
-                was_resuming = st.session_state.get("is_resuming", False)
-                st.session_state.is_resuming = False
-                st.session_state.resume_data = None
+                    test_status = st.session_state.get("test_status", "Idle")
+                    was_resuming = st.session_state.get("is_resuming", False)
+                    st.session_state.is_resuming = False
+                    st.session_state.resume_data = None
 
-                if test_status == "Running":
-                    set_test_completed()
+                    if test_status == "Running":
+                        set_test_completed()
 
-                st.session_state.test_running = False
-                if was_resuming:
-                    st.session_state.test_paused = False
+                    st.session_state.test_running = False
+                    if was_resuming:
+                        st.session_state.test_paused = False
 
-                st.session_state.logger = runner_instance.logger
-                if hasattr(runner_instance, "all_outputs"):
-                    st.session_state.test_outputs = runner_instance.all_outputs
-                self._capture_post_run_artifacts(runner_instance)
+                    st.session_state.logger = runner_instance.logger
+                    if hasattr(runner_instance, "all_outputs"):
+                        st.session_state.test_outputs = runner_instance.all_outputs
+                    self._capture_post_run_artifacts(runner_instance)
             except Exception:
                 # 清理阶段的异常不应影响 done 信号
                 pass
             finally:
-                if "_current_runner_instance" in st.session_state:
-                    del st.session_state._current_runner_instance
-                handle.done.set()
+                _finish_worker_handle(handle, runner_instance)
 
     def _capture_system_info(self, runner_instance):
         """Capture system information（合并富指纹 + 稀疏自定义，而非覆盖）。"""
@@ -756,21 +804,28 @@ def render_active_test_progress(handle: _TestRunHandle) -> None:
         st.error(f"Error occurred during test execution: {handle.error}")
         if handle.error_trace:
             st.code(handle.error_trace)
-        st.session_state.pop("_active_test_handle", None)
+        if _is_active_test_handle(handle):
+            st.session_state.test_running = False
+            st.session_state.test_status = "Failed"
+            _release_active_test_handle(handle)
         st.rerun()
         return
 
     # ---- 完成检测 ----
     if handle.done.is_set():
         result_df = handle.result_df if handle.result_df is not None else pd.DataFrame()
-        st.session_state.results_df = result_df
+        owns_run = _is_active_test_handle(handle)
+        if owns_run:
+            st.session_state.results_df = result_df
+            st.session_state.test_running = False
         duration = time.time() - handle.start_time
         if not result_df.empty:
             st.success(
                 f"Test completed! Duration: {duration:.2f}s. "
                 f"Results saved to {handle.csv_filename}"
             )
-        st.session_state.pop("_active_test_handle", None)
+        if owns_run:
+            _release_active_test_handle(handle)
         # 全页 rerun：退出 fragment，主脚本重跑到 PageLayout.render 显示报告
         st.rerun()
         return
