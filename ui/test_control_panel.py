@@ -263,9 +263,9 @@ class ProgressManager:
                         "test_type": data.get("test_type", "Unknown"),
                         "status": data.get("status", TestStatus.IDLE),
                         "progress": f"{data.get('completed_samples', 0)}/{data.get('total_samples', 0)}",
-                        "file_time": datetime.fromtimestamp(
-                            progress_file.stat().st_mtime
-                        ).strftime("%Y-%m-%d %H:%M:%S"),
+                        "file_time": datetime.fromtimestamp(progress_file.stat().st_mtime).strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        ),
                     }
                 )
             except Exception:
@@ -363,9 +363,7 @@ def render_test_control_panel():
         current_status = st.session_state.get("test_status", TestStatus.IDLE)
 
         status_html = status_icon(current_status)
-        st.markdown(
-            f"**Status:** {status_html} {current_status}", unsafe_allow_html=True
-        )
+        st.markdown(f"**Status:** {status_html} {current_status}", unsafe_allow_html=True)
 
         # Progress display(ifhas)
         if "current_progress" in st.session_state:
@@ -416,55 +414,56 @@ def render_test_control_panel():
                 abort_gemini_clients()
 
                 # 3. 保存当前结果和测试配置（用于 Resume）
-                if "_current_runner_instance" in st.session_state:
+                runner = None
+                if "_active_test_handle" in st.session_state:
+                    handle = st.session_state["_active_test_handle"]
+                    if handle and handle.runner_ref:
+                        runner = handle.runner_ref[0]
+                if runner is None and "_current_runner_instance" in st.session_state:
                     runner = st.session_state._current_runner_instance
-                    if runner:
-                        # 保存结果
-                        if hasattr(runner, "results_list") and runner.results_list:
-                            import pandas as pd
+                if runner:
+                    # 保存结果
+                    if hasattr(runner, "results_list") and runner.results_list:
+                        import pandas as pd
 
-                            from utils.helpers import reorder_dataframe_columns
+                        from utils.helpers import reorder_dataframe_columns
 
-                            df = pd.DataFrame(runner.results_list)
-                            if not df.empty:
-                                df = reorder_dataframe_columns(df)
-                                st.session_state.results_df = df
+                        df = pd.DataFrame(runner.results_list)
+                        if not df.empty:
+                            df = reorder_dataframe_columns(df)
+                            st.session_state.results_df = df
 
-                        # 保存完整的测试配置（用于 Resume）
-                        # 从 runner 实例获取配置
-                        test_config = {}
+                    # 保存完整的测试配置（用于 Resume）
+                    # 从 runner 实例获取配置
+                    test_config = {}
 
-                        # 通用配置
-                        if hasattr(runner, "_current_max_tokens"):
-                            test_config["max_tokens"] = runner._current_max_tokens
-                        if hasattr(runner, "total_requests"):
-                            test_config["total_requests"] = runner.total_requests
+                    # 通用配置
+                    if hasattr(runner, "_current_max_tokens"):
+                        test_config["max_tokens"] = runner._current_max_tokens
+                    if hasattr(runner, "total_requests"):
+                        test_config["total_requests"] = runner.total_requests
 
-                        # 从 _current_test_config 获取更详细的配置
-                        current_config = st.session_state.get("current_test_config", {})
-                        if current_config:
-                            test_config.update(current_config)
+                    # 从 _current_test_config 获取更详细的配置
+                    current_config = st.session_state.get("current_test_config", {})
+                    if current_config:
+                        test_config.update(current_config)
 
-                        st.session_state.current_test_config = test_config
+                    st.session_state.current_test_config = test_config
 
-                        # 保存 resume_data（已完成的请求）
-                        completed_count = (
-                            len(runner.results_list)
-                            if hasattr(runner, "results_list")
-                            else 0
-                        )
-                        st.session_state.resume_data = {
-                            "completed_results": (
-                                runner.results_list.copy()
-                                if hasattr(runner, "results_list")
-                                else []
-                            ),
-                            "current_index": completed_count,  # 使用已完成数量作为跳过索引
-                            "total_samples": getattr(runner, "total_requests", 0),
-                        }
-                        st.toast(
-                            f"Paused: {completed_count} requests completed, will resume from index {completed_count}",
-                        )
+                    # 保存 resume_data（已完成的请求）
+                    completed_count = (
+                        len(runner.results_list) if hasattr(runner, "results_list") else 0
+                    )
+                    st.session_state.resume_data = {
+                        "completed_results": (
+                            runner.results_list.copy() if hasattr(runner, "results_list") else []
+                        ),
+                        "current_index": completed_count,  # 使用已完成数量作为跳过索引
+                        "total_samples": getattr(runner, "total_requests", 0),
+                    }
+                    st.toast(
+                        f"Paused: {completed_count} requests completed, will resume from index {completed_count}",
+                    )
 
                 # 4. 更新状态为 Paused
                 st.session_state.test_running = False
@@ -602,21 +601,22 @@ def render_test_control_panel():
                 abort_gemini_clients()
 
                 # 2. 尝试从当前 runner 实例获取结果（如果有）
-                if "_current_runner_instance" in st.session_state:
+                runner = None
+                if "_active_test_handle" in st.session_state:
+                    handle = st.session_state["_active_test_handle"]
+                    if handle and handle.runner_ref:
+                        runner = handle.runner_ref[0]
+                if runner is None and "_current_runner_instance" in st.session_state:
                     runner = st.session_state._current_runner_instance
-                    if (
-                        runner
-                        and hasattr(runner, "results_list")
-                        and runner.results_list
-                    ):
-                        import pandas as pd
+                if runner and hasattr(runner, "results_list") and runner.results_list:
+                    import pandas as pd
 
-                        from utils.helpers import reorder_dataframe_columns
+                    from utils.helpers import reorder_dataframe_columns
 
-                        df = pd.DataFrame(runner.results_list)
-                        if not df.empty:
-                            df = reorder_dataframe_columns(df)
-                            st.session_state.results_df = df
+                    df = pd.DataFrame(runner.results_list)
+                    if not df.empty:
+                        df = reorder_dataframe_columns(df)
+                        st.session_state.results_df = df
 
                 # 3. 立即更新 session_state 状态
                 st.session_state.test_running = False
@@ -625,11 +625,13 @@ def render_test_control_panel():
                 st.session_state.stop_requested = False
                 st.session_state.pause_requested = False
 
-                # 4. 清除待执行的测试和 runner 实例
+                # 4. 清除待执行的测试、runner 实例和 handle
                 if "_pending_test" in st.session_state:
                     st.session_state["_pending_test"] = None
                 if "_current_runner_instance" in st.session_state:
                     del st.session_state._current_runner_instance
+                if "_active_test_handle" in st.session_state:
+                    del st.session_state["_active_test_handle"]
 
                 st.toast("Test stopped.")
                 st.rerun()
@@ -686,9 +688,7 @@ def render_resumable_tests():
 
     # Filter resumable tests
     resumable = [
-        p
-        for p in saved_progress_list
-        if p["status"] in [TestStatus.PAUSED, TestStatus.CANCELLED]
+        p for p in saved_progress_list if p["status"] in [TestStatus.PAUSED, TestStatus.CANCELLED]
     ]
 
     if not resumable:

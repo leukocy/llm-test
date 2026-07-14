@@ -57,13 +57,21 @@ def _execute_pending_test(run_test_func, test_type):
     This is called at the start of render_test_panels to execute tests
     after the state has been set and UI has been rerun.
 
+    测试在后台线程执行（不再阻塞主脚本线程），``run_test_func`` 立即返回
+    ``_TestRunHandle``；随后调用 ``render_active_test_progress`` fragment
+    轮询进度并在完成后触发全页 ``st.rerun()``。
+
     支持两种格式：
     1. 新测试：{'test_type': ..., 'test_func': ..., 'runner_class': ..., 'args': ...}
     2. 恢复测试：{'test_type': ..., 'is_resume': True, 'resume_data': ...}
 
     返回：
-        bool: True 如果执行了测试（需要 rerun 来刷新 UI）
+        bool: True 如果执行了测试（需要 fragment 接管渲染）
     """
+    # 重入防护：已有测试在后台跑时不重复启动（消除诊断日志里的多次 RUN_TEST）
+    if st.session_state.get("_active_test_handle"):
+        return False
+
     pending = st.session_state.get("_pending_test", None)
     if not pending:
         return False
@@ -97,9 +105,7 @@ def _execute_pending_test(run_test_func, test_type):
 
             # 显示恢复信息
             completed = resume_data.get("current_index", 0)
-            total = resume_data.get("total_samples", 0) or resume_data.get(
-                "total_requests", 0
-            )
+            total = resume_data.get("total_samples", 0) or resume_data.get("total_requests", 0)
             st.info(
                 f"Resuming {test_type_label(test_type)} from saved progress "
                 f"({completed}/{total} completed)."
@@ -108,16 +114,13 @@ def _execute_pending_test(run_test_func, test_type):
             st.warning("No saved progress found, starting fresh test.")
             st.session_state.is_resuming = False
 
-    # 执行测试（无论是新测试还是恢复测试）
+    # 执行测试（后台线程，立即返回 handle）；fragment 渲染由 render_test_panels 统一挂载
     if "test_func" in pending and "runner_class" in pending:
         test_func = pending["test_func"]
         runner_class = pending["runner_class"]
         args = pending.get("args", ())
 
         run_test_func(test_func, runner_class, *args)
-
-        # 测试完成后触发 rerun 以刷新 UI 状态
-        st.rerun()
 
     return True
 
@@ -137,6 +140,14 @@ def render_test_panels(test_type, run_test_func):
     # 检查是否有待执行的测试（在状态更新后的渲染周期执行）
     # 如果执行了测试，函数会在内部调用 st.rerun() 刷新页面
     _execute_pending_test(run_test_func, test_type)
+
+    # 如果后台测试正在运行，重新挂载 progress fragment（每次脚本重跑都需要，
+    # 否则 fragment 的 placeholder 会变成孤儿，后台线程渲染回调失效）
+    active_handle = st.session_state.get("_active_test_handle")
+    if active_handle is not None:
+        from ui.test_runner import render_active_test_progress
+
+        render_active_test_progress(active_handle)
 
     # Concurrency Test
     if test_type == "concurrency":
@@ -271,9 +282,7 @@ def render_test_panels(test_type, run_test_func):
             )
 
         if start_btn_prefill:
-            max_tokens_to_use = (
-                1 if prefill_isolation_mode else max_tokens_prefill_input
-            )
+            max_tokens_to_use = 1 if prefill_isolation_mode else max_tokens_prefill_input
 
             if prefill_isolation_mode:
                 st.info("Prefill isolation test activated (max_tokens=1).")
@@ -564,9 +573,7 @@ def render_test_panels(test_type, run_test_func):
                     for c in matrix_concurrencies_custom.split(",")
                     if c.strip() and c.strip().isdigit()
                 ]
-                selected_concurrencies = sorted(
-                    set(matrix_concurrencies_select + custom_cons)
-                )
+                selected_concurrencies = sorted(set(matrix_concurrencies_select + custom_cons))
 
                 custom_ctxs = [
                     int(l.strip())
@@ -576,9 +583,7 @@ def render_test_panels(test_type, run_test_func):
                 selected_contexts = sorted(set(matrix_context_select + custom_ctxs))
 
                 if not selected_concurrencies or not selected_contexts:
-                    st.error(
-                        "Please select at least one concurrency level and one context length."
-                    )
+                    st.error("Please select at least one concurrency level and one context length.")
                 else:
                     from config.session_state import set_test_running
 
@@ -605,9 +610,7 @@ def render_test_panels(test_type, run_test_func):
                     set_test_running()
                     st.rerun()
             except ValueError:
-                st.error(
-                    "Invalid custom value format. Please use comma-separated numbers."
-                )
+                st.error("Invalid custom value format. Please use comma-separated numbers.")
 
     # Custom Text Test
     elif test_type == "custom":
@@ -643,9 +646,7 @@ def render_test_panels(test_type, run_test_func):
 
                 typed = _load_typed_pools()
                 # Type selector
-                avail_types = [
-                    (k, lbl) for k, lbl, _ in SUFFIX_TYPE_OPTIONS if typed.get(k)
-                ]
+                avail_types = [(k, lbl) for k, lbl, _ in SUFFIX_TYPE_OPTIONS if typed.get(k)]
                 if not avail_types:
                     st.warning("No test-pool problems available.")
                 else:
@@ -667,25 +668,17 @@ def render_test_panels(test_type, run_test_func):
                         help="Multiple problems are rotated one-per-request. Single selection repeats the same problem.",
                     )
                     if chosen:
-                        selected_problems = [
-                            (problems[i][0], problems[i][1]) for i in chosen
-                        ]
+                        selected_problems = [(problems[i][0], problems[i][1]) for i in chosen]
                         # Show the content of each selected problem
                         st.markdown(f"**Selected problem content ({len(chosen)}):**")
                         for i in chosen:
                             sid, text = problems[i]
-                            with st.expander(
-                                f"{sid}  ({len(text)} chars)", expanded=False
-                            ):
-                                st.text(
-                                    text[:4000] + ("..." if len(text) > 4000 else "")
-                                )
+                            with st.expander(f"{sid}  ({len(text)} chars)", expanded=False):
+                                st.text(text[:4000] + ("..." if len(text) > 4000 else ""))
             except Exception as e:
                 st.warning(f"Could not load test pool: {e}")
         else:  # Manual Input
-            base_prompt = st.text_area(
-                "Base Prompt", height=150, key="custom_manual_base"
-            )
+            base_prompt = st.text_area("Base Prompt", height=150, key="custom_manual_base")
 
         # --- Optional suffix instruction (appended after the base/problem) ---
         suffix_instruction = st.text_area(
@@ -743,9 +736,7 @@ def render_test_panels(test_type, run_test_func):
                 ]
             except (ValueError, AttributeError):
                 custom_values = []
-            selected_concurrencies = sorted(
-                set(custom_concurrencies_select + custom_values)
-            )
+            selected_concurrencies = sorted(set(custom_concurrencies_select + custom_values))
 
             # Resolve base prompt from file
             if uploaded_file is not None:
@@ -796,14 +787,10 @@ def render_test_panels(test_type, run_test_func):
     # All Tests
     elif test_type == "all":
         st.header("All Tests")
-        st.warning(
-            "This option will run all test types sequentially, which may take a long time."
-        )
+        st.warning("This option will run all test types sequentially, which may take a long time.")
 
         st.subheader("Concurrency Test Configuration")
-        all_con = st.text_input(
-            "Concurrency Levels (comma-separated)", "1,2", key="all_con_levels"
-        )
+        all_con = st.text_input("Concurrency Levels (comma-separated)", "1,2", key="all_con_levels")
         all_con_rounds = st.number_input(
             "Concurrency Test Rounds", min_value=1, value=1, key="all_con_rounds"
         )
@@ -864,12 +851,8 @@ def render_test_panels(test_type, run_test_func):
         )
         if start_btn_all:
             try:
-                token_levels_list = [
-                    int(t.strip()) for t in all_prefill.split(",") if t.strip()
-                ]
-                context_lengths_list = [
-                    int(l.strip()) for l in all_context.split(",") if l.strip()
-                ]
+                token_levels_list = [int(t.strip()) for t in all_prefill.split(",") if t.strip()]
+                context_lengths_list = [int(l.strip()) for l in all_context.split(",") if l.strip()]
 
                 from config.session_state import set_test_running
 
