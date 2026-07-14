@@ -89,8 +89,13 @@ Evaluators in `evaluators/` are auto-discovered via `@register_evaluator` decora
 
 ## Git Conventions
 
-Branch naming: `feature/...`, `fix/...`
-Commit format: `Type: Subject` (e.g., `Feat: add new chart export`)
+- `master` is the only long-lived branch.
+- Start every change from the latest remote `master` on a short-lived
+  `feature/<topic>` or `fix/<topic>` branch.
+- Push the topic branch and merge it through a PR after required checks pass;
+  never push directly or force-push to `master`.
+- Delete the remote topic branch after the PR is merged.
+- Commit format: `Type: Subject` (e.g., `Feat: add new chart export`).
 
 ## Code Style
 
