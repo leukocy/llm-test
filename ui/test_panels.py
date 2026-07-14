@@ -48,7 +48,9 @@ def _get_button_disabled_state():
     Get button disabled state - directly from session_state without caching.
     """
     # 直接从 session_state 读取，不做任何缓存
-    return st.session_state.get("test_running", False)
+    handle = st.session_state.get("_active_test_handle")
+    worker_running = bool(handle and not handle.done.is_set())
+    return st.session_state.get("test_running", False) or worker_running
 
 
 def _execute_pending_test(run_test_func, test_type):
