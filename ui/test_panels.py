@@ -53,12 +53,16 @@ def _execute_pending_test(run_test_func, test_type):
     This is called at the start of render_test_panels to execute tests
     after the state has been set and UI has been rerun.
 
+    测试在后台线程执行（不再阻塞主脚本线程），``run_test_func`` 立即返回
+    ``_TestRunHandle``；随后调用 ``render_active_test_progress`` fragment
+    轮询进度并在完成后触发全页 ``st.rerun()``。
+
     支持两种格式：
     1. 新测试：{'test_type': ..., 'test_func': ..., 'runner_class': ..., 'args': ...}
     2. 恢复测试：{'test_type': ..., 'is_resume': True, 'resume_data': ...}
 
     返回：
-        bool: True 如果执行了测试（需要 rerun 来刷新 UI）
+        bool: True 如果执行了测试（需要 fragment 接管渲染）
     """
     pending = st.session_state.get('_pending_test', None)
     if not pending:
@@ -111,9 +115,6 @@ def _execute_pending_test(run_test_func, test_type):
 
         run_test_func(test_func, runner_class, *args)
 
-        # 测试完成后触发 rerun 以刷新 UI 状态
-        st.rerun()
-
     return True
 
 
@@ -132,6 +133,14 @@ def render_test_panels(test_type, run_test_func):
     # 检查是否有待执行的测试（在状态更新后的渲染周期执行）
     # 如果执行了测试，函数会在内部调用 st.rerun() 刷新页面
     _execute_pending_test(run_test_func, test_type)
+
+    # 如果后台测试正在运行，重新挂载 progress fragment（每次脚本重跑都需要，
+    # 否则 fragment 的 placeholder 会变成孤儿，后台线程渲染回调失效）
+    active_handle = st.session_state.get("_active_test_handle")
+    if active_handle is not None:
+        from ui.test_runner import render_active_test_progress
+
+        render_active_test_progress(active_handle)
 
     # Concurrency Test
     if test_type == "Concurrency Test":

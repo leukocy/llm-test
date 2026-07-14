@@ -144,7 +144,7 @@ def run_test(test_function, runner_class, *args):
     executor = test_runner.TestExecutor(config)
     test_type = st.session_state.get('current_test_type', 'Unknown Test')
 
-    # Execute test
+    # Execute test — 启动后台线程，立即返回 _TestRunHandle（不阻塞主脚本线程）
     return executor.run_test(test_function, runner_class, test_type, *args)
 
 
