@@ -44,7 +44,9 @@ def _get_button_disabled_state():
     Get button disabled state - directly from session_state without caching.
     """
     # 直接从 session_state 读取，不做任何缓存
-    return st.session_state.get('test_running', False)
+    handle = st.session_state.get("_active_test_handle")
+    worker_running = bool(handle and not handle.done.is_set())
+    return st.session_state.get("test_running", False) or worker_running
 
 
 def _execute_pending_test(run_test_func, test_type):
@@ -615,7 +617,7 @@ def render_test_panels(test_type, run_test_func):
             uploaded_file = st.file_uploader("Upload TXT File (base context)", type=["txt"], key="custom_uploaded_file")
         elif source_mode == "Test Pool Problems":
             try:
-                from core.benchmark_runner import _load_typed_pools, SUFFIX_TYPE_OPTIONS
+                from core.benchmark_runner import SUFFIX_TYPE_OPTIONS, _load_typed_pools
                 typed = _load_typed_pools()
                 # Type selector
                 avail_types = [(k, lbl) for k, lbl, _ in SUFFIX_TYPE_OPTIONS if typed.get(k)]

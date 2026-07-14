@@ -117,3 +117,17 @@ def test_forced_test_type_updates_selector_before_widget_creation(clean_streamli
     assert clean_streamlit_state._data["current_test_type"] == "Prefill Stress Test"
     assert clean_streamlit_state._data["test_type_selector_widget_1"] == "Prefill Stress Test"
     assert clean_streamlit_state._data["_force_test_type_selector"] is None
+
+
+def test_start_buttons_stay_disabled_until_worker_finishes(clean_streamlit_state):
+    from ui import test_panels
+    from ui.test_runner import _TestRunHandle
+
+    handle = _TestRunHandle()
+    clean_streamlit_state["test_running"] = False
+    clean_streamlit_state["_active_test_handle"] = handle
+
+    assert test_panels._get_button_disabled_state() is True
+
+    handle.done.set()
+    assert test_panels._get_button_disabled_state() is False
