@@ -58,6 +58,12 @@ vllm:cache_config_info{block_size="16",num_gpu_blocks="32096",num_cpu_blocks="0"
 vllm:num_requests_running 0
 """
 
+_VLLM_GROUP_AWARE_METRICS = """
+# HELP vllm:cache_config_info Cache config information
+# TYPE vllm:cache_config_info gauge
+vllm:cache_config_info{block_size="4",num_gpu_blocks="44206",num_cpu_blocks="0",kv_cache_size_tokens="6150106",kv_cache_max_concurrency="5.865198"} 1.0
+"""
+
 
 @pytest.fixture(autouse=True)
 def _restore_httpx_after():
@@ -99,6 +105,19 @@ def test_probe_kv_capacity_from_metrics_vllm():
     ):
         r = probe_kv_capacity("http://x/v1")
     assert r["kv_capacity_tokens"] == 16 * 32096
+    assert r["source"] == "metrics"
+    assert r["metrics_ok"] is True
+
+
+def test_probe_prefers_group_aware_capacity_from_new_vllm():
+    """Hybrid KV cache must use the explicit group-aware capacity."""
+    _install_fake_httpx(lambda *a, **kw: _make_cm(_VLLM_GROUP_AWARE_METRICS))
+    with patch(
+        "core.engine_metrics.default_metrics_url", return_value="http://x/metrics"
+    ):
+        r = probe_kv_capacity("http://x/v1")
+    assert r["kv_capacity_tokens"] == 6150106
+    assert r["kv_capacity_tokens"] != 4 * 44206
     assert r["source"] == "metrics"
     assert r["metrics_ok"] is True
 

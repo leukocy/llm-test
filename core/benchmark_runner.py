@@ -1315,7 +1315,8 @@ class BenchmarkRunner:
 
         优先级：
           1. warehouse_context['kv_budget'] 手动覆盖（UI 侧边栏 / 测试配置）
-          2. 引擎 /metrics 的 cache_config（block_size×num_gpu_blocks）——最准
+          2. 引擎 /metrics 的 cache_config（优先 group-aware kv_cache_size_tokens，
+             旧版回退 block_size×num_gpu_blocks）
           3. /v1/models 的 max_model_len——保守上界
           4. 都拿不到 → _kv_budget=None，不跳过任何 cell（全跑，与原行为一致）
 
