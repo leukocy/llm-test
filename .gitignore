@@ -107,3 +107,4 @@ test_output_quality/
 bench_workspace/reports/
 bench_workspace/archives/
 bench_workspace/logs/
+.claude/
