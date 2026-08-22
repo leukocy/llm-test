@@ -44,4 +44,5 @@ def compute_config_hash(**fields: Any) -> str:
     """
     parts = [f"{name}={_norm(fields.get(name))}" for name in CONFIG_HASH_FIELDS]
     canon = "|".join(parts)
-    return hashlib.sha1(canon.encode("utf-8")).hexdigest()[:16]
+    # usedforsecurity=False: 非密码学用途, 仅配置指纹(审查 #12)
+    return hashlib.sha1(canon.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]

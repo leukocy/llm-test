@@ -90,11 +90,7 @@ def build_snapshot(
         machine_id, hostname, hardware_fingerprint, system_info,
         engine_capture?, model_spec?, manual}。绝不包含 sudo_password。
     """
-    manual = {
-        k: v
-        for k, v in (manual or {}).items()
-        if k in MANUAL_FIELDS and v not in (None, "")
-    }
+    manual = {k: v for k, v in (manual or {}).items() if k in MANUAL_FIELDS and v not in (None, "")}
 
     # A 维 —— 硬件指纹（CPU/内存/GPU/CUDA/拓扑/磁盘 + machine_id）
     fingerprint = capture_hardware_fingerprint(sudo_password)
@@ -110,8 +106,7 @@ def build_snapshot(
         "collector_version": COLLECTOR_VERSION,
         "collected_at": datetime.now().isoformat(),
         "machine_id": fingerprint.get("machine_id"),
-        "hostname": fingerprint.get("os", {}).get("hostname")
-        or system_info.get("hostname"),
+        "hostname": fingerprint.get("os", {}).get("hostname") or system_info.get("hostname"),
         "hardware_fingerprint": fingerprint,
         "system_info": system_info,
         "manual": manual,
@@ -169,9 +164,7 @@ def load_snapshot(path: str | Path) -> dict[str, Any]:
         raise ValueError(f"快照不是 JSON 对象: {path}")
     schema = data.get("schema")
     if schema != SCHEMA_VERSION:
-        raise ValueError(
-            f"快照 schema 不兼容: 期望 {SCHEMA_VERSION}，实际 {schema!r}（{path}）"
-        )
+        raise ValueError(f"快照 schema 不兼容: 期望 {SCHEMA_VERSION}，实际 {schema!r}（{path}）")
     if "hardware_fingerprint" not in data:
         raise ValueError(f"快照缺少 hardware_fingerprint 字段: {path}")
     return data
@@ -185,15 +178,11 @@ def fingerprint_hash(snapshot: dict[str, Any]) -> str:
     """
     fp = snapshot.get("hardware_fingerprint") or {}
     gpus = fp.get("gpus") or []
-    gpu_sig = sorted(
-        f"{g.get('name')}|{g.get('vram_gb')}" for g in gpus if g.get("name")
-    )
+    gpu_sig = sorted(f"{g.get('name')}|{g.get('vram_gb')}" for g in gpus if g.get("name"))
     cpu = fp.get("cpu") or {}
     mem = fp.get("memory") or {}
     disks = fp.get("disks") or []
-    disk_sig = sorted(
-        f"{d.get('name')}|{d.get('size_tb')}" for d in disks if d.get("name")
-    )
+    disk_sig = sorted(f"{d.get('name')}|{d.get('size_tb')}" for d in disks if d.get("name"))
     stable = {
         "cpu_model": cpu.get("model_name"),
         "sockets": cpu.get("sockets"),
@@ -203,7 +192,8 @@ def fingerprint_hash(snapshot: dict[str, Any]) -> str:
         "disks": disk_sig,
     }
     payload = json.dumps(stable, sort_keys=True, ensure_ascii=False, default=str)
-    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
+    # usedforsecurity=False: 非密码学用途, 仅快照指纹(审查 #12)
+    return hashlib.sha1(payload.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
 
 
 def summarize(snapshot: dict[str, Any]) -> str:

@@ -138,8 +138,10 @@ class ComparisonResult:
         if not self.comparison_id:
             import hashlib
 
+            # usedforsecurity=False: 非密码学用途, 仅对比 ID(审查 #12)
             self.comparison_id = hashlib.md5(
-                f"{self.models}_{datetime.now().isoformat()}".encode()
+                f"{self.models}_{datetime.now().isoformat()}".encode(),
+                usedforsecurity=False,
             ).hexdigest()[:12]
         if not self.created_at:
             self.created_at = datetime.now().isoformat()
@@ -347,9 +349,7 @@ class ModelComparator:
 
         self.models: dict[str, ModelConfig] = {}
         self.evaluators: dict[str, Any] = {}  # QualityEvaluator instances
-        self.results: dict[str, dict[str, Any]] = (
-            {}
-        )  # model_id -> {dataset -> EvaluationResult}
+        self.results: dict[str, dict[str, Any]] = {}  # model_id -> {dataset -> EvaluationResult}
 
         self.comparison_result: ComparisonResult | None = None
 
@@ -411,9 +411,7 @@ class ModelComparator:
                     api_key=model_config.api_key,
                     provider=model_config.provider,
                     output_dir=os.path.join(self.output_dir, "raw_results"),
-                    log_callback=cast(
-                        "Callable[[str, LogLevel], None] | None", self.log_callback
-                    ),
+                    log_callback=cast("Callable[[str, LogLevel], None] | None", self.log_callback),
                 )
 
                 # Config
@@ -466,12 +464,8 @@ class ModelComparator:
         # SetModel
         for model_id in results_dict:
             if model_id not in self.models:
-                label = (
-                    model_labels.get(model_id, model_id) if model_labels else model_id
-                )
-                self.models[model_id] = ModelConfig(
-                    model_id=model_id, api_base_url="", label=label
-                )
+                label = model_labels.get(model_id, model_id) if model_labels else model_id
+                self.models[model_id] = ModelConfig(model_id=model_id, api_base_url="", label=label)
 
         # Get所hasDataset
         all_datasets: set[str] = set()
@@ -525,9 +519,7 @@ class ModelComparator:
 
         # 逐样本对比
         if hasattr(first_result, "details") and first_result.details:
-            sample_map: dict[Any, dict[str, Any]] = (
-                {}
-            )  # sample_id -> {model_id: detail}
+            sample_map: dict[Any, dict[str, Any]] = {}  # sample_id -> {model_id: detail}
 
             for model_id, result in model_results.items():
                 if hasattr(result, "details"):
@@ -545,9 +537,7 @@ class ModelComparator:
 
                 if model_details:
                     first_detail = list(model_details.values())[0]
-                    sample_comp.question = (
-                        first_detail.prompt[:200] if first_detail.prompt else ""
-                    )
+                    sample_comp.question = first_detail.prompt[:200] if first_detail.prompt else ""
                     sample_comp.expected_answer = first_detail.expected
 
                 all_correct = True
@@ -584,16 +574,11 @@ class ModelComparator:
             if len(model_ids) >= 2:
                 for i, model_a in enumerate(model_ids):
                     for model_b in model_ids[i + 1 :]:
-                        if (
-                            model_a in correctness_lists
-                            and model_b in correctness_lists
-                        ):
+                        if model_a in correctness_lists and model_b in correctness_lists:
                             test_result = mcnemar_test(
                                 correctness_lists[model_a], correctness_lists[model_b]
                             )
-                            comparison.statistical_tests[f"{model_a}_vs_{model_b}"] = (
-                                test_result
-                            )
+                            comparison.statistical_tests[f"{model_a}_vs_{model_b}"] = test_result
 
         return comparison
 
@@ -664,9 +649,7 @@ class ModelComparator:
 
         return pd.DataFrame(data)
 
-    def get_disagreement_samples(
-        self, dataset: str, limit: int = 20
-    ) -> list[dict[str, Any]]:
+    def get_disagreement_samples(self, dataset: str, limit: int = 20) -> list[dict[str, Any]]:
         """Gethas分歧样本"""
         if not self.comparison_result or dataset not in self.comparison_result.datasets:
             return []
