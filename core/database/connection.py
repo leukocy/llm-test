@@ -4,6 +4,7 @@ DatabaseConnect管理模块
 提供Thread安全 SQLite Connection Pooland常用操作封装。
 """
 
+import re
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -11,6 +12,46 @@ from pathlib import Path
 from typing import Any, Optional, cast
 
 from .schema import create_tables
+
+# 标识符白名单: 表名/列名/排序字段拼接进 SQL 前必须通过校验(安全审查 #8)
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$")
+# order_by 允许 "col ASC/DESC" 形式
+_ORDER_BY_RE = re.compile(
+    r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?( (ASC|DESC))?"
+    r"(, [A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?( (ASC|DESC))?)*$"
+)
+
+
+def _validate_identifier(name: str) -> str:
+    if not _IDENTIFIER_RE.match(name):
+        raise ValueError(f"Illegal SQL identifier: {name!r}")
+    return name
+
+
+def _validate_order_by(order_by: str) -> str:
+    if not _ORDER_BY_RE.match(order_by):
+        raise ValueError(f"Illegal ORDER BY expression: {order_by!r}")
+    return order_by
+
+
+def _validate_where(where: str) -> str:
+    """WHERE 子句仅做结构性黑名单校验(参数值已 ? 参数化)。"""
+    lowered = where.lower()
+    for token in (
+        ";",
+        "--",
+        "/*",
+        "drop ",
+        "delete ",
+        "insert ",
+        "update ",
+        "attach ",
+        "pragma ",
+        "union select",
+    ):
+        if token in lowered:
+            raise ValueError(f"Illegal WHERE clause fragment: {where!r}")
+    return where
 
 
 class Database:
@@ -193,15 +234,14 @@ class Database:
         Returns:
             新记录 ID
         """
-        columns = ", ".join(data.keys())
+        _validate_identifier(table)
+        columns = ", ".join(_validate_identifier(k) for k in data)
         placeholders = ", ".join(["?" for _ in data])
         sql = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
         cursor = self.execute(sql, tuple(data.values()))
         return cast(int, cursor.lastrowid)
 
-    def update(
-        self, table: str, data: dict[str, Any], where: str, where_params: tuple = ()
-    ) -> int:
+    def update(self, table: str, data: dict[str, Any], where: str, where_params: tuple = ()) -> int:
         """
         Update记录
 
@@ -214,7 +254,9 @@ class Database:
         Returns:
             影响行数
         """
-        set_clause = ", ".join([f"{k} = ?" for k in data])
+        _validate_identifier(table)
+        _validate_where(where)
+        set_clause = ", ".join(f"{_validate_identifier(k)} = ?" for k in data)
         sql = f"UPDATE {table} SET {set_clause} WHERE {where}"
         cursor = self.execute(sql, tuple(data.values()) + where_params)
         return cursor.rowcount
@@ -231,6 +273,8 @@ class Database:
         Returns:
             影响行数
         """
+        _validate_identifier(table)
+        _validate_where(where)
         sql = f"DELETE FROM {table} WHERE {where}"
         cursor = self.execute(sql, where_params)
         return cursor.rowcount
@@ -242,11 +286,14 @@ class Database:
         Args:
             table: 表名
             where: WHERE 子句（optional）
-            where_params: WHERE 参数
+            params: 参数元组
 
         Returns:
             记录数
         """
+        _validate_identifier(table)
+        if where:
+            _validate_where(where)
         sql = f"SELECT COUNT(*) as cnt FROM {table}"
         if where:
             sql += f" WHERE {where}"
@@ -259,9 +306,7 @@ class Database:
 
     def get_schema_version(self) -> str:
         """Get Schema Version"""
-        result = self.fetch_one(
-            "SELECT value FROM db_meta WHERE key = 'schema_version'"
-        )
+        result = self.fetch_one("SELECT value FROM db_meta WHERE key = 'schema_version'")
         return str(result["value"]) if result else "unknown"
 
     def vacuum(self):

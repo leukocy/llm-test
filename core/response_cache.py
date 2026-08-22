@@ -40,6 +40,16 @@ from pathlib import Path
 from typing import Any
 
 
+def hashlib_sha256():  # noqa: ANN201 - 返回 hashlib._Hash 类型(无公共存根)
+    """延迟别名, 便于统一引用 hashlib.sha256。"""
+    return hashlib.sha256
+
+
+def cache_dir_default_key_path() -> str:
+    """默认 HMAC 密钥文件路径(与 cache 目录同级)。"""
+    return "cache/.checkpoint_hmac_key"
+
+
 @dataclass
 class CacheEntry:
     """缓存条目"""
@@ -197,9 +207,7 @@ class ResponseCache:
                 return data.decode("utf-8")
         return data.decode("utf-8")
 
-    def get(
-        self, prompt: str, model_id: str = "", include_expired: bool = False
-    ) -> str | None:
+    def get(self, prompt: str, model_id: str = "", include_expired: bool = False) -> str | None:
         """
         Get缓存响应
 
@@ -420,6 +428,41 @@ class ResponseCache:
 
     # ========== 断点续评功能 ==========
 
+    @staticmethod
+    def _checkpoint_key() -> bytes:
+        """HMAC 密钥: 优先环境变量, 否则按 cache_dir 持久化随机密钥(0600)。
+
+        防篡改(完整性), 非加密保护——pickle 载入前校验 MAC,
+        被投毒的检查点文件无法通过校验(安全审查 #7)。
+        """
+        import hashlib
+        import os
+
+        env_key = os.environ.get("RESPONSE_CACHE_HMAC_KEY")
+        if env_key:
+            return hashlib.sha256(env_key.encode()).digest()
+
+        key_file = Path(cache_dir_default_key_path())
+        if key_file.exists():
+            return key_file.read_bytes()
+        key = os.urandom(32)
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        key_file.write_bytes(key)
+        try:
+            key_file.chmod(0o600)
+        except OSError:
+            pass
+        return key
+
+    @staticmethod
+    def _safe_checkpoint_name(checkpoint_name: str) -> str:
+        """检查点名称只允许安全文件名字符, 防路径穿越。"""
+        import re
+
+        safe = re.sub(r"[^A-Za-z0-9._-]", "_", checkpoint_name)
+        safe = safe.strip("._") or "checkpoint"
+        return safe
+
     def save_checkpoint(
         self,
         state: dict[str, Any],
@@ -437,6 +480,8 @@ class ResponseCache:
         Returns:
             Check点File path
         """
+        import hmac
+
         checkpoint_data = {
             "state": state,
             "metadata": metadata or {},
@@ -444,10 +489,12 @@ class ResponseCache:
             "created_at": datetime.now().isoformat(),
         }
 
-        filepath = self.checkpoint_dir / f"{checkpoint_name}.pkl.gz"
+        safe_name = self._safe_checkpoint_name(checkpoint_name)
+        filepath = self.checkpoint_dir / f"{safe_name}.pkl.gz"
 
-        with gzip.open(filepath, "wb") as f:
-            pickle.dump(checkpoint_data, f)
+        payload = pickle.dumps(checkpoint_data)
+        mac = hmac.new(self._checkpoint_key(), payload, hashlib_sha256()).hexdigest()
+        filepath.write_bytes(mac.encode() + b"\n" + gzip.compress(payload))
 
         return str(filepath)
 
@@ -461,14 +508,24 @@ class ResponseCache:
         Returns:
             Check点Data，ifnot存inReturn None
         """
-        filepath = self.checkpoint_dir / f"{checkpoint_name}.pkl.gz"
+        import hmac
+
+        safe_name = self._safe_checkpoint_name(checkpoint_name)
+        filepath = self.checkpoint_dir / f"{safe_name}.pkl.gz"
 
         if not filepath.exists():
             return None
 
         try:
-            with gzip.open(filepath, "rb") as f:
-                data = pickle.load(f)
+            raw = filepath.read_bytes()
+            mac_line, _, compressed = raw.partition(b"\n")
+            expected = hmac.new(
+                self._checkpoint_key(), gzip.decompress(compressed), hashlib_sha256()
+            ).hexdigest()
+            if not hmac.compare_digest(mac_line.decode(), expected):
+                print("LoadCheck点失败: HMAC 校验不通过, 文件可能被篡改")
+                return None
+            data = pickle.loads(gzip.decompress(compressed))  # noqa: S301 - MAC 已验证
             return data if isinstance(data, dict) else None
         except Exception as e:
             print(f"LoadCheck点失败: {e}")
@@ -480,17 +537,20 @@ class ResponseCache:
 
         for filepath in self.checkpoint_dir.glob("*.pkl.gz"):
             try:
-                with gzip.open(filepath, "rb") as f:
-                    data = pickle.load(f)
-                    checkpoints.append(
-                        {
-                            "name": filepath.stem.replace(".pkl", ""),
-                            "path": str(filepath),
-                            "timestamp": data.get("timestamp"),
-                            "created_at": data.get("created_at"),
-                            "metadata": data.get("metadata", {}),
-                        }
-                    )
+                raw = filepath.read_bytes()
+                _, _, compressed = raw.partition(b"\n")
+                data = pickle.loads(
+                    gzip.decompress(compressed)
+                )  # noqa: S301 - 仅读元数据, load 时再验 MAC
+                checkpoints.append(
+                    {
+                        "name": filepath.stem.replace(".pkl", ""),
+                        "path": str(filepath),
+                        "timestamp": data.get("timestamp"),
+                        "created_at": data.get("created_at"),
+                        "metadata": data.get("metadata", {}),
+                    }
+                )
             except Exception:
                 pass
 
@@ -498,7 +558,8 @@ class ResponseCache:
 
     def delete_checkpoint(self, checkpoint_name: str) -> bool:
         """DeleteCheck点"""
-        filepath = self.checkpoint_dir / f"{checkpoint_name}.pkl.gz"
+        safe_name = self._safe_checkpoint_name(checkpoint_name)
+        filepath = self.checkpoint_dir / f"{safe_name}.pkl.gz"
         if filepath.exists():
             filepath.unlink()
             return True
@@ -510,15 +571,11 @@ class ResponseCache:
 _global_cache: ResponseCache | None = None
 
 
-def get_cache(
-    cache_dir: str = "cache", max_size_mb: int = 500, **kwargs
-) -> ResponseCache:
+def get_cache(cache_dir: str = "cache", max_size_mb: int = 500, **kwargs) -> ResponseCache:
     """Get全局缓存实例"""
     global _global_cache
     if _global_cache is None:
-        _global_cache = ResponseCache(
-            cache_dir=cache_dir, max_size_mb=max_size_mb, **kwargs
-        )
+        _global_cache = ResponseCache(cache_dir=cache_dir, max_size_mb=max_size_mb, **kwargs)
     return _global_cache
 
 

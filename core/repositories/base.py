@@ -5,7 +5,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Generic, TypeVar
 
-from core.database.connection import Database, db
+from core.database.connection import Database, _validate_order_by, _validate_where, db
 
 T = TypeVar("T")
 
@@ -48,9 +48,7 @@ class BaseRepository(ABC, Generic[T]):
         row = self.db.fetch_one(sql, (id,))
         return self._from_row(row) if row else None
 
-    def find_all(
-        self, limit: int = 100, offset: int = 0, order_by: str = "id DESC"
-    ) -> list[T]:
+    def find_all(self, limit: int = 100, offset: int = 0, order_by: str = "id DESC") -> list[T]:
         """
         查找所has记录
 
@@ -62,6 +60,7 @@ class BaseRepository(ABC, Generic[T]):
         Returns:
             Model实例列表
         """
+        _validate_order_by(order_by)
         sql = f"SELECT * FROM {self._table_name} ORDER BY {order_by} LIMIT ? OFFSET ?"
         rows = self.db.fetch_all(sql, (limit, offset))
         return [self._from_row(r) for r in rows]
@@ -85,6 +84,8 @@ class BaseRepository(ABC, Generic[T]):
         Returns:
             Model实例列表
         """
+        _validate_where(where)
+        _validate_order_by(order_by)
         sql = f"SELECT * FROM {self._table_name} WHERE {where} ORDER BY {order_by} LIMIT ?"
         rows = self.db.fetch_all(sql, params + (limit,))
         return [self._from_row(r) for r in rows]
@@ -100,6 +101,7 @@ class BaseRepository(ABC, Generic[T]):
         Returns:
             Model实例or None
         """
+        _validate_where(where)
         sql = f"SELECT * FROM {self._table_name} WHERE {where} LIMIT 1"
         row = self.db.fetch_one(sql, params)
         return self._from_row(row) if row else None
@@ -155,9 +157,7 @@ class BaseRepository(ABC, Generic[T]):
         """
         return self.db.delete(self._table_name, where, params)
 
-    def update_by(
-        self, data: dict[str, Any], where: str, where_params: tuple = ()
-    ) -> int:
+    def update_by(self, data: dict[str, Any], where: str, where_params: tuple = ()) -> int:
         """
         条件Update
 
@@ -205,6 +205,9 @@ class BaseRepository(ABC, Generic[T]):
             分页Result字典
         """
         offset = (page - 1) * page_size
+        _validate_order_by(order_by)
+        if where:
+            _validate_where(where)
 
         # Query总数
         total = self.count(where, params)
@@ -214,9 +217,7 @@ class BaseRepository(ABC, Generic[T]):
             sql = f"SELECT * FROM {self._table_name} WHERE {where} ORDER BY {order_by} LIMIT ? OFFSET ?"
             rows = self.db.fetch_all(sql, params + (page_size, offset))
         else:
-            sql = (
-                f"SELECT * FROM {self._table_name} ORDER BY {order_by} LIMIT ? OFFSET ?"
-            )
+            sql = f"SELECT * FROM {self._table_name} ORDER BY {order_by} LIMIT ? OFFSET ?"
             rows = self.db.fetch_all(sql, (page_size, offset))
 
         items = [self._from_row(r) for r in rows]
