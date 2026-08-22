@@ -62,12 +62,12 @@ def add(a, b):
         assert error is None
 
     def test_blocked_imports(self):
-        """Test that imports are blocked."""
+        """Test that imports are blocked (子进程白名单无 __import__)。"""
         code = "import os\nprint(os.getcwd())"
 
         success, error, output = safe_exec_code(code)
         assert success is False
-        assert "not allowed" in error.lower()
+        assert error  # 拒绝执行即可(旧文案 'not allowed' 已随沙箱重写演进)
 
     def test_syntax_error_handling(self):
         """Test that syntax errors are handled gracefully."""
@@ -279,6 +279,237 @@ class TestRateLimiter:
 
         # Second request should fail (would block)
         assert limiter.acquire(blocking=False, timeout=0.01) is False
+
+
+class TestSandboxIsolation:
+    """安全审查 #1/#2 回归: 子进程隔离沙箱(2026-08 加固)。"""
+
+    def test_normal_code_executes(self):
+        from core.safe_executor import safe_exec_code
+
+        success, error, output = safe_exec_code(
+            "def add(a, b):\n    return a + b", "assert add(2, 3) == 5"
+        )
+        assert success is True
+        assert error is None
+
+    def test_infinite_loop_times_out(self):
+        """timeout_seconds 必须真实生效(旧实现文档自认未实现)。"""
+        import time
+
+        from core.safe_executor import safe_exec_code
+
+        start = time.time()
+        success, error, _ = safe_exec_code("while True: pass", timeout_seconds=2)
+        elapsed = time.time() - start
+
+        assert success is False
+        assert "Timeout" in (error or "")
+        assert elapsed < 10  # 挂死则远超此值
+
+    def test_escape_poc_contained(self):
+        """运行时拼接属性链逃逸 PoC: 允许在子进程内执行, 但不得影响主进程。"""
+        from core.safe_executor import safe_exec_code
+
+        poc = (
+            "u='_'\n"
+            "nc=u*2+'cl'+'ass'+u*2; nb=u*2+'ba'+'se'+u*2; ns=u*2+'su'+'bclasses'+u*2\n"
+            "A=type('A',(),{})\n"
+            "tpl='{0.'+nc+'.'+nb+'.'+ns+'}'\n"
+            "print(tpl.format(A()))\n"
+        )
+        # 子进程隔离后 PoC 无害(读到的只是子进程自身解释器对象)
+        success, error, output = safe_exec_code(poc)
+        assert success is True
+        assert "__subclasses__" in (output or "")
+
+    def test_memory_bomb_blocked(self):
+        from core.safe_executor import safe_exec_code
+
+        success, error, _ = safe_exec_code("x = [0] * (10**9)", timeout_seconds=15)
+        assert success is False
+
+    def test_output_and_error_capture(self):
+        from core.safe_executor import safe_exec_code
+
+        success, _, output = safe_exec_code("print('hello')")
+        assert success is True
+        assert "hello" in (output or "")
+
+        success, error, _ = safe_exec_code("raise ValueError('boom')")
+        assert success is False
+        assert "ValueError" in (error or "")
+
+
+class TestProviderSSRFValidation:
+    """安全审查 #4 回归: provider 工厂接入 URL 校验。"""
+
+    def test_blocks_file_protocol(self):
+        from core.providers.factory import get_provider
+        from core.url_validator import SSRFError
+
+        with pytest.raises(SSRFError):
+            get_provider("Custom", "file:///etc/passwd", "k", "m")
+
+    def test_blocks_metadata_ip(self):
+        from core.providers.factory import get_provider
+        from core.url_validator import SSRFError
+
+        with pytest.raises(SSRFError):
+            get_provider("Custom", "http://169.254.169.254/latest", "k", "m")
+
+    def test_allows_public_https(self):
+        from core.providers.factory import get_provider
+
+        provider = get_provider("DeepSeek", "https://api.deepseek.com/v1", "k", "m")
+        assert provider.api_base_url.startswith("https://")
+
+    def test_allows_local_inference_endpoints(self):
+        from core.providers.factory import get_provider
+
+        provider = get_provider("llama.cpp", "http://127.0.0.1:8080/v1", "k", "m")
+        assert provider is not None
+
+
+class TestCheckpointIntegrity:
+    """安全审查 #7 回归: 检查点 HMAC + 名称清洗。"""
+
+    def test_save_load_roundtrip(self, tmp_path, monkeypatch):
+
+        monkeypatch.chdir(tmp_path)
+        from core.response_cache import ResponseCache
+
+        cache = ResponseCache(cache_dir="cache")
+        cache.save_checkpoint({"done": [1, 2]}, "ckpt")
+        assert cache.load_checkpoint("ckpt")["state"] == {"done": [1, 2]}
+
+    def test_tampered_payload_rejected(self, tmp_path, monkeypatch):
+        import gzip
+        import pickle
+
+        monkeypatch.chdir(tmp_path)
+        from core.response_cache import ResponseCache
+
+        cache = ResponseCache(cache_dir="cache")
+        path = cache.save_checkpoint({"a": 1}, "ckpt")
+        with open(path, "rb") as f:
+            raw = f.read()
+        mac_line, _, compressed = raw.partition(b"\n")
+        inner = pickle.dumps({"a": 999})
+        with open(path, "wb") as f:
+            f.write(mac_line + b"\n" + gzip.compress(inner))
+
+        assert cache.load_checkpoint("ckpt") is None
+
+    def test_traversal_name_contained(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        from core.response_cache import ResponseCache
+
+        cache = ResponseCache(cache_dir="cache")
+        cache.save_checkpoint({}, "../../evil")
+        names = [p.name for p in cache.checkpoint_dir.glob("*.pkl.gz")]
+        assert names == ["evil.pkl.gz"]  # 收敛在 checkpoint_dir 内
+
+
+class TestSQLIdentifierValidation:
+    """安全审查 #8 回归: SQL 标识符/WHERE/ORDER BY 校验。"""
+
+    def test_rejects_table_injection(self):
+        import pytest
+
+        from core.database.connection import _validate_identifier
+
+        with pytest.raises(ValueError):
+            _validate_identifier("t; DROP TABLE t--")
+
+    def test_rejects_where_injection(self):
+        from core.database.connection import _validate_where
+
+        with pytest.raises(ValueError):
+            _validate_where("1=1; DROP TABLE t")
+        with pytest.raises(ValueError):
+            _validate_where("1=1 -- comment")
+
+    def test_rejects_order_by_injection(self):
+        from core.database.connection import _validate_order_by
+
+        with pytest.raises(ValueError):
+            _validate_order_by("id; DROP TABLE t")
+        # 合法形式放行
+        assert _validate_order_by("id DESC")
+        assert _validate_order_by("created_at ASC, id DESC")
+
+    def test_repository_crud_still_works(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        from core.database import connection as db_conn
+        from core.repositories import base as repo_base
+
+        # TestResultRepository 默认绑定模块级单例 db; 让单例指向 tmp 库
+        db_conn.Database._instance = None
+        database = db_conn.Database("data/t.db")
+        monkeypatch.setattr(repo_base, "db", database, raising=False)
+        try:
+            from core.repositories.test_result import TestResultRepository
+
+            repo = TestResultRepository()
+            assert repo.find_all(limit=5) == []
+        finally:
+            if db_conn.Database._instance is not None:
+                db_conn.Database._instance.close_all()
+
+
+class TestLogSanitizationWiring:
+    """安全审查 #9 回归: get_logger 输出脱敏。"""
+
+    def test_logger_redacts_api_keys(self):
+        import io
+
+        from utils.get_logger import get_logger
+
+        buf = io.StringIO()
+        logger = get_logger("test.security.wiring")
+        for handler in logger.handlers:
+            handler.stream = buf
+        logger.error("failed with sk-1234567890abcdefghijklmnopqr")
+        out = buf.getvalue()
+        assert "sk-1234567890abcdefghijklmnopqr" not in out
+        assert "sk-[REDACTED]" in out
+
+    def test_request_logger_masks_gemini_header(self):
+        from core.request_logger import RequestLogger
+
+        logger = RequestLogger(log_dir="/tmp/sec_test_logs", enabled=False)
+        masked = logger._mask_headers({"x-goog-api-key": "AIzaXXX", "Accept": "*/*"})
+        assert masked["x-goog-api-key"] == "*****"
+        assert masked["Accept"] == "*/*"
+
+
+class TestLongBenchSafeEval:
+    """安全审查 #5 回归: 数据集字段不再 eval。"""
+
+    def test_list_string_answer(self):
+        from evaluators.longbench_evaluator import LongBenchEvaluator
+
+        ev = LongBenchEvaluator.__new__(LongBenchEvaluator)
+        assert ev.check_answer("paris", '["Paris", "city"]') is True
+        assert ev.check_answer("nope", '["Paris"]') is False
+
+    def test_malicious_dataset_field_rejected(self):
+        from evaluators.longbench_evaluator import LongBenchEvaluator
+
+        ev = LongBenchEvaluator.__new__(LongBenchEvaluator)
+        # 恶意"列表"不会被执行, 走回退当普通字符串包含匹配
+        assert ev.check_answer("x", '__import__("os").system("id")') is False
+
+
+class TestDockerExecGate:
+    """安全审查 #6 回归: docker exec 默认关闭。"""
+
+    def test_disabled_by_default(self, monkeypatch):
+        monkeypatch.setenv("ENGINE_CAPTURE_DOCKER_EXEC", "0")
+        from core.engine_capture import _query_container_runtime_versions
+
+        assert _query_container_runtime_versions("some-container") == {}
 
 
 if __name__ == "__main__":
