@@ -204,3 +204,26 @@ requirements.txt/pyproject.toml 全部为 >= 下限无锁定，构建不可复�
    provider 入口接 URL 校验（#4）；生产去 docker.sock（#6）
 3. **中期**: pickle 换格式（#7）；SQL 标识符校验（#8）；
    日志脱敏统一（#9）；依赖锁 + CI 审计门禁（#13）
+
+## 修复状态附录（2026-08-22，fix/security-hardening 分支）
+
+| # | 状态 | 修复方式 | 回归测试 |
+|---|------|----------|----------|
+| 1 | ✅ | 子进程隔离执行（`-I` + rlimit），PoC 困于子进程无害 | SandboxIsolation |
+| 2 | ✅ | 真实墙钟强杀；内存炸弹被 RLIMIT_AS 拦截 | 同上 |
+| 3 | 部分 | XSRF 开启、注释写明收敛建议；反代认证属部署侧 | — |
+| 4 | ✅ | 工厂统一接 URL 校验；私网端点显式放行 | ProviderSSRF |
+| 5 | ✅ | LongBench 改 literal_eval；HumanEval 进沙箱 | LongBenchSafeEval |
+| 6 | 部分 | docker exec 开关默认关闭；compose 去 socket 属部署侧 | DockerExecGate |
+| 7 | ✅ | HMAC 签名 + 名称清洗；篡改实测被拒 | CheckpointIntegrity |
+| 8 | ✅ | 标识符白名单 + WHERE 黑名单；值仍参数化 | SQLIdentifier |
+| 9 | ✅ | Gemini 头掩码；error 出口与 logger 统一清洗 | LogSanitization |
+| 10 | 确认 | 提示注入面非 XSS；模板来源受控，维持现状并记录 | — |
+| 11 | 缓解 | 默认不渲染 HTML，仅格式注入；无 unsafe_allow_html 叠加 | — |
+| 12 | ✅ | usedforsecurity=False；URL 白名单；os.system 改 subprocess | — |
+| 13 | 待办 | 修复版本已给出；依赖锁与 CI 门禁待基建项 | — |
+
+**验证基线**: tests/test_security.py 21→42 项全过；全仓 1248 测试通过；
+ruff 0 错误；mypy 错误数较 master 基线净减（115 vs 116）。
+部署侧待办（#3 反代认证、#6 compose 去 socket、#13 依赖锁）需基础设施配合，
+已在上方"建议处置顺序"中保留。
