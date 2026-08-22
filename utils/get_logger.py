@@ -11,18 +11,24 @@ Usage:
 import logging
 import sys
 
+from .log_sanitizer import SanitizingFormatter
+
+_LOG_FORMAT = "[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s"
+
+
+def _make_handler() -> logging.StreamHandler:
+    """stdout handler + 脱敏 formatter(API key/换行/ANSI 清洗, 审查 #9)。"""
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(SanitizingFormatter(fmt=_LOG_FORMAT, datefmt="%H:%M:%S"))
+    return handler
+
 
 # Configure root logger once
 def _setup_logging():
     """Configure the root logger for the application."""
     root = logging.getLogger("llm_test")
     if not root.handlers:
-        handler = logging.StreamHandler(sys.stdout)
-        formatter = logging.Formatter(
-            "[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s", datefmt="%H:%M:%S"
-        )
-        handler.setFormatter(formatter)
-        root.addHandler(handler)
+        root.addHandler(_make_handler())
         root.setLevel(logging.INFO)  # Default level, can be overridden
     return root
 
@@ -53,14 +59,9 @@ def get_logger(name: str | None = None, level: int = logging.INFO) -> logging.Lo
     logger.setLevel(level)
     # Prevent propagation to avoid duplicate logs
     logger.propagate = False
-    # Add handler if not already present
+    # Add sanitizing handler if not already present
     if not logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
-        formatter = logging.Formatter(
-            "[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s", datefmt="%H:%M:%S"
-        )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+        logger.addHandler(_make_handler())
     return logger
 
 

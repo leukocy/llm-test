@@ -5,6 +5,8 @@ from typing import Any
 
 import httpx
 
+from utils.log_sanitizer import sanitize_api_key
+
 from ..error_messages import get_error_info
 from ..thinking_params import build_thinking_params, detect_platform
 from .base import LLMProvider, get_request_timeout_seconds
@@ -136,9 +138,7 @@ class GeminiProvider(LLMProvider):
         if client is None:
             client = httpx.AsyncClient(
                 transport=httpx.AsyncHTTPTransport(
-                    limits=httpx.Limits(
-                        max_connections=2048, max_keepalive_connections=256
-                    ),
+                    limits=httpx.Limits(max_connections=2048, max_keepalive_connections=256),
                 ),
                 timeout=request_timeout_seconds,
             )
@@ -176,7 +176,9 @@ class GeminiProvider(LLMProvider):
                             e, context=f"Model: {self.model_id}", language="zh"
                         )
                         return {
-                            "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
+                            "error": sanitize_api_key(
+                                f"{str(e)}. {error_info['title']}: {error_info['details']}"
+                            ),
                             "error_info": error_info,
                         }
                     else:
@@ -192,11 +194,7 @@ class GeminiProvider(LLMProvider):
                         try:
                             chunk = json.loads(line_data)
                             if "candidates" in chunk and len(chunk["candidates"]) > 0:
-                                parts = (
-                                    chunk["candidates"][0]
-                                    .get("content", {})
-                                    .get("parts", [])
-                                )
+                                parts = chunk["candidates"][0].get("content", {}).get("parts", [])
                                 for part in parts:
                                     text = part.get("text") or ""
                                     thought = part.get("thought") or ""
@@ -235,32 +233,32 @@ class GeminiProvider(LLMProvider):
 
         except httpx.TimeoutException as e:
             if log_callback:
-                log_callback(f"Session {session_id} (Gemini): ERROR: {str(e)}")
-            error_info = get_error_info(
-                e, context=f"Model: {self.model_id}", language="zh"
-            )
+                log_callback(f"Session {session_id} (Gemini): ERROR: {sanitize_api_key(str(e))}")
+            error_info = get_error_info(e, context=f"Model: {self.model_id}", language="zh")
             return {
-                "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
+                "error": sanitize_api_key(
+                    f"{str(e)}. {error_info['title']}: {error_info['details']}"
+                ),
                 "error_info": error_info,
             }
         except httpx.NetworkError as e:
             if log_callback:
-                log_callback(f"Session {session_id} (Gemini): ERROR: {str(e)}")
-            error_info = get_error_info(
-                e, context=f"Model: {self.model_id}", language="zh"
-            )
+                log_callback(f"Session {session_id} (Gemini): ERROR: {sanitize_api_key(str(e))}")
+            error_info = get_error_info(e, context=f"Model: {self.model_id}", language="zh")
             return {
-                "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
+                "error": sanitize_api_key(
+                    f"{str(e)}. {error_info['title']}: {error_info['details']}"
+                ),
                 "error_info": error_info,
             }
         except httpx.HTTPStatusError as e:
             if log_callback:
-                log_callback(f"Session {session_id} (Gemini): ERROR: {str(e)}")
-            error_info = get_error_info(
-                e, context=f"Model: {self.model_id}", language="zh"
-            )
+                log_callback(f"Session {session_id} (Gemini): ERROR: {sanitize_api_key(str(e))}")
+            error_info = get_error_info(e, context=f"Model: {self.model_id}", language="zh")
             return {
-                "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
+                "error": sanitize_api_key(
+                    f"{str(e)}. {error_info['title']}: {error_info['details']}"
+                ),
                 "error_info": error_info,
             }
         except asyncio.CancelledError:
@@ -268,12 +266,12 @@ class GeminiProvider(LLMProvider):
             raise
         except Exception as e:
             if log_callback:
-                log_callback(f"Session {session_id} (Gemini): ERROR: {str(e)}")
-            error_info = get_error_info(
-                e, context=f"Model: {self.model_id}", language="zh"
-            )
+                log_callback(f"Session {session_id} (Gemini): ERROR: {sanitize_api_key(str(e))}")
+            error_info = get_error_info(e, context=f"Model: {self.model_id}", language="zh")
             return {
-                "error": f"{str(e)}. {error_info['title']}: {error_info['details']}",
+                "error": sanitize_api_key(
+                    f"{str(e)}. {error_info['title']}: {error_info['details']}"
+                ),
                 "error_info": error_info,
             }
         finally:
