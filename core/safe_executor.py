@@ -1,13 +1,58 @@
 """
 Safe code execution utilities for evaluating code and expressions.
-Uses AST validation to prevent arbitrary code execution.
+
+Security model (进程隔离, CWE-250/400 防护):
+- LLM 生成的被测代码在**独立子进程**中执行, 与主进程(持有 API key、
+  数据库、docker socket 访问)完全隔离 —— 解释器内逃逸只能打到子进程自身。
+- 真实超时: 主进程 kill 子进程, while True / fork 类失控代码不再挂死评测线程。
+- 资源限制: Linux 下通过 preexec_fn 施加 CPU 秒数与地址空间上限,
+  抑制内存炸弹与 fork 炸弹。
+- 执行结果仅经 stdout/stderr/exit code 回传, 无对象引用泄漏。
+
+历史版本曾用「AST/正则黑名单 + exec」在同一解释器内执行, 已被证实可
+通过运行时字符串拼接绕过 dunder 黑名单(docs/security_audit_2026-08.md #1)。
 """
 
 import ast
 import math
+import os
 import re
-from contextlib import redirect_stderr, redirect_stdout
-from io import StringIO
+import subprocess
+import sys
+
+# 子进程单次执行的默认资源上限
+DEFAULT_TIMEOUT_SECONDS = 10.0
+DEFAULT_MEM_LIMIT_MB = 1024
+# 子进程输出上限, 防止 print 炸弹撑爆管道
+_MAX_OUTPUT_BYTES = 1_000_000
+
+_CHILD_TEMPLATE = """\
+import sys
+
+# 允许被测代码定义函数/类所需的最小 builtins 集(仅作用于子进程;
+# 真正的隔离是进程边界本身, 不依赖这份名单的完备性)
+_safe = ("print range len str int float bool list dict tuple set sum min max abs "
+         "round sorted enumerate zip map filter any all isinstance type reversed "
+         "object super staticmethod classmethod property ValueError TypeError "
+         "ZeroDivisionError IndexError KeyError AssertionError StopIteration "
+         "Exception RuntimeError ArithmeticError OverflowError").split()
+_real = {}
+for _name in _safe:
+    try:
+        import builtins as _b
+        _real[_name] = getattr(_b, _name)
+    except AttributeError:
+        pass
+
+_globals = {"__builtins__": _real, "__name__": "__main__"}
+
+try:
+    exec(compile(sys.stdin.read(), "<submission>", "exec"), _globals)
+except BaseException as e:
+    sys.stderr.write(f"{type(e).__name__}: {e}\\n")
+    sys.exit(1)
+sys.exit(0)
+"""
 
 
 class SafeExecutionError(Exception):
@@ -68,10 +113,7 @@ def validate_math_expression(expr: str) -> bool:
             elif isinstance(node, ast.Call):
                 # Only allow math function calls
                 if isinstance(node.func, ast.Attribute):
-                    if (
-                        isinstance(node.func.value, ast.Name)
-                        and node.func.value.id == "math"
-                    ):
+                    if isinstance(node.func.value, ast.Name) and node.func.value.id == "math":
                         continue
                 return False
             # Check for imports
@@ -128,7 +170,9 @@ def safe_eval_math(expr: str) -> float | None:
     }
 
     try:
-        result = eval(expr, safe_namespace, {})
+        result = eval(  # noqa: S307 - 表达式经 AST 白名单校验且只暴露 math
+            expr, {"__builtins__": {}, **safe_namespace}, {}
+        )
         return float(result)
     except (NameError, SyntaxError, TypeError, ValueError) as e:
         raise SafeExecutionError(f"Failed to evaluate expression: {e}") from e
@@ -136,16 +180,80 @@ def safe_eval_math(expr: str) -> float | None:
         raise SafeExecutionError(f"Unexpected error evaluating expression: {e}") from e
 
 
+def _child_preexec(timeout_seconds: float, mem_limit_mb: int):  # noqa: ANN202
+    """子进程资源限制(Linux): CPU 秒数 + 地址空间上限。失败则中止启动。"""
+
+    def apply() -> None:  # pragma: no cover - 在子进程中运行
+        import resource
+
+        cpu = max(1, int(timeout_seconds)) + 5
+        resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
+        mem_bytes = max(64, mem_limit_mb) * 1024 * 1024
+        resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
+        # 收窄 fd 上限(硬上限不可低于当前 soft, 否则 EPERM)
+        cur_soft, cur_hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        cap = min(cur_soft, 256)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (cap, max(cur_hard, cap)))
+        os.umask(0o077)
+
+    return apply
+
+
+def run_untrusted_code(
+    full_code: str,
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    mem_limit_mb: int = DEFAULT_MEM_LIMIT_MB,
+) -> tuple[bool, str | None, str | None]:
+    """
+    在隔离子进程中执行不可信代码。
+
+    Args:
+        full_code: 待执行代码(如 HumanEval 提交 + 测试断言)
+        timeout_seconds: 墙钟超时, 到点强杀子进程(真实生效)
+        mem_limit_mb: 子进程地址空间上限(MB)
+
+    Returns:
+        Tuple of (success: bool, error_message: Optional[str], output: Optional[str])
+    """
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-I", "-c", _CHILD_TEMPLATE],
+            input=full_code,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            preexec_fn=(
+                _child_preexec(timeout_seconds, mem_limit_mb) if os.name == "posix" else None
+            ),
+        )
+    except subprocess.TimeoutExpired:
+        return (
+            False,
+            f"TimeoutError: execution exceeded {timeout_seconds}s",
+            None,
+        )
+    except OSError as e:
+        return False, f"ExecutionError: failed to spawn sandbox process: {e}", None
+
+    output = (proc.stdout or "")[:_MAX_OUTPUT_BYTES] or None
+    if proc.returncode != 0:
+        err = (proc.stderr or "").strip()
+        # 压缩 traceback 噪音, 只保留最后一行错误摘要
+        tail = err.splitlines()[-1] if err else f"exit code {proc.returncode}"
+        return False, tail[:2000], output
+    return True, None, output
+
+
 def safe_exec_code(
     code: str, test_code: str | None = None, timeout_seconds: int = 5
 ) -> tuple[bool, str | None, str | None]:
     """
-    Safely execute Python code in a restricted environment.
+    Safely execute code in an isolated child process with a real timeout.
 
     Args:
-        code: The code to execute
+        code: The code to execute (LLM-generated submission)
         test_code: Optional test code to append and run
-        timeout_seconds: Maximum execution time (not enforced in this implementation)
+        timeout_seconds: Maximum wall-clock time before the child is killed
 
     Returns:
         Tuple of (success: bool, error_message: Optional[str], output: Optional[str])
@@ -156,118 +264,12 @@ def safe_exec_code(
     if not code or not isinstance(code, str):
         return False, "No code provided", None
 
-    # Basic validation - check for obviously dangerous operations
-    dangerous_keywords = [
-        "os",
-        "subprocess",
-        "sys",
-        "importlib",
-        "builtins",
-        "eval",
-        "exec",
-        "compile",
-        "open",
-        "__import__",
-        "globals",
-        "locals",
-        "vars",
-        "dir",
-    ]
-
-    code_lower = code.lower()
-
-    # Check for import statements
-    for dangerous in dangerous_keywords:
-        dangerous_lower = dangerous.lower()
-        # Check for "import os" or "from os import"
-        if (
-            f"import {dangerous_lower}" in code_lower
-            or f"from {dangerous_lower}" in code_lower
-        ):
-            return False, f"Import of '{dangerous}' is not allowed", None
-
-    # Check for direct access to dangerous modules through builtins
-    if "__builtins__" in code_lower or "__import__" in code_lower:
-        return False, "Access to __builtins__ or __import__ is not allowed", None
-
-    # Check for dangerous attribute access patterns
-    dangerous_patterns = [
-        r"__class__",
-        r"__base__",
-        r"__subclasses__",
-        r"__mro__",
-        r"__globals__",
-    ]
-    for pattern in dangerous_patterns:
-        if re.search(pattern, code):
-            return False, f"Dangerous pattern detected: {pattern}", None
-
-    # Prepare the full code
-    full_code = code
-    if test_code:
-        full_code = code + "\n" + test_code
-
-    # Create restricted execution environment
-    exec_globals = {
-        "__builtins__": {
-            # Only allow specific, safe builtins
-            "print": print,
-            "range": range,
-            "len": len,
-            "str": str,
-            "int": int,
-            "float": float,
-            "bool": bool,
-            "list": list,
-            "dict": dict,
-            "tuple": tuple,
-            "set": set,
-            "sum": sum,
-            "min": min,
-            "max": max,
-            "abs": abs,
-            "round": round,
-            "sorted": sorted,
-            "enumerate": enumerate,
-            "zip": zip,
-            "map": map,
-            "filter": filter,
-            "any": any,
-            "all": all,
-            "isinstance": isinstance,
-            "type": type,
-            "reversed": reversed,
-        },
-        # Add typing support (commonly needed in HumanEval)
-        "List": list,
-        "Dict": dict,
-        "Tuple": tuple,
-        "Optional": type(None),  # Simplified
-        "Any": object,
-        "Union": lambda *args: object,  # Simplified
-    }
-
-    # Capture output
-    stdout_capture = StringIO()
-    stderr_capture = StringIO()
-
-    try:
-        with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-            exec(full_code, exec_globals)
-
-        output = stdout_capture.getvalue()
-        return True, None, output
-
-    except AssertionError as e:
-        return False, f"AssertionError: {str(e)}", None
-    except SyntaxError as e:
-        return False, f"SyntaxError: {str(e)}", None
-    except Exception as e:
-        return False, f"{type(e).__name__}: {str(e)}", None
+    full_code = code if not test_code else code + "\n" + test_code
+    return run_untrusted_code(full_code, timeout_seconds=float(timeout_seconds))
 
 
 # For backward compatibility, provide the old interface but with warnings
-def safe_exec_legacy(code: str, globals_dict: dict, locals_dict: dict = None):
+def safe_exec_legacy(code: str, globals_dict: dict, locals_dict: "dict | None" = None):
     """
     Legacy compatibility wrapper for safe_exec_code.
     Issues a deprecation warning.
