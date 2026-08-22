@@ -28,9 +28,7 @@ except ImportError:  # pragma: no cover
 
 def _run(args: list[str], timeout: float = 12.0) -> str | None:
     try:
-        r = subprocess.run(
-            args, capture_output=True, text=True, timeout=timeout, check=False
-        )
+        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
         return r.stdout if r.returncode == 0 else None
     except (OSError, subprocess.SubprocessError):
         return None
@@ -99,9 +97,7 @@ def find_vllm_container(api_base_url: str, hint: str | None = None) -> str | Non
                 timeout=8.0,
             )
             if cmd and (
-                f"--port {port}" in cmd
-                or f"--port={port}" in cmd
-                or f"PORT={port}" in cmd
+                f"--port {port}" in cmd or f"--port={port}" in cmd or f"PORT={port}" in cmd
             ):
                 # 优先返回引擎容器;非引擎(如 Open-WebUI)降级为候选
                 image = ""
@@ -161,13 +157,9 @@ class EngineCaptureAdapter:
     cmd_keywords: tuple[str, ...] = ()
 
     @classmethod
-    def detect(
-        cls, image: str, launch_cmd: str, api_model: dict | None
-    ) -> bool:  # noqa: ARG003
+    def detect(cls, image: str, launch_cmd: str, api_model: dict | None) -> bool:  # noqa: ARG003
         s = f"{image} {launch_cmd}".lower()
-        return any(k in s for k in cls.image_keywords) or any(
-            k in s for k in cls.cmd_keywords
-        )
+        return any(k in s for k in cls.image_keywords) or any(k in s for k in cls.cmd_keywords)
 
     @classmethod
     def parse_logs(cls, logs: str) -> dict[str, Any]:  # noqa: ARG003
@@ -203,7 +195,7 @@ def _max_float(logs: str, pat: str) -> str | None:
     try:
         return str(max(float(m) for m in ms))
     except ValueError:
-        return ms[0]
+        return str(ms[0])
 
 
 class VLLMAdapter(EngineCaptureAdapter):
@@ -215,9 +207,7 @@ class VLLMAdapter(EngineCaptureAdapter):
     def parse_logs(cls, logs: str) -> dict[str, Any]:
         out: dict[str, Any] = {}
         # non-default args
-        matches = re.findall(
-            r"non-default args: (\{.*?\})\s*(?=\[|\n|$)", logs, re.DOTALL
-        )
+        matches = re.findall(r"non-default args: (\{.*?\})\s*(?=\[|\n|$)", logs, re.DOTALL)
         if matches:
             raw = matches[-1]
             args: dict[str, Any] = {}
@@ -294,18 +284,19 @@ class VLLMAdapter(EngineCaptureAdapter):
             runtime["init_engine_s"] = float(ie)
         gc = _max_float(logs, r"Graph capturing finished in (\d+) secs")
         if gc:
-            runtime["graph_capture_s"] = int(float(gc))
+            runtime["graph_capture_s"] = float(gc)
         kv = _last(logs, r"GPU KV cache size: ([\d,]+) tokens")
         if kv:
             runtime["kv_cache_tokens"] = int(kv.replace(",", ""))
         if runtime:
-            wl, ie, gc = (
-                runtime.get("weight_load_s", 0),
-                runtime.get("init_engine_s", 0),
-                runtime.get("graph_capture_s", 0),
-            )
-            if wl or ie or gc:
-                runtime["cold_start_s_est"] = round(wl + ie + gc, 1)
+            # 口径与基线一致: weight_load + init_engine + graph_capture(model_load 不计入);
+            # cold_start_s_est 写入 runtime dict(与基线字段位置一致)
+            wl_v = float(runtime.get("weight_load_s") or 0)
+            ie_v = float(runtime.get("init_engine_s") or 0)
+            gc_v = float(runtime.get("graph_capture_s") or 0)
+            if wl_v or ie_v or gc_v:
+                cold_start = round(wl_v + ie_v + gc_v, 1)
+                runtime["cold_start_s_est"] = cold_start
             out["runtime"] = runtime
         return out
 
@@ -378,9 +369,7 @@ class SGLangAdapter(EngineCaptureAdapter):
             v = _last(logs, pat)
             if v:
                 runtime[k] = float(v) if "." in v else int(v)
-        kv = _last(logs, r"max_total_num_token *= *(\d+)") or _last(
-            logs, r"KV cache size: (\d+)"
-        )
+        kv = _last(logs, r"max_total_num_token *= *(\d+)") or _last(logs, r"KV cache size: (\d+)")
         if kv:
             runtime["kv_cache_tokens"] = int(kv)
         if runtime:
@@ -388,9 +377,7 @@ class SGLangAdapter(EngineCaptureAdapter):
         return out
 
     @classmethod
-    def normalize_params(
-        cls, launch_cmd: str, parsed: dict[str, Any]
-    ) -> dict[str, Any]:
+    def normalize_params(cls, launch_cmd: str, parsed: dict[str, Any]) -> dict[str, Any]:
         # SGLang 参数从 launch_cmd 解析(--tp, --max-running-requests, --mem-fraction-static)
         def flag(name: str) -> str | None:
             m = re.search(rf"--{name}[ =](\S+)", launch_cmd)
@@ -431,9 +418,7 @@ class LlamaCppAdapter(EngineCaptureAdapter):
         return out
 
     @classmethod
-    def normalize_params(
-        cls, launch_cmd: str, parsed: dict[str, Any]
-    ) -> dict[str, Any]:
+    def normalize_params(cls, launch_cmd: str, parsed: dict[str, Any]) -> dict[str, Any]:
         def flag(name: str) -> str | None:
             m = re.search(rf"-{name}\s+(\S+)", launch_cmd)
             return m.group(1) if m else None
@@ -442,9 +427,7 @@ class LlamaCppAdapter(EngineCaptureAdapter):
         ctx = flag("c")
         if ctx and ctx.isdigit():
             out["schedule"]["context_length"] = int(ctx)
-            out["runtime"] = {
-                "kv_cache_tokens_est": int(ctx)
-            }  # llama.cpp KV ≈ 上下文容量
+            out["runtime"] = {"kv_cache_tokens_est": int(ctx)}  # llama.cpp KV ≈ 上下文容量
         ngl = flag("ngl")
         if ngl:
             out["schedule"]["gpu_layers"] = int(ngl) if ngl.isdigit() else ngl
@@ -464,9 +447,7 @@ class KTransformersAdapter(EngineCaptureAdapter):
         cls, launch_cmd: str, parsed: dict[str, Any]
     ) -> dict[str, Any]:  # noqa: ARG003
         # ktransformers 配置在 yaml/gguf,API 暴露有限;记 launch_cmd 即可
-        return {
-            "parallel": {"note": "ktransformers 配置见 yaml(本采集仅记 launch_cmd)"}
-        }
+        return {"parallel": {"note": "ktransformers 配置见 yaml(本采集仅记 launch_cmd)"}}
 
 
 class FastLLMAdapter(EngineCaptureAdapter):
@@ -532,9 +513,7 @@ class HeyiAdapter(EngineCaptureAdapter):
         return out
 
     @classmethod
-    def normalize_params(
-        cls, launch_cmd: str, parsed: dict[str, Any]
-    ) -> dict[str, Any]:
+    def normalize_params(cls, launch_cmd: str, parsed: dict[str, Any]) -> dict[str, Any]:
         out: dict[str, Any] = {}
         args = parsed.get("args") or {}
         # 从 launch_cmd 也能解析(docker inspect 的 Cmd,--key value 格式)
@@ -556,9 +535,7 @@ class HeyiAdapter(EngineCaptureAdapter):
         # heyi 无 TP/DP 概念,但记录 layerwise prefill 并行度
         parallel: dict[str, Any] = {}
         if args.get("layerwise_prefill_world_size"):
-            parallel["layerwise_prefill_world_size"] = args[
-                "layerwise_prefill_world_size"
-            ]
+            parallel["layerwise_prefill_world_size"] = args["layerwise_prefill_world_size"]
         if args.get("num_decode_workers"):
             parallel["num_decode_workers"] = args["num_decode_workers"]
         if parallel:
@@ -646,9 +623,7 @@ def get_adapters() -> list[str]:
 # ---------------------------------------------------------------------------
 # 主入口
 # ---------------------------------------------------------------------------
-def capture_engine_config(
-    api_base_url: str, container_name: str | None = None
-) -> dict[str, Any]:
+def capture_engine_config(api_base_url: str, container_name: str | None = None) -> dict[str, Any]:
     """自动采集推理引擎配置(docker inspect + 日志 + /v1/models + 引擎适配器)。永不抛异常。"""
     result: dict[str, Any] = {
         "captured_at": datetime.now().isoformat(),
@@ -681,9 +656,7 @@ def capture_engine_config(
             result.update(proc_info)
             result["capture_source"].append("bare_process")
             # 适配器探测 + 本地包版本
-            _apply_adapter_and_versions(
-                result, proc_info.get("launch_cmd", ""), api_model
-            )
+            _apply_adapter_and_versions(result, proc_info.get("launch_cmd", ""), api_model)
         else:
             result["capture_source"].append("no_container")
         return result
@@ -799,14 +772,20 @@ def _apply_adapter_and_versions(
         runtime_versions = _query_local_runtime_versions()
     if runtime_versions:
         result["container_runtime"] = runtime_versions
-        result["capture_source"].append(
-            "container_exec" if container else "local_metadata"
-        )
+        result["capture_source"].append("container_exec" if container else "local_metadata")
 
 
 def _query_container_runtime_versions(container: str | None) -> dict[str, str | None]:
-    """通过 docker exec 在容器内探测 torch/cuda/vllm 版本。失败返回空字典。"""
+    """通过 docker exec 在容器内探测 torch/cuda/vllm 版本。失败返回空字典。
+
+    安全(审查 #6): docker exec 等价于在目标容器内执行任意代码。默认关闭,
+    设 ENGINE_CAPTURE_DOCKER_EXEC=1 显式启用;生产部署建议保持关闭。
+    """
+    import os
+
     if not container:
+        return {}
+    if os.environ.get("ENGINE_CAPTURE_DOCKER_EXEC", "0") != "1":
         return {}
     out: dict[str, str | None] = {}
     # 逐包 try/except,避免 find_spec 技巧脆弱性;torch 单独 import(warnings 抑制)
