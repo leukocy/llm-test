@@ -1,14 +1,15 @@
 [logger]
 # 设置日志级别为 error，只显示错误
 level = "error"
-
 # 禁用消息日志
 messageFormat = "%(message)s"
 
 [server]
-headless = true
-enableCORS = false
-enableXsrfProtection = false
+# 生产部署建议经反向代理(TLS + 认证)暴露, 不要直接把 8501 挂公网。
 address = "0.0.0.0"
-port = 8501
+enableCORS = false
+# XSRF 保护保持开启(安全审查 #3)。表单/上传类功能依赖它防跨站伪造。
+enableXsrfProtection = true
 fileWatcherType = "none"
+headless = true
+port = 8501
