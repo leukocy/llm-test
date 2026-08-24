@@ -364,18 +364,6 @@ def apply_design_system() -> None:
     st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 
 
-def render_sidebar_brand() -> None:
-    """Render a compact product mark at the top of the sidebar."""
-
-    st.sidebar.markdown(
-        """
-        <div class="sidebar-brand">
-            <div class="sidebar-brand-name">LLM Benchmark</div>
-            <div class="sidebar-brand-caption">Performance and quality workspace</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def render_application_header(

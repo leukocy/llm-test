@@ -65,18 +65,3 @@ def get_logger(name: str | None = None, level: int = logging.INFO) -> logging.Lo
     return logger
 
 
-def set_global_level(level: int):
-    """
-    Set the global logging level.
-
-    Args:
-        level: Logging level (e.g., logging.DEBUG, logging.INFO)
-
-    Example:
-        >>> from utils.get_logger import set_global_level
-        >>> import logging
-        >>> set_global_level(logging.DEBUG)
-    """
-    _root_logger.setLevel(level)
-    for handler in _root_logger.handlers:
-        handler.setLevel(level)

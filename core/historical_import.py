@@ -272,23 +272,3 @@ def import_meta_group(
     }
 
 
-def import_raw_data_directory(db, raw_data_dir: str | Path) -> dict[str, Any]:
-    """遍历 raw_data_dir 下所有 *.csv.meta.json，批量导入。返回汇总。"""
-    raw_data_dir = Path(raw_data_dir)
-    metas = sorted(raw_data_dir.rglob("*.csv.meta.json"))
-    summary = {
-        "total": len(metas),
-        "imported": 0,
-        "failed": 0,
-        "results": 0,
-        "errors": [],
-    }
-    for meta_path in metas:
-        r = import_meta_group(db, meta_path)
-        if r.get("ok"):
-            summary["imported"] += 1
-            summary["results"] += r.get("result_count", 0)
-        else:
-            summary["failed"] += 1
-            summary["errors"].append(f"{meta_path.name}: {r.get('error')}")
-    return summary

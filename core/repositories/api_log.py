@@ -40,9 +40,6 @@ class ApiLogRepository(BaseRepository[ApiLog]):
         """查找Error Logs"""
         return self.find_by("status = ?", (ApiLogStatus.ERROR.value,), limit)
 
-    def find_by_session(self, session_id: str) -> list[ApiLog]:
-        """based on session_id 查找"""
-        return self.find_by("session_id = ?", (session_id,))
 
     def find_by_date_range(
         self, start: datetime, end: datetime, limit: int = 1000
@@ -77,18 +74,3 @@ class ApiLogRepository(BaseRepository[ApiLog]):
             "created_at < ?", (datetime.fromtimestamp(cutoff).isoformat(),)
         )
 
-    def get_error_summary(self, limit: int = 20) -> list[dict[str, Any]]:
-        """GetError摘要"""
-        sql = """
-            SELECT
-                error,
-                COUNT(*) as count,
-                model_id,
-                provider
-            FROM api_logs
-            WHERE status = 'error' AND error IS NOT NULL
-            GROUP BY error, model_id, provider
-            ORDER BY count DESC
-            LIMIT ?
-        """
-        return self.db.fetch_all(sql, (limit,))

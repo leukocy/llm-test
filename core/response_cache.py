@@ -34,7 +34,7 @@ import pickle
 import sqlite3
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -50,21 +50,6 @@ def cache_dir_default_key_path() -> str:
     return "cache/.checkpoint_hmac_key"
 
 
-@dataclass
-class CacheEntry:
-    """缓存条目"""
-
-    prompt_hash: str
-    model_id: str
-    response: str
-    timestamp: float
-    ttl_seconds: int = 86400 * 7  # default7天过期
-    hit_count: int = 0
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def is_expired(self) -> bool:
-        return time.time() > (self.timestamp + self.ttl_seconds)
 
 
 @dataclass
@@ -396,30 +381,6 @@ class ResponseCache:
 
             self._load_stats()
 
-    def cleanup_expired(self) -> int:
-        """Cleanup过期条目，ReturnDelete数量"""
-        with self._lock, sqlite3.connect(str(self.db_path)) as conn:
-            cursor = conn.execute(
-                """
-                    SELECT COUNT(*) FROM cache
-                    WHERE timestamp + ttl_seconds < ?
-                """,
-                (time.time(),),
-            )
-            count = int(cursor.fetchone()[0])
-
-            if count > 0:
-                conn.execute(
-                    """
-                        DELETE FROM cache
-                        WHERE timestamp + ttl_seconds < ?
-                    """,
-                    (time.time(),),
-                )
-                conn.commit()
-                self._load_stats()
-
-            return count
 
     def get_stats(self) -> CacheStats:
         """Get缓存Statistics"""
@@ -531,39 +492,7 @@ class ResponseCache:
             print(f"LoadCheck点失败: {e}")
             return None
 
-    def list_checkpoints(self) -> list[dict[str, Any]]:
-        """列出所hasCheck点"""
-        checkpoints = []
 
-        for filepath in self.checkpoint_dir.glob("*.pkl.gz"):
-            try:
-                raw = filepath.read_bytes()
-                _, _, compressed = raw.partition(b"\n")
-                data = pickle.loads(
-                    gzip.decompress(compressed)
-                )  # noqa: S301 - 仅读元数据, load 时再验 MAC
-                checkpoints.append(
-                    {
-                        "name": filepath.stem.replace(".pkl", ""),
-                        "path": str(filepath),
-                        "timestamp": data.get("timestamp"),
-                        "created_at": data.get("created_at"),
-                        "metadata": data.get("metadata", {}),
-                    }
-                )
-            except Exception:
-                pass
-
-        return sorted(checkpoints, key=lambda x: x.get("timestamp", 0), reverse=True)
-
-    def delete_checkpoint(self, checkpoint_name: str) -> bool:
-        """DeleteCheck点"""
-        safe_name = self._safe_checkpoint_name(checkpoint_name)
-        filepath = self.checkpoint_dir / f"{safe_name}.pkl.gz"
-        if filepath.exists():
-            filepath.unlink()
-            return True
-        return False
 
 
 # ========== 全局缓存实例 ==========
@@ -579,10 +508,6 @@ def get_cache(cache_dir: str = "cache", max_size_mb: int = 500, **kwargs) -> Res
     return _global_cache
 
 
-def reset_cache():
-    """Reset全局缓存实例"""
-    global _global_cache
-    _global_cache = None
 
 
 # ========== Decorator ==========

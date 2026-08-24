@@ -149,9 +149,6 @@ class BenchmarkLogger:
         """记录ERROR级别Log"""
         return self.log(LogLevel.ERROR, message, **kwargs)
 
-    def critical(self, message: str, **kwargs) -> LogEntry:
-        """记录CRITICAL级别Log"""
-        return self.log(LogLevel.CRITICAL, message, **kwargs)
 
     def filter(
         self,

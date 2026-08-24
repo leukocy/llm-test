@@ -19,7 +19,6 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 
 # ===== Color Scheme =====
 COLORS = {
@@ -315,70 +314,6 @@ class StaticChartGenerator:
         # plt.tight_layout()
         return fig
 
-    def draw_dual_line_chart(
-        self,
-        x_data: list[float],
-        y1_data: list[float],
-        y2_data: list[float],
-        title: str,
-        x_label: str,
-        y1_label: str,
-        y2_label: str,
-        y1_color: str = "#4bc0c0",
-        y2_color: str = "#ff6384",
-        system_info: dict[str, str] | None = None,
-        figsize: tuple[int, int] = (10, 10),  # Increase height to accommodate info
-    ) -> plt.Figure:
-        """
-        Draw dual line chart (stacked vertically) with system info display
-        """
-        fig = plt.figure(figsize=figsize)
-
-        # Top title
-        fig.text(
-            0.5,
-            0.95,
-            title,
-            fontsize=FONT_CONFIG["title_size"] + 4,
-            fontweight="bold",
-            ha="center",
-            va="top",
-        )
-
-        # Draw system info (if provided)
-        # Default chart start height slightly lowered to prevent title overlap
-        chart_top = 0.82
-
-        # If title contains newline (long title) and no system info, move down a bit
-        if "\n" in title and not system_info:
-            chart_top = 0.78
-
-        if system_info:
-            chart_top = self._draw_system_info(fig, system_info, chart_top)
-
-        # Dynamically calculate chart height and position with sufficient spacing
-        bottom_margin = 0.08
-        inter_chart_gap = 0.18  # Increase spacing to prevent X-axis labels overlapping with the bottom title
-
-        # Available height = top start - bottom margin - inter-chart gap
-        available_height = chart_top - bottom_margin - inter_chart_gap
-        chart_height = available_height / 2
-
-        # Draw chart 1 (Top)
-        # top_chart_bottom = chart_top - chart_height
-        ax1 = fig.add_axes([0.1, chart_top - chart_height, 0.85, chart_height])
-        self._draw_single_chart(
-            ax1, x_data, y1_data, y1_label, x_label, f"{y1_label} (token/s)", y1_color
-        )
-
-        # Draw chart 2 (Bottom)
-        # bottom_chart_bottom = 0.08 (bottom_margin)
-        ax2 = fig.add_axes([0.1, bottom_margin, 0.85, chart_height])
-        self._draw_single_chart(
-            ax2, x_data, y2_data, y2_label, x_label, f"{y2_label} (token/s)", y2_color
-        )
-
-        return fig
 
     def _draw_single_chart(
         self,
@@ -1023,110 +958,10 @@ class StaticChartGenerator:
         plt.close(fig)
 
 
-def create_benchmark_chart_from_dataframe(
-    df: pd.DataFrame,
-    x_col: str,
-    y_col: str,
-    title: str,
-    x_label: str,
-    y_label: str,
-    color: str = "#4bc0c0",
-) -> plt.Figure:
-    """
-    Quick function to create chart from DataFrame
-
-    Args:
-        df: DataFrame containing data
-        x_col: X-axis column name
-        y_col: Y-axis column name
-        title: Chart Title
-        x_label: X-axis label
-        y_label: Y-axis label
-        color: Line color
-
-    Returns:
-        matplotlib Figure object
-    """
-    generator = StaticChartGenerator()
-    x_data = df[x_col].tolist()
-    y_data = df[y_col].tolist()
-    return generator.draw_line_chart(x_data, y_data, title, x_label, y_label, color)
 
 
-def create_concurrency_static_chart(
-    df: pd.DataFrame,
-    metric: str = "system_output_throughput",
-    title: str = "System Throughput vs Concurrency",
-    color: str = "#4bc0c0",
-) -> plt.Figure:
-    """
-    Create concurrency test static chart
-
-    Args:
-        df: DataFrame with concurrency and metric columns
-        metric: Metric column name to plot
-        title: Chart Title
-        color: Line color
-
-    Returns:
-        matplotlib Figure object
-    """
-    generator = StaticChartGenerator()
-
-    # Sort by concurrency
-    df_sorted = df.sort_values("concurrency")
-    x_data = df_sorted["concurrency"].tolist()
-    y_data = df_sorted[metric].tolist()
-
-    # Determine Y-axis label based on metric
-    y_label_map = {
-        "system_output_throughput": "System Output Throughput (tokens/s)",
-        "tps": "TPS (tokens/s)",
-        "ttft": "TTFT (s)",
-        "prefill_speed": "Prefill Speed (tokens/s)",
-    }
-    y_label = y_label_map.get(metric, metric)
-
-    return generator.draw_line_chart(
-        x_data, y_data, title, "Concurrency", y_label, color
-    )
 
 
-def create_prefill_static_chart(
-    df: pd.DataFrame,
-    metric: str = "prefill_speed",
-    title: str = "Prefill Speed vs Input Length",
-    color: str = "#4bc0c0",
-) -> plt.Figure:
-    """
-    Create prefill test static chart
-
-    Args:
-        df: DataFrame with prefill_tokens and metric columns
-        metric: Metric column name to plot
-        title: Chart Title
-        color: Line color
-
-    Returns:
-        matplotlib Figure object
-    """
-    generator = StaticChartGenerator()
-
-    # Sort by input length
-    df_sorted = df.sort_values("prefill_tokens")
-    x_data = df_sorted["prefill_tokens"].tolist()
-    y_data = df_sorted[metric].tolist()
-
-    y_label_map = {
-        "prefill_speed": "Prefill Speed (tokens/s)",
-        "ttft": "TTFT (s)",
-        "tps": "TPS (tokens/s)",
-    }
-    y_label = y_label_map.get(metric, metric)
-
-    return generator.draw_line_chart(
-        x_data, y_data, title, "Input Length (tokens)", y_label, color
-    )
 
 
 # ===== HTML Report Generation =====

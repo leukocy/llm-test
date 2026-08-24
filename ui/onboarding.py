@@ -442,143 +442,10 @@ def render_onboarding_trigger():
             st.rerun()
 
 
-def render_quick_reference():
-    """Render quick reference card"""
-    st.markdown(
-        """
-    <style>
-    .quick-ref {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 10px;
-        padding: 20px;
-        color: white;
-        margin-bottom: 20px;
-    }
-    .quick-ref h3 {
-        color: white;
-        margin-top: 0;
-    }
-    </style>
-    """,
-        unsafe_allow_html=True,
-    )
-
-    with st.container():
-        rocket_icon = icon("rocket", color="#ffffff")
-        hand_icon = icon("hand-pointing-up", color="#ffffff")
-        st.markdown(
-            """
-        <div class="quick-ref">
-            <h3>__ROCKET_ICON__ Quick Start</h3>
-            <p><strong>1.</strong> Configure API on the left</p>
-            <p><strong>2.</strong> Select Test Type</p>
-            <p><strong>3.</strong> Click 'Start Test'</p>
-            <p><strong>4.</strong> View and analyze results</p>
-            <p style="margin-bottom: 0;">__HAND_ICON__ need <a href="#" onclick="Streamlit.setComponentValue('onboarding_trigger', true)">detailed help</a>?</p>
-        </div>
-        """.replace(
-                "__ROCKET_ICON__", rocket_icon
-            ).replace(
-                "__HAND_ICON__", hand_icon
-            ),
-            unsafe_allow_html=True,
-        )
 
 
-def render_feature_highlights():
-    """Render feature highlights"""
-    with st.expander("Feature Highlights", expanded=False):
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.markdown(
-                """
-            **Precise Testing**
-            - Supports 7 test types
-            - Multi-dimensional performance metrics
-            - Reproducible test environment
-            """
-            )
-
-            st.markdown(
-                """
-            **Deep Analysis**
-            - Real-time progress monitoring
-            - Visualization chart display
-            - Automatic report generation
-            """
-            )
-
-        with col2:
-            st.markdown(
-                """
-            **Smart Management**
-            - Configuration preset saving
-            - Test progress persistence
-            - History query
-            """
-            )
-
-            st.markdown(
-                """
-            **Flexible Configuration**
-            - Multi API provider support
-            - Custom test parameters
-            - Thinking mode testing
-            """
-            )
 
 
-def render_faqs():
-    """Render FAQ"""
-    with st.expander("FAQ", expanded=False):
-        faqs = [
-            {
-                "q": "How to choose the right concurrency?",
-                "a": """
-                Recommended to start with low concurrency:
-                - **Quick test**: Concurrency 1-2
-                - **Standard test**: Concurrency 4-8
-                - **Stress test**: Concurrency 16+
-
-                Note: High concurrency consumes more API quota.
-                """,
-            },
-            {
-                "q": "What to do when tests fail?",
-                "a": """
-                Common causes and solutions:
-                - **401 Error**: Check if API Key is correct
-                - **429 Error**: Lower concurrency or retry later
-                - **ConnectError**: Check network and API URL
-                - **Timeout**: Increase max_tokens or lower concurrency
-                """,
-            },
-            {
-                "q": "How to compare different model performances?",
-                "a": """
-                Use the result comparison feature:
-                1. Run tests on multiple models
-                2. Select results to compare on the comparison page
-                3. View comparison charts and reports
-                """,
-            },
-            {
-                "q": "Where is Test data saved?",
-                "a": """
-                Test results are saved in:
-                - `benchmark_results*.csv` - Test data
-                - `test_progress/` - Test progress
-                - `test_presets/` - Configuration presets
-
-                These files are in the project directory and can be safely backed up or deleted.
-                """,
-            },
-        ]
-
-        for i, faq in enumerate(faqs):
-            with st.expander(f"Q: {faq['q']}", expanded=False):
-                st.markdown(f"A: {faq['a']}")
 
 
 # ============================================================================
@@ -592,23 +459,7 @@ def show_onboarding():
     return state.show_onboarding
 
 
-def reset_onboarding():
-    """Reset onboarding state (including persistent file)."""
-    if "onboarding" in st.session_state:
-        del st.session_state.onboarding
-    st.session_state.onboarding_completed = False
-    st.session_state.show_onboarding_guide = False
-    try:
-        os.remove(_ONBOARDING_FILE)
-    except FileNotFoundError:
-        pass
 
 
-def skip_onboarding():
-    """Skip Onboarding"""
-    _skip_onboarding()
 
 
-def is_onboarding_completed() -> bool:
-    """Check if onboarding is completed"""
-    return bool(st.session_state.get("onboarding_completed", False))

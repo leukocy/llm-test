@@ -494,14 +494,6 @@ class QualityEvaluator:
             "from_cache": False,
         }
 
-    async def _get_response(
-        self, prompt: str, temperature: float = 0.0, max_tokens: int = 256
-    ) -> str:
-        """简化版响应Get (Backward compatibility)"""
-        result = await self._get_response_with_metrics(prompt, temperature, max_tokens)
-        if result.get("error"):
-            raise Exception(result["error"])
-        return str(result.get("content", ""))
 
     def register_evaluator(
         self, dataset_name: str, evaluator_class: type[BaseEvaluator]

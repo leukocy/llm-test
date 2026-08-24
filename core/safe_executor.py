@@ -268,20 +268,3 @@ def safe_exec_code(
     return run_untrusted_code(full_code, timeout_seconds=float(timeout_seconds))
 
 
-# For backward compatibility, provide the old interface but with warnings
-def safe_exec_legacy(code: str, globals_dict: dict, locals_dict: "dict | None" = None):
-    """
-    Legacy compatibility wrapper for safe_exec_code.
-    Issues a deprecation warning.
-    """
-    import warnings
-
-    warnings.warn(
-        "safe_exec_legacy is deprecated. Use safe_exec_code instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    success, error, output = safe_exec_code(code)
-    if not success:
-        raise Exception(error)
-    return output

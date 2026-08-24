@@ -3,7 +3,6 @@ Quality Test Reports Module
 Quality test report module - generates quality assessment visualization reports
 """
 
-from typing import Any
 
 import pandas as pd
 import plotly.express as px
@@ -681,79 +680,3 @@ def render_quality_report(
         )
 
 
-def render_model_comparison(all_results: dict[str, dict[str, EvaluationResult]]):
-    """
-    Render multi-model comparison report
-
-    Args:
-        all_results: {model_id: {dataset_name: EvaluationResult}}
-    """
-    if not all_results:
-        st.warning("No comparison data yet")
-        return
-
-    st.header("Model Capability Comparison")
-
-    # Collect all datasets
-    all_datasets: set[str] = set()
-    for model_results in all_results.values():
-        all_datasets.update(model_results.keys())
-    all_datasets_list = sorted(all_datasets)
-
-    # Build comparison data
-    comparison_data = []
-    for model_id, model_results in all_results.items():
-        row: dict[str, Any] = {"Model": model_id}
-        for dataset in all_datasets_list:
-            if dataset in model_results:
-                row[dataset] = model_results[dataset].accuracy
-            else:
-                row[dataset] = None
-        comparison_data.append(row)
-
-    df = pd.DataFrame(comparison_data)
-
-    # Showing comparison table
-    st.markdown("### Accuracy Comparison Table")
-
-    # Format
-    styled_df = df.copy()
-    for col in all_datasets_list:
-        if col in styled_df.columns:
-            styled_df[col] = styled_df[col].apply(
-                lambda x: f"{x:.2%}" if x is not None else "N/A"
-            )
-
-    st.dataframe(styled_df)
-
-    # Comparison bar chart
-    st.markdown("### Visual Comparison")
-
-    fig = go.Figure()
-
-    colors = px.colors.qualitative.Set2
-
-    for i, (model_id, model_results) in enumerate(all_results.items()):
-        datasets = list(model_results.keys())
-        accuracies = [model_results[d].accuracy * 100 for d in datasets]
-
-        fig.add_trace(
-            go.Bar(
-                name=model_id,
-                x=datasets,
-                y=accuracies,
-                marker_color=colors[i % len(colors)],
-            )
-        )
-
-    fig.update_layout(
-        barmode="group",
-        title="Accuracy Comparison Across Models and Datasets",
-        xaxis_title="Dataset",
-        yaxis_title="Accuracy (%)",
-        yaxis_range=[0, 105],
-        template="plotly_white",
-        height=500,
-    )
-
-    st.plotly_chart(fig)

@@ -45,9 +45,6 @@ class ReportRepository(BaseRepository[Report]):
         cursor = self.db.execute(sql, tuple(values))
         return cursor.rowcount > 0
 
-    def find_by_report_id(self, report_id: str) -> Report | None:
-        """based on report_id 查找"""
-        return self.find_one_by("report_id = ?", (report_id,))
 
     def find_by_run_id(self, run_id: int) -> list[Report]:
         """based on运行 ID 查找"""
@@ -78,46 +75,7 @@ class ReportRepository(BaseRepository[Report]):
             limit,
         )
 
-    def update_export_paths(
-        self,
-        report_id: int,
-        json_path: str | None = None,
-        html_path: str | None = None,
-        markdown_path: str | None = None,
-        excel_path: str | None = None,
-    ) -> bool:
-        """UpdateExport路径"""
-        data = {}
-        if json_path:
-            data["json_path"] = json_path
-        if html_path:
-            data["html_path"] = html_path
-        if markdown_path:
-            data["markdown_path"] = markdown_path
-        if excel_path:
-            data["excel_path"] = excel_path
 
-        if not data:
-            return False
-
-        return self.update_by(data, "id = ?", (report_id,)) > 0
-
-    def get_summary(self, model_id: str | None = None) -> dict[str, Any]:
-        """Get报告摘要"""
-        where = "model_id = ?" if model_id else "1=1"
-        params = (model_id,) if model_id else ()
-
-        sql = f"""
-            SELECT
-                COUNT(*) as total_reports,
-                COUNT(DISTINCT model_id) as unique_models,
-                COUNT(DISTINCT report_type) as report_types,
-                MAX(created_at) as latest_report
-            FROM reports
-            WHERE {where}
-        """
-        row = self.db.fetch_one(sql, params)
-        return row if row else {}
 
     def delete_old_reports(self, days: int = 90) -> int:
         """Delete旧报告"""

@@ -98,30 +98,6 @@ def sanitize_api_key(message: str) -> str:
     return result
 
 
-def sanitize_error_response(error_text: str, api_key: str | None = None) -> str:
-    """
-    Remove API key from error messages.
-
-    Args:
-        error_text: Error response text
-        api_key: API key to redact (optional)
-
-    Returns:
-        Sanitized error text
-    """
-    if not error_text:
-        return error_text
-
-    result = error_text
-
-    # Remove specific API key if provided
-    if api_key and api_key in result:
-        result = result.replace(api_key, "***REDACTED***")
-
-    # Also redact common key patterns
-    result = sanitize_api_key(result)
-
-    return result
 
 
 class SanitizingFormatter(logging.Formatter):
@@ -179,23 +155,6 @@ class SanitizingFormatter(logging.Formatter):
         return super().format(record)
 
 
-def safe_log(logger, level: str, message: Any, *args, **kwargs):
-    """
-    Safely log a message with sanitization.
-
-    Args:
-        logger: Logger instance
-        level: Log level ('debug', 'info', 'warning', 'error', 'critical')
-        message: Message to log
-        *args: Additional args (will be sanitized)
-        **kwargs: Additional kwargs
-    """
-    sanitized_message = sanitize_log_message(message)
-    sanitized_args = tuple(sanitize_log_message(arg) for arg in args)
-
-    log_func = getattr(logger, level.lower(), None)
-    if log_func:
-        log_func(sanitized_message, *sanitized_args, **kwargs)
 
 
 # Import logging at the end to avoid circular dependency

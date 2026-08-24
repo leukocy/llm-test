@@ -687,17 +687,6 @@ def get_dataset(
     return manager.load(name, split=split, max_samples=max_samples, **kwargs)
 
 
-def ensure_dataset(name: str, **kwargs) -> bool:
-    """
-    确保Dataset可用 (ifnot存in则under载)
-
-    Returns:
-        is否可用
-    """
-    manager = get_manager()
-    if manager.is_available(name):
-        return True
-    return manager.download(name, **kwargs)
 
 
 def list_available_datasets() -> list[dict[str, Any]]:

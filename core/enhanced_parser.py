@@ -49,15 +49,6 @@ class ParseResult:
     error: str | None = None
 
 
-@dataclass
-class FilterConfig:
-    """Filter器Configure"""
-
-    name: str
-    function: str  # regex, take_first, take_last, remove, normalize
-    pattern: str | None = None
-    group: int = 1
-    flags: int = 0
 
 
 class EnhancedAnswerParser:
@@ -829,24 +820,3 @@ def get_parser() -> EnhancedAnswerParser:
     return _default_parser
 
 
-def quick_parse(response: str, answer_type: str = "number") -> ParseResult:
-    """
-    快速ParseAnswer
-
-    Usage:
-        result = quick_parse("The answer is 42", "number")
-        print(result.normalized)  # 42.0
-    """
-    type_map = {
-        "number": AnswerType.NUMBER,
-        "int": AnswerType.INTEGER,
-        "integer": AnswerType.INTEGER,
-        "choice": AnswerType.CHOICE,
-        "bool": AnswerType.BOOLEAN,
-        "text": AnswerType.TEXT,
-        "code": AnswerType.CODE,
-        "math": AnswerType.MATH_EXPR,
-    }
-
-    at = type_map.get(answer_type.lower(), AnswerType.TEXT)
-    return get_parser().parse(response, at)

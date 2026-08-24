@@ -39,13 +39,6 @@ def add_custom_provider(name, url):
     return save_custom_config(config)
 
 
-def remove_custom_provider(name):
-    """DeleteCustomProvider"""
-    config = load_custom_config()
-    if name in config["providers"]:
-        del config["providers"][name]
-        return save_custom_config(config)
-    return False
 
 
 def add_custom_model(model_name):
@@ -57,13 +50,6 @@ def add_custom_model(model_name):
     return False
 
 
-def remove_custom_model(model_name):
-    """DeleteCustomModel"""
-    config = load_custom_config()
-    if model_name in config["models"]:
-        config["models"].remove(model_name)
-        return save_custom_config(config)
-    return False
 
 
 def get_all_providers():

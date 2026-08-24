@@ -165,16 +165,6 @@ class Database:
             conn.commit()
             return cast(int, cursor.rowcount)
 
-    def execute_script(self, script: str) -> None:
-        """
-        执行 SQL 脚本
-
-        Args:
-            script: SQL 脚本
-        """
-        with self.get_connection() as conn:
-            conn.executescript(script)
-            conn.commit()
 
     def fetch_one(self, sql: str, params: tuple = ()) -> dict[str, Any] | None:
         """
@@ -304,16 +294,7 @@ class Database:
         sql = "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
         return self.fetch_one(sql, (table_name,)) is not None
 
-    def get_schema_version(self) -> str:
-        """Get Schema Version"""
-        result = self.fetch_one("SELECT value FROM db_meta WHERE key = 'schema_version'")
-        return str(result["value"]) if result else "unknown"
 
-    def vacuum(self):
-        """执行 VACUUM 优化Database"""
-        with self.get_connection() as conn:
-            conn.execute("VACUUM")
-            conn.commit()
 
     def get_database_size(self) -> int:
         """GetDatabase文件大小（字节）"""

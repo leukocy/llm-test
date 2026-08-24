@@ -309,21 +309,6 @@ class YAMLEvaluator(BaseEvaluator):
         return str(renderer.render(self.config.doc_to_target, sample))
 
 
-def create_evaluator_from_yaml(
-    task_name: str, config_path: str | None = None, **kwargs
-) -> YAMLEvaluator:
-    """
-    从 YAML ConfigureCreateEvaluatorFactory函数
-
-    Args:
-        task_name: 任务名称
-        config_path: ConfigureFile path
-        **kwargs: other参数传递给 YAMLEvaluator
-
-    Returns:
-        YAMLEvaluator 实例
-    """
-    return YAMLEvaluator(task_name, config_path, **kwargs)
 
 
 def list_yaml_tasks(config_dir: str = "task_configs") -> list[str]:

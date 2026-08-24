@@ -283,20 +283,6 @@ class ProgressManager:
             st.error(f"Failed to delete progress: {e}")
             return False
 
-    def clear_old_progress(self, days: int = 7) -> int:
-        """Clear old progress files"""
-        import time as time_module
-
-        cutoff_time = time_module.time() - (days * 86400)
-        count = 0
-        for progress_file in self.progress_dir.glob("*.json"):
-            if progress_file.stat().st_mtime < cutoff_time:
-                try:
-                    progress_file.unlink()
-                    count += 1
-                except Exception:
-                    pass
-        return count
 
 
 # Global progress manager instance
@@ -641,85 +627,8 @@ def render_test_control_panel():
     }
 
 
-def render_progress_history():
-    """Render progress history panel"""
-    with st.expander("Test History", expanded=False):
-        saved_progress_list = progress_manager.list_saved_progress()
-
-        if not saved_progress_list:
-            st.info("No saved test progress")
-            return
-
-        for item in saved_progress_list:
-            with st.container():
-                col1, col2, col3, col4 = st.columns(4)
-
-                with col1:
-                    st.write(f"**{item['test_type']}**")
-
-                with col2:
-                    st.write(item["status"])
-
-                with col3:
-                    st.caption(item["progress"])
-
-                with col4:
-                    if st.button(
-                        "Delete",
-                        key=f"del_{item['test_id']}",
-                        help="Delete this progress",
-                    ):
-                        if progress_manager.delete_progress(item["test_id"]):
-                            st.rerun()
-
-                st.caption(f"Save time: {item['file_time']}")
-                st.markdown("---")
 
 
-def render_resumable_tests():
-    """
-    Render resumable test panel
-
-    Display all paused or cancelled tests, allowing users to resume
-    """
-    saved_progress_list = progress_manager.list_saved_progress()
-
-    # Filter resumable tests
-    resumable = [
-        p for p in saved_progress_list if p["status"] in [TestStatus.PAUSED, TestStatus.CANCELLED]
-    ]
-
-    if not resumable:
-        return None
-
-    with st.expander("Resumable Tests", expanded=True):
-        st.caption("The following tests can be resumed:")
-
-        selected_test_id = None
-
-        for prog in resumable:
-            col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-
-            with col1:
-                st.write(f"**{prog['test_type']}**")
-                st.caption(f"Save: {prog['file_time']}")
-
-            with col2:
-                status_html = status_icon(prog["status"])
-                st.markdown(f"{status_html} {prog['status']}", unsafe_allow_html=True)
-
-            with col3:
-                st.write(prog["progress"])
-
-            with col4:
-                if st.button(
-                    "Restore",
-                    key=f"resume_{prog['test_id']}",
-                    use_container_width=True,
-                ):
-                    selected_test_id = prog["test_id"]
-
-        return selected_test_id
 
 
 def format_time(s: float) -> str:
@@ -739,80 +648,13 @@ def format_time(s: float) -> str:
 # ============================================================================
 
 
-def save_current_progress(progress: TestProgress) -> bool:
-    """Save current test progress"""
-    st.session_state.current_progress = progress
-    return progress_manager.save_progress(progress)
 
 
-def load_saved_progress(test_id: str) -> TestProgress | None:
-    """Load saved test progress"""
-    progress = progress_manager.load_progress(test_id)
-    if progress:
-        st.session_state.current_progress = progress
-        st.session_state.current_test_id = test_id
-    return progress
 
 
-def clear_current_progress():
-    """Clear current progress"""
-    if "current_progress" in st.session_state:
-        del st.session_state.current_progress
-    if "current_test_id" in st.session_state:
-        del st.session_state.current_test_id
 
 
-def get_test_config(test_type: str) -> TestConfig:
-    """Get test configuration for specified type"""
-    return TestConfig.from_session_state(test_type)
 
 
-def load_resume_data(test_id: str) -> dict[str, Any] | None:
-    """
-    Load resume data
-
-    Args:
-        test_id: Test ID
-
-    Returns:
-        Dictionary containing resume data, returns None if load failed
-    """
-    try:
-        progress_file = Path("test_progress") / f"{test_id}.json"
-        if not progress_file.exists():
-            return None
-
-        with open(progress_file, encoding="utf-8") as f:
-            data: dict[str, Any] = json.load(f)
-
-        # Set resume flag in session_state
-        st.session_state.is_resuming = True
-        st.session_state.resume_data = data
-        st.session_state.current_test_id = test_id
-
-        return data
-
-    except Exception as e:
-        st.error(f"Failed to load resume data: {e}")
-        return None
 
 
-def prepare_resume_from_progress(progress_data: dict[str, Any]) -> dict[str, Any]:
-    """
-    Prepare resume parameters from progress data
-
-    Args:
-        progress_data: Progress data dictionary
-
-    Returns:
-        Resume parameters dictionary
-    """
-    return {
-        "test_id": progress_data.get("test_id"),
-        "test_type": progress_data.get("test_type"),
-        "completed_results": progress_data.get("completed_results", []),
-        "pending_prompts": progress_data.get("pending_prompts", []),
-        "current_index": progress_data.get("current_index", 0),
-        "total_samples": progress_data.get("total_samples", 0),
-        "test_config": progress_data.get("test_config", {}),
-    }

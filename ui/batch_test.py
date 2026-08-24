@@ -527,35 +527,5 @@ def render_batch_test_history():
 # ============================================================================
 
 
-def get_batch_config_from_session() -> BatchTestConfig | None:
-    """Get batch test configuration from session_state"""
-    if "batch_test_items" not in st.session_state:
-        return None
-
-    config_name = st.session_state.get("last_saved_batch_config", "Unnamed Batch Test")
-    config_desc = st.session_state.get("batch_config_desc", "")
-
-    items = []
-    for item_data in st.session_state.batch_test_items:
-        item = BatchTestItem(**item_data)
-        items.append(item)
-
-    return BatchTestConfig(name=config_name, description=config_desc, items=items)
 
 
-def clear_batch_test_session():
-    """Clear batch test session data"""
-    keys_to_clear = [
-        "batch_test_items",
-        "last_saved_batch_config",
-        "batch_config_name",
-        "batch_config_desc",
-        "batch_test_running",
-        "batch_test_stop_requested",
-        "batch_test_progress",
-        "batch_test_logs",
-    ]
-
-    for key in keys_to_clear:
-        if key in st.session_state:
-            del st.session_state[key]

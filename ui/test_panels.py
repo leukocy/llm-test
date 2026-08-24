@@ -37,10 +37,6 @@ def _get_benchmark_runner():
     return _BenchmarkRunner
 
 
-def _is_test_active():
-    """Check if test is currently active (running or paused)"""
-    test_status = st.session_state.get("test_status", "Idle")
-    return test_status in ("Running", "Paused")
 
 
 def _get_button_disabled_state():

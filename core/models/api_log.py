@@ -150,7 +150,3 @@ class ApiLog:
         self.ttft = ttft
         self.total_time = total_time
 
-    def mark_error(self, error: str):
-        """标记Error"""
-        self.status = ApiLogStatus.ERROR.value
-        self.error = error

@@ -76,11 +76,6 @@ class ExecLogRepository(BaseRepository[ExecLog]):
         """查找Error Logs"""
         return self.find_by_level(LogLevel.ERROR.value, run_id, limit)
 
-    def find_warnings(
-        self, run_id: int | None = None, limit: int = 100
-    ) -> list[ExecLog]:
-        """查找WarningLog"""
-        return self.find_by_level(LogLevel.WARNING.value, run_id, limit)
 
     def get_level_counts(self, run_id: int | None = None) -> dict[str, int]:
         """Get各级别Log数量"""

@@ -67,14 +67,8 @@ def _get_enhanced_eval_module():
     return _enhanced_eval_module
 
 
-def is_quality_eval_available():
-    """Check if quality assessment module is available"""
-    return _get_quality_eval_module() is not None
 
 
-def is_enhanced_eval_available():
-    """Check if enhanced evaluation module is available"""
-    return _get_enhanced_eval_module() is not None
 
 
 # Compatibility variables (lazy detection)

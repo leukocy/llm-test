@@ -354,7 +354,6 @@ import random
 import re
 import statistics
 from collections import Counter
-from collections.abc import Callable
 
 
 @dataclass
@@ -797,11 +796,6 @@ class EvalMetricsCalculator:
 # ============================================
 
 
-def get_metric(name: str) -> Callable:
-    """Get指标函数"""
-    if name in EvalMetricsCalculator.METRICS:
-        return EvalMetricsCalculator.METRICS[name]
-    raise ValueError(f"Unknown metric: {name}")
 
 
 def compute_metrics(

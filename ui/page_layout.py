@@ -372,30 +372,6 @@ def render_log_section():
 class PageLayout:
     """Page layout class"""
 
-    @staticmethod
-    def show_empty_state():
-        """Render empty state prompt"""
-        st.info(
-            """
-        ### Welcome to LLM Performance Benchmark Platform V2
-
-        Please configure test parameters in the left sidebar, then select a test type to begin.
-
-        **Features:**
-        - **Concurrency Test**
-        - **Prefill Stress Test**
-        - **Long Context Test**
-        - **Matrix Test**
-        - **Custom Text Test**
-        - **All Tests**
-        - **Stability Test**
-
-        **V2 New Features:**
-        - **Modular Architecture**
-        - **Cleaner Code Organization**
-        - **Better Maintainability**
-        """
-        )
 
     @staticmethod
     def render(test_type):

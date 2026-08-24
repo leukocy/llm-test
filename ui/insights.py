@@ -209,12 +209,6 @@ def _get_col(df, base_col):
     return None
 
 
-def _get_val(df, idx, base_col):
-    """Safely get value handling column names."""
-    col = _get_col(df, base_col)
-    if col:
-        return df.loc[idx, col]
-    return 0
 
 
 def _success_rate_fraction(series):
@@ -1083,27 +1077,3 @@ def get_performance_grade(insights, severities=None):
 # ============================================
 
 
-def generate_insights_markdown(insights, model_id=""):
-    """
-    Format insights as markdown for export.
-
-    Returns:
-        Markdown formatted string
-    """
-    if not insights:
-        return "## Performance Insights\n\nNo performance insights available.\n"
-
-    grade, color, description = get_performance_grade(insights)
-
-    md = "## Performance Insights\n\n"
-    md += f"**Overall Grade**: {grade} - {description}\n\n"
-
-    if model_id:
-        md += f"**Model**: {model_id}\n\n"
-
-    md += "### Detailed Analysis\n\n"
-
-    for insight in insights:
-        md += f"- {insight}\n"
-
-    return md

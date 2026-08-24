@@ -235,15 +235,6 @@ class PromptTemplate:
 # ============================================
 
 
-@dataclass
-class ChatMessage:
-    """单条聊天消息"""
-
-    role: str  # system, user, assistant
-    content: str
-
-    def to_dict(self) -> dict[str, str]:
-        return {"role": self.role, "content": self.content}
 
 
 @dataclass
@@ -514,13 +505,6 @@ class TemplateFactory:
             return ChatTemplate.from_yaml(yaml_path)
         return PromptTemplate.from_yaml(yaml_path)
 
-    @classmethod
-    def list_templates(cls) -> dict[str, list[str]]:
-        """列出所has可用模板"""
-        return {
-            "completion": list(cls.TEMPLATES.keys()),
-            "chat": list(cls.CHAT_TEMPLATES.keys()),
-        }
 
 
 # ============================================
@@ -533,21 +517,3 @@ def get_template(name: str, format: str = "completion") -> Union[PromptTemplate,
     return TemplateFactory.get(name, format)
 
 
-def render_prompt(
-    template_str: str,
-    sample: dict[str, Any],
-    few_shot_examples: list[dict[str, Any]] | None = None,
-) -> str:
-    """
-    快速Render prompt
-
-    Args:
-        template_str: Jinja2 模板字符串
-        sample: Sample count据
-        few_shot_examples: Few-shot 示例
-
-    Returns:
-        Render后 prompt
-    """
-    template = PromptTemplate(doc_to_text=template_str)
-    return template.render_full(sample, few_shot_examples)

@@ -333,33 +333,6 @@ class TestConfigLoader:
         """列出所hasConfigure文件"""
         return [f.name for f in self.config_dir.glob("*.yaml")]
 
-    def create_template(self, name: str = "template") -> str:
-        """
-        Create模板Configure文件
-
-        Args:
-            name: 模板名称
-
-        Returns:
-            CreateFile path
-        """
-        template = TestConfig(
-            name="模板Test Configuration",
-            description="这is一模板Configure，请based onneed修改",
-            models=[
-                ModelConfig(
-                    platform="mimo",
-                    model_id="mimo-v2-flash",
-                    api_key_env="MIMO_API_KEY",
-                    thinking_enabled=True,
-                )
-            ],
-            dataset=DatasetConfig(name="gsm8k", samples=100, seed=42, num_shots=0),
-        )
-
-        filepath = f"{name}.yaml"
-        self.save(template, filepath)
-        return str(self.config_dir / filepath)
 
 
 def load_test_config(filepath: str) -> TestConfig:

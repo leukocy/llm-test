@@ -454,36 +454,6 @@ class ReportExporter:
 
         return filepath
 
-    def to_opencompass_format(self, filepath: str) -> str:
-        """
-        Exportis OpenCompass 兼容格式
-        """
-        oc_result: dict[str, Any] = {
-            "model": self.report.model.model_id,
-            "time": self.report.created_at,
-            "results": {},
-        }
-
-        for name, metrics in self.report.results.items():
-            oc_result["results"][name] = {
-                "accuracy": metrics.accuracy * 100,  # OpenCompass use百分比
-                "score": metrics.accuracy * 100,
-                "details": {
-                    "total": metrics.total_samples,
-                    "correct": metrics.correct_samples,
-                },
-            }
-
-        (
-            os.makedirs(os.path.dirname(filepath), exist_ok=True)
-            if os.path.dirname(filepath)
-            else None
-        )
-
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(oc_result, f, ensure_ascii=False, indent=2)
-
-        return filepath
 
     def to_markdown(self, filepath: str) -> str:
         """Export as Markdown 格式报告"""
@@ -636,54 +606,6 @@ class ReportExporter:
 # ============================================
 
 
-def generate_failure_analysis(failures: list[FailureCase], top_n: int = 10) -> dict[str, Any]:
-    """
-    Generate详细失败分析报告
-
-    Args:
-        failures: 失败案例列表
-        top_n: Return详细案例数量
-
-    Returns:
-        分析报告字典
-    """
-    if not failures:
-        return {"total_failures": 0}
-
-    # 按失败类型Group
-    by_type: dict[str, list[FailureCase]] = {}
-    for f in failures:
-        ft = f.failure_type or "unknown"
-        if ft not in by_type:
-            by_type[ft] = []
-        by_type[ft].append(f)
-
-    # 按类别Group
-    by_category: dict[str, int] = {}
-    for f in failures:
-        cat = f.category or "unknown"
-        by_category[cat] = by_category.get(cat, 0) + 1
-
-    # Generate分析
-    recommendations: list[str] = []
-    analysis: dict[str, Any] = {
-        "total_failures": len(failures),
-        "by_failure_type": {k: len(v) for k, v in by_type.items()},
-        "by_category": by_category,
-        "top_cases": [f.to_dict() for f in failures[:top_n]],
-        "recommendations": recommendations,
-    }
-
-    # GenerateSuggestion
-    if len(by_type.get("parse_error", [])) > len(failures) * 0.2:
-        recommendations.append(
-            "ParseError rate较高，SuggestionCheckAnswer提取逻辑or启用增强Parse器"
-        )
-
-    if by_type.get("empty_response"):
-        recommendations.append("存in空响应，可能is API Erroror超时问题")
-
-    return analysis
 
 
 # ============================================
@@ -691,94 +613,9 @@ def generate_failure_analysis(failures: list[FailureCase], top_n: int = 10) -> d
 # ============================================
 
 
-def export_lm_eval_format(result, filepath: str) -> str:
-    """快速Export lm-eval 格式"""
-    report = StandardReport.from_evaluation_result(result)
-    exporter = ReportExporter(report)
-    return exporter.to_lm_eval_format(filepath)
 
 
-def export_all_formats(result, output_dir: str, prefix: str = "report") -> dict[str, str]:
-    """Export所has格式"""
-    report = StandardReport.from_evaluation_result(result)
-    exporter = ReportExporter(report)
-
-    os.makedirs(output_dir, exist_ok=True)
-
-    return {
-        "json": exporter.to_json(os.path.join(output_dir, f"{prefix}.json")),
-        "lm_eval": exporter.to_lm_eval_format(os.path.join(output_dir, f"{prefix}_lm_eval.json")),
-        "markdown": exporter.to_markdown(os.path.join(output_dir, f"{prefix}.md")),
-        "csv": exporter.to_csv(os.path.join(output_dir, f"{prefix}.csv")),
-    }
 
 
-def load_report(filepath: str) -> StandardReport:
-    """从 JSON 文件Load报告"""
-    with open(filepath, encoding="utf-8") as f:
-        data = json.load(f)
-
-    report = StandardReport()
-    report.report_id = data.get("report_id", "")
-    report.created_at = data.get("created_at", "")
-    report.version = data.get("version", "1.0")
-    report.config = data.get("config", {})
-    report.aggregate = data.get("aggregate", {})
-
-    # Model信息
-    model_data = data.get("model", {})
-    report.model = ModelInfo(**model_data) if model_data else ModelInfo("unknown")
-
-    # 环境信息
-    env_data = data.get("environment", {})
-    if env_data:
-        report.environment = EnvironmentInfo(**env_data)
-
-    # Result
-    for name, metrics_data in data.get("results", {}).items():
-        report.results[name] = DatasetMetrics(**metrics_data)
-
-    return report
 
 
-def compare_reports(report1: StandardReport, report2: StandardReport) -> dict[str, Any]:
-    """比较两报告"""
-    comparison: dict[str, Any] = {
-        "report1_id": report1.report_id,
-        "report2_id": report2.report_id,
-        "model1": report1.model.model_id,
-        "model2": report2.model.model_id,
-        "datasets": {},
-        "summary": {},
-    }
-
-    # 找出共同Dataset
-    common_datasets = set(report1.results.keys()) & set(report2.results.keys())
-
-    for ds in common_datasets:
-        m1 = report1.results[ds]
-        m2 = report2.results[ds]
-
-        diff = m2.accuracy - m1.accuracy
-        comparison["datasets"][ds] = {
-            "report1_accuracy": m1.accuracy,
-            "report2_accuracy": m2.accuracy,
-            "difference": diff,
-            "better": "report2" if diff > 0 else "report1" if diff < 0 else "equal",
-        }
-
-    # 汇总
-    if common_datasets:
-        avg_diff = sum(comparison["datasets"][ds]["difference"] for ds in common_datasets) / len(
-            common_datasets
-        )
-
-        comparison["summary"] = {
-            "common_datasets": len(common_datasets),
-            "avg_difference": avg_diff,
-            "overall_better": (
-                "report2" if avg_diff > 0 else "report1" if avg_diff < 0 else "equal"
-            ),
-        }
-
-    return comparison
