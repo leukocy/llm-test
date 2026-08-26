@@ -37,8 +37,6 @@ def _get_benchmark_runner():
     return _BenchmarkRunner
 
 
-
-
 def _get_button_disabled_state():
     """
     Get button disabled state - directly from session_state without caching.

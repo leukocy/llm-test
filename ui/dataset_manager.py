@@ -12,9 +12,7 @@ def render_dataset_manager():
 
     # --- Upload Section ---
     with st.expander("Upload New Dataset", expanded=False):
-        uploaded_file = st.file_uploader(
-            "Select a CSV or JSON file", type=["csv", "json"]
-        )
+        uploaded_file = st.file_uploader("Select a CSV or JSON file", type=["csv", "json"])
         if uploaded_file is not None and st.button("Save Dataset"):
             with st.spinner("Validating and saving..."):
                 error = loader.save_dataset(uploaded_file, uploaded_file.name)
@@ -53,9 +51,7 @@ def render_dataset_manager():
                 if st.button("Preview", key=f"preview_{row['filename']}"):
                     st.session_state.preview_dataset = row["filename"]
             with col4:
-                if st.button(
-                    "Delete", key=f"delete_{row['filename']}", type="secondary"
-                ):
+                if st.button("Delete", key=f"delete_{row['filename']}", type="secondary"):
                     if loader.delete_dataset(row["filename"]):
                         st.success(f"Deleted {row['filename']}")
                         if (

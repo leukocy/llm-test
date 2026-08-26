@@ -43,15 +43,6 @@ def export_to_excel(df_dict, filename="benchmark_results.xlsx"):
                     }
                 )
 
-                workbook.add_format(
-                    {
-                        "align": "center",
-                        "valign": "vcenter",
-                        "border": 1,
-                        "font_size": 10,
-                    }
-                )
-
                 number_format = workbook.add_format(
                     {
                         "align": "center",
@@ -83,11 +74,7 @@ def export_to_excel(df_dict, filename="benchmark_results.xlsx"):
                         # Calculate max width
                         max_len = (
                             max(
-                                (
-                                    df[col].astype(str).map(len).max()
-                                    if len(df) > 0
-                                    else 10
-                                ),
+                                (df[col].astype(str).map(len).max() if len(df) > 0 else 10),
                                 len(str(col)),
                             )
                             + 2
@@ -111,8 +98,6 @@ def export_to_excel(df_dict, filename="benchmark_results.xlsx"):
     except Exception as e:
         st.error(f"Excel Export failed: {e}")
         return None
-
-
 
 
 def export_interactive_html(
@@ -284,9 +269,7 @@ def export_interactive_html(
             # Use 'cdn' for the first chart to include the library, 'False' for others to reuse it
             include_js = "cdn" if i == 0 else False
             html_parts.append(
-                fig.to_html(
-                    include_plotlyjs=include_js, full_html=False, div_id=f"chart{i}"
-                )
+                fig.to_html(include_plotlyjs=include_js, full_html=False, div_id=f"chart{i}")
             )
 
     # Add tables
@@ -335,15 +318,9 @@ def create_html_download_link(
     return href
 
 
-
-
 # =====================================================================
 # Static Chart Export (inspired by llm-performance-test.html style)
 # =====================================================================
-
-
-
-
 
 
 def create_static_chart_download_link(
@@ -379,10 +356,13 @@ def _resolve_col(df: pd.DataFrame, *candidates: str) -> str | None:
 
 
 def _safe_col_list(df: pd.DataFrame, col: str | None) -> list[float]:
-    """Safely extract column data, convert to float list"""
+    """Safely extract column data, convert to float list.
+
+    NaN/NA values become 0.0 — float(pd.NA) would raise, and matplotlib
+    chokes on raw NA sentinels."""
     if col is None or col not in df.columns:
         return []
-    return [float(v) if v is not None else 0.0 for v in df[col].tolist()]
+    return [float(v) if pd.notna(v) else 0.0 for v in df[col].tolist()]
 
 
 def export_benchmark_summary_chart(
@@ -435,14 +415,12 @@ def export_benchmark_summary_chart(
         if test_type == "concurrency":
             avg_in_col = _resolve_col(df, "Actual_Tokens_Mean", "Avg_Input_Tokens")
             max_out_col = _resolve_col(df, "Actual_Decode_Max", "Max_Output_Tokens")
-            if avg_in_col and avg_in_col in df.columns:
-                avg_in = int(df[avg_in_col].mean())
-            else:
-                avg_in = 0
-            if max_out_col and max_out_col in df.columns:
-                max_out = int(df[max_out_col].max())
-            else:
-                max_out = 0
+            avg_in_mean = df[avg_in_col].mean() if avg_in_col and avg_in_col in df.columns else None
+            max_out_max = (
+                df[max_out_col].max() if max_out_col and max_out_col in df.columns else None
+            )
+            avg_in = int(avg_in_mean) if avg_in_mean is not None and pd.notna(avg_in_mean) else 0
+            max_out = int(max_out_max) if max_out_max is not None and pd.notna(max_out_max) else 0
             if avg_in > 0 or max_out > 0:
                 io_label = f" (In: ~{avg_in}, Out: ~{max_out})"
 
@@ -459,9 +437,7 @@ def export_benchmark_summary_chart(
         if system_info:
             title = base_title + full_label
         else:
-            title = (
-                f"{base_title}{full_label}\nModel: {model_id} | Provider: {provider}"
-            )
+            title = f"{base_title}{full_label}\nModel: {model_id} | Provider: {provider}"
 
         # ---- matrix test → multi-line chart (special handling, has concurrency dimension) ----
         if test_type == "matrix":
@@ -657,9 +633,7 @@ def export_benchmark_summary_chart(
         if len(charts) == 0:
             return None
 
-        fig = generator.draw_quad_chart(
-            x_data, charts, title, x_label, system_info=system_info
-        )
+        fig = generator.draw_quad_chart(x_data, charts, title, x_label, system_info=system_info)
         return generator.save_figure_to_bytes(fig, "png")
 
     except Exception as e:

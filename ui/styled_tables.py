@@ -201,24 +201,17 @@ def create_styled_summary_table(df, highlight_cols=None, highlight_best=True):
                 return ["" for _ in s]
 
             # Determine if smaller or larger is better
-            if any(
-                keyword in s.name
-                for keyword in ["TTFT", "TPOT", "time", "latency", "delay"]
-            ):
+            if any(keyword in s.name for keyword in ["TTFT", "TPOT", "time", "latency", "delay"]):
                 # Smaller is better
                 is_best = s == s.min()
                 return [
-                    "background-color: #90EE90; font-weight: bold" if v else ""
-                    for v in is_best
+                    "background-color: #90EE90; font-weight: bold" if v else "" for v in is_best
                 ]
-            elif any(
-                keyword in s.name for keyword in ["TPS", "Speed", "Throughput", "Rate"]
-            ):
+            elif any(keyword in s.name for keyword in ["TPS", "Speed", "Throughput", "Rate"]):
                 # Larger is better
                 is_best = s == s.max()
                 return [
-                    "background-color: #90EE90; font-weight: bold" if v else ""
-                    for v in is_best
+                    "background-color: #90EE90; font-weight: bold" if v else "" for v in is_best
                 ]
 
             return ["" for _ in s]
@@ -226,15 +219,7 @@ def create_styled_summary_table(df, highlight_cols=None, highlight_best=True):
         styler = styler.apply(highlight_best_value)
 
     # 5. Hide index if it's just sequential numbers
-    if df.index.name is None and all(
-        isinstance(i, (int, np.integer)) for i in df.index
-    ):
+    if df.index.name is None and all(isinstance(i, (int, np.integer)) for i in df.index):
         styler = styler.hide(axis="index")
 
     return styler
-
-
-
-
-
-

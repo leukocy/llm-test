@@ -49,9 +49,7 @@ def render_batch_config_editor():
         )
 
     with col2:
-        max_parallel = st.number_input(
-            "Max Parallel", min_value=1, max_value=10, value=2
-        )
+        max_parallel = st.number_input("Max Parallel", min_value=1, max_value=10, value=2)
 
     with col3:
         stop_on_error = st.checkbox(
@@ -199,9 +197,7 @@ def render_batch_config_editor():
                 st.error("Please add at least one test item")
             else:
                 # Create configuration
-                items = [
-                    BatchTestItem(**item) for item in st.session_state.batch_test_items
-                ]
+                items = [BatchTestItem(**item) for item in st.session_state.batch_test_items]
                 config = BatchTestConfig(
                     name=config_name,
                     description=config_desc,
@@ -310,46 +306,71 @@ def render_batch_test_executor():
 
     # Display progress
     if st.session_state.get("batch_test_running"):
-        render_batch_test_progress(config)
+        _run_batch_test(config)
 
 
-def render_batch_test_progress(config: BatchTestConfig):
-    """Render batch test progress"""
+def _run_batch_test(config: BatchTestConfig):
+    """Execute the batch test synchronously (Streamlit reruns keep the page alive)."""
+    import asyncio
+
+    from core.batch_test import BatchTestScheduler
+
     st.markdown("---")
     st.subheader("Test Progress")
 
-    # Progress bar
-    if "batch_test_progress" in st.session_state:
-        progress = st.session_state.batch_test_progress
+    progress_bar = st.progress(0.0)
+    metrics_cols = st.columns(4)
+    current_item_box = st.empty()
+    log_expander = st.expander("Execution Log", expanded=False)
+    log_box = log_expander.empty()
+    logs: list[str] = []
 
-        st.progress(progress.progress_percentage / 100)
-
-        col1, col2, col3, col4 = st.columns(4)
-
-        with col1:
-            st.metric("Completed", f"{progress.completed_items}/{progress.total_items}")
-
-        with col2:
-            st.metric("Failed", f"{progress.failed_items}")
-
-        with col3:
-            st.metric("Skipped", f"{progress.skipped_items}")
-
-        with col4:
-            elapsed = progress.elapsed_time
-            st.metric("Elapsed Time", f"{elapsed:.1f}s")
-
-        # Currently executing test
+    def _render_progress(progress):
+        progress_bar.progress(min(progress.progress_percentage / 100, 1.0))
+        metrics_cols[0].metric("Completed", f"{progress.completed_items}/{progress.total_items}")
+        metrics_cols[1].metric("Failed", f"{progress.failed_items}")
+        metrics_cols[2].metric("Skipped", f"{progress.skipped_items}")
+        metrics_cols[3].metric("Elapsed Time", f"{progress.elapsed_time:.1f}s")
         if progress.current_item:
-            st.info(f"Currently executing: {progress.current_item}")
+            current_item_box.info(f"Currently executing: {progress.current_item}")
 
-        # Real-time logs
-        if "batch_test_logs" in st.session_state:
-            with st.expander("Execution Log", expanded=False):
-                for log in st.session_state.batch_test_logs[
-                    -10:
-                ]:  # Show last 10 entries
-                    st.caption(log)
+    def _on_progress(progress):
+        st.session_state.batch_test_progress = progress
+        _render_progress(progress)
+
+    def _on_log(message: str):
+        logs.append(message)
+        st.session_state.batch_test_logs = logs
+        log_box.code("\n".join(logs[-10:]))
+
+    scheduler = BatchTestScheduler(
+        config,
+        test_function=None,  # unused: scheduler runs items via BenchmarkRunner
+        progress_callback=_on_progress,
+        log_callback=_on_log,
+    )
+    st.session_state.batch_test_scheduler = scheduler
+
+    try:
+        result = asyncio.run(scheduler.run())
+    except Exception as e:
+        st.error(f"Batch test failed: {e}")
+        return
+    finally:
+        st.session_state.batch_test_running = False
+        st.session_state.batch_test_scheduler = None
+
+    if result is None:
+        st.warning("Batch test was stopped before producing a result.")
+        return
+
+    if batch_test_manager.save_result(result):
+        st.success(
+            f"Batch test finished: {result.completed_items}/{result.total_items} "
+            f"completed, {result.failed_items} failed. See the Results tab."
+        )
+    else:
+        st.warning("Batch test finished but the result could not be saved.")
 
 
 # ============================================================================
@@ -397,21 +418,21 @@ def render_batch_test_results():
     with col3:
         st.metric("Failed", f"{result.failed_items}")
 
-    # Display comparYeson table
+    # Display comparison table
     st.markdown("---")
     st.markdown("### Test Comparison")
 
-    comparYeson_df = result.get_comparYeson_df()
-    if not comparYeson_df.empty:
-        st.dataframe(comparYeson_df, use_container_width=True)
+    comparison_df = result.get_comparison_df()
+    if not comparison_df.empty:
+        st.dataframe(comparison_df, use_container_width=True)
 
         # Download button
-        csv = comparYeson_df.to_csv(index=False).encode("utf-8")
+        csv = comparison_df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="Download Comparison CSV",
             icon=material_icon("download"),
             data=csv,
-            file_name=f"{result.batch_name}_comparYeson.csv",
+            file_name=f"{result.batch_name}_comparison.csv",
             mime="text/csv",
         )
     else:
@@ -503,9 +524,7 @@ def render_batch_test_history():
 
     # Display history
     for result in results:
-        with st.expander(
-            f"{result['batch_name']} - {result['start_time']}", expanded=False
-        ):
+        with st.expander(f"{result['batch_name']} - {result['start_time']}", expanded=False):
             col1, col2, col3, col4 = st.columns(4)
 
             with col1:
@@ -525,7 +544,3 @@ def render_batch_test_history():
 # ============================================================================
 # Helper Functions
 # ============================================================================
-
-
-
-

@@ -1,4 +1,5 @@
 import colorsys
+import math
 
 import numpy as np
 import pandas as pd
@@ -27,6 +28,8 @@ def get_smart_format_string(max_value):
 
 def smart_format_value(value, max_value=None):
     """Format a single value"""
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return "N/A"
     if max_value is None:
         max_value = abs(value) if value else 0
 
@@ -60,9 +63,7 @@ def generate_color_gradient(base_hex, n_steps):
 
     base_rgb = hex_to_rgb(base_hex)
     # Convert to HSV to manipulate saturation/value
-    h, s, v = colorsys.rgb_to_hsv(
-        base_rgb[0] / 255.0, base_rgb[1] / 255.0, base_rgb[2] / 255.0
-    )
+    h, s, v = colorsys.rgb_to_hsv(base_rgb[0] / 255.0, base_rgb[1] / 255.0, base_rgb[2] / 255.0)
 
     colors = []
     # Strategy: Vary Saturation and Value to create distinct shades.
@@ -155,8 +156,6 @@ def apply_theme(fig):
     """Apply unified theme to plotly figure."""
     fig.update_layout(**CHART_THEME)
     return fig
-
-
 
 
 def plot_plotly_line(
@@ -257,17 +256,20 @@ def plot_plotly_line(
         # Improved axis normalization
         y_values = pd.to_numeric(df[y], errors="coerce").to_numpy()
         if error_y_col:
-            err_values = (
-                pd.to_numeric(df[error_y_col], errors="coerce").fillna(0).to_numpy()
-            )
+            err_values = pd.to_numeric(df[error_y_col], errors="coerce").fillna(0).to_numpy()
             y_values = np.concatenate([y_values, y_values + err_values])
         finite_y = y_values[np.isfinite(y_values)]
         y_max = np.max(finite_y) if len(finite_y) > 0 else 1
         y_min = np.min(finite_y) if len(finite_y) > 0 else 0
 
-        # Dynamically set Y-axis range
-        y_padding = (y_max - y_min) * 0.1 if y_max != y_min else y_max * 0.1
-        fig.update_yaxes(range=[max(0, y_min - y_padding), y_max + y_padding])
+        # Dynamically set Y-axis range. All-zero/all-negative data must still
+        # produce a valid (lower < upper) axis range for plotly.
+        y_padding = (y_max - y_min) * 0.1 if y_max != y_min else abs(y_max) * 0.1
+        y_lower = max(0, y_min - y_padding)
+        y_upper = y_max + y_padding
+        if y_upper <= y_lower:
+            y_upper = y_lower + max(abs(y_lower), 1.0) * 0.1 or 1.0
+        fig.update_yaxes(range=[y_lower, y_upper])
 
         # Improved log scale detection logic
         # 1. Filter out <= 0 values to avoid 0 values causing ratio calculation errors
@@ -364,14 +366,6 @@ def plot_plotly_line(
         return None
 
 
-
-
-
-
-
-
-
-
 def plot_performance_summary(df, metrics, title="Performance Summary"):
     """
     Multi-metric performance summary chart (Radar Chart).
@@ -380,6 +374,10 @@ def plot_performance_summary(df, metrics, title="Performance Summary"):
     Metrics are normalized to 0-100 relative to the dataset max/min.
     """
     try:
+        if not metrics:
+            st.warning("No metrics provided for performance summary chart.")
+            return None
+
         # Normalize metrics to 0-100 scale
         df_norm = df.copy()
 
@@ -399,7 +397,10 @@ def plot_performance_summary(df, metrics, title="Performance Summary"):
                 min_val = df[metric].min()
                 max_val = df[metric].max()
 
-                if max_val == min_val:
+                if pd.isna(min_val) or pd.isna(max_val):
+                    # All-NaN column: nothing to normalize
+                    df_norm[f"{metric}_norm"] = 0
+                elif max_val == min_val:
                     df_norm[f"{metric}_norm"] = 100  # If all same, give full score
                 else:
                     if any(h in metric.lower() for h in higher_is_better):

@@ -184,9 +184,7 @@ class StaticChartGenerator:
 
         # Use equal-width categorical X-axis: use index as actual plot position
         n_points = len(x_data)
-        x_positions = list(
-            range(1, n_points + 1)
-        )  # Start from 1, leave room for 0 position
+        x_positions = list(range(1, n_points + 1))  # Start from 1, leave room for 0 position
 
         # Calculate Y-axis range
         y_max = self._get_nice_max_value(max(y_data)) if y_data else 100
@@ -232,9 +230,7 @@ class StaticChartGenerator:
         # Data point value labels
         for i, (x_pos, y) in enumerate(zip(x_positions, y_data, strict=False)):
             value_text = (
-                smart_format_value(float(y), y_max)
-                if isinstance(y, (int, float))
-                else str(y)
+                smart_format_value(float(y), y_max) if isinstance(y, (int, float)) else str(y)
             )
             ax.annotate(
                 value_text,
@@ -251,9 +247,7 @@ class StaticChartGenerator:
         # Title already drawn at top, no need for set_title here
 
         # Set axis label - Y-axis label
-        ax.set_ylabel(
-            y_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold", labelpad=10
-        )
+        ax.set_ylabel(y_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold", labelpad=10)
 
         # Smart process X-axis tick labels to prevent overlap
         max_label_len = max([len(l) for l in x_tick_labels])
@@ -273,9 +267,7 @@ class StaticChartGenerator:
                 visible_indices.add(i)
             visible_indices.add(n_points - 1)
 
-            filtered_positions = [
-                x_tick_positions[i + 1] for i in sorted(visible_indices)
-            ]
+            filtered_positions = [x_tick_positions[i + 1] for i in sorted(visible_indices)]
             filtered_labels = [x_tick_labels[i + 1] for i in sorted(visible_indices)]
             ax.set_xticks([0] + filtered_positions)
             ax.set_xticklabels(["0"] + filtered_labels)
@@ -304,16 +296,13 @@ class StaticChartGenerator:
             )
 
         # Use set_xlabel to add X-axis label
-        ax.set_xlabel(
-            x_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold", labelpad=10
-        )
+        ax.set_xlabel(x_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold", labelpad=10)
 
         # Format Y-axis tick labels
         ax.yaxis.set_major_formatter(plt.FuncFormatter(get_smart_formatter(y_max)))
 
         # plt.tight_layout()
         return fig
-
 
     def _draw_single_chart(
         self,
@@ -331,13 +320,9 @@ class StaticChartGenerator:
         n_points = len(x_data)
 
         # Use equal-width categorical X-axis: use index as actual plot position
-        x_positions = list(
-            range(1, n_points + 1)
-        )  # Start from 1, leave room for 0 position
+        x_positions = list(range(1, n_points + 1))  # Start from 1, leave room for 0 position
 
-        y_max = (
-            self._get_nice_max_value(max(y_data)) if y_data and max(y_data) > 0 else 100
-        )
+        y_max = self._get_nice_max_value(max(y_data)) if y_data and max(y_data) > 0 else 100
         y_ticks = np.linspace(0, y_max, 5)
 
         # Process X-axis labels
@@ -407,9 +392,7 @@ class StaticChartGenerator:
                     zorder=5,
                 )
 
-        ax.set_title(
-            title, fontsize=FONT_CONFIG["title_size"], fontweight="bold", pad=15
-        )
+        ax.set_title(title, fontsize=FONT_CONFIG["title_size"], fontweight="bold", pad=15)
         ax.set_ylabel(y_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold")
 
         # Smart process X-axis tick labels to prevent overlap
@@ -436,9 +419,7 @@ class StaticChartGenerator:
             visible_indices.add(n_points - 1)  # Always include last point
 
             # Only display sampled ticks
-            filtered_positions = [
-                x_tick_positions[i + 1] for i in sorted(visible_indices)
-            ]
+            filtered_positions = [x_tick_positions[i + 1] for i in sorted(visible_indices)]
             filtered_labels = [x_tick_labels[i + 1] for i in sorted(visible_indices)]
             # Add origin 0
             ax.set_xticks([0] + filtered_positions)
@@ -466,9 +447,7 @@ class StaticChartGenerator:
             )
 
         # Use set_xlabel to add X-axis label, leveraging matplotlib auto-avoidance of tick label overlap
-        ax.set_xlabel(
-            x_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold", labelpad=10
-        )
+        ax.set_xlabel(x_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold", labelpad=10)
 
         ax.set_yticks(y_ticks)
         ax.tick_params(axis="both", which="major", labelsize=FONT_CONFIG["tick_size"])
@@ -495,12 +474,9 @@ class StaticChartGenerator:
             matplotlib Figure object
         """
         # Extract data
-        input_lengths = [
-            r.get("input_length", r.get("inputLength", 0)) for r in test_results
-        ]
+        input_lengths = [r.get("input_length", r.get("inputLength", 0)) for r in test_results]
         prefill_speeds = [
-            float(r.get("prefill_speed", r.get("prefillSpeed", 0)))
-            for r in test_results
+            float(r.get("prefill_speed", r.get("prefillSpeed", 0))) for r in test_results
         ]
         output_speeds = [
             float(r.get("output_speed", r.get("outputSpeed", 0))) for r in test_results
@@ -545,9 +521,7 @@ class StaticChartGenerator:
                 valid_info_lines.append(f"{label}:{value}")
 
         if test_time:
-            valid_info_lines.append(
-                f"Test time:{test_time.strftime('%Y-%m-%d %H:%M:%S')}"
-            )
+            valid_info_lines.append(f"Test time:{test_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
         # Dynamic layout: determine rows per column based on valid info count
         total_items = len(valid_info_lines)
@@ -724,12 +698,8 @@ class StaticChartGenerator:
             ax.scatter(x_positions, y_dataset, s=s_inner, c=line_color, zorder=4)
 
         # Labels
-        ax.set_ylabel(
-            y_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold", labelpad=10
-        )
-        ax.set_xlabel(
-            x_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold", labelpad=10
-        )
+        ax.set_ylabel(y_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold", labelpad=10)
+        ax.set_xlabel(x_label, fontsize=FONT_CONFIG["label_size"], fontweight="bold", labelpad=10)
 
         # Ticks
         ax.set_xticks(x_tick_positions)
@@ -739,9 +709,7 @@ class StaticChartGenerator:
         ax.yaxis.set_major_formatter(plt.FuncFormatter(get_smart_formatter(y_max)))
 
         # Legend
-        ax.legend(
-            loc="upper left", frameon=True, fontsize=12, ncol=len(datasets) // 4 + 1
-        )
+        ax.legend(loc="upper left", frameon=True, fontsize=12, ncol=len(datasets) // 4 + 1)
 
         return fig
 
@@ -958,12 +926,6 @@ class StaticChartGenerator:
         plt.close(fig)
 
 
-
-
-
-
-
-
 # ===== HTML Report Generation =====
 
 
@@ -984,9 +946,7 @@ def generate_static_html_report(
         HTML string
     """
     generator = StaticChartGenerator()
-    fig = generator.create_performance_report_image(
-        test_results, system_info, test_time
-    )
+    fig = generator.create_performance_report_image(test_results, system_info, test_time)
     img_base64 = generator.save_figure_to_base64(fig)
 
     if test_time is None:

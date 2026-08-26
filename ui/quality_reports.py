@@ -3,7 +3,6 @@ Quality Test Reports Module
 Quality test report module - generates quality assessment visualization reports
 """
 
-
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -30,9 +29,7 @@ def generate_quality_summary(results: dict[str, EvaluationResult]) -> pd.DataFra
         stats = result.performance_stats or {}
 
         # Calculate AI judge correction count
-        judge_corrected = sum(
-            1 for s in result.details if getattr(s, "is_judge_corrected", False)
-        )
+        judge_corrected = sum(1 for s in result.details if getattr(s, "is_judge_corrected", False))
 
         # Calculate evaluation method breakdown
         eval_methods = _compute_eval_method_breakdown(result.details)
@@ -165,9 +162,9 @@ def render_category_heatmap(result: EvaluationResult) -> go.Figure:
     if not result.by_category:
         return go.Figure()
 
-    # Extract data
+    # Extract data (accuracy may be explicitly None in deserialized results)
     categories = list(result.by_category.keys())
-    accuracies = [result.by_category[c].get("accuracy", 0) * 100 for c in categories]
+    accuracies = [(result.by_category[c].get("accuracy") or 0) * 100 for c in categories]
     counts = [result.by_category[c].get("count", 0) for c in categories]
 
     # Sort by accuracy
@@ -196,8 +193,7 @@ def render_category_heatmap(result: EvaluationResult) -> go.Figure:
                 x=list(accuracies),
                 orientation="h",
                 text=[
-                    f"{acc:.1f}% (n={cnt})"
-                    for acc, cnt in zip(accuracies, counts, strict=False)
+                    f"{acc:.1f}% (n={cnt})" for acc, cnt in zip(accuracies, counts, strict=False)
                 ],
                 textposition="outside",
                 marker_color=list(accuracies),
@@ -273,8 +269,8 @@ def render_error_analysis(result: EvaluationResult, max_errors: int = 20) -> Non
     col_filter, col_export = st.columns([3, 1])
 
     with col_filter:
-        # Extract categories for filtering
-        categories = sorted({err.category for err in errors})
+        # Extract categories for filtering (tolerate None categories)
+        categories = sorted({str(err.category or "Uncategorized") for err in errors})
         selected_category = st.selectbox(
             f"Filter Error Category (total {len(errors)} errors)",
             ["All"] + categories,
@@ -285,7 +281,7 @@ def render_error_analysis(result: EvaluationResult, max_errors: int = 20) -> Non
     filtered_errors = (
         errors
         if selected_category == "All"
-        else [e for e in errors if e.category == selected_category]
+        else [e for e in errors if str(e.category or "Uncategorized") == selected_category]
     )
 
     with col_export:
@@ -304,7 +300,7 @@ def render_error_analysis(result: EvaluationResult, max_errors: int = 20) -> Non
             # Include evaluation metadata if available
             eval_method = getattr(err, "evaluation_method", "")
             parse_method = getattr(err, "answer_parse_method", "")
-            confidence = getattr(err, "answer_parse_confidence", 0)
+            confidence = getattr(err, "answer_parse_confidence", 0) or 0
             if eval_method:
                 row["Evaluation Method"] = eval_method
             if parse_method:
@@ -341,15 +337,13 @@ def render_error_analysis(result: EvaluationResult, max_errors: int = 20) -> Non
         parse_method = getattr(err, "answer_parse_method", "")
         if parse_method:
             row["Parse Method"] = parse_method
-        confidence = getattr(err, "answer_parse_confidence", 0)
+        confidence = getattr(err, "answer_parse_confidence", 0) or 0
         if confidence > 0:
             row["Confidence"] = f"{confidence:.0%}"
         display_data.append(row)
 
     if display_data:
-        st.dataframe(
-            pd.DataFrame(display_data), use_container_width=True, hide_index=True
-        )
+        st.dataframe(pd.DataFrame(display_data), use_container_width=True, hide_index=True)
         if len(filtered_errors) > max_errors:
             st.caption(
                 f"*Showing only the first {max_errors} items. Use the button above to download the full report or the tool below for details.*"
@@ -369,9 +363,7 @@ def render_error_analysis(result: EvaluationResult, max_errors: int = 20) -> Non
     )
 
     # Find selected error details
-    target_error = next(
-        (e for e in filtered_errors if e.sample_id == selected_error_id), None
-    )
+    target_error = next((e for e in filtered_errors if e.sample_id == selected_error_id), None)
 
     if target_error:
         with st.container(border=True):
@@ -399,12 +391,10 @@ def render_error_analysis(result: EvaluationResult, max_errors: int = 20) -> Non
 
                 # Parse details
                 parse_method = getattr(target_error, "answer_parse_method", "")
-                confidence = getattr(target_error, "answer_parse_confidence", 0)
+                confidence = getattr(target_error, "answer_parse_confidence", 0) or 0
                 eval_method = getattr(target_error, "evaluation_method", "")
 
-                st.markdown(
-                    f"**Extracted Prediction**: `{target_error.predicted_answer}`"
-                )
+                st.markdown(f"**Extracted Prediction**: `{target_error.predicted_answer}`")
 
                 if parse_method or eval_method:
                     detail_parts = []
@@ -431,7 +421,7 @@ def render_eval_method_breakdown(result: EvaluationResult) -> None:
     for s in result.details:
         em = getattr(s, "evaluation_method", "")
         pm = getattr(s, "answer_parse_method", "")
-        conf = getattr(s, "answer_parse_confidence", 0)
+        conf = getattr(s, "answer_parse_confidence", 0) or 0
         if em:
             eval_methods[em] += 1
         if pm:
@@ -448,23 +438,15 @@ def render_eval_method_breakdown(result: EvaluationResult) -> None:
 
     with col1:
         if eval_methods:
-            method_data = [
-                {"Method": m, "Count": c} for m, c in eval_methods.most_common()
-            ]
-            st.dataframe(
-                pd.DataFrame(method_data), hide_index=True, use_container_width=True
-            )
+            method_data = [{"Method": m, "Count": c} for m, c in eval_methods.most_common()]
+            st.dataframe(pd.DataFrame(method_data), hide_index=True, use_container_width=True)
         else:
             st.caption("No evaluation method data")
 
     with col2:
         if parse_methods:
-            parse_data = [
-                {"Parse Method": m, "Count": c} for m, c in parse_methods.most_common()
-            ]
-            st.dataframe(
-                pd.DataFrame(parse_data), hide_index=True, use_container_width=True
-            )
+            parse_data = [{"Parse Method": m, "Count": c} for m, c in parse_methods.most_common()]
+            st.dataframe(pd.DataFrame(parse_data), hide_index=True, use_container_width=True)
         else:
             st.caption("No parse method data")
 
@@ -678,5 +660,3 @@ def render_quality_report(
             file_name=f"quality_details_{model_id}.json",
             mime="application/json",
         )
-
-

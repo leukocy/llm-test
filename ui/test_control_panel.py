@@ -284,7 +284,6 @@ class ProgressManager:
             return False
 
 
-
 # Global progress manager instance
 progress_manager = ProgressManager()
 
@@ -305,9 +304,11 @@ def render_test_control_panel():
     """
     from config.session_state import request_pause, request_stop
 
-    # Import abort functions
+    # Import abort functions (isort can't see through the try/except
+    # fallback pattern and would fight ruff's I001 here)
     try:
-        from core.providers.openai import is_pause_requested, set_stop_requested
+        from core.providers.openai import is_pause_requested  # isort: skip
+        from core.providers.openai import set_stop_requested  # isort: skip
         from core.providers.openai import set_pause_requested as set_global_pause
     except ImportError:
 
@@ -469,7 +470,7 @@ def render_test_control_panel():
             )
             if continue_button:
                 # Resume: 从暂停处继续测试
-                from config.session_state import set_test_running
+                from config.session_state import set_test_completed, set_test_running
 
                 # 重置停止和暂停标志
                 set_stop_requested(False)
@@ -568,7 +569,13 @@ def render_test_control_panel():
                             ),
                         }
                     else:
+                        # Roll back the running state set above, otherwise the
+                        # page gets stuck in a fake "Running" state with no
+                        # _pending_test to execute.
+                        st.session_state.is_resuming = False
+                        set_test_completed()
                         st.warning(f"Resume not supported for: {test_type}")
+                        return
 
                 st.toast("Resuming test...")
                 st.rerun()
@@ -627,10 +634,6 @@ def render_test_control_panel():
     }
 
 
-
-
-
-
 def format_time(s: float) -> str:
     """Format time display"""
     if s < 60:
@@ -646,15 +649,3 @@ def format_time(s: float) -> str:
 # ============================================================================
 # Helper Functions
 # ============================================================================
-
-
-
-
-
-
-
-
-
-
-
-

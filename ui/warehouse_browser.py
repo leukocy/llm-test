@@ -65,7 +65,12 @@ def render_warehouse_browser() -> None:
     )
 
     db = db_manager
-    runs = query_runs(db, _build_filter(db))
+    try:
+        runs = query_runs(db, _build_filter(db))
+    except Exception as e:
+        # A corrupted DB / legacy row shape must not white-screen the page
+        st.error(f"数据仓库查询失败：{e}")
+        return
 
     _render_kpis(runs)
     st.markdown("---")
@@ -125,9 +130,7 @@ def _build_filter(db) -> WarehouseFilter:
         vals = ["全部"] + distinct_values(db, field)
         return vals
 
-    machine = st.sidebar.selectbox(
-        "硬件 machine_id", _opts("machine_id", "硬件"), key="wh_machine"
-    )
+    machine = st.sidebar.selectbox("硬件 machine_id", _opts("machine_id", "硬件"), key="wh_machine")
     model = st.sidebar.selectbox("模型", _opts("model_name", "模型"), key="wh_model")
     engine = st.sidebar.selectbox("引擎", _opts("engine", "引擎"), key="wh_engine")
     level = st.sidebar.selectbox(
@@ -143,9 +146,7 @@ def _build_filter(db) -> WarehouseFilter:
         key="wh_cfg_hash",
         help="CASE 02：同配置才能承诺。按配置指纹过滤同模型/引擎/并行/量化的一组测试。",
     )
-    search = st.sidebar.text_input(
-        "模糊搜索", placeholder="备注 / 模型 / 测试员…", key="wh_search"
-    )
+    search = st.sidebar.text_input("模糊搜索", placeholder="备注 / 模型 / 测试员…", key="wh_search")
 
     def _pick(v):
         return None if v in (None, "全部", "") else v
@@ -168,13 +169,9 @@ def _build_filter(db) -> WarehouseFilter:
 
 
 def _render_kpis(runs) -> None:
-    machines = {
-        project_run(r)["machine_id"] for r in runs if project_run(r)["machine_id"]
-    }
+    machines = {project_run(r)["machine_id"] for r in runs if project_run(r)["machine_id"]}
     models = {r.model_id for r in runs if r.model_id}
-    publishable = sum(
-        1 for r in runs if (r.external_level or "internal") == "publishable"
-    )
+    publishable = sum(1 for r in runs if (r.external_level or "internal") == "publishable")
     completed = sum(1 for r in runs if r.status == "completed")
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("记录数", len(runs))
@@ -204,7 +201,8 @@ def _render_history(runs) -> None:
     ]
     if options:
         choice = st.selectbox("选择记录", options, key="wh_detail_pick")
-        idx = int(choice.split(":", 1)[0])
+        # The selectbox can hold a stale index after filters shrink the run list
+        idx = min(int(choice.split(":", 1)[0]), len(runs) - 1)
         _render_detail_drawer(runs[idx])
 
 
@@ -311,9 +309,7 @@ def _render_scaling_efficiency(runs) -> None:
         "（理想线性=1.0；<1 亚线性，疑似通信/调度瓶颈）。"
     )
 
-    metric = st.selectbox(
-        "指标", ["decode_tps", "effective_bandwidth_gbps"], key="se_metric"
-    )
+    metric = st.selectbox("指标", ["decode_tps", "effective_bandwidth_gbps"], key="se_metric")
     rows = build_scaling_efficiency(runs, metric=metric)
     if not rows:
         st.info("无可分析的多卡数据（需同模型在 tp1/tp2/tp4... 下各跑过测试）。")
@@ -325,9 +321,7 @@ def _render_scaling_efficiency(runs) -> None:
     st.dataframe(df, use_container_width=True, hide_index=True)
 
     # 归因：取效率最低的非 tp1 行
-    non_baseline = [
-        r for r in rows if r["tp_size"] != 1 and r["efficiency"] is not None
-    ]
+    non_baseline = [r for r in rows if r["tp_size"] != 1 and r["efficiency"] is not None]
     if non_baseline:
         worst = min(non_baseline, key=lambda r: r["efficiency"])
         st.warning(
@@ -377,25 +371,20 @@ def _render_cross_matrix(runs) -> None:
         agg = st.radio("聚合", ["best", "latest"], horizontal=True, key="wh_matrix_agg")
     agg_code = "best" if agg == "best" else "latest"
 
-    mx = build_cross_matrix(
-        runs, row_key=row_key, col_key=col_key, metric=metric, agg=agg_code
-    )
+    mx = build_cross_matrix(runs, row_key=row_key, col_key=col_key, metric=metric, agg=agg_code)
     if not mx.row_labels or not mx.col_labels:
         st.info("该指标在当前筛选下无可透视的格（指标全缺测或无 machine_id/模型）。")
         return
 
     # 构建 DataFrame：行=machine_id，列=model_name
     table = {
-        row: [mx.cells.get(row, {}).get(col) for col in mx.col_labels]
-        for row in mx.row_labels
+        row: [mx.cells.get(row, {}).get(col) for col in mx.col_labels] for row in mx.row_labels
     }
     df = pd.DataFrame(table, index=mx.row_labels, columns=mx.col_labels).T
     st.caption(f"行 = {mx.row_key}，列 = {mx.col_key}，值 = {metric}（{agg_code}）")
     # 背景渐变：decode_tps/带宽/利用率 越高越好；ttft/显存越低越好——这里统一按数值大小渐变
     try:
-        styled = df.style.background_gradient(cmap="YlGn", axis=None).format(
-            "{:.2f}", na_rep="—"
-        )
+        styled = df.style.background_gradient(cmap="YlGn", axis=None).format("{:.2f}", na_rep="—")
         st.dataframe(styled, use_container_width=True)
     except Exception:  # noqa: BLE001
         st.dataframe(df, use_container_width=True)
@@ -468,22 +457,14 @@ def _render_capability_sheet() -> None:
 
     cases = db_manager.list_application_cases(limit=2000)
     if not cases:
-        st.info(
-            "暂无应用用例。跑 Model Quality Test（自动采集）或录入应用用例后会生成。"
-        )
+        st.info("暂无应用用例。跑 Model Quality Test（自动采集）或录入应用用例后会生成。")
         return
 
-    group_by = (
-        tuple(group_dim) if group_dim else ("customer_type", "scenario", "model_name")
-    )
-    sheet = build_capability_sheet(
-        cases, group_by=group_by, min_external_level=min_level
-    )
+    group_by = tuple(group_dim) if group_dim else ("customer_type", "scenario", "model_name")
+    sheet = build_capability_sheet(cases, group_by=group_by, min_external_level=min_level)
 
     if not sheet:
-        st.info(
-            f"当前筛选下无达 {min_level} 口径的能力切片。降低口径下限或录入更多用例。"
-        )
+        st.info(f"当前筛选下无达 {min_level} 口径的能力切片。降低口径下限或录入更多用例。")
         return
 
     import pandas as pd
@@ -530,9 +511,7 @@ def _sheet_to_csv(sheet: list[dict]) -> str:
     fields += extra
     buf = io.StringIO()
     buf.write("﻿")
-    writer = csv.DictWriter(
-        buf, fieldnames=fields, lineterminator="\n", extrasaction="ignore"
-    )
+    writer = csv.DictWriter(buf, fieldnames=fields, lineterminator="\n", extrasaction="ignore")
     writer.writeheader()
     for row in sheet:
         writer.writerow({k: ("" if v is None else v) for k, v in row.items()})

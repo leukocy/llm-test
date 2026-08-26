@@ -19,9 +19,7 @@ from ui.icons import icon
 # Onboarding State Management
 # ----------------------------------------------------------------------------
 
-_ONBOARDING_FILE = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)), ".onboarding_state"
-)
+_ONBOARDING_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".onboarding_state")
 
 
 def _load_onboarding_file():
@@ -34,9 +32,15 @@ def _load_onboarding_file():
 
 
 def _save_onboarding_file(data):
-    """Save persistent onboarding state to disk."""
-    with open(_ONBOARDING_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False)
+    """Save persistent onboarding state to disk.
+
+    Persistence is best-effort: on read-only deployments the in-session
+    dismissal still applies, so a failed write must not crash the page."""
+    try:
+        with open(_ONBOARDING_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+    except OSError:
+        pass
 
 
 class OnboardingState:
@@ -386,9 +390,7 @@ def render_onboarding_guide():
 
     with st.container(border=True):
         # Header with progress
-        st.progress(
-            state.progress, text=f"Step {state.current_step + 1} / {len(state.STEPS)}"
-        )
+        st.progress(state.progress, text=f"Step {state.current_step + 1} / {len(state.STEPS)}")
 
         # Current step content
         step_name = state.current_step_name
@@ -442,12 +444,6 @@ def render_onboarding_trigger():
             st.rerun()
 
 
-
-
-
-
-
-
 # ============================================================================
 # Helper Functions
 # ============================================================================
@@ -457,9 +453,3 @@ def show_onboarding():
     """Display onboarding (if not completed)"""
     state = init_onboarding_state()
     return state.show_onboarding
-
-
-
-
-
-

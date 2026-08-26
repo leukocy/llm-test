@@ -67,6 +67,14 @@ def _render_test_summary_card(
     """
     import numpy as np
 
+    # Guard against None/NaN/negative durations from interrupted runs
+    try:
+        duration = float(duration)
+        if not np.isfinite(duration) or duration < 0:
+            duration = 0.0
+    except (TypeError, ValueError):
+        duration = 0.0
+
     with st.expander("Test Summary", expanded=True):
         # --- Row 1: Basic Info & Context ---
         info_col1, info_col2, info_col3 = st.columns(3)
@@ -97,21 +105,11 @@ def _render_test_summary_card(
             total_requests = len(df)
             error_col = df.get("error")
             successful = (
-                count_successful_requests(error_col)
-                if error_col is not None
-                else total_requests
+                count_successful_requests(error_col) if error_col is not None else total_requests
             )
-            total_input = (
-                int(df["prefill_tokens"].sum()) if "prefill_tokens" in df.columns else 0
-            )
-            total_output = (
-                int(df["decode_tokens"].sum()) if "decode_tokens" in df.columns else 0
-            )
-            df_ok = (
-                df[success_mask_from_error(df["error"])]
-                if "error" in df.columns
-                else df
-            )
+            total_input = int(df["prefill_tokens"].sum()) if "prefill_tokens" in df.columns else 0
+            total_output = int(df["decode_tokens"].sum()) if "decode_tokens" in df.columns else 0
+            df_ok = df[success_mask_from_error(df["error"])] if "error" in df.columns else df
             df_ok = sanitize_performance_metrics(df_ok)
 
             # ===== CONCURRENCY =====
@@ -129,11 +127,7 @@ def _render_test_summary_card(
                     tp_col = (
                         "system_output_throughput"
                         if "system_output_throughput" in df_ok.columns
-                        else (
-                            "system_throughput"
-                            if "system_throughput" in df_ok.columns
-                            else None
-                        )
+                        else ("system_throughput" if "system_throughput" in df_ok.columns else None)
                     )
                     if tp_col:
                         tp_by_c = df_ok.groupby("concurrency")[tp_col].max()
@@ -205,10 +199,7 @@ def _render_test_summary_card(
                     # Detect TTFT trend: check if monotonically increasing or has a dip
                     ttft_vals = [ttft_by_c[c] for c in conc_levels]
                     if len(ttft_vals) >= 3:
-                        diffs = [
-                            ttft_vals[i + 1] - ttft_vals[i]
-                            for i in range(len(ttft_vals) - 1)
-                        ]
+                        diffs = [ttft_vals[i + 1] - ttft_vals[i] for i in range(len(ttft_vals) - 1)]
                         max_jump_idx = max(range(len(diffs)), key=lambda i: diffs[i])
                         jump_from = int(conc_levels[max_jump_idx])
                         jump_to = int(conc_levels[max_jump_idx + 1])
@@ -223,15 +214,11 @@ def _render_test_summary_card(
                             else "Gradual increase"
                         )
                     else:
-                        ttft_trend = (
-                            f"↑ {ttft_ratio:.1f}x" if ttft_ratio > 1.2 else "Stable"
-                        )
+                        ttft_trend = f"↑ {ttft_ratio:.1f}x" if ttft_ratio > 1.2 else "Stable"
 
                     # Detect throughput saturation point
                     if tp_col:
-                        tp_vals = [
-                            tp_by_c[c] for c in conc_levels if c in tp_by_c.index
-                        ]
+                        tp_vals = [tp_by_c[c] for c in conc_levels if c in tp_by_c.index]
                         if len(tp_vals) >= 3:
                             # Find where throughput stops growing significantly (<5% gain)
                             saturation_c = None
@@ -244,9 +231,7 @@ def _render_test_summary_card(
                                 if gain < 0.05 and saturation_c is None:
                                     saturation_c = int(conc_levels[i])
                             saturation_label = (
-                                f"@ C{saturation_c}"
-                                if saturation_c
-                                else "Not saturated"
+                                f"@ C{saturation_c}" if saturation_c else "Not saturated"
                             )
                         else:
                             saturation_label = "Insufficient data"
@@ -300,23 +285,13 @@ def _render_test_summary_card(
                         df_ok[df_ok["input_tokens_target"] == sm],
                         df_ok[df_ok["input_tokens_target"] == lg],
                     )
-                    ps_sm = (
-                        sm_df["prefill_speed"].mean()
-                        if "prefill_speed" in sm_df.columns
-                        else 0
-                    )
-                    ps_lg = (
-                        lg_df["prefill_speed"].mean()
-                        if "prefill_speed" in lg_df.columns
-                        else 0
-                    )
+                    ps_sm = sm_df["prefill_speed"].mean() if "prefill_speed" in sm_df.columns else 0
+                    ps_lg = lg_df["prefill_speed"].mean() if "prefill_speed" in lg_df.columns else 0
                     ttft_sm = sm_df["ttft"].mean() if "ttft" in sm_df.columns else 0
                     ttft_lg = lg_df["ttft"].mean() if "ttft" in lg_df.columns else 0
                     ratio = ps_lg / ps_sm if ps_sm > 0 else 0
 
-                    st.markdown(
-                        f"##### Prefill Speed Change ({_fmt(sm)} → {_fmt(lg)} tokens)"
-                    )
+                    st.markdown(f"##### Prefill Speed Change ({_fmt(sm)} → {_fmt(lg)} tokens)")
                     m1, m2, m3, m4 = st.columns(4)
                     with m1:
                         st.metric(
@@ -327,11 +302,7 @@ def _render_test_summary_card(
                     with m2:
                         st.metric(f"Prefill @ {_fmt(sm)}t", f"{ps_sm:.0f} t/s")
                     with m3:
-                        d = (
-                            f"↓ {((1 - ratio) * 100):.0f}%"
-                            if ratio < 0.95
-                            else "Stable"
-                        )
+                        d = f"↓ {((1 - ratio) * 100):.0f}%" if ratio < 0.95 else "Stable"
                         st.metric(
                             f"Prefill @ {_fmt(lg)}t",
                             f"{ps_lg:.0f} t/s",
@@ -358,9 +329,7 @@ def _render_test_summary_card(
                         st.metric("Total Output Tokens", _fmt(total_output))
 
                     # --- Row 3: Peak & Trend Analysis ---
-                    ps_by_level = df_ok.groupby("input_tokens_target")[
-                        "prefill_speed"
-                    ].mean()
+                    ps_by_level = df_ok.groupby("input_tokens_target")["prefill_speed"].mean()
                     peak_ps_val = ps_by_level.max()
                     peak_ps_level = int(ps_by_level.idxmax())
                     ttft_by_level = df_ok.groupby("input_tokens_target")["ttft"].mean()
@@ -388,11 +357,7 @@ def _render_test_summary_card(
                             else "Gradual decline"
                         )
                     else:
-                        speed_trend = (
-                            f"↓ {((1 - ratio) * 100):.0f}%"
-                            if ratio < 0.95
-                            else "Stable"
-                        )
+                        speed_trend = f"↓ {((1 - ratio) * 100):.0f}%" if ratio < 0.95 else "Stable"
 
                     # Detect TTFT scaling pattern (linear vs super-linear)
                     if len(levels) >= 3:
@@ -461,15 +426,9 @@ def _render_test_summary_card(
                     ttft_sh = sh_df["ttft"].mean() if "ttft" in sh_df.columns else 0
                     ttft_lo2 = lo_df["ttft"].mean() if "ttft" in lo_df.columns else 0
                     growth = ttft_lo2 / ttft_sh if ttft_sh > 0 else 0
-                    ps_sh = (
-                        sh_df["prefill_speed"].mean()
-                        if "prefill_speed" in sh_df.columns
-                        else 0
-                    )
+                    ps_sh = sh_df["prefill_speed"].mean() if "prefill_speed" in sh_df.columns else 0
                     ps_lo2 = (
-                        lo_df["prefill_speed"].mean()
-                        if "prefill_speed" in lo_df.columns
-                        else 0
+                        lo_df["prefill_speed"].mean() if "prefill_speed" in lo_df.columns else 0
                     )
                     tps_sh = sh_df["tps"].mean() if "tps" in sh_df.columns else 0
                     tps_lo2 = lo_df["tps"].mean() if "tps" in lo_df.columns else 0
@@ -514,9 +473,7 @@ def _render_test_summary_card(
                         st.metric("Total Output Tokens", _fmt(total_output))
 
                     # --- Row 3: Peak & Trend Analysis ---
-                    ps_by_ctx = df_ok.groupby("context_length_target")[
-                        "prefill_speed"
-                    ].mean()
+                    ps_by_ctx = df_ok.groupby("context_length_target")["prefill_speed"].mean()
                     peak_ps_val = ps_by_ctx.max()
                     peak_ps_ctx = int(ps_by_ctx.idxmax())
                     tps_by_ctx = df_ok.groupby("context_length_target")["tps"].mean()
@@ -550,14 +507,10 @@ def _render_test_summary_card(
                     # Overall TPS stability across all levels
                     tps_vals = [tps_by_ctx[lv] for lv in levels]
                     tps_cv = (
-                        (np.std(tps_vals) / np.mean(tps_vals) * 100)
-                        if np.mean(tps_vals) > 0
-                        else 0
+                        (np.std(tps_vals) / np.mean(tps_vals) * 100) if np.mean(tps_vals) > 0 else 0
                     )
                     tps_stability = (
-                        f"Volatile {tps_cv:.0f}%"
-                        if tps_cv > 10
-                        else f"Stable (CV={tps_cv:.0f}%)"
+                        f"Volatile {tps_cv:.0f}%" if tps_cv > 10 else f"Stable (CV={tps_cv:.0f}%)"
                     )
 
                     st.markdown("---")
@@ -623,9 +576,7 @@ def _render_test_summary_card(
                         else 0
                     )
                     in_f = (
-                        int(f_df["prefill_tokens"].sum())
-                        if "prefill_tokens" in f_df.columns
-                        else 0
+                        int(f_df["prefill_tokens"].sum()) if "prefill_tokens" in f_df.columns else 0
                     )
                     r_f = (ch_f / in_f * 100) if in_f > 0 else 0
                     ch_l = (
@@ -634,21 +585,11 @@ def _render_test_summary_card(
                         else 0
                     )
                     in_l = (
-                        int(l_df["prefill_tokens"].sum())
-                        if "prefill_tokens" in l_df.columns
-                        else 0
+                        int(l_df["prefill_tokens"].sum()) if "prefill_tokens" in l_df.columns else 0
                     )
                     r_l = (ch_l / in_l * 100) if in_l > 0 else 0
-                    ps_f = (
-                        f_df["prefill_speed"].max()
-                        if "prefill_speed" in f_df.columns
-                        else 0
-                    )
-                    ps_l = (
-                        l_df["prefill_speed"].max()
-                        if "prefill_speed" in l_df.columns
-                        else 0
-                    )
+                    ps_f = f_df["prefill_speed"].max() if "prefill_speed" in f_df.columns else 0
+                    ps_l = l_df["prefill_speed"].max() if "prefill_speed" in l_df.columns else 0
 
                     st.markdown(f"##### Prefix Caching Effect ({len(levels)} segments)")
                     m1, m2, m3, m4 = st.columns(4)
@@ -666,13 +607,9 @@ def _render_test_summary_card(
                         )
                     with m3:
                         d = f"↑ {r_l - r_f:.0f}pp" if r_l > r_f + 5 else "No growth"
-                        st.metric(
-                            "Cache Rate Change", f"{r_f:.0f}% → {r_l:.0f}%", delta=d
-                        )
+                        st.metric("Cache Rate Change", f"{r_f:.0f}% → {r_l:.0f}%", delta=d)
                     with m4:
-                        st.metric(
-                            "Uncached TTFT First→Last", f"{ttft_f:.3f}s → {ttft_l:.3f}s"
-                        )
+                        st.metric("Uncached TTFT First→Last", f"{ttft_f:.3f}s → {ttft_l:.3f}s")
 
                     m5, m6, m7, m8 = st.columns(4)
                     with m5:
@@ -688,9 +625,7 @@ def _render_test_summary_card(
                     # Per-segment cache rate and uncached TTFT
                     cache_by_seg = {}
                     ttft_by_seg = df_ok.groupby("context_length_target")["ttft"].max()
-                    ps_by_seg = df_ok.groupby("context_length_target")[
-                        "prefill_speed"
-                    ].max()
+                    ps_by_seg = df_ok.groupby("context_length_target")["prefill_speed"].max()
                     for lv in levels:
                         lv_df = df_ok[df_ok["context_length_target"] == lv]
                         ch = (
@@ -778,11 +713,7 @@ def _render_test_summary_card(
                 tp_col = (
                     "system_output_throughput"
                     if "system_output_throughput" in df_ok.columns
-                    else (
-                        "system_throughput"
-                        if "system_throughput" in df_ok.columns
-                        else None
-                    )
+                    else ("system_throughput" if "system_throughput" in df_ok.columns else None)
                 )
                 conc_levels = sorted(df_ok["concurrency"].unique())
                 ctx_levels = sorted(df_ok["context_length_target"].unique())
@@ -828,9 +759,7 @@ def _render_test_summary_card(
                         st.metric("Total Output Tokens", _fmt(total_output))
 
                 ttft_all = (
-                    df_ok[df_ok["ttft"] > 0]["ttft"]
-                    if "ttft" in df_ok.columns
-                    else pd.Series()
+                    df_ok[df_ok["ttft"] > 0]["ttft"] if "ttft" in df_ok.columns else pd.Series()
                 )
                 m5, m6, m7, m8 = st.columns(4)
                 with m5:
@@ -867,9 +796,7 @@ def _render_test_summary_card(
 
             # Filter out keys that are already shown above
             skip_keys = {"Test Type", "Model ID", "Provider", "Timestamp"}
-            filtered_config = {
-                k: v for k, v in test_config.items() if k not in skip_keys
-            }
+            filtered_config = {k: v for k, v in test_config.items() if k not in skip_keys}
 
             if filtered_config:
                 config_cols = st.columns(min(len(filtered_config), 4))
@@ -931,9 +858,7 @@ def _render_generic_summary(
 
     m1, m2, m3, m4 = st_mod.columns(4)
     with m1:
-        st_mod.metric(
-            "Total Requests", f"{total_requests}", delta=f"{successful} succeeded"
-        )
+        st_mod.metric("Total Requests", f"{total_requests}", delta=f"{successful} succeeded")
     with m2:
         st_mod.metric("Request Success Rate", f"{success_rate:.1f}%")
     with m3:
@@ -1001,9 +926,7 @@ def generate_concurrency_report(
     except ValueError as e:
         message = str(e)
         if "missing 'concurrency'" in message:
-            st.error(
-                "Concurrency test report failed: missing 'concurrency' column in data."
-            )
+            st.error("Concurrency test report failed: missing 'concurrency' column in data.")
         else:
             st.warning("Concurrency test report: no valid concurrency data.")
         return ""
@@ -1034,16 +957,13 @@ def generate_concurrency_report(
 
     # Update display columns with new names
     display_columns = [COLUMN_RENAME_MAP.get(col, col) for col in display_columns]
-    display_columns = [
-        "Max_QPM (req/min)" if c == "Max_QPM" else c for c in display_columns
-    ]
+    display_columns = ["Max_QPM (req/min)" if c == "Max_QPM" else c for c in display_columns]
 
     # === Enhanced: Styled table ===
     styled_table = create_styled_summary_table(
         summary[display_columns].round(4),
         highlight_cols=[
-            COLUMN_RENAME_MAP.get(c, c)
-            for c in ["Best_TTFT", "Max_System_Output_Throughput"]
+            COLUMN_RENAME_MAP.get(c, c) for c in ["Best_TTFT", "Max_System_Output_Throughput"]
         ],
         highlight_best=True,
     )
@@ -1068,9 +988,7 @@ def generate_concurrency_report(
                 format="%d t/s",
                 min_value=0,
                 max_value=(
-                    safe_positive_max(
-                        summary["Max_System_Output_Throughput (tokens/s)"], 1.1, 100
-                    )
+                    safe_positive_max(summary["Max_System_Output_Throughput (tokens/s)"], 1.1, 100)
                     if "Max_System_Output_Throughput (tokens/s)" in summary
                     else 100
                 ),
@@ -1088,14 +1006,10 @@ def generate_concurrency_report(
             ),
         },
     )
-    report_md += (
-        safe_to_markdown(summary[display_columns].round(4), index=False) + "\n\n"
-    )
+    report_md += safe_to_markdown(summary[display_columns].round(4), index=False) + "\n\n"
 
     # === Enhanced: Performance insights ===
-    insights, severities = generate_performance_insights(
-        summary, "concurrency", model_id
-    )
+    insights, severities = generate_performance_insights(summary, "concurrency", model_id)
     if insights:
         with st.expander("Performance Insights & Analysis", expanded=True):
             grade, color, description = get_performance_grade(insights, severities)
@@ -1107,9 +1021,7 @@ def generate_concurrency_report(
             for insight in insights:
                 st.markdown(insight)
             report_md += (
-                "\n### Performance Insights\n\n"
-                + "\n".join([f"- {i}" for i in insights])
-                + "\n\n"
+                "\n### Performance Insights\n\n" + "\n".join([f"- {i}" for i in insights]) + "\n\n"
             )
 
     summary["concurrency_str"] = summary["concurrency"].astype(int).astype(str)
@@ -1121,10 +1033,7 @@ def generate_concurrency_report(
         # Generate static chart bytes
         # Check for column (renamed or original)
         tput_col = "Max_System_Output_Throughput"
-        if (
-            tput_col not in summary.columns
-            and f"{tput_col} (tokens/s)" in summary.columns
-        ):
+        if tput_col not in summary.columns and f"{tput_col} (tokens/s)" in summary.columns:
             tput_col = f"{tput_col} (tokens/s)"
 
         if tput_col in summary.columns:
@@ -1145,14 +1054,10 @@ def generate_concurrency_report(
 
     # Calculate Labels for Charts
     avg_in = (
-        int(summary["Actual_Tokens_Mean"].mean())
-        if "Actual_Tokens_Mean" in summary.columns
-        else 0
+        int(summary["Actual_Tokens_Mean"].mean()) if "Actual_Tokens_Mean" in summary.columns else 0
     )
     max_out = (
-        int(summary["Actual_Decode_Max"].max())
-        if "Actual_Decode_Max" in summary.columns
-        else 0
+        int(summary["Actual_Decode_Max"].max()) if "Actual_Decode_Max" in summary.columns else 0
     )
     io_label = f"(In: ~{avg_in}, Out: ~{max_out})"
 
@@ -1324,9 +1229,7 @@ def generate_prefill_report(
     except ValueError as e:
         message = str(e)
         if "missing 'input_tokens_target'" in message:
-            st.error(
-                "Prefill test report failed: missing 'input_tokens_target' column in data."
-            )
+            st.error("Prefill test report failed: missing 'input_tokens_target' column in data.")
         else:
             st.warning("Prefill test report: no valid Prefill data.")
         return ""
@@ -1355,9 +1258,7 @@ def generate_prefill_report(
     # === Enhanced: Styled table ===
     styled_table = create_styled_summary_table(
         summary[display_columns].round(4),
-        highlight_cols=[
-            COLUMN_RENAME_MAP.get(c, c) for c in ["Best_TTFT", "Max_Prefill_Speed"]
-        ],
+        highlight_cols=[COLUMN_RENAME_MAP.get(c, c) for c in ["Best_TTFT", "Max_Prefill_Speed"]],
         highlight_best=True,
     )
     st.dataframe(
@@ -1381,9 +1282,7 @@ def generate_prefill_report(
                 format="%d t/s",
                 min_value=0,
                 max_value=(
-                    safe_positive_max(
-                        summary["Max_Prefill_Speed (tokens/s)"], 1.1, 1000
-                    )
+                    safe_positive_max(summary["Max_Prefill_Speed (tokens/s)"], 1.1, 1000)
                     if "Max_Prefill_Speed (tokens/s)" in summary
                     else 1000
                 ),
@@ -1396,9 +1295,7 @@ def generate_prefill_report(
             ),
         },
     )
-    report_md += (
-        safe_to_markdown(summary[display_columns].round(4), index=False) + "\n\n"
-    )
+    report_md += safe_to_markdown(summary[display_columns].round(4), index=False) + "\n\n"
 
     # === Enhanced: Performance insights ===
     insights, _sev = generate_performance_insights(summary, "prefill", model_id)
@@ -1407,9 +1304,7 @@ def generate_prefill_report(
             for insight in insights:
                 st.markdown(insight)
             report_md += (
-                "\n### Performance Insights\n\n"
-                + "\n".join([f"- {i}" for i in insights])
-                + "\n\n"
+                "\n### Performance Insights\n\n" + "\n".join([f"- {i}" for i in insights]) + "\n\n"
             )
 
     hover_data_prefill = ["Actual_Tokens_Mean", "input_tokens_target"]
@@ -1421,10 +1316,7 @@ def generate_prefill_report(
         # Generate static chart bytes
         # Check for column (renamed or original)
         prefill_col = "Max_Prefill_Speed"
-        if (
-            prefill_col not in summary.columns
-            and f"{prefill_col} (tokens/s)" in summary.columns
-        ):
+        if prefill_col not in summary.columns and f"{prefill_col} (tokens/s)" in summary.columns:
             prefill_col = f"{prefill_col} (tokens/s)"
 
         if "input_tokens_target" in summary.columns and prefill_col in summary.columns:
@@ -1612,9 +1504,7 @@ def generate_long_context_report(
                 format="%d t/s",
                 min_value=0,
                 max_value=(
-                    safe_positive_max(
-                        summary["Max_System_Input_Throughput (tokens/s)"], 1.1, 100
-                    )
+                    safe_positive_max(summary["Max_System_Input_Throughput (tokens/s)"], 1.1, 100)
                     if "Max_System_Input_Throughput (tokens/s)" in summary
                     else 100
                 ),
@@ -1624,9 +1514,7 @@ def generate_long_context_report(
                 format="%d t/s",
                 min_value=0,
                 max_value=(
-                    safe_positive_max(
-                        summary["Max_System_Output_Throughput (tokens/s)"], 1.1, 100
-                    )
+                    safe_positive_max(summary["Max_System_Output_Throughput (tokens/s)"], 1.1, 100)
                     if "Max_System_Output_Throughput (tokens/s)" in summary
                     else 100
                 ),
@@ -1636,9 +1524,7 @@ def generate_long_context_report(
                 format="%d t/s",
                 min_value=0,
                 max_value=(
-                    safe_positive_max(
-                        summary["Max_System_Throughput (tokens/s)"], 1.1, 100
-                    )
+                    safe_positive_max(summary["Max_System_Throughput (tokens/s)"], 1.1, 100)
                     if "Max_System_Throughput (tokens/s)" in summary
                     else 100
                 ),
@@ -1651,9 +1537,7 @@ def generate_long_context_report(
             ),
         },
     )
-    report_md += (
-        safe_to_markdown(summary[display_columns].round(4), index=False) + "\n\n"
-    )
+    report_md += safe_to_markdown(summary[display_columns].round(4), index=False) + "\n\n"
 
     # === Enhanced: Performance insights ===
     insights, _sev = generate_performance_insights(summary, "long_context", model_id)
@@ -1662,9 +1546,7 @@ def generate_long_context_report(
             for insight in insights:
                 st.markdown(insight)
             report_md += (
-                "\n### Performance Insights\n\n"
-                + "\n".join([f"- {i}" for i in insights])
-                + "\n\n"
+                "\n### Performance Insights\n\n" + "\n".join([f"- {i}" for i in insights]) + "\n\n"
             )
 
     hover_data_ttft = ["Actual_Tokens_Mean"]
@@ -1693,9 +1575,7 @@ def generate_long_context_report(
 
     # Determine Output Metrics Label
     max_out_tokens = (
-        int(summary["Actual_Decode_Max"].max())
-        if "Actual_Decode_Max" in summary.columns
-        else 0
+        int(summary["Actual_Decode_Max"].max()) if "Actual_Decode_Max" in summary.columns else 0
     )
     out_label = f"(Output: ~{max_out_tokens})"
 
@@ -1862,10 +1742,7 @@ def generate_matrix_report(
 
     report_md += "## Detailed Results\n\n"
 
-    if (
-        "context_length_target" not in df_group.columns
-        or "concurrency" not in df_group.columns
-    ):
+    if "context_length_target" not in df_group.columns or "concurrency" not in df_group.columns:
         st.error(
             "Matrix test report failed: missing 'context_length_target' or 'concurrency' column."
         )
@@ -1917,9 +1794,7 @@ def generate_matrix_report(
     stats = fill_non_performance_na(stats)
 
     group_cols = ["context_length_target", "concurrency"]
-    summary_ttft = summarize_metric_extreme(
-        group_copy, group_cols, "ttft", "Best_TTFT", how="min"
-    )
+    summary_ttft = summarize_metric_extreme(group_copy, group_cols, "ttft", "Best_TTFT", how="min")
     summary_prefill = summarize_metric_extreme(
         group_copy, group_cols, "prefill_speed", "Max_Prefill_Speed"
     )
@@ -1972,13 +1847,9 @@ def generate_matrix_report(
         how="left",
     )
 
-    summary_tps = summarize_metric_extreme(
-        group_copy, group_cols, "tps", "Max_Single_TPS"
-    )
+    summary_tps = summarize_metric_extreme(group_copy, group_cols, "tps", "Max_Single_TPS")
 
-    summary = pd.merge(
-        stats, summary_ttft, on=["context_length_target", "concurrency"], how="left"
-    )
+    summary = pd.merge(stats, summary_ttft, on=["context_length_target", "concurrency"], how="left")
     summary = pd.merge(
         summary, summary_tpot, on=["context_length_target", "concurrency"], how="left"
     )
@@ -1998,9 +1869,7 @@ def generate_matrix_report(
         summary, summary_tps, on=["context_length_target", "concurrency"], how="left"
     )
 
-    summary["x_label"] = (summary["context_length_target"] / 1024).round(1).astype(
-        str
-    ) + "k"
+    summary["x_label"] = (summary["context_length_target"] / 1024).round(1).astype(str) + "k"
 
     summary = summary[summary["concurrency"] > 0].copy()
     summary["concurrency"] = summary["concurrency"].astype(int)
@@ -2017,9 +1886,7 @@ def generate_matrix_report(
     # Determine Output Metrics Label
     # Use max observed output tokens as the label
     max_out_tokens = (
-        int(summary["Actual_Decode_Max"].max())
-        if "Actual_Decode_Max" in summary.columns
-        else 0
+        int(summary["Actual_Decode_Max"].max()) if "Actual_Decode_Max" in summary.columns else 0
     )
     out_label = f"(Output: ~{max_out_tokens})"
 
@@ -2088,9 +1955,7 @@ def generate_matrix_report(
             for insight in insights:
                 st.markdown(insight)
             report_md += (
-                "\n### Performance Insights\n\n"
-                + "\n".join([f"- {i}" for i in insights])
-                + "\n\n"
+                "\n### Performance Insights\n\n" + "\n".join([f"- {i}" for i in insights]) + "\n\n"
             )
 
     # Previous duplicate charts and heatmap removed
@@ -2264,9 +2129,7 @@ def generate_matrix_report(
         st.plotly_chart(fig_qpm, use_container_width=True)
 
     # === Export Full Report (HTML) ===
-    figs_list = [
-        f for f in [fig1, fig_tpot, fig3, fig2, fig4, fig_qpm] if f is not None
-    ]
+    figs_list = [f for f in [fig1, fig_tpot, fig3, fig2, fig4, fig_qpm] if f is not None]
 
     from ui.export import create_html_download_link, export_interactive_html
 
@@ -2364,9 +2227,7 @@ def generate_segmented_report(
     if "effective_prefill_tokens" in group_copy.columns:
         # When effective column exists, fill missing values with tokenizer values
         prefill_col = "effective_prefill_tokens"
-        group_copy[prefill_col] = group_copy[prefill_col].fillna(
-            group_copy["prefill_tokens"]
-        )
+        group_copy[prefill_col] = group_copy[prefill_col].fillna(group_copy["prefill_tokens"])
         group_copy.loc[group_copy[prefill_col] == 0, prefill_col] = group_copy.loc[
             group_copy[prefill_col] == 0, "prefill_tokens"
         ]
@@ -2375,9 +2236,7 @@ def generate_segmented_report(
 
     if "effective_decode_tokens" in group_copy.columns:
         decode_col = "effective_decode_tokens"
-        group_copy[decode_col] = group_copy[decode_col].fillna(
-            group_copy["decode_tokens"]
-        )
+        group_copy[decode_col] = group_copy[decode_col].fillna(group_copy["decode_tokens"])
         group_copy.loc[group_copy[decode_col] == 0, decode_col] = group_copy.loc[
             group_copy[decode_col] == 0, "decode_tokens"
         ]
@@ -2416,9 +2275,7 @@ def generate_segmented_report(
     stats = group_copy.groupby("context_length_target").agg(**agg_dict).reset_index()
     stats = fill_non_performance_na(stats)
 
-    stats["x_label"] = (stats["context_length_target"] / 1024).round(1).astype(
-        str
-    ) + "k"
+    stats["x_label"] = (stats["context_length_target"] / 1024).round(1).astype(str) + "k"
     stats = stats.sort_values(by="context_length_target")
 
     # Calculate Cache Hit Rate
@@ -2583,9 +2440,7 @@ def generate_segmented_report(
             for insight in insights:
                 st.markdown(insight)
             report_md += (
-                "\n### Performance Insights\n\n"
-                + "\n".join([f"- {i}" for i in insights])
-                + "\n\n"
+                "\n### Performance Insights\n\n" + "\n".join([f"- {i}" for i in insights]) + "\n\n"
             )
 
     # === Charts ===
