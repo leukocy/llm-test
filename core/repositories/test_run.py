@@ -61,9 +61,6 @@ class TestRunRepository(BaseRepository[TestRun]):
         cursor = self.db.execute(sql, tuple(values))
         return cursor.rowcount > 0
 
-    def find_by_test_id(self, test_id: str) -> TestRun | None:
-        """based on test_id 查找"""
-        return self.find_one_by("test_id = ?", (test_id,))
 
     def find_by_status(self, status: str, limit: int = 100) -> list[TestRun]:
         """based onStatus查找"""
@@ -85,13 +82,7 @@ class TestRunRepository(BaseRepository[TestRun]):
             "created_at BETWEEN ? AND ?", (start.isoformat(), end.isoformat()), limit
         )
 
-    def find_running(self) -> list[TestRun]:
-        """查找所hasRunningTest"""
-        return self.find_by_status(TestRunStatus.RUNNING.value)
 
-    def find_paused(self) -> list[TestRun]:
-        """查找所has暂停Test"""
-        return self.find_by_status(TestRunStatus.PAUSED.value)
 
     def find_recent(self, limit: int = 20) -> list[TestRun]:
         """查找最近Test"""
@@ -223,31 +214,3 @@ class TestRunRepository(BaseRepository[TestRun]):
             limit,
         )
 
-    def get_statistics_summary(self, model_id: str | None = None) -> dict[str, Any]:
-        """
-        GetStatistics摘要
-
-        Args:
-            model_id: Model ID（optional，not指定则Statistics所has）
-
-        Returns:
-            Statistics摘要字典
-        """
-        where = "model_id = ?" if model_id else "1=1"
-        params = (model_id,) if model_id else ()
-
-        sql = f"""
-            SELECT
-                COUNT(*) as total_runs,
-                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_runs,
-                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_runs,
-                SUM(total_requests) as total_requests,
-                SUM(completed_requests) as completed_requests,
-                AVG(avg_ttft) as avg_ttft,
-                AVG(avg_tps) as avg_tps
-            FROM test_runs
-            WHERE {where}
-        """
-
-        row = self.db.fetch_one(sql, params)
-        return row if row else {}

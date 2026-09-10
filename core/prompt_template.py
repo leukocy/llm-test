@@ -47,7 +47,7 @@ try:
     JINJA2_AVAILABLE = True
 except ImportError:
     JINJA2_AVAILABLE = False
-    Environment = None  # type: ignore[assignment,misc]
+    Environment = None
 
 
 # ============================================
@@ -84,9 +84,7 @@ def create_jinja_env() -> "Environment":
     # AddCustomFilter器
     env.filters["choice_letter"] = lambda idx: chr(ord("A") + int(idx))
     env.filters["strip"] = lambda s: s.strip() if isinstance(s, str) else s
-    env.filters["escape_newlines"] = lambda s: (
-        s.replace("\n", "\\n") if isinstance(s, str) else s
-    )
+    env.filters["escape_newlines"] = lambda s: (s.replace("\n", "\\n") if isinstance(s, str) else s)
 
     return env
 
@@ -237,15 +235,6 @@ class PromptTemplate:
 # ============================================
 
 
-@dataclass
-class ChatMessage:
-    """单条聊天消息"""
-
-    role: str  # system, user, assistant
-    content: str
-
-    def to_dict(self) -> dict[str, str]:
-        return {"role": self.role, "content": self.content}
 
 
 @dataclass
@@ -358,9 +347,7 @@ class ChatTemplate:
 
         return cls(
             system_message=config.get("system_message", ""),
-            user_template=config.get(
-                "user_template", config.get("doc_to_text", "{{question}}")
-            ),
+            user_template=config.get("user_template", config.get("doc_to_text", "{{question}}")),
             assistant_template=config.get(
                 "assistant_template", config.get("doc_to_target", "{{answer}}")
             ),
@@ -518,13 +505,6 @@ class TemplateFactory:
             return ChatTemplate.from_yaml(yaml_path)
         return PromptTemplate.from_yaml(yaml_path)
 
-    @classmethod
-    def list_templates(cls) -> dict[str, list[str]]:
-        """列出所has可用模板"""
-        return {
-            "completion": list(cls.TEMPLATES.keys()),
-            "chat": list(cls.CHAT_TEMPLATES.keys()),
-        }
 
 
 # ============================================
@@ -532,28 +512,8 @@ class TemplateFactory:
 # ============================================
 
 
-def get_template(
-    name: str, format: str = "completion"
-) -> Union[PromptTemplate, ChatTemplate]:
+def get_template(name: str, format: str = "completion") -> Union[PromptTemplate, ChatTemplate]:
     """Get模板便捷函数"""
     return TemplateFactory.get(name, format)
 
 
-def render_prompt(
-    template_str: str,
-    sample: dict[str, Any],
-    few_shot_examples: list[dict[str, Any]] | None = None,
-) -> str:
-    """
-    快速Render prompt
-
-    Args:
-        template_str: Jinja2 模板字符串
-        sample: Sample count据
-        few_shot_examples: Few-shot 示例
-
-    Returns:
-        Render后 prompt
-    """
-    template = PromptTemplate(doc_to_text=template_str)
-    return template.render_full(sample, few_shot_examples)

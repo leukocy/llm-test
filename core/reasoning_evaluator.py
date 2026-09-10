@@ -7,18 +7,7 @@ including:逻辑连贯性、步骤完整性、推理相关性etc.维度。
 
 import re
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any
-
-
-class ReasoningQualityDimension(Enum):
-    """推理Quality Assessment维度"""
-
-    COHERENCE = "coherence"  # 逻辑连贯性
-    COMPLETENESS = "completeness"  # 步骤完整性
-    RELEVANCE = "relevance"  # 与问题相关性
-    CORRECTNESS = "correctness"  # Reasoning Steps正确性
-    EFFICIENCY = "efficiency"  # 推理效率（is否has冗余）
 
 
 @dataclass
@@ -531,75 +520,6 @@ class ReasoningQualityEvaluator:
                 f"AnswerError，失败原因可能is：{result.failure_analysis}"
             )
 
-    async def evaluate_with_llm(
-        self,
-        question: str,
-        reasoning: str,
-        final_answer: str,
-        correct_answer: str,
-        llm_func,
-        is_answer_correct: bool | None = None,
-    ) -> ReasoningEvaluationResult:
-        """
-        use LLM 进行深度推理Quality Assessment
-
-        Args:
-            question: 问题
-            reasoning: Reasoning process
-            final_answer: 最终Answer
-            correct_answer: Correct answer
-            llm_func: LLM 调用函数 async (prompt) -> str
-            is_answer_correct: Answeris否正确
-
-        Returns:
-            ReasoningEvaluationResult
-        """
-        # 先进行规则评估
-        result = self.evaluate(
-            question, reasoning, final_answer, correct_answer, is_answer_correct
-        )
-
-        if not reasoning or len(reasoning.strip()) < 50:
-            return result
-
-        # use LLM 深度评估
-        try:
-            llm_eval = await self._llm_evaluate_reasoning(
-                question, reasoning, final_answer, correct_answer, llm_func
-            )
-
-            # 融合规则评估and LLM 评估
-            result.quality_score.coherence = (
-                result.quality_score.coherence + llm_eval.get("coherence", 5)
-            ) / 2
-            result.quality_score.completeness = (
-                result.quality_score.completeness + llm_eval.get("completeness", 5)
-            ) / 2
-            result.quality_score.relevance = (
-                result.quality_score.relevance + llm_eval.get("relevance", 5)
-            ) / 2
-            result.quality_score.correctness = (
-                result.quality_score.correctness + llm_eval.get("correctness", 5)
-            ) / 2
-            result.quality_score.efficiency = (
-                result.quality_score.efficiency + llm_eval.get("efficiency", 5)
-            ) / 2
-
-            result.quality_score.calculate_overall()
-
-            # Add LLM 反馈
-            if llm_eval.get("feedback"):
-                result.quality_score.suggestions.append(
-                    f"[AI评价] {llm_eval['feedback']}"
-                )
-
-            result.evaluation_method = "hybrid"
-            result.evaluation_confidence = 0.85
-
-        except Exception as e:
-            result.quality_score.suggestions.append(f"LLM 评估失败: {str(e)}")
-
-        return result
 
     async def _llm_evaluate_reasoning(
         self,
@@ -656,10 +576,3 @@ Respond in JSON format:
         return {}
 
 
-# 便捷函数
-def quick_evaluate_reasoning(
-    question: str, reasoning: str, final_answer: str, correct_answer: str
-) -> ReasoningEvaluationResult:
-    """快速评估推理质量（仅规则，no LLM）"""
-    evaluator = ReasoningQualityEvaluator()
-    return evaluator.evaluate(question, reasoning, final_answer, correct_answer)

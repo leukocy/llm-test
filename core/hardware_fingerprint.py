@@ -162,9 +162,7 @@ def _lookup_gpu_bandwidth(gpu_name: str, vram_gb: float | None) -> float | None:
 def _lookup_gpu_memory_type(gpu_name: str) -> str | None:
     """按 GPU 名称子串查显存类型(HBM3e/GDDR7 等)；查不到返回 None。"""
     name = (gpu_name or "").lower()
-    for key, mem_type in sorted(
-        _GPU_MEMORY_TYPE, key=lambda kv: len(kv[0]), reverse=True
-    ):
+    for key, mem_type in sorted(_GPU_MEMORY_TYPE, key=lambda kv: len(kv[0]), reverse=True):
         if key in name:
             return mem_type
     return None
@@ -246,9 +244,7 @@ def _query_gpus() -> list[dict[str, Any]]:
                             "name": name,
                             "vram_gb": vram_gb,
                             "memory_type": _lookup_gpu_memory_type(name),
-                            "nominal_bandwidth_gbps": _lookup_gpu_bandwidth(
-                                name, vram_gb
-                            ),
+                            "nominal_bandwidth_gbps": _lookup_gpu_bandwidth(name, vram_gb),
                             "pcie_gen": None,
                             "pcie_width": None,
                         }
@@ -289,9 +285,7 @@ def _query_cuda_versions() -> dict[str, str | None]:
         pass
 
     # nvidia-smi 兜底
-    out = _run_cmd(
-        ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"]
-    )
+    out = _run_cmd(["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"])
     if out:
         result["driver"] = out.strip().splitlines()[0].strip() or None
     out = _run_cmd(["nvidia-smi"])
@@ -348,9 +342,7 @@ def _query_cpu_topology() -> dict[str, Any]:
         if info["sockets"] is None:
             info["sockets"] = 1
         if phys is not None:
-            info["cores_per_socket"] = (
-                phys // info["sockets"] if info["sockets"] else phys
-            )
+            info["cores_per_socket"] = phys // info["sockets"] if info["sockets"] else phys
         if phys and logical:
             info["threads_per_core"] = max(1, logical // phys)
 
@@ -446,15 +438,9 @@ def _query_memory_details(sudo_password: str | None = None) -> dict[str, Any]:
             populated = [
                 d
                 for d in dimms
-                if "Size:" in d
-                and "No Module" not in d
-                and "No Module Installed" not in d
+                if "Size:" in d and "No Module" not in d and "No Module Installed" not in d
             ]
-            types = {
-                t
-                for d in populated
-                if (t := _dmidecode_field(d, "Type:")) and t != "Unknown"
-            }
+            types = {t for d in populated if (t := _dmidecode_field(d, "Type:")) and t != "Unknown"}
             speeds = {_dmidecode_field(d, "Speed:") for d in populated} - {None}
             if types:
                 info["type"] = "/".join(sorted(types))
@@ -469,9 +455,7 @@ def _query_memory_details(sudo_password: str | None = None) -> dict[str, Any]:
                         info["speed_mt_s"] = mt
                         break
             if "Error Correction" in out:
-                ecc_line = next(
-                    (l for l in out.splitlines() if "Error Correction" in l), ""
-                )
+                ecc_line = next((l for l in out.splitlines() if "Error Correction" in l), "")
                 info["ecc"] = ecc_line.split(":", 1)[-1].strip() or None
 
     # 容器兜底：dmidecode 不可用（容器无 DMI 权限）→ 读宿主机预置的 hw_memory.json。
@@ -543,9 +527,7 @@ def compute_machine_id(fingerprint: dict[str, Any]) -> str:
     只纳入硬件本体属性，忽略可用内存、pstate、时间戳等易变值。
     """
     gpus = fingerprint.get("gpus") or []
-    gpu_sig = sorted(
-        f"{g.get('name')}|{g.get('vram_gb')}" for g in gpus if g.get("name")
-    )
+    gpu_sig = sorted(f"{g.get('name')}|{g.get('vram_gb')}" for g in gpus if g.get("name"))
     cpu = fingerprint.get("cpu") or {}
     mem = fingerprint.get("memory") or {}
     stable = {
@@ -556,7 +538,8 @@ def compute_machine_id(fingerprint: dict[str, Any]) -> str:
         "gpus": gpu_sig,
     }
     payload = json.dumps(stable, sort_keys=True, ensure_ascii=False, default=str)
-    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
+    # usedforsecurity=False: 非密码学用途, 仅硬件指纹(审查 #12)
+    return hashlib.sha1(payload.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
 
 
 def _query_disk_info() -> list[dict[str, Any]]:
@@ -564,9 +547,7 @@ def _query_disk_info() -> list[dict[str, Any]]:
     用 lsblk 解析;优雅降级,失败返回空列表。
     """
     disks: list[dict[str, Any]] = []
-    out = _run_cmd(
-        ["lsblk", "-d", "-b", "-o", "NAME,MODEL,SIZE,ROTA,TYPE", "--json"], timeout=8.0
-    )
+    out = _run_cmd(["lsblk", "-d", "-b", "-o", "NAME,MODEL,SIZE,ROTA,TYPE", "--json"], timeout=8.0)
     if not out:
         return disks
     import json as _json

@@ -17,7 +17,6 @@ import streamlit as st
 
 from config.session_state import set_current_test_type
 from config.test_types import normalize_test_type as normalize_test_type_id
-from ui.design_system import material_icon
 
 # ============================================================================
 # Config预设类
@@ -190,33 +189,6 @@ class TestConfigManager:
             st.error(f"Failed to delete preset: {e}")
             return False
 
-    def export_preset(self, name: str, export_path: str) -> bool:
-        """
-        ExportConfig Presets到指定路径
-
-        Args:
-            name: Preset name
-            export_path: Export路径
-
-        Returns:
-            is否Exportsucceeded
-        """
-        try:
-            preset = self.load_preset(name)
-            if not preset:
-                st.error(f"Preset not found: {name}")
-                return False
-
-            export_file = Path(export_path)
-            export_file.parent.mkdir(parents=True, exist_ok=True)
-
-            with open(export_file, "w", encoding="utf-8") as f:
-                json.dump(preset.to_dict(), f, ensure_ascii=False, indent=2)
-
-            return True
-        except Exception as e:
-            st.error(f"Failed to export preset: {e}")
-            return False
 
     def import_preset(self, import_path: str) -> ConfigPreset | None:
         """
@@ -377,131 +349,8 @@ def init_builtin_presets():
 # ============================================================================
 
 
-def render_preset_manager():
-    """Render预设管理界面"""
-    st.subheader("Test Configuration Presets")
-
-    # Get所has预设
-    all_presets = config_manager.list_presets()
-
-    # 按LabelGroup
-    tag_groups: dict[str, list[dict[str, Any]]] = {}
-    for preset in all_presets:
-        for tag in preset.get("tags", []):
-            if tag not in tag_groups:
-                tag_groups[tag] = []
-            tag_groups[tag].append(preset)
-
-    # Display预设
-    if not all_presets:
-        st.info("No saved configuration presets")
-        return
-
-    # Label页
-    tab_all, tab_by_tag = st.tabs(["All Presets", "Browse by Tag"])
-
-    with tab_all:
-        for preset in all_presets:
-            with st.expander(preset["name"], expanded=False):
-                col1, col2, col3 = st.columns(3)
-
-                with col1:
-                    st.write(preset.get("description", "No description"))
-
-                with col2:
-                    # LabelDisplay
-                    tags = preset.get("tags", [])
-                    if tags:
-                        st.markdown(" ".join([f"`{tag}`" for tag in tags]))
-
-                with col3:
-                    # 操作按钮
-                    col_load, col_del = st.columns(2)
-
-                    with col_load:
-                        if st.button(
-                            "Apply",
-                            key=f"load_{preset['name']}",
-                            icon=material_icon("check"),
-                        ):
-                            if apply_preset(preset["name"]):
-                                st.success(f"Applied preset: {preset['name']}")
-                                st.rerun()
-
-                    with col_del:
-                        if st.button(
-                            "Delete",
-                            key=f"del_{preset['name']}",
-                            help="Delete preset",
-                            icon=material_icon("delete"),
-                        ):
-                            if config_manager.delete_preset(preset["name"]):
-                                st.rerun()
-
-    with tab_by_tag:
-        for tag, presets in sorted(tag_groups.items()):
-            st.markdown(f"**`{tag}`**")
-            for preset in presets:
-                if st.button(
-                    preset["name"],
-                    key=f"tag_{tag}_{preset['name']}",
-                    use_container_width=True,
-                ):
-                    if apply_preset(preset["name"]):
-                        st.success(f"Applied preset: {preset['name']}")
-                        st.rerun()
-            st.markdown("---")
 
 
-def render_save_preset_form():
-    """RenderSave预设表单"""
-    with st.expander("Save Current Configuration as Preset", expanded=False):
-        name = st.text_input(
-            "Preset name", key="preset_name", placeholder="For example: Custom Test"
-        )
-        description = st.text_area(
-            "Description (optional)",
-            key="preset_desc",
-            placeholder="Describe when this configuration should be used.",
-        )
-        tags_input = st.text_input(
-            "Tags (optional, comma-separated)",
-            key="preset_tags",
-            placeholder="For example: quick, baseline",
-        )
-
-        col_save, col_cancel = st.columns(2)
-
-        with col_save:
-            if st.button(
-                "Save Preset",
-                type="primary",
-                use_container_width=True,
-                icon=material_icon("save"),
-            ):
-                if not name:
-                    st.error("Please enter a preset name")
-                else:
-                    # Get当前Configure
-                    current_config = get_current_config()
-
-                    # ProcessLabel
-                    tags = (
-                        [t.strip() for t in tags_input.split(",") if t.strip()]
-                        if tags_input
-                        else []
-                    )
-
-                    # Create预设
-                    preset = ConfigPreset(
-                        name=name,
-                        description=description,
-                        config=current_config,
-                        tags=tags,
-                    )
-
-                    if config_manager.save_preset(preset):
-                        st.success(f"Preset '{name}' saved")
 
 
 def apply_preset(name: str) -> bool:
@@ -624,67 +473,3 @@ def get_current_config() -> dict[str, Any]:
     }
 
 
-def render_config_import_export():
-    """RenderConfigureImport/Export界面"""
-    with st.expander("Import or Export Configuration", expanded=False):
-        col_import, col_export = st.columns(2)
-
-        with col_import:
-            st.markdown("**Import Configuration**")
-            uploaded_file = st.file_uploader(
-                "Select configuration file (JSON)",
-                type=["json"],
-                key="import_config",
-                help="Upload a previously exported configuration file",
-            )
-
-            if uploaded_file:
-                if st.button(
-                    "Import",
-                    use_container_width=True,
-                    icon=material_icon("upload_file"),
-                ):
-                    # Save临时文件
-                    temp_path = Path(f"temp_import_{uploaded_file.name}")
-                    with open(temp_path, "wb") as f:
-                        f.write(uploaded_file.getvalue())
-
-                    # Import预设
-                    preset = config_manager.import_preset(str(temp_path))
-                    if preset:
-                        st.success(f"Imported preset: {preset.name}")
-                        temp_path.unlink()
-
-        with col_export:
-            st.markdown("**Export Configuration**")
-            all_presets = config_manager.list_presets()
-            preset_names = [p["name"] for p in all_presets]
-
-            if preset_names:
-                selected_preset = st.selectbox(
-                    "Select preset to export",
-                    preset_names,
-                    key="export_preset",
-                )
-
-                if st.button(
-                    "Export",
-                    use_container_width=True,
-                    icon=material_icon("download"),
-                ):
-                    # ExportConfigure
-                    export_filename = f"{selected_preset}_config.json"
-                    preset_data = config_manager.load_preset(selected_preset)
-
-                    if preset_data:
-                        json_data = json.dumps(
-                            preset_data.to_dict(), ensure_ascii=False, indent=2
-                        )
-                        st.download_button(
-                            label="Download Configuration File",
-                            icon=material_icon("download"),
-                            data=json_data,
-                            file_name=export_filename,
-                            mime="application/json",
-                            use_container_width=True,
-                        )

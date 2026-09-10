@@ -71,9 +71,7 @@ class ResultMetadata:
         return asdict(self)
 
     @classmethod
-    def from_result(
-        cls, result: EvaluationResult, filepath: str, label: str
-    ) -> "ResultMetadata":
+    def from_result(cls, result: EvaluationResult, filepath: str, label: str) -> "ResultMetadata":
         """从 EvaluationResult Create元Data"""
         # Get性能Statistics
         perf_stats = result.performance_stats or {}
@@ -164,9 +162,7 @@ class ComparisonEntry:
         if best is None or best == 0:
             return None
         return {
-            label: (
-                ((value - best) / best * 100) if isinstance(best, (int, float)) else 0
-            )
+            label: (((value - best) / best * 100) if isinstance(best, (int, float)) else 0)
             for label, value in self.values.items()
         }
 
@@ -194,8 +190,9 @@ class ComparisonReport:
         if not self.comparison_id:
             import hashlib
 
+            # usedforsecurity=False: 非密码学用途, 仅对比 ID(审查 #12)
             self.comparison_id = hashlib.md5(
-                datetime.now().isoformat().encode()
+                datetime.now().isoformat().encode(), usedforsecurity=False
             ).hexdigest()[:12]
         if not self.created_at:
             self.created_at = datetime.now().isoformat()
@@ -547,15 +544,11 @@ class ResultComparator:
                 if isinstance(value, (int, float)):
                     if comparison.higher_is_better:
                         rank_label = (
-                            "1st"
-                            if i == 0
-                            else "2nd" if i == 1 else "3rd" if i == 2 else "   "
+                            "1st" if i == 0 else "2nd" if i == 1 else "3rd" if i == 2 else "   "
                         )
                     else:
                         rank_label = (
-                            "1st"
-                            if i == 0
-                            else "2nd" if i == 1 else "3rd" if i == 2 else "   "
+                            "1st" if i == 0 else "2nd" if i == 1 else "3rd" if i == 2 else "   "
                         )
 
                     # Format值
@@ -695,9 +688,7 @@ class ResultComparator:
             comp
             for comp in self.report.comparisons
             if comp.metric_name in metrics
-            and any(
-                isinstance(v, (int, float)) and v != 0 for v in comp.values.values()
-            )
+            and any(isinstance(v, (int, float)) and v != 0 for v in comp.values.values())
         ]
 
         if not valid_comparisons:

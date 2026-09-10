@@ -125,16 +125,16 @@ def render_page_header():
 # =====================================================================
 from ui.formatters import format_results_for_display
 
-# Test type name mapping: English → Chinese (for backward compatibility with report generators)
+# Test type name mapping: English display name → Chinese (for backward compatibility with report generators)
 _TEST_TYPE_MAP = {
-    "Concurrency Test": "并发性能Test",
-    "Prefill Stress Test": "Prefill 压力Test",
-    "Long Context Test": "长onunder文Test",
-    "Concurrency-Context Matrix Test": "并发-onunder文 综合Test",
-    "Segmented Context Test": "分段onunder文Test",
-    "Custom Text Test": "Custom文本Test",
-    "All Tests": "全部Test",
-    "Stability Test": "稳定性Test",
+    "Concurrency Test": "并发性能测试",
+    "Prefill Stress Test": "Prefill 压力测试",
+    "Long Context Test": "长上下文测试",
+    "Concurrency-Context Matrix Test": "并发-上下文 综合测试",
+    "Segmented Context Test": "分段上下文测试",
+    "Custom Text Test": "Custom文本测试",
+    "All Tests": "全部测试",
+    "Stability Test": "稳定性测试",
 }
 
 # Internal raw test_type values (stored in results_df) → UI display names
@@ -181,12 +181,15 @@ def _detect_test_type_from_df(df):
         return "Segmented Context Test"
     if "context_length_target" in cols and "concurrency" in cols:
         return "Concurrency-Context Matrix Test"
-    if "input_tokens_target" in cols:
+    # Stability must be checked before Prefill: stability CSV rows always
+    # carry "input_tokens_target" (it is in the fixed csv_columns list),
+    # which would otherwise be misdetected as a Prefill Stress Test.
+    if "timestamp" in cols and "round" not in cols and "concurrency" in cols:
+        return "Stability Test"
+    if "input_tokens_target" in cols and "concurrency" not in cols:
         return "Prefill Stress Test"
     if "context_length_target" in cols:
         return "Long Context Test"
-    if "timestamp" in cols and "round" not in cols and "concurrency" in cols:
-        return "Stability Test"
     if "concurrency" in cols:
         return "Concurrency Test"
 
@@ -199,11 +202,12 @@ def render_results_section(test_type=None):
     Args:
         test_type: Test type, used to determine column display and formatting
     """
-    if not st.session_state.results_df.empty:
+    results_df = st.session_state.get("results_df")
+    if results_df is not None and not results_df.empty:
         st.markdown("---")
         st.header("Test Results")
 
-        raw_df = st.session_state.results_df
+        raw_df = results_df
 
         # Prefer the actual test type stored in the data so column ordering
         # stays correct even when the user switches the sidebar selector.
@@ -233,11 +237,9 @@ def render_results_section(test_type=None):
         try:
             from ui.warehouse_report import render_warehouse_panel
 
-            render_warehouse_panel(
-                display_type, st.session_state.get("current_model_id", "")
-            )
-        except Exception:
-            pass
+            render_warehouse_panel(display_type, st.session_state.get("current_model_id", ""))
+        except Exception as e:
+            st.warning(f"Warehouse panel unavailable: {e}")
 
 
 def render_report_section(test_type):
@@ -247,114 +249,114 @@ def render_report_section(test_type):
     Args:
         test_type: Current test type selected in the sidebar
     """
-    if not st.session_state.results_df.empty:
-        st.markdown("---")
-        st.header("Test Report")
+    results_df = st.session_state.get("results_df")
+    if results_df is None or results_df.empty:
+        return
 
-        # Extract context. After a browser refresh, results can be restored from
-        # disk while sidebar widgets return their defaults, so prefer restored
-        # result metadata when available.
-        restored_context = (
-            st.session_state.get("restored_result_context", {})
-            if st.session_state.get("restored_from_csv")
-            else {}
-        )
-        model_id = restored_context.get("model_id") or st.session_state.get(
-            "current_model_id", "Unknown"
-        )
-        provider = restored_context.get("provider") or st.session_state.get(
-            "current_provider", "Unknown"
-        )
-        duration = restored_context.get(
-            "duration", st.session_state.get("test_duration", 0)
-        )
-        test_config = restored_context.get("test_config") or st.session_state.get(
-            "test_config", {}
-        )
-        system_info = restored_context.get("system_info") or st.session_state.get(
-            "system_info", {}
-        )
-        test_type = restored_context.get("test_type") or test_type
+    st.markdown("---")
+    st.header("Test Report")
 
-        # Infer the *actual* test type from the data itself so that switching
-        # the sidebar selector does not try to render e.g. a Prefill report
-        # using leftover Concurrency data (which causes missing-column errors).
-        inferred_type = _detect_test_type_from_df(st.session_state.results_df)
-        report_type = inferred_type or test_type
+    # Extract context. After a browser refresh, results can be restored from
+    # disk while sidebar widgets return their defaults, so prefer restored
+    # result metadata when available.
+    restored_context = (
+        st.session_state.get("restored_result_context", {})
+        if st.session_state.get("restored_from_csv")
+        else {}
+    )
+    model_id = restored_context.get("model_id") or st.session_state.get(
+        "current_model_id", "Unknown"
+    )
+    provider = restored_context.get("provider") or st.session_state.get(
+        "current_provider", "Unknown"
+    )
+    duration = restored_context.get("duration", st.session_state.get("test_duration", 0))
+    test_config = restored_context.get("test_config") or st.session_state.get("test_config", {})
+    system_info = restored_context.get("system_info") or st.session_state.get("system_info", {})
+    test_type = restored_context.get("test_type") or test_type
 
-        # Warn the user when the displayed report type differs from the
-        # currently selected sidebar option.
-        if inferred_type and inferred_type != test_type:
-            st.info(
-                f"Displaying results from previous **{inferred_type}**. "
-                f"Switch back to that test type to run a new test."
-            )
+    # Infer the *actual* test type from the data itself so that switching
+    # the sidebar selector does not try to render e.g. a Prefill report
+    # using leftover Concurrency data (which causes missing-column errors).
+    inferred_type = _detect_test_type_from_df(results_df)
+    report_type = inferred_type or test_type
 
-        # Map test type for backward compatibility
-        internal_type = _TEST_TYPE_MAP.get(report_type, report_type)
-
-        # Auto-detect test type and generate corresponding report
-        if internal_type in ("并发性能Test", "Concurrency Test"):
-            st.session_state.report = reports.generate_concurrency_report(
-                st.session_state.results_df,
-                model_id=model_id,
-                provider=provider,
-                duration=duration,
-                test_config=test_config,
-                system_info=system_info,
-            )
-        elif internal_type in ("Prefill 压力Test", "Prefill Stress Test"):
-            st.session_state.report = reports.generate_prefill_report(
-                st.session_state.results_df,
-                model_id=model_id,
-                provider=provider,
-                duration=duration,
-                test_config=test_config,
-                system_info=system_info,
-            )
-        elif internal_type in ("长onunder文Test", "Long Context Test"):
-            st.session_state.report = reports.generate_long_context_report(
-                st.session_state.results_df,
-                model_id=model_id,
-                provider=provider,
-                duration=duration,
-                test_config=test_config,
-                system_info=system_info,
-            )
-        elif internal_type in (
-            "并发-onunder文 综合Test",
-            "Concurrency-Context Matrix Test",
-        ):
-            st.session_state.report = reports.generate_matrix_report(
-                st.session_state.results_df,
-                model_id=model_id,
-                provider=provider,
-                duration=duration,
-                test_config=test_config,
-                system_info=system_info,
-            )
-        elif internal_type in ("分段onunder文Test", "Segmented Context Test"):
-            st.session_state.report = reports.generate_segmented_report(
-                st.session_state.results_df,
-                model_id=model_id,
-                provider=provider,
-                duration=duration,
-                test_config=test_config,
-                system_info=system_info,
-            )
-        else:
-            st.session_state.report = f"# Test Completed ({report_type})\n\nPlease refer to the data table above for results."
-
-        # Display report
-        st.markdown(st.session_state.report)
-
-        # Download report
-        st.download_button(
-            label="Download Report (Markdown)",
-            data=st.session_state.report,
-            file_name=f"report_{st.session_state.get('current_csv_file', 'report')}.md",
-            mime="text/markdown",
+    # Warn the user when the displayed report type differs from the
+    # currently selected sidebar option.
+    if inferred_type and inferred_type != test_type:
+        st.info(
+            f"Displaying results from previous **{inferred_type}**. "
+            f"Switch back to that test type to run a new test."
         )
+
+    # Map test type for backward compatibility
+    internal_type = _TEST_TYPE_MAP.get(report_type, report_type)
+
+    # Auto-detect test type and generate corresponding report
+    if internal_type in ("并发性能测试", "并发性能Test", "Concurrency Test"):
+        st.session_state.report = reports.generate_concurrency_report(
+            results_df,
+            model_id=model_id,
+            provider=provider,
+            duration=duration,
+            test_config=test_config,
+            system_info=system_info,
+        )
+    elif internal_type in ("Prefill 压力测试", "Prefill 压力Test", "Prefill Stress Test"):
+        st.session_state.report = reports.generate_prefill_report(
+            results_df,
+            model_id=model_id,
+            provider=provider,
+            duration=duration,
+            test_config=test_config,
+            system_info=system_info,
+        )
+    elif internal_type in ("长上下文测试", "长onunder文Test", "Long Context Test"):
+        st.session_state.report = reports.generate_long_context_report(
+            results_df,
+            model_id=model_id,
+            provider=provider,
+            duration=duration,
+            test_config=test_config,
+            system_info=system_info,
+        )
+    elif internal_type in (
+        "并发-上下文 综合测试",
+        "并发-onunder文 综合Test",
+        "Concurrency-Context Matrix Test",
+    ):
+        st.session_state.report = reports.generate_matrix_report(
+            results_df,
+            model_id=model_id,
+            provider=provider,
+            duration=duration,
+            test_config=test_config,
+            system_info=system_info,
+        )
+    elif internal_type in ("分段上下文测试", "分段onunder文Test", "Segmented Context Test"):
+        st.session_state.report = reports.generate_segmented_report(
+            results_df,
+            model_id=model_id,
+            provider=provider,
+            duration=duration,
+            test_config=test_config,
+            system_info=system_info,
+        )
+    else:
+        st.session_state.report = (
+            f"# Test Completed ({report_type})\n\nPlease refer to the data table above for results."
+        )
+
+    # Display report
+    st.markdown(st.session_state.report)
+
+    # Download report
+    st.download_button(
+        label="Download Report (Markdown)",
+        data=st.session_state.report,
+        file_name=f"report_{st.session_state.get('current_csv_file', 'report')}.md",
+        mime="text/markdown",
+    )
 
 
 def render_log_section():
@@ -371,31 +373,6 @@ def render_log_section():
 
 class PageLayout:
     """Page layout class"""
-
-    @staticmethod
-    def show_empty_state():
-        """Render empty state prompt"""
-        st.info(
-            """
-        ### Welcome to LLM Performance Benchmark Platform V2
-
-        Please configure test parameters in the left sidebar, then select a test type to begin.
-
-        **Features:**
-        - **Concurrency Test**
-        - **Prefill Stress Test**
-        - **Long Context Test**
-        - **Matrix Test**
-        - **Custom Text Test**
-        - **All Tests**
-        - **Stability Test**
-
-        **V2 New Features:**
-        - **Modular Architecture**
-        - **Cleaner Code Organization**
-        - **Better Maintainability**
-        """
-        )
 
     @staticmethod
     def render(test_type):

@@ -233,46 +233,10 @@ def get_content_field(platform: str) -> str:
     return str(features.get("content_output_field", "content"))
 
 
-def supports_thinking_budget(platform: str) -> bool:
-    """
-    Check平台is否支持 thinking_budget 参数
-
-    Args:
-        platform: 平台标识
-
-    Returns:
-        is否支持
-    """
-    features = get_platform_features(platform)
-    return bool(features.get("supports_budget", False))
 
 
-def supports_reasoning_effort(platform: str) -> bool:
-    """
-    Check平台is否支持 reasoning_effort 参数
-
-    Args:
-        platform: 平台标识
-
-    Returns:
-        is否支持
-    """
-    features = get_platform_features(platform)
-    return bool(features.get("supports_effort", False))
 
 
-def get_effort_levels(platform: str) -> list:
-    """
-    Get平台支持 effort etc.级列表
-
-    Args:
-        platform: 平台标识
-
-    Returns:
-        支持etc.级列表，如 ["low", "medium", "high"]
-    """
-    features = get_platform_features(platform)
-    return list(features.get("effort_levels", ["low", "medium", "high"]))
 
 
 def detect_platform(api_base_url: str, model_id: str = "") -> str:
@@ -449,46 +413,6 @@ def build_thinking_params(
     return params
 
 
-def get_default_thinking_config(platform: str) -> dict[str, Any]:
-    """
-    Get各平台default推理Configure
-
-    Args:
-        platform: 平台标识
-
-    Returns:
-        defaultConfigure字典
-    """
-    defaults: dict[str, dict[str, Any]] = {
-        "mimo": {"thinking": {"type": "enabled"}},  # MiMo use thinking 对象，顶级参数
-        "siliconflow": {"enable_thinking": True, "thinking_budget": 32768},  # 最大值
-        "deepseek": {
-            "thinking": {"type": "enabled"}
-        },  # DeepSeek 官方API，与 MiMo 格式相同
-        "zhipu": {"thinking": {"type": "enabled"}},  # 智谱 AI 格式
-        "volcano": {
-            # 火山引擎via extra_body 传递
-            "thinking": {"type": "enabled"},
-            "reasoning": {"effort": "high"},  # Highest档位
-        },
-        "aliyun": {
-            # 阿里云via extra_body 传递
-            "enable_thinking": True,
-            "thinking_budget": 32768,  # 最大值（范围 128-32768）
-        },
-        "minimax": {"reasoning_split": True},  # MiniMax via extra_body 传递
-        "gemini": {
-            "thinkingConfig": {"thinkingLevel": "HIGH"}
-        },  # Gemini via generationConfig 传递
-        "openrouter": {"reasoning": {"effort": "high"}},  # 与 OpenAI 相同格式
-        "openai": {
-            "reasoning": {
-                "effort": "high"
-            }  # Highest档位 (none/minimal/low/medium/high/xhigh)
-        },
-    }
-
-    return defaults.get(platform, {})
 
 
 # 支持混合推理Model列表（部分示例，实际应该更完整）

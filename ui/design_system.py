@@ -352,30 +352,13 @@ def status_badge_html(status: object) -> str:
 
     label = str(status or "Idle").strip() or "Idle"
     css_class = _STATUS_CLASSES.get(label.casefold(), "status-idle")
-    return (
-        f'<span class="status-badge {css_class}" role="status">'
-        f"{escape(label)}</span>"
-    )
+    return f'<span class="status-badge {css_class}" role="status">' f"{escape(label)}</span>"
 
 
 def apply_design_system() -> None:
     """Inject the shared dashboard CSS once per Streamlit render."""
 
     st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
-
-
-def render_sidebar_brand() -> None:
-    """Render a compact product mark at the top of the sidebar."""
-
-    st.sidebar.markdown(
-        """
-        <div class="sidebar-brand">
-            <div class="sidebar-brand-name">LLM Benchmark</div>
-            <div class="sidebar-brand-caption">Performance and quality workspace</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def render_application_header(

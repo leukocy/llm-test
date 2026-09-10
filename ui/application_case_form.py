@@ -115,9 +115,7 @@ def _render_form() -> None:
         st.markdown("**质量评分（evaluator 不产出，手动补）**")
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            success = st.selectbox(
-                "success", ["未定", "成功", "失败"], key="ac_success"
-            )
+            success = st.selectbox("success", ["未定", "成功", "失败"], key="ac_success")
         with c2:
             quality_score = st.number_input(
                 "quality_score",
@@ -200,9 +198,7 @@ def _render_form() -> None:
             evidence_path = st.text_input("evidence_path", key="ac_evidence")
         failure_reason = st.text_input("failure_reason（失败时填）", key="ac_failure")
         next_action = st.text_input("next_action", key="ac_next")
-        sales_summary = st.text_area(
-            "sales_summary（对外口径一句话）", key="ac_sales", height=68
-        )
+        sales_summary = st.text_area("sales_summary（对外口径一句话）", key="ac_sales", height=68)
 
         submitted = st.form_submit_button("保存用例")
         if submitted:
@@ -252,13 +248,9 @@ def _render_list() -> None:
     db = db_manager
     f1, f2, f3, f4 = st.columns(4)
     with f1:
-        scenario = st.selectbox(
-            "scenario", ["全部"] + _SCENARIO_OPTIONS, key="acl_scenario"
-        )
+        scenario = st.selectbox("scenario", ["全部"] + _SCENARIO_OPTIONS, key="acl_scenario")
     with f2:
-        model = st.selectbox(
-            "model", ["全部"] + distinct_values(db, "model_name"), key="acl_model"
-        )
+        model = st.selectbox("model", ["全部"] + distinct_values(db, "model_name"), key="acl_model")
     with f3:
         level = st.selectbox(
             "external_level",

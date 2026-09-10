@@ -321,9 +321,7 @@ class DatasetManager:
 
         try:
             if progress_callback:
-                progress_callback(
-                    0.1, f"currently从 HuggingFace Load {config.hf_path}..."
-                )
+                progress_callback(0.1, f"currently从 HuggingFace Load {config.hf_path}...")
 
             # LoadDataset
             # Process特殊情况
@@ -338,9 +336,7 @@ class DatasetManager:
             elif name == "aime2025" or name == "arena_hard":
                 dataset = load_dataset(config.hf_path, split="train")
             elif name == "swebench_lite":
-                dataset = load_dataset(
-                    config.hf_path, split="test", trust_remote_code=True
-                )
+                dataset = load_dataset(config.hf_path, split="test", trust_remote_code=True)
             elif name == "ceval":
                 dataset = load_dataset(config.hf_path, "all")
             elif name == "longbench":
@@ -371,9 +367,7 @@ class DatasetManager:
                 splits_saved += 1
                 if progress_callback:
                     progress = 0.5 + 0.5 * (splits_saved / total_splits)
-                    progress_callback(
-                        progress, f"Saved {split_name} ({len(samples)} 样本)"
-                    )
+                    progress_callback(progress, f"Saved {split_name} ({len(samples)} 样本)")
 
                 self._log(f"Saved {split_name}: {len(samples)} 样本")
 
@@ -497,6 +491,15 @@ class DatasetManager:
             if not url:
                 self._log(f"Dataset {name} 未配置 URL")
                 return False
+
+            # SSRF 校验(审查 #4/#12): 只允许 http(s), 拒绝 file:/ftp: 等协议
+            from urllib.parse import urlparse
+
+            parsed = urlparse(url)
+            if parsed.scheme not in ("http", "https") or not parsed.hostname:
+                self._log(f"Dataset {name} URL 非法(仅支持 http/https): {url}")
+                return False
+
             filename = url.split("/")[-1]
             download_path = local_path / filename
 
@@ -504,7 +507,7 @@ class DatasetManager:
                 progress_callback(0.1, f"Downloading {filename}...")
 
             # under载文件
-            urllib.request.urlretrieve(url, download_path)
+            urllib.request.urlretrieve(url, download_path)  # noqa: S310 - 协议已校验
 
             if progress_callback:
                 progress_callback(0.7, "currently解压...")
@@ -589,9 +592,7 @@ class DatasetManager:
                     else:
                         with open(filepath, encoding="utf-8") as f:
                             data = json.load(f)
-                            samples = (
-                                data if isinstance(data, list) else data.get("data", [])
-                            )
+                            samples = data if isinstance(data, list) else data.get("data", [])
 
                     self._log(f"从 {filepath.name} Load {len(samples)}  samples")
                     break
@@ -686,17 +687,6 @@ def get_dataset(
     return manager.load(name, split=split, max_samples=max_samples, **kwargs)
 
 
-def ensure_dataset(name: str, **kwargs) -> bool:
-    """
-    确保Dataset可用 (ifnot存in则under载)
-
-    Returns:
-        is否可用
-    """
-    manager = get_manager()
-    if manager.is_available(name):
-        return True
-    return manager.download(name, **kwargs)
 
 
 def list_available_datasets() -> list[dict[str, Any]]:

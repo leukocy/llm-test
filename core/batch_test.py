@@ -265,23 +265,6 @@ class BatchTestResult:
     # 对比Data
     comparison_data: pd.DataFrame | None = None
 
-    def get_summary_df(self) -> pd.DataFrame:
-        """Get汇总 DataFrame"""
-        data = []
-        for item_result in self.item_results:
-            data.append(
-                {
-                    "Test名称": item_result.get("name", "未知"),
-                    "Model": item_result.get("model_id", "未知"),
-                    "Status": item_result.get("status", "未知"),
-                    "Accuracy": item_result.get("accuracy", 0),
-                    "AverageLatency": item_result.get("avg_latency_ms", 0),
-                    "AverageTPS": item_result.get("avg_tps", 0),
-                    "Error": item_result.get("error", ""),
-                }
-            )
-
-        return pd.DataFrame(data)
 
     def get_comparison_df(self) -> pd.DataFrame:
         """Get对比 DataFrame"""

@@ -129,8 +129,7 @@ def _with_severities(insights):
     also satisfying callers that unpack a ``(insights, severities)`` tuple.
     """
     severities = [
-        _severity_to_str(getattr(i, "severity", None) or InsightSeverity.NEUTRAL)
-        for i in insights
+        _severity_to_str(getattr(i, "severity", None) or InsightSeverity.NEUTRAL) for i in insights
     ]
     return insights, severities
 
@@ -209,14 +208,6 @@ def _get_col(df, base_col):
     return None
 
 
-def _get_val(df, idx, base_col):
-    """Safely get value handling column names."""
-    col = _get_col(df, base_col)
-    if col:
-        return df.loc[idx, col]
-    return 0
-
-
 def _success_rate_fraction(series):
     """Normalize success-rate columns that may be fractions or percentages."""
     values = pd.to_numeric(series, errors="coerce")
@@ -242,9 +233,7 @@ def _analyze_concurrency(df, model_id):
     n_levels = len(df)
 
     # --- 1. Throughput: Peak, Absolute Level, and Scaling ---
-    tp_col = _get_col(df, "Max_System_Output_Throughput") or _get_col(
-        df, "Max_System_Throughput"
-    )
+    tp_col = _get_col(df, "Max_System_Output_Throughput") or _get_col(df, "Max_System_Throughput")
 
     if tp_col:
         peak_idx = df[tp_col].idxmax()
@@ -264,7 +253,7 @@ def _analyze_concurrency(df, model_id):
             # At single concurrency, throughput = single-stream decode speed, a model characteristic
             # Only assess as "low" when throughput doesn't scale with concurrency
             max_conc_tested = df["concurrency"].max()
-            if max_conc_tested > 1:
+            if max_conc_tested > 1 and peak_conc > 0:
                 # At higher concurrency, assess throughput per concurrency unit
                 tp_per_conc = peak_tp / peak_conc
                 if tp_per_conc < 5:
@@ -387,9 +376,7 @@ def _analyze_concurrency(df, model_id):
             sla_breach = valid_tpot[valid_tpot[tpot_p99_col] > sla_limit]
 
             if not sla_breach.empty:
-                safe_conc = valid_tpot[valid_tpot[tpot_p99_col] <= sla_limit][
-                    "concurrency"
-                ].max()
+                safe_conc = valid_tpot[valid_tpot[tpot_p99_col] <= sla_limit]["concurrency"].max()
                 if pd.isna(safe_conc):
                     insights.append(
                         _insight(
@@ -1048,12 +1035,7 @@ def get_performance_grade(insights, severities=None):
         return "B", "#6c757d", "Performance adequate"
 
     # Weighted score: positive=+2, neutral=0, warning=-1, critical=-3
-    score = (
-        positive_count * 2
-        + neutral_count * 0
-        + warning_count * (-1)
-        + critical_count * (-3)
-    )
+    score = positive_count * 2 + neutral_count * 0 + warning_count * (-1) + critical_count * (-3)
     # Normalize to a per-insight score
     avg_score = score / total_scored
 
@@ -1081,29 +1063,3 @@ def get_performance_grade(insights, severities=None):
 # ============================================
 # Export
 # ============================================
-
-
-def generate_insights_markdown(insights, model_id=""):
-    """
-    Format insights as markdown for export.
-
-    Returns:
-        Markdown formatted string
-    """
-    if not insights:
-        return "## Performance Insights\n\nNo performance insights available.\n"
-
-    grade, color, description = get_performance_grade(insights)
-
-    md = "## Performance Insights\n\n"
-    md += f"**Overall Grade**: {grade} - {description}\n\n"
-
-    if model_id:
-        md += f"**Model**: {model_id}\n\n"
-
-    md += "### Detailed Analysis\n\n"
-
-    for insight in insights:
-        md += f"- {insight}\n"
-
-    return md

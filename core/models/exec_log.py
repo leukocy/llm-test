@@ -81,9 +81,6 @@ class ExecLog:
     def warning(cls, message: str, **kwargs) -> "ExecLog":
         return cls.create(message, LogLevel.WARNING.value, **kwargs)
 
-    @classmethod
-    def error_log(cls, message: str, **kwargs) -> "ExecLog":
-        return cls.create(message, LogLevel.ERROR.value, **kwargs)
 
     @classmethod
     def critical(cls, message: str, **kwargs) -> "ExecLog":

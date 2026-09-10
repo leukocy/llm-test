@@ -53,9 +53,7 @@ def _render_compact_log(logger: BenchmarkLogger, max_display=50):
     st.markdown(log_html, unsafe_allow_html=True)
 
 
-def _render_full_log_viewer(
-    logger: BenchmarkLogger, max_display=100, enable_filter=True
-):
+def _render_full_log_viewer(logger: BenchmarkLogger, max_display=100, enable_filter=True):
     """Render full log viewer"""
     # Statistics info cards
     stats = logger.get_stats()
@@ -68,14 +66,10 @@ def _render_full_log_viewer(
         st.metric("Error", stats["errors"], delta=error_delta, delta_color="inverse")
     with col3:
         warning_delta = f"-{stats['warnings']}" if stats["warnings"] > 0 else None
-        st.metric(
-            "Warning", stats["warnings"], delta=warning_delta, delta_color="inverse"
-        )
+        st.metric("Warning", stats["warnings"], delta=warning_delta, delta_color="inverse")
     with col4:
         success_delta = f"+{stats['success']}" if stats["success"] > 0 else None
-        st.metric(
-            "Succeeded", stats["success"], delta=success_delta, delta_color="normal"
-        )
+        st.metric("Succeeded", stats["success"], delta=success_delta, delta_color="normal")
 
     # Filter controls
     filtered_entries = logger.get_recent(max_display)
@@ -132,9 +126,7 @@ def _render_full_log_viewer(
     with tab1:
         # Text view - with colors and formatting
         with st.expander("Log Content", expanded=True):
-            log_html = _render_log_text(
-                filtered_entries, compact=False, show_metrics=show_metrics
-            )
+            log_html = _render_log_text(filtered_entries, compact=False, show_metrics=show_metrics)
             st.markdown(log_html, unsafe_allow_html=True)
 
     with tab2:
@@ -174,9 +166,7 @@ def _render_log_text(entries, compact=False, show_metrics=True):
         ]
     else:
         # Full mode: with borders and background
-        html_parts = [
-            '<div style="font-family: monospace; font-size: 13px; line-height: 1.8;">'
-        ]
+        html_parts = ['<div style="font-family: monospace; font-size: 13px; line-height: 1.8;">']
 
     import html
 
@@ -187,9 +177,7 @@ def _render_log_text(entries, compact=False, show_metrics=True):
         safe_text = html.escape(text)
 
         if compact:
-            html_parts.append(
-                f'<div style="color: {color}; padding: 2px 0;">{safe_text}</div>'
-            )
+            html_parts.append(f'<div style="color: {color}; padding: 2px 0;">{safe_text}</div>')
         else:
             html_parts.append(
                 f'<div style="color: {color}; background-color: {bg_color}; '
@@ -345,43 +333,3 @@ def _render_log_analytics(logger: BenchmarkLogger, filtered_entries=None):
             if tpss:
                 st.metric("Average TPS", f"{sum(tpss)/len(tpss):.2f}")
                 st.caption(f"Range: {min(tpss):.2f} - {max(tpss):.2f}")
-
-
-def create_log_download_buttons(logger: BenchmarkLogger):
-    """Create log download buttons"""
-    st.markdown("### Export Logs")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        # JSON export
-        json_data = logger.export_json()
-        st.download_button(
-            label="Download JSON",
-            data=json_data,
-            file_name="benchmark_log.json",
-            mime="application/json",
-            help="Structured JSON format with all fields",
-        )
-
-    with col2:
-        # Text export
-        text_data = logger.export_text(include_metrics=True)
-        st.download_button(
-            label="Download TXT",
-            data=text_data,
-            file_name="benchmark_log.txt",
-            mime="text/plain",
-            help="Readable text format",
-        )
-
-    with col3:
-        # CSV export
-        csv_data = logger.export_csv()
-        st.download_button(
-            label="Download CSV",
-            data=csv_data,
-            file_name="benchmark_log.csv",
-            mime="text/csv",
-            help="CSV format, can be opened with Excel",
-        )

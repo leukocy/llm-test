@@ -21,7 +21,6 @@ EMOJI_PATTERN = re.compile(
 
 PRIMARY_SURFACES = (
     "app.py",
-    "config/auth.py",
     "ui/sidebar.py",
     "ui/test_panels.py",
     "ui/test_control_panel.py",
@@ -36,8 +35,6 @@ REPORTING_SURFACES = (
     "ui/reports.py",
     "ui/export.py",
     "ui/quality_reports.py",
-    "ui/evaluation_dashboard.py",
-    "ui/thinking_components.py",
     "ui/static_chart_generator.py",
     "ui/styled_tables.py",
 )

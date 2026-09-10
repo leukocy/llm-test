@@ -5,9 +5,7 @@ Supports export to Excel, HTML, enhanced Markdown formats, and static PNG charts
 """
 
 import base64
-from datetime import datetime
 from io import BytesIO
-from typing import Any
 
 import pandas as pd
 import streamlit as st
@@ -45,15 +43,6 @@ def export_to_excel(df_dict, filename="benchmark_results.xlsx"):
                     }
                 )
 
-                workbook.add_format(
-                    {
-                        "align": "center",
-                        "valign": "vcenter",
-                        "border": 1,
-                        "font_size": 10,
-                    }
-                )
-
                 number_format = workbook.add_format(
                     {
                         "align": "center",
@@ -85,11 +74,7 @@ def export_to_excel(df_dict, filename="benchmark_results.xlsx"):
                         # Calculate max width
                         max_len = (
                             max(
-                                (
-                                    df[col].astype(str).map(len).max()
-                                    if len(df) > 0
-                                    else 10
-                                ),
+                                (df[col].astype(str).map(len).max() if len(df) > 0 else 10),
                                 len(str(col)),
                             )
                             + 2
@@ -113,29 +98,6 @@ def export_to_excel(df_dict, filename="benchmark_results.xlsx"):
     except Exception as e:
         st.error(f"Excel Export failed: {e}")
         return None
-
-
-def create_excel_download_link(
-    df_dict, filename="benchmark_results.xlsx", link_text="Download Excel Report"
-):
-    """
-    Create Streamlit download link for Excel file.
-
-    Args:
-        df_dict: Dictionary of {sheet_name: dataframe}
-        filename: Download filename
-        link_text: Link button text
-
-    Returns:
-        HTML download link
-    """
-    excel_file = export_to_excel(df_dict, filename)
-
-    if excel_file:
-        b64 = base64.b64encode(excel_file.read()).decode()
-        href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}" class="download-btn">{link_text}</a>'
-        return href
-    return ""
 
 
 def export_interactive_html(
@@ -307,9 +269,7 @@ def export_interactive_html(
             # Use 'cdn' for the first chart to include the library, 'False' for others to reuse it
             include_js = "cdn" if i == 0 else False
             html_parts.append(
-                fig.to_html(
-                    include_plotlyjs=include_js, full_html=False, div_id=f"chart{i}"
-                )
+                fig.to_html(include_plotlyjs=include_js, full_html=False, div_id=f"chart{i}")
             )
 
     # Add tables
@@ -358,136 +318,9 @@ def create_html_download_link(
     return href
 
 
-def export_enhanced_markdown(df, insights=None, charts_description=""):
-    """
-    Export enhanced markdown with tables and insights.
-
-    Args:
-        df: Results DataFrame
-        insights: List of insights
-        charts_description: Description of charts
-
-    Returns:
-        Markdown string
-    """
-    md_parts = []
-
-    # Title
-    md_parts.append("# LLM Performance Benchmark Report\n\n")
-
-    # Insights
-    if insights:
-        md_parts.append("## Performance Insights\n\n")
-        for insight in insights:
-            md_parts.append(f"- {insight}\n")
-        md_parts.append("\n")
-
-    # Data table
-    md_parts.append("## Results Summary\n\n")
-    md_parts.append(df.to_markdown(index=False))
-    md_parts.append("\n\n")
-
-    # Charts description
-    if charts_description:
-        md_parts.append("## Charts\n\n")
-        md_parts.append(charts_description)
-        md_parts.append("\n")
-
-    # Timestamp
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    md_parts.append(f"\n---\n*Generated: {timestamp}*\n")
-
-    return "".join(md_parts)
-
-
 # =====================================================================
 # Static Chart Export (inspired by llm-performance-test.html style)
 # =====================================================================
-
-
-def export_static_performance_chart(
-    df: pd.DataFrame,
-    x_col: str,
-    y_col: str,
-    title: str,
-    x_label: str,
-    y_label: str,
-    color: str = "#4bc0c0",
-    filename: str = "performance_chart.png",
-) -> BytesIO | None:
-    """
-    Export static performance chart (PNG format)
-
-    Uses elegant line chart style with data point labels and shadow effects.
-
-    Args:
-        df: DataFrame containing the data
-        x_col: X-axis column name
-        y_col: Y-axis column name
-        title: Chart title
-        x_label: X-axis label
-        y_label: Y-axis label
-        color: Line color (Default teal)
-        filename: Output filename
-
-    Returns:
-        BytesIO object containing PNG image data
-    """
-    try:
-        from ui.static_chart_generator import StaticChartGenerator
-
-        generator = StaticChartGenerator(dpi=150)
-        x_data = df[x_col].tolist()
-        y_data = df[y_col].tolist()
-
-        fig = generator.draw_line_chart(x_data, y_data, title, x_label, y_label, color)
-        return generator.save_figure_to_bytes(fig, "png")
-
-    except Exception as e:
-        st.error(f"Static chart export failed: {e}")
-        return None
-
-
-def export_prefill_decode_report(
-    test_results: list[dict[str, Any]],
-    system_info: dict[str, str],
-    test_time: datetime | None = None,
-    filename: str = "llm_performance_chart.png",
-) -> BytesIO | None:
-    """
-    Export prefill and output speed dual-chart report (similar to llm-performance-test.html style)
-
-    Args:
-        test_results: Test results list, each item contains:
-            - input_length: Input length
-            - prefill_speed: Prefill speed (token/s)
-            - output_speed: Output speed (token/s)
-        system_info: System info dict, containing:
-            - processor: Processor
-            - mainboard: Mainboard
-            - memory: Memory
-            - gpu: GPU
-            - system: Operating System
-            - engine_name: Inference engine name
-            - model_name: Model name
-        test_time: Test time (optional, Defaults to current time)
-        filename: Output filename
-
-    Returns:
-        BytesIO object containing PNG image data
-    """
-    try:
-        from ui.static_chart_generator import StaticChartGenerator
-
-        generator = StaticChartGenerator(dpi=150)
-        fig = generator.create_performance_report_image(
-            test_results, system_info, test_time
-        )
-        return generator.save_figure_to_bytes(fig, "png")
-
-    except Exception as e:
-        st.error(f"Performance report chart export failed: {e}")
-        return None
 
 
 def create_static_chart_download_link(
@@ -523,10 +356,13 @@ def _resolve_col(df: pd.DataFrame, *candidates: str) -> str | None:
 
 
 def _safe_col_list(df: pd.DataFrame, col: str | None) -> list[float]:
-    """Safely extract column data, convert to float list"""
+    """Safely extract column data, convert to float list.
+
+    NaN/NA values become 0.0 — float(pd.NA) would raise, and matplotlib
+    chokes on raw NA sentinels."""
     if col is None or col not in df.columns:
         return []
-    return [float(v) if v is not None else 0.0 for v in df[col].tolist()]
+    return [float(v) if pd.notna(v) else 0.0 for v in df[col].tolist()]
 
 
 def export_benchmark_summary_chart(
@@ -579,14 +415,12 @@ def export_benchmark_summary_chart(
         if test_type == "concurrency":
             avg_in_col = _resolve_col(df, "Actual_Tokens_Mean", "Avg_Input_Tokens")
             max_out_col = _resolve_col(df, "Actual_Decode_Max", "Max_Output_Tokens")
-            if avg_in_col and avg_in_col in df.columns:
-                avg_in = int(df[avg_in_col].mean())
-            else:
-                avg_in = 0
-            if max_out_col and max_out_col in df.columns:
-                max_out = int(df[max_out_col].max())
-            else:
-                max_out = 0
+            avg_in_mean = df[avg_in_col].mean() if avg_in_col and avg_in_col in df.columns else None
+            max_out_max = (
+                df[max_out_col].max() if max_out_col and max_out_col in df.columns else None
+            )
+            avg_in = int(avg_in_mean) if avg_in_mean is not None and pd.notna(avg_in_mean) else 0
+            max_out = int(max_out_max) if max_out_max is not None and pd.notna(max_out_max) else 0
             if avg_in > 0 or max_out > 0:
                 io_label = f" (In: ~{avg_in}, Out: ~{max_out})"
 
@@ -603,9 +437,7 @@ def export_benchmark_summary_chart(
         if system_info:
             title = base_title + full_label
         else:
-            title = (
-                f"{base_title}{full_label}\nModel: {model_id} | Provider: {provider}"
-            )
+            title = f"{base_title}{full_label}\nModel: {model_id} | Provider: {provider}"
 
         # ---- matrix test → multi-line chart (special handling, has concurrency dimension) ----
         if test_type == "matrix":
@@ -801,9 +633,7 @@ def export_benchmark_summary_chart(
         if len(charts) == 0:
             return None
 
-        fig = generator.draw_quad_chart(
-            x_data, charts, title, x_label, system_info=system_info
-        )
+        fig = generator.draw_quad_chart(x_data, charts, title, x_label, system_info=system_info)
         return generator.save_figure_to_bytes(fig, "png")
 
     except Exception as e:

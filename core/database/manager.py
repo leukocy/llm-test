@@ -9,7 +9,7 @@ from typing import Any, cast
 
 from core.database.backup import DatabaseBackup
 from core.database.connection import Database
-from core.models import ApiLog, ApplicationCase, ExecLog, Report, TestResult, TestRun
+from core.models import ApplicationCase, ExecLog, TestResult, TestRun
 from core.repositories import (
     ApiLogRepository,
     ApplicationCaseRepository,
@@ -284,26 +284,6 @@ class DatabaseManager:
     # 便捷方法：Log
     # ============================================
 
-    def log_api_request(
-        self,
-        session_id: str,
-        test_type: str,
-        provider: str,
-        model_id: str,
-        request: dict,
-        run_id: int | None = None,
-    ) -> ApiLog:
-        """记录 API 请求"""
-        log = ApiLog.create(
-            session_id=session_id,
-            test_type=test_type,
-            provider=provider,
-            model_id=model_id,
-            request=request,
-            run_id=run_id,
-        )
-        log.id = self._api_log_repo.insert(log)
-        return log
 
     def log_execution(
         self,
@@ -328,19 +308,6 @@ class DatabaseManager:
     # 便捷方法：报告
     # ============================================
 
-    def create_report(
-        self,
-        model_id: str,
-        report_type: str = "standard",
-        run_id: int | None = None,
-        **kwargs,
-    ) -> Report:
-        """Create报告"""
-        report = Report.create(
-            model_id=model_id, report_type=report_type, run_id=run_id, **kwargs
-        )
-        report.id = self._report_repo.insert(report)
-        return report
 
     # ============================================
     # 便捷方法：Query
@@ -350,24 +317,7 @@ class DatabaseManager:
         """Get最近Test运行"""
         return self._run_repo.find_recent(limit)
 
-    def get_runs_by_model(self, model_id: str, limit: int = 50) -> list[TestRun]:
-        """Get指定ModelTest运行"""
-        return self._run_repo.find_by_model(model_id, limit)
 
-    def get_run_with_results(self, run_id: int) -> dict | None:
-        """GetTest运行and其Result"""
-        run = self._run_repo.find_by_id(run_id)
-        if not run:
-            return None
-
-        results = self._result_repo.find_by_run_id(run_id)
-        stats = self._result_repo.get_aggregate_metrics(run_id)
-
-        return {
-            "run": run,
-            "results": results,
-            "stats": stats,
-        }
 
     def search_runs(self, query: str, limit: int = 50) -> list[TestRun]:
         """搜索Test运行"""
@@ -411,9 +361,6 @@ class DatabaseManager:
             limit=limit,
         )
 
-    def update_application_case(self, case_id: str, fields: dict[str, Any]) -> bool:
-        """按 case_id 更新指定字段。"""
-        return self._case_repo.update_by(fields, "case_id = ?", (case_id,)) > 0
 
     def delete_application_case(self, case_id: str) -> bool:
         """按 case_id 删除。"""
@@ -493,20 +440,6 @@ class DatabaseManager:
     # Cleanup
     # ============================================
 
-    def cleanup_old_data(self, days: int = 30):
-        """Cleanup旧Data"""
-        api_deleted = self._api_log_repo.cleanup_old_logs(days)
-        exec_deleted = self._exec_log_repo.cleanup_old_logs(days)
-        reports_deleted = self._report_repo.delete_old_reports(days)
-
-        logger.info(
-            f"Cleanup完成: api_logs={api_deleted}, exec_logs={exec_deleted}, reports={reports_deleted}"
-        )
-        return {
-            "api_logs": api_deleted,
-            "exec_logs": exec_deleted,
-            "reports": reports_deleted,
-        }
 
     def close(self):
         """CloseDatabaseConnect"""

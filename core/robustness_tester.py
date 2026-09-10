@@ -554,13 +554,3 @@ class RobustnessTester:
         return recommendations
 
 
-def create_robustness_tester(
-    perturbation_types: list[str] | None = None,
-) -> RobustnessTester:
-    """Factory函数：CreateRobustness Tester"""
-    types = (
-        [PerturbationType(t) for t in perturbation_types]
-        if perturbation_types
-        else None
-    )
-    return RobustnessTester(perturbation_types=types)

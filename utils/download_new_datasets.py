@@ -8,6 +8,7 @@ use方法:
     python utils/download_new_datasets.py --all
 """
 
+# mypy: disable-error-code=attr-defined
 import argparse
 import json
 import os
@@ -27,7 +28,9 @@ def ensure_datasets_installed():
     if importlib.util.find_spec("datasets") is not None:
         return True
     print("正在安装 datasets 库...")
-    os.system(f"{sys.executable} -m pip install datasets -q")
+    import subprocess
+
+    subprocess.run([sys.executable, "-m", "pip", "install", "datasets", "-q"], check=False)
     if importlib.util.find_spec("datasets") is not None:
         return True
     print("datasets 库安装失败，请手动运行: pip install datasets")
@@ -83,15 +86,11 @@ def download_gpqa():
                             "Incorrect Answer 3",
                             item.get("C", item.get("choice_c", "")),
                         ),
-                        item.get(
-                            "Correct Answer", item.get("D", item.get("choice_d", ""))
-                        ),
+                        item.get("Correct Answer", item.get("D", item.get("choice_d", ""))),
                     ]
 
                 # Answer
-                ans_raw = item.get(
-                    "Correct Answer", item.get("answer", item.get("Answer", "D"))
-                )
+                ans_raw = item.get("Correct Answer", item.get("answer", item.get("Answer", "D")))
                 if isinstance(ans_raw, int):
                     answer = ans_raw
                 elif isinstance(ans_raw, str):
@@ -246,9 +245,7 @@ def download_swebench_lite():
 
         print("正在从 HuggingFace 下载...")
         try:
-            ds = load_dataset(
-                "princeton-nlp/SWE-bench_Lite", split="test", trust_remote_code=True
-            )
+            ds = load_dataset("princeton-nlp/SWE-bench_Lite", split="test", trust_remote_code=True)
 
             output_file = os.path.join(output_dir, "swe-bench-lite.jsonl")
             with open(output_file, "w", encoding="utf-8") as f:

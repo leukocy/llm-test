@@ -173,16 +173,6 @@ class DatabaseBackup:
 
         return False
 
-    def auto_backup_if_needed(self) -> Path | None:
-        """
-        ifneed则自动Backup
-
-        Returns:
-            Backup路径，未BackupReturn None
-        """
-        if self.should_backup():
-            return self.create_backup("auto")
-        return None
 
     def get_backup_summary(self) -> dict:
         """GetBackup摘要"""

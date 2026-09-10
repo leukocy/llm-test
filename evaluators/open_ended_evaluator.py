@@ -238,24 +238,3 @@ class OpenEndedEvaluator:
         return "".join(report)
 
 
-# 便捷函数
-async def evaluate_open_ended(
-    question: str, answer: str, judge_api_key: str = "", judge_model: str = "gpt-4o"
-) -> JudgeResult:
-    """
-    便捷函数：评估开放式问题回答
-
-    Args:
-        question: 问题
-        answer: 回答
-        judge_api_key: 裁判 API 密钥
-        judge_model: 裁判Model
-
-    Returns:
-        Evaluation result
-    """
-    config = EvaluationConfig(judge_model=judge_model, judge_api_key=judge_api_key)
-
-    evaluator = OpenEndedEvaluator(config)
-
-    return await evaluator.evaluate_answer(question, answer)

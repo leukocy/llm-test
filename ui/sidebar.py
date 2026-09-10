@@ -77,9 +77,7 @@ def _render_custom_params(st_module):
             )
             # value input depends on type
             if row["type"] == "boolean":
-                raw_val = cols[2].selectbox(
-                    "Value", ["false", "true"], key=f"cp_val_{idx}"
-                )
+                raw_val = cols[2].selectbox("Value", ["false", "true"], key=f"cp_val_{idx}")
             else:
                 raw_val = cols[2].text_input(
                     "Value",
@@ -104,9 +102,7 @@ def _render_custom_params(st_module):
                 if err:
                     st.error(f"{name}: {err}")
                 else:
-                    parsed.append(
-                        {"name": name, "value": value, "location": row["loc"]}
-                    )
+                    parsed.append({"name": name, "value": value, "location": row["loc"]})
 
     st.session_state.custom_params = parsed
 
@@ -137,9 +133,7 @@ def _auto_map_tokenizer(model_id: str) -> str:
     current_model_lower = model_id.lower()
 
     # Find matching HF model (longer keys first so specific matches beat generic ones)
-    for mapping_key, hf_id in sorted(
-        model_mapping.items(), key=lambda x: len(x[0]), reverse=True
-    ):
+    for mapping_key, hf_id in sorted(model_mapping.items(), key=lambda x: len(x[0]), reverse=True):
         if mapping_key.lower() in current_model_lower:
             return hf_id
 
@@ -197,15 +191,11 @@ def fetch_models(api_base, api_key):
     except requests.exceptions.HTTPError as e:
         status_code = e.response.status_code
         if status_code == 401:
-            error_info = get_error_info(
-                e, context="API Key Verification", language="en"
-            )
+            error_info = get_error_info(e, context="API Key Verification", language="en")
         elif status_code == 429:
             error_info = get_error_info(e, context="Fetching Model List", language="en")
         elif status_code >= 500:
-            error_info = get_error_info(
-                e, context=f"API URL: {api_base}", language="en"
-            )
+            error_info = get_error_info(e, context=f"API URL: {api_base}", language="en")
         else:
             error_info = get_error_info(e, language="en")
 
@@ -231,9 +221,7 @@ def _render_tokenizer_status_panel():
         for t in tokenizers:
             status = status_icon("completed" if t["available"] else "failed")
             size_str = f"{t['size_mb']:.1f} MB" if t["available"] else "—"
-            st.markdown(
-                f"{status} **{t['name']}** — {size_str}", unsafe_allow_html=True
-            )
+            st.markdown(f"{status} **{t['name']}** — {size_str}", unsafe_allow_html=True)
 
         # Download buttons for missing tokenizers
         if missing:
@@ -275,9 +263,7 @@ def _render_tokenizer_status_panel():
                         st.success(f"Downloaded {t['name']}")
                         st.rerun()
                     else:
-                        st.error(
-                            f"Failed to download {t['name']} from {t['hf_repo_id']}"
-                        )
+                        st.error(f"Failed to download {t['name']} from {t['hf_repo_id']}")
 
 
 def render_sidebar():
@@ -367,6 +353,12 @@ def render_sidebar():
         default_api_base_url = all_providers[selected_provider]
         api_base_url = st.text_input("API Base URL", default_api_base_url)
 
+        # Invalidate the fetched model list when the endpoint changes, so a
+        # stale model list from another provider is never used for new runs.
+        if st.session_state.get("_models_fetched_for") != api_base_url:
+            st.session_state.fetched_models = []
+            st.session_state._models_fetched_for = api_base_url
+
         if "Non-Compatible" in selected_provider:
             st.warning(
                 f"**Special Handling**: {selected_provider} uses non-OpenAI standard API. Dedicated adapter enabled."
@@ -389,10 +381,8 @@ def render_sidebar():
                 models = fetch_models(api_base_url, api_key)
                 if models:
                     st.session_state.fetched_models = models
-                    if (
-                        models
-                        and st.session_state.get("model_id_selector") not in models
-                    ):
+                    st.session_state._models_fetched_for = api_base_url
+                    if models and st.session_state.get("model_id_selector") not in models:
                         st.session_state.model_id_selector = models[0]
                         # Auto-map tokenizer for the first model
                         _on_model_change()
@@ -435,13 +425,22 @@ def render_sidebar():
                 t_starts = []
                 for _ in range(3):
                     t0 = time.time()
-                    fetch_models(api_base_url, api_key)
+                    fetched = fetch_models(api_base_url, api_key)
                     t_starts.append(time.time() - t0)
 
-                measured_rtt = min(t_starts)
-                st.session_state["latency_offset_input"] = measured_rtt
-                st.toast(f"Calibrated latency: {measured_rtt:.3f}s")
-                # 无需 rerun，Streamlit 自动检测 widget key 值变化
+                if not fetched:
+                    # All probes hit an unreachable/unauthorized endpoint — the
+                    # measured RTT would be meaningless and would silently skew
+                    # every TTFT, so refuse to write it.
+                    st.error(
+                        "Latency probe failed: API endpoint unreachable or "
+                        "unauthorized. Offset left unchanged."
+                    )
+                else:
+                    measured_rtt = min(t_starts)
+                    st.session_state["latency_offset_input"] = measured_rtt
+                    st.toast(f"Calibrated latency: {measured_rtt:.3f}s")
+                    # 无需 rerun，Streamlit 自动检测 widget key 值变化
 
         # Number input section
         # Ensure default value exists for the widget key
@@ -646,15 +645,24 @@ def render_sidebar():
                     default_hf_model = hf_id
                     break
 
-            # Get the index of the default model for auto-selection
+            # Get the index of the default model for auto-selection. Only seed
+            # the widget state when unset or stale — passing both `key` and
+            # `index` on every rerun would fight the user's selection and can
+            # trigger Streamlit key/index warnings once `_on_model_change` has
+            # written a value into session state.
             default_index = 0
             if default_hf_model in hf_model_presets:
                 default_index = hf_model_presets.index(default_hf_model)
 
+            if (
+                "hf_model_selector" not in st.session_state
+                or st.session_state["hf_model_selector"] not in hf_model_presets
+            ):
+                st.session_state["hf_model_selector"] = hf_model_presets[default_index]
+
             selected_hf_preset = st.selectbox(
                 "Select HuggingFace Model ID",
                 hf_model_presets,
-                index=default_index,
                 key="hf_model_selector",
                 help="Auto-recommends matching tokenizer based on current model",
             )
@@ -690,9 +698,7 @@ def render_sidebar():
                             calc_tokenizer = get_cached_tokenizer(hf_tokenizer_model_id)
 
                         if calc_tokenizer:
-                            tokens = calc_tokenizer.encode(
-                                calc_text, add_special_tokens=False
-                            )
+                            tokens = calc_tokenizer.encode(calc_text, add_special_tokens=False)
                             count = len(tokens)
                             st.info(f"Token Count: **{count}**")
                         else:
@@ -733,9 +739,7 @@ def render_sidebar():
         for spec in TEST_TYPE_SPECS
         if spec.id != "data_warehouse" and _conditional_specs.get(spec.id, True)
     ]
-    _test_types.append(
-        next(spec.id for spec in TEST_TYPE_SPECS if spec.id == "data_warehouse")
-    )
+    _test_types.append(next(spec.id for spec in TEST_TYPE_SPECS if spec.id == "data_warehouse"))
 
     forced_test_type = st.session_state.get("_force_test_type_selector")
     if forced_test_type:
@@ -802,9 +806,7 @@ def render_sidebar_bottom():
             saved_results = list_saved_results()
             if saved_results:
                 total_size_kb = sum(item.get("size_kb", 0) for item in saved_results)
-                st.caption(
-                    f"{len(saved_results)} saved result(s), {total_size_kb:.1f} KB"
-                )
+                st.caption(f"{len(saved_results)} saved result(s), {total_size_kb:.1f} KB")
 
                 def _format_saved_result(item):
                     modified = time.strftime(
@@ -815,18 +817,14 @@ def render_sidebar_bottom():
                     test_type = item.get("test_type") or "Unknown test"
                     return f"{modified} | {model} | {test_type}"
 
-                options = {
-                    _format_saved_result(item): item["path"] for item in saved_results
-                }
+                options = {_format_saved_result(item): item["path"] for item in saved_results}
                 selected_saved = st.selectbox(
                     "Select Saved Result",
                     list(options.keys()),
                     key="saved_result_select",
                 )
                 selected_item = next(
-                    item
-                    for item in saved_results
-                    if item["path"] == options[selected_saved]
+                    item for item in saved_results if item["path"] == options[selected_saved]
                 )
 
                 st.caption(
@@ -845,8 +843,8 @@ def render_sidebar_bottom():
                         if restore_result_file_to_session(
                             st.session_state, options[selected_saved]
                         ):
-                            st.session_state["_force_test_type_selector"] = (
-                                st.session_state.get("current_test_type")
+                            st.session_state["_force_test_type_selector"] = st.session_state.get(
+                                "current_test_type"
                             )
                             st.success("Loaded. Regenerating charts and conclusions...")
                             st.rerun()
@@ -865,10 +863,7 @@ def render_sidebar_bottom():
                         help="Delete the selected CSV and its metadata.",
                     ):
                         if delete_saved_result(options[selected_saved]):
-                            if (
-                                st.session_state.get("current_csv_file")
-                                == options[selected_saved]
-                            ):
+                            if st.session_state.get("current_csv_file") == options[selected_saved]:
                                 st.session_state.results_df = pd.DataFrame()
                                 st.session_state.report = ""
                                 st.session_state.restored_from_csv = False
@@ -910,9 +905,7 @@ def render_sidebar_bottom():
                     col_load, col_del = st.columns(2)
 
                     with col_load:
-                        if st.button(
-                            "Apply", key="preset_load_btn", use_container_width=True
-                        ):
+                        if st.button("Apply", key="preset_load_btn", use_container_width=True):
                             st.session_state["_pending_preset_apply"] = selected_preset
                             st.rerun()
 
@@ -950,13 +943,9 @@ def render_sidebar_bottom():
                     current_config = get_current_config()
                     current_config.update(
                         {
-                            "api_base_url": st.session_state.get(
-                                "current_api_base", ""
-                            ),
+                            "api_base_url": st.session_state.get("current_api_base", ""),
                             "model_id": st.session_state.get("current_model_id", ""),
-                            "concurrency": st.session_state.get(
-                                "current_concurrency", 1
-                            ),
+                            "concurrency": st.session_state.get("current_concurrency", 1),
                         }
                     )
 

@@ -7,6 +7,7 @@ LongBench is一 testsModel长onunder文理解能力Dataset，
 平均onunder文长度in 5K-15K tokens。
 """
 
+import ast
 import json
 import os
 import random
@@ -131,9 +132,7 @@ class LongBenchEvaluator(BaseEvaluator):
         samples = self._normalize_samples(samples)
         random.shuffle(samples)
 
-        total_needed = self.num_shots + (
-            self.max_samples if self.max_samples else len(samples)
-        )
+        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
@@ -211,9 +210,7 @@ class LongBenchEvaluator(BaseEvaluator):
             },
         ]
 
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """Format LongBench 样本"""
         context = sample.get("context", "")
 
@@ -234,9 +231,7 @@ class LongBenchEvaluator(BaseEvaluator):
         elif "code" in task:
             instruction = "Complete the following code:\n\n"
         else:
-            instruction = (
-                "Answer the following question based on the given context:\n\n"
-            )
+            instruction = "Answer the following question based on the given context:\n\n"
 
         return instruction + self.format_prompt(sample, include_answer=False)
 
@@ -252,7 +247,9 @@ class LongBenchEvaluator(BaseEvaluator):
         # correct 可能isAnswer列表字符串表示
         if isinstance(correct, str):
             try:
-                correct_list = eval(correct) if correct.startswith("[") else [correct]
+                # ast.literal_eval: 数据集字段不可执行任意代码(安全审查 #5)
+                parsed = ast.literal_eval(correct) if correct.startswith("[") else None
+                correct_list = parsed if isinstance(parsed, list) else [correct]
             except Exception:
                 correct_list = [correct]
         else:
@@ -260,9 +257,7 @@ class LongBenchEvaluator(BaseEvaluator):
 
         predicted_lower = normalize_text(predicted.lower())
 
-        return any(
-            normalize_text(ans.lower()) in predicted_lower for ans in correct_list
-        )
+        return any(normalize_text(ans.lower()) in predicted_lower for ans in correct_list)
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
         """GetCorrect answer"""

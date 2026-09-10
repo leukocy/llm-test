@@ -1,4 +1,5 @@
 import colorsys
+import math
 
 import numpy as np
 import pandas as pd
@@ -27,6 +28,8 @@ def get_smart_format_string(max_value):
 
 def smart_format_value(value, max_value=None):
     """Format a single value"""
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return "N/A"
     if max_value is None:
         max_value = abs(value) if value else 0
 
@@ -60,9 +63,7 @@ def generate_color_gradient(base_hex, n_steps):
 
     base_rgb = hex_to_rgb(base_hex)
     # Convert to HSV to manipulate saturation/value
-    h, s, v = colorsys.rgb_to_hsv(
-        base_rgb[0] / 255.0, base_rgb[1] / 255.0, base_rgb[2] / 255.0
-    )
+    h, s, v = colorsys.rgb_to_hsv(base_rgb[0] / 255.0, base_rgb[1] / 255.0, base_rgb[2] / 255.0)
 
     colors = []
     # Strategy: Vary Saturation and Value to create distinct shades.
@@ -155,144 +156,6 @@ def apply_theme(fig):
     """Apply unified theme to plotly figure."""
     fig.update_layout(**CHART_THEME)
     return fig
-
-
-def plot_plotly_bar(
-    df,
-    x,
-    y,
-    title,
-    xlabel,
-    ylabel,
-    model_id,
-    total_runs,
-    error_y_col=None,
-    show_relative=False,
-    force_linear_scale=False,
-    hover_data=None,
-    provider=None,
-):
-    try:
-        df = sanitize_performance_metrics(df, [y])
-
-        # Simplified title
-        fig_title = title
-
-        # Default color (Teal)
-        color_seq = ["#4bc0c0"]
-
-        # Create chart
-        fig = px.bar(
-            df,
-            x=x,
-            y=y,
-            text_auto=".2f",
-            title=fig_title,
-            labels={x: xlabel, y: ylabel},
-            color_discrete_sequence=color_seq,
-            error_y=error_y_col,
-            hover_data=hover_data,
-        )
-
-        # === Enhanced: Annotate Decode Tokens for TPS charts ===
-        if "TPS" in ylabel or "Throughput" in ylabel:
-            # Check if we have decode token info in hover_data
-            decode_col = None
-            if hover_data:
-                for col in hover_data:
-                    if "Decode_Tokens" in col:
-                        decode_col = col
-                        break
-
-            if decode_col and decode_col in df.columns:
-                # Create custom text with value and token count
-                custom_text = df.apply(
-                    lambda row: (
-                        f"{row[y]:.2f}<br>({int(row[decode_col])} tok)"
-                        if pd.notna(row[y])
-                        else ""
-                    ),
-                    axis=1,
-                )
-                fig.update_traces(text=custom_text, textposition="outside")
-        # =======================================================
-
-        # Add relative performance view (if enabled and y is numeric)
-        if show_relative and y in df.columns:
-            best_value = df[y].max()
-            if pd.notna(best_value) and best_value > 0:
-                df_rel = df.copy()
-                df_rel[f"{y}_relative"] = (df_rel[y] / best_value * 100).round(1)
-                df_rel[f"{y}_text"] = df_rel[f"{y}_relative"].apply(
-                    lambda x: f"{x:.1f}%" if pd.notna(x) else ""
-                )
-
-                # Use relative performance as text display
-                fig.update_traces(text=df_rel[f"{y}_text"], textposition="outside")
-
-                # Update y-axis label, add relative performance annotation
-                if "System Throughput" in ylabel or "Throughput" in ylabel:
-                    ylabel_with_rel = f"{ylabel} (max=100%)"
-                else:
-                    ylabel_with_rel = f"{ylabel} (Relative Perf)"
-
-                fig.update_layout(yaxis_title=ylabel_with_rel)
-
-        # Improved axis normalization
-        y_values = pd.to_numeric(df[y], errors="coerce").to_numpy()
-        if error_y_col:
-            err_values = (
-                pd.to_numeric(df[error_y_col], errors="coerce").fillna(0).to_numpy()
-            )
-            y_values = np.concatenate([y_values, y_values + err_values])
-        finite_y = y_values[np.isfinite(y_values)]
-        y_max = np.max(finite_y) if len(finite_y) > 0 else 1
-        y_min = np.min(finite_y) if len(finite_y) > 0 else 0
-
-        # Dynamically set y-axis range with sufficient margin
-        y_padding = (y_max - y_min) * 0.1 if y_max != y_min else y_max * 0.1
-        fig.update_yaxes(range=[max(0, y_min - y_padding), y_max + y_padding])
-
-        # Improved log scale detection logic
-        # 1. Filter out <= 0 values to avoid 0 values causing ratio calculation errors
-        positive_y = y_values[y_values > 0]
-        if len(positive_y) > 0:
-            calc_min = np.min(positive_y)
-        else:
-            calc_min = y_max  # If all zeros, do not trigger
-
-        # 2. Calculate ratio
-        ratio = y_max / calc_min if calc_min > 0 else 0
-
-        # 3. Only when ratio is extremely large (> 100,000) enable log scale
-        if not force_linear_scale and (ratio > 100000):
-            fig.update_yaxes(type="log")
-            fig.update_layout(title=title + " [Log Scale]")
-
-        # Improved layout and styles
-        fig.update_layout(
-            title_x=0,  # Left-align title
-            xaxis_title=xlabel,
-            plot_bgcolor="white",
-            paper_bgcolor="white",
-            font_color="#333",
-            xaxis={"showgrid": False},
-            yaxis={"gridcolor": "#e6e9ef", "showgrid": True},
-        )
-
-        # Distinguish confidence interval and error bar colors
-        fig.update_traces(
-            marker_color="#007bff",
-            textposition="outside",
-            error_y_color="rgba(255, 0, 0, 0.7)",  # Confidence interval in red
-            error_y_thickness=2,
-            error_y_width=3,
-        )
-
-        return fig
-    except Exception as e:
-        st.error(f"Plotly bar chart failed: {e}")
-        return None
 
 
 def plot_plotly_line(
@@ -393,17 +256,20 @@ def plot_plotly_line(
         # Improved axis normalization
         y_values = pd.to_numeric(df[y], errors="coerce").to_numpy()
         if error_y_col:
-            err_values = (
-                pd.to_numeric(df[error_y_col], errors="coerce").fillna(0).to_numpy()
-            )
+            err_values = pd.to_numeric(df[error_y_col], errors="coerce").fillna(0).to_numpy()
             y_values = np.concatenate([y_values, y_values + err_values])
         finite_y = y_values[np.isfinite(y_values)]
         y_max = np.max(finite_y) if len(finite_y) > 0 else 1
         y_min = np.min(finite_y) if len(finite_y) > 0 else 0
 
-        # Dynamically set Y-axis range
-        y_padding = (y_max - y_min) * 0.1 if y_max != y_min else y_max * 0.1
-        fig.update_yaxes(range=[max(0, y_min - y_padding), y_max + y_padding])
+        # Dynamically set Y-axis range. All-zero/all-negative data must still
+        # produce a valid (lower < upper) axis range for plotly.
+        y_padding = (y_max - y_min) * 0.1 if y_max != y_min else abs(y_max) * 0.1
+        y_lower = max(0, y_min - y_padding)
+        y_upper = y_max + y_padding
+        if y_upper <= y_lower:
+            y_upper = y_lower + max(abs(y_lower), 1.0) * 0.1 or 1.0
+        fig.update_yaxes(range=[y_lower, y_upper])
 
         # Improved log scale detection logic
         # 1. Filter out <= 0 values to avoid 0 values causing ratio calculation errors
@@ -500,175 +366,6 @@ def plot_plotly_line(
         return None
 
 
-def plot_relative_performance_bar(
-    df, x, y, title, xlabel, ylabel, model_id, total_runs
-):
-    """Dedicated bar chart for displaying relative performance comparison"""
-    try:
-        df_rel = sanitize_performance_metrics(df, [y])
-        best_value = df_rel[y].max()
-        if pd.isna(best_value) or best_value <= 0:
-            return None
-        df_rel[f"{y}_relative"] = (df_rel[y] / best_value * 100).round(1)
-        df_rel[f"{y}_absolute"] = df_rel[y]
-
-        fig = go.Figure()
-
-        # Add absolute value bars (light color)
-        fig.add_trace(
-            go.Bar(
-                x=df_rel[x],
-                y=df_rel[f"{y}_absolute"],
-                name="Absolute",
-                marker_color="rgba(0, 123, 255, 0.3)",
-                text=[f"{val:.2f}" for val in df_rel[f"{y}_absolute"]],
-                textposition="outside",
-                yaxis="y",
-            )
-        )
-
-        # Add relative performance bar chart (dark color)
-        fig.add_trace(
-            go.Bar(
-                x=df_rel[x],
-                y=df_rel[f"{y}_relative"],
-                name="Relative Perf (%)",
-                marker_color="#007bff",
-                text=[f"{val:.1f}%" for val in df_rel[f"{y}_relative"]],
-                textposition="outside",
-                yaxis="y2",
-            )
-        )
-
-        # Set dual y-axis
-        fig.update_layout(
-            title=f"{title} - Relative Performance Comparison (Model: {model_id})",
-            xaxis_title=xlabel,
-            yaxis={"title": ylabel, "side": "left", "showgrid": False},
-            yaxis2={
-                "title": "Relative Perf (%)",
-                "overlaying": "y",
-                "side": "right",
-                "range": [0, 105],
-                "ticksuffix": "%",
-            },
-            title_x=0,  # Left-align title
-            plot_bgcolor="white",
-            paper_bgcolor="white",
-            font_color="#333",
-            barmode="group",
-            showlegend=True,
-        )
-
-        return fig
-    except Exception as e:
-        st.error(f"Relative performance chart failed: {e}")
-        return None
-
-
-def plot_box_plot(df, x, y, title, xlabel, ylabel, color=None):
-    """
-    Box plot for performance distribution analysis.
-
-    Shows quartiles, outliers, and data distribution.
-    """
-    try:
-        fig = px.box(
-            df,
-            x=x,
-            y=y,
-            title=title,
-            labels={x: xlabel, y: ylabel},
-            color=color,
-            points="all",  # Show all data points
-            notched=True,  # Show confidence interval
-        )
-
-        # Apply theme
-        fig = apply_theme(fig)
-
-        # Customize box colors
-        fig.update_traces(
-            marker={"size": 4, "opacity": 0.6, "color": COLORS["primary"]},
-            line={"color": COLORS["primary"], "width": 2},
-        )
-
-        return fig
-    except Exception as e:
-        st.error(f"Box plot generation failed: {e}")
-        return None
-
-
-def plot_violin(df, x, y, title, xlabel, ylabel, color=None):
-    """
-    Violin plot combining box plot and density distribution.
-
-    Better for showing distribution shape.
-    """
-    try:
-        fig = px.violin(
-            df,
-            x=x,
-            y=y,
-            title=title,
-            labels={x: xlabel, y: ylabel},
-            color=color,
-            box=True,  # Overlay box plot
-            points="all",  # Show all points
-        )
-
-        # Apply theme
-        fig = apply_theme(fig)
-
-        # Customize violin
-        fig.update_traces(
-            meanline_visible=True,
-            marker={"size": 3, "opacity": 0.5},
-            line={"color": COLORS["primary"], "width": 2},
-        )
-
-        return fig
-    except Exception as e:
-        st.error(f"Violin plot generation failed: {e}")
-        return None
-
-
-def plot_scatter_with_trend(
-    df, x, y, title, xlabel, ylabel, size=None, color=None, trendline="ols"
-):
-    """
-    Scatter plot with regression trendline.
-
-    Args:
-        trendline: 'ols' (linear), 'lowess' (local weighted), or None
-    """
-    try:
-        fig = px.scatter(
-            df,
-            x=x,
-            y=y,
-            title=title,
-            labels={x: xlabel, y: ylabel},
-            size=size,
-            color=color,
-            trendline=trendline if trendline else None,
-            trendline_color_override=COLORS["danger"],
-        )
-
-        # Apply theme
-        fig = apply_theme(fig)
-
-        # Customize markers
-        fig.update_traces(
-            marker={"size": 10, "opacity": 0.7, "line": {"width": 1, "color": "white"}}
-        )
-
-        return fig
-    except Exception as e:
-        st.error(f"Scatter plot generation failed: {e}")
-        return None
-
-
 def plot_performance_summary(df, metrics, title="Performance Summary"):
     """
     Multi-metric performance summary chart (Radar Chart).
@@ -677,6 +374,10 @@ def plot_performance_summary(df, metrics, title="Performance Summary"):
     Metrics are normalized to 0-100 relative to the dataset max/min.
     """
     try:
+        if not metrics:
+            st.warning("No metrics provided for performance summary chart.")
+            return None
+
         # Normalize metrics to 0-100 scale
         df_norm = df.copy()
 
@@ -696,7 +397,10 @@ def plot_performance_summary(df, metrics, title="Performance Summary"):
                 min_val = df[metric].min()
                 max_val = df[metric].max()
 
-                if max_val == min_val:
+                if pd.isna(min_val) or pd.isna(max_val):
+                    # All-NaN column: nothing to normalize
+                    df_norm[f"{metric}_norm"] = 0
+                elif max_val == min_val:
                     df_norm[f"{metric}_norm"] = 100  # If all same, give full score
                 else:
                     if any(h in metric.lower() for h in higher_is_better):

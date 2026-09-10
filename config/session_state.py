@@ -268,7 +268,3 @@ def set_test_completed():
     _touch_test_running_timestamp()
 
 
-def clear_control_flags():
-    """Clear all control flags"""
-    st.session_state.stop_requested = False
-    st.session_state.pause_requested = False

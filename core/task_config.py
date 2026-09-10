@@ -150,13 +150,6 @@ class TaskConfigLoader:
         """列出所has已Load任务"""
         return list(self.configs.keys())
 
-    def list_tasks_by_tag(self, tag: str) -> list[str]:
-        """列出指定Label所has任务"""
-        return [
-            name
-            for name, config in self.configs.items()
-            if config.tag and tag in config.tag
-        ]
 
 
 class PromptRenderer:

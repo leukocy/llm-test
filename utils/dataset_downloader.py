@@ -224,22 +224,8 @@ class DatasetDownloader:
         print("=" * 60)
 
 
-def download_math500(
-    output_dir: str = "datasets/math500", max_samples: int = 500
-) -> bool:
-    """
-    专门under载 MATH-500 Dataset便捷函数
-    """
-    downloader = DatasetDownloader()
-    return downloader.download_dataset("math500", max_rows=max_samples)
 
 
-def download_gsm8k(output_dir: str = "datasets/gsm8k", max_samples: int = 1319) -> bool:
-    """
-    专门under载 GSM8K Dataset便捷函数
-    """
-    downloader = DatasetDownloader()
-    return downloader.download_dataset("gsm8k", max_rows=max_samples)
 
 
 # CLI 入口

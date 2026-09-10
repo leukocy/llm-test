@@ -226,7 +226,8 @@ def main():
         test_panels.render_test_panels(test_type, run_test)
 
         # 11. If test completed, show results
-        if not is_test_running() and not st.session_state.results_df.empty:
+        results_df = st.session_state.get("results_df")
+        if not is_test_running() and results_df is not None and not results_df.empty:
             from ui.page_layout import PageLayout
 
             PageLayout.render(test_type)

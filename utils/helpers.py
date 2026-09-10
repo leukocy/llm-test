@@ -1,4 +1,3 @@
-import base64
 import csv
 
 import pandas as pd
@@ -25,22 +24,8 @@ def append_to_csv(result_dict, columns, filename):
         logger.error(f"写入 CSV 失败: {e}")
 
 
-def get_table_download_link(df, filename, text):
-    csv_data = df.to_csv(index=False)
-    b64 = base64.b64encode(csv_data.encode()).decode()
-    return f'<a href="data:file/csv;base64,{b64}" download="{filename}">{text}</a>'
 
 
-def get_log_download_link(log_list, filename, text):
-    """Generates a download link for a list of log strings."""
-    try:
-        # 移除 Markdown 粗体标记，保留纯文本
-        log_text = "\n".join(line.replace("**", "") for line in log_list)
-        b64 = base64.b64encode(log_text.encode()).decode()
-        return f'<a href="data:file/text;base64,{b64}" download="{filename}">{text}</a>'
-    except Exception as e:
-        logger.error(f"GenerateLog 下载链接失败: {e}")
-        return ""
 
 
 def reorder_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:

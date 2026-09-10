@@ -19,7 +19,6 @@ Data来源: HuggingFace lmarena-ai/arena-hard-auto
 import json
 import os
 import random
-import re
 from typing import Any
 
 from .base_evaluator import BaseEvaluator
@@ -271,23 +270,7 @@ Then provide a brief explanation of your rating."""
         # ifhas响应内容，就算has效
         return bool(predicted and len(predicted.strip()) > 20)
 
-    def build_judge_prompt(self, question: str, answer: str) -> str:
-        """Build judge 评估 prompt"""
-        return self.judge_prompt_template.format(question=question, answer=answer)
 
-    def parse_judge_score(self, judge_response: str) -> float | None:
-        """从 judge 响应in提取Score"""
-        # 匹配 Rating: [[X]] 格式
-        match = re.search(r"Rating:\s*\[\[(\d+(?:\.\d+)?)\]\]", judge_response)
-        if match:
-            return float(match.group(1))
-
-        # 回退：匹配任意数字Score
-        match = re.search(r"(\d+(?:\.\d+)?)\s*/?\s*10", judge_response)
-        if match:
-            return float(match.group(1))
-
-        return None
 
     def get_sample_category(self, sample: dict[str, Any]) -> str:
         """Get样本类别"""

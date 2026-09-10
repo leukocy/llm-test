@@ -337,9 +337,6 @@ class BaseEvaluator(ABC):
         """Return the current prompt template."""
         return self._prompt_template
 
-    def set_template(self, template):
-        """Set a custom prompt template."""
-        self._prompt_template = template
 
     @abstractmethod
     def load_dataset(self, subset: str | None = None) -> list[dict[str, Any]]:

@@ -24,9 +24,9 @@ class RealtimeDashboard:
         self.max_points = max_points
 
         # Time series data
-        self.timestamps = deque(maxlen=max_points)
-        self.ttft_values = deque(maxlen=max_points)
-        self.tps_values = deque(maxlen=max_points)
+        self.timestamps: deque[float] = deque(maxlen=max_points)
+        self.ttft_values: deque[float] = deque(maxlen=max_points)
+        self.tps_values: deque[float] = deque(maxlen=max_points)
 
         # Counters
         self.active_requests = 0
@@ -35,11 +35,11 @@ class RealtimeDashboard:
         self.total_requests = 0
 
         # Request states tracking
-        self.request_states = {}  # {request_id: status}
+        self.request_states: dict[int, str] = {}  # {request_id: status}
 
         # Performance aggregates
-        self.ttft_sum = 0
-        self.tps_sum = 0
+        self.ttft_sum = 0.0
+        self.tps_sum = 0.0
         self.valid_count = 0
 
     def update(
@@ -72,6 +72,7 @@ class RealtimeDashboard:
             self.valid_count += 1
 
         # Update counters
+        self.total_requests += 1
         if status == "success":
             self.completed_requests += 1
         elif status == "failed":
@@ -79,9 +80,7 @@ class RealtimeDashboard:
 
         # Update request state if session_id provided
         if session_id is not None:
-            self.request_states[session_id] = (
-                "completed" if status == "success" else "failed"
-            )
+            self.request_states[session_id] = "completed" if status == "success" else "failed"
 
     def update_request_state(self, session_id: int, state: str):
         """
@@ -116,8 +115,7 @@ class RealtimeDashboard:
             "avg_ttft": avg_ttft,
             "avg_tps": avg_tps,
             "success_rate": (
-                self.completed_requests
-                / max(1, self.completed_requests + self.failed_requests)
+                self.completed_requests / max(1, self.completed_requests + self.failed_requests)
             )
             * 100,
         }

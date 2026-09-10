@@ -66,9 +66,7 @@ def _is_active_test_handle(handle: _TestRunHandle, session_state=None) -> bool:
         return False
 
 
-def _finish_worker_handle(
-    handle: _TestRunHandle, runner_instance, session_state=None
-) -> None:
+def _finish_worker_handle(handle: _TestRunHandle, runner_instance, session_state=None) -> None:
     """Release the worker-only runner reference and always signal completion.
 
     The active handle remains installed until the fragment consumes the final
@@ -614,7 +612,9 @@ class TestExecutor:
             sniffio.current_async_library_cvar.reset(token)
 
             try:
-                pending = asyncio.all_tasks(loop)
+                pending = [
+                    t for t in asyncio.all_tasks(loop) if t is not main_task and not t.done()
+                ]
                 for t in pending:
                     try:
                         t.cancel()
