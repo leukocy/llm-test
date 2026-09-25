@@ -11,6 +11,7 @@ Provides the Streamlit sidebar configuration interface, including:
 """
 
 import time
+from typing import Any, Callable
 
 import pandas as pd
 import streamlit as st
@@ -234,11 +235,11 @@ def _render_tokenizer_status_panel():
                 type="primary",
             ):
                 progress = st.progress(0)
-                status = st.empty()
+                download_status = st.empty()
                 total = len(missing)
                 ok = 0
                 for i, t in enumerate(missing):
-                    status.info(
+                    download_status.info(
                         f"Downloading {t['name']} from {t['hf_repo_id']}... ({i+1}/{total})"
                     )
                     local = ensure_tokenizer_available(t["local_path"])
@@ -477,7 +478,7 @@ def render_sidebar():
         st.checkbox(
             "Skip First Token for TPS",
             key="skip_first_token_for_tps",
-            help="For PD-separated providers: treat the 2nd token as generation start for TPS/TPOT, so decode speed is measured accurately. TTFT is unaffected.",
+            help="Start TPS/TPOT timing at the second output chunk only when chunk count matches output token count. This is an estimate because stream chunks may contain multiple tokens. TTFT is unaffected.",
         )
 
         # Composable prompt-suffix builder: type (multi) x difficulty (single) x output-instruction (multi)
@@ -1024,17 +1025,15 @@ def render_sidebar_bottom():
         render_test_metadata_panel,
     )
 
-    for _fn, _arg in (
-        (render_model_spec_panel, st.session_state.get("model_id_selector", "")),
-        (render_serving_config_panel, None),
-        (render_test_metadata_panel, None),
-        (render_engine_runtime_panel, st.session_state.get("api_base_url_input", "")),
-    ):
+    panel_calls: list[tuple[Callable[..., Any], tuple[Any, ...]]] = [
+        (render_model_spec_panel, (st.session_state.get("model_id_selector", ""),)),
+        (render_serving_config_panel, ()),
+        (render_test_metadata_panel, ()),
+        (render_engine_runtime_panel, (st.session_state.get("api_base_url_input", ""),)),
+    ]
+    for _fn, _args in panel_calls:
         try:
-            if _arg is not None:
-                _fn(_arg)
-            else:
-                _fn()
+            _fn(*_args)
         except Exception as _e:  # noqa: BLE001
             _wh_log.warning(
                 f"仓库面板 {getattr(_fn, '__name__', _fn)} 渲染失败: {_e}",

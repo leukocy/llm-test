@@ -311,7 +311,7 @@ class DatasetManager:
     ) -> bool:
         """从 HuggingFace under载Dataset"""
         try:
-            from datasets import load_dataset  # type: ignore[attr-defined]
+            from datasets import load_dataset
         except ImportError:
             self._log("请安装 datasets: pip install datasets")
             return False
@@ -400,7 +400,7 @@ class DatasetManager:
     ) -> bool:
         """Download LongBench dataset with all sub-tasks."""
         try:
-            from datasets import load_dataset  # type: ignore[attr-defined]
+            from datasets import load_dataset
         except ImportError:
             self._log("请安装 datasets: pip install datasets")
             return False
@@ -685,8 +685,6 @@ def get_dataset(
     """
     manager = get_manager()
     return manager.load(name, split=split, max_samples=max_samples, **kwargs)
-
-
 
 
 def list_available_datasets() -> list[dict[str, Any]]:

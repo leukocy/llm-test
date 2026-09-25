@@ -130,11 +130,11 @@ def _load_snapshot(
     if not fallback_to_latest_csv:
         return {}
 
-    csv_path = _newest_csv(base_dir)
-    if not csv_path:
+    latest_csv_path = _newest_csv(base_dir)
+    if not latest_csv_path:
         return {}
 
-    return _snapshot_for_csv(csv_path, base_dir)
+    return _snapshot_for_csv(latest_csv_path, base_dir)
 
 
 def _restore_snapshot_to_session(

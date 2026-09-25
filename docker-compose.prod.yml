@@ -11,34 +11,29 @@ services:
     image: llm-benchmark:latest
     container_name: llm-benchmark
 
-    command: >
-      streamlit run app.py
-      --server.port=8501
-      --server.address=0.0.0.0
-      --browser.gatherUsageStats=false
+    command:
+    - --server.port=8501
+    - --server.address=0.0.0.0
+    - --browser.gatherUsageStats=false
 
     ports:
-    - ${PORT:-8501}:8501
+    - ${BIND_HOST:-127.0.0.1}:${PORT:-8501}:8501
 
     environment:
     - TZ=Asia/Shanghai
     - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
     - MODELSCOPE_CACHE=/app/cache/modelscope
+    - LLM_TEST_SANDBOX_URL=http://sandbox-worker:8765
+    - LLM_TEST_SANDBOX_TOKEN=${LLM_TEST_SANDBOX_TOKEN:-}
+    - LLM_TEST_TRUSTED_API_HOSTS=${LLM_TEST_TRUSTED_API_HOSTS:-}
+    - LLM_TEST_ALLOW_PRIVATE_ENDPOINTS=${LLM_TEST_ALLOW_PRIVATE_ENDPOINTS:-0}
 
     deploy:
       resources:
         limits:
           memory: 16G
-        reservations:
-          devices:
-          - driver: nvidia
-            count: all
-            capabilities: [gpu]
 
     volumes:
-      # Docker socket + CLI:让容器内 engine_capture 能 docker inspect/logs 引擎容器
-    - /var/run/docker.sock:/var/run/docker.sock
-    - /usr/bin/docker:/usr/bin/docker:ro
       # 运行时持久化（自动创建，无需预置文件）
     - ./data:/app/data
     - ./cache:/app/cache
@@ -61,3 +56,32 @@ services:
         max-file: '3'
 
     restart: unless-stopped
+    networks:
+    - default
+    - sandbox-private
+
+  sandbox-worker:
+    profiles: [code-eval]
+    image: llm-benchmark-sandbox-worker:latest
+    environment:
+    - LLM_TEST_SANDBOX_TOKEN=${LLM_TEST_SANDBOX_TOKEN:-}
+    - LLM_TEST_SANDBOX_IMAGE=${LLM_TEST_SANDBOX_IMAGE:-python:3.12-slim}
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    - /usr/bin/docker:/usr/bin/docker:ro
+    user: 65534:65534
+    group_add:
+    - ${DOCKER_GID:-999}
+    read_only: true
+    tmpfs:
+    - /tmp:rw,nosuid,nodev,noexec,size=16m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 256m
+    networks: [sandbox-private]
+    restart: unless-stopped
+
+networks:
+  sandbox-private:
+    internal: true

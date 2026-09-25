@@ -1,62 +1,32 @@
-"""
-Safe code execution utilities for evaluating code and expressions.
+"""Math expression validation and client for the isolated code execution worker.
 
-Security model (进程隔离, CWE-250/400 防护):
-- LLM 生成的被测代码在**独立子进程**中执行, 与主进程(持有 API key、
-  数据库、docker socket 访问)完全隔离 —— 解释器内逃逸只能打到子进程自身。
-- 真实超时: 主进程 kill 子进程, while True / fork 类失控代码不再挂死评测线程。
-- 资源限制: Linux 下通过 preexec_fn 施加 CPU 秒数与地址空间上限,
-  抑制内存炸弹与 fork 炸弹。
-- 执行结果仅经 stdout/stderr/exit code 回传, 无对象引用泄漏。
-
-历史版本曾用「AST/正则黑名单 + exec」在同一解释器内执行, 已被证实可
-通过运行时字符串拼接绕过 dunder 黑名单(docs/security_audit_2026-08.md #1)。
+Generated code is never executed in the application process or a child that shares
+its filesystem and credentials. A separately deployed worker runs each submission
+inside a restricted container. An unavailable worker is an infrastructure error.
 """
 
 import ast
 import math
 import os
 import re
-import subprocess
-import sys
+from urllib.parse import urlparse
 
-# 子进程单次执行的默认资源上限
+import httpx
+
 DEFAULT_TIMEOUT_SECONDS = 10.0
 DEFAULT_MEM_LIMIT_MB = 1024
-# 子进程输出上限, 防止 print 炸弹撑爆管道
 _MAX_OUTPUT_BYTES = 1_000_000
-
-_CHILD_TEMPLATE = """\
-import sys
-
-# 允许被测代码定义函数/类所需的最小 builtins 集(仅作用于子进程;
-# 真正的隔离是进程边界本身, 不依赖这份名单的完备性)
-_safe = ("print range len str int float bool list dict tuple set sum min max abs "
-         "round sorted enumerate zip map filter any all isinstance type reversed "
-         "object super staticmethod classmethod property ValueError TypeError "
-         "ZeroDivisionError IndexError KeyError AssertionError StopIteration "
-         "Exception RuntimeError ArithmeticError OverflowError").split()
-_real = {}
-for _name in _safe:
-    try:
-        import builtins as _b
-        _real[_name] = getattr(_b, _name)
-    except AttributeError:
-        pass
-
-_globals = {"__builtins__": _real, "__name__": "__main__"}
-
-try:
-    exec(compile(sys.stdin.read(), "<submission>", "exec"), _globals)
-except BaseException as e:
-    sys.stderr.write(f"{type(e).__name__}: {e}\\n")
-    sys.exit(1)
-sys.exit(0)
-"""
+_SAFE_MATH_ATTRIBUTES = {"sqrt", "sin", "cos", "tan", "log", "log10", "exp", "pi", "e"}
 
 
 class SafeExecutionError(Exception):
     """Raised when safe execution fails."""
+
+    pass
+
+
+class SandboxUnavailableError(SafeExecutionError):
+    """The isolated code execution service is missing or unhealthy."""
 
     pass
 
@@ -75,6 +45,8 @@ def validate_math_expression(expr: str) -> bool:
         return False
 
     expr = expr.strip()
+    if len(expr) > 256:
+        return False
 
     # Check for suspicious patterns
     dangerous_patterns = [
@@ -99,23 +71,47 @@ def validate_math_expression(expr: str) -> bool:
     # Try to parse as AST to ensure it's a valid expression
     try:
         tree = ast.parse(expr, mode="eval")
+        nodes = list(ast.walk(tree))
+        if len(nodes) > 128:
+            return False
+        power_count = 0
         # Walk the AST to check for dangerous constructs
-        for node in ast.walk(tree):
+        for node in nodes:
+            if isinstance(node, ast.Constant):
+                if (
+                    isinstance(node.value, bool)
+                    or not isinstance(node.value, (int, float))
+                    or abs(node.value) > 10**18
+                ):
+                    return False
+            elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+                power_count += 1
+                if (
+                    power_count > 2
+                    or not isinstance(node.right, ast.Constant)
+                    or not isinstance(node.right.value, int)
+                    or not 0 <= node.right.value <= 64
+                ):
+                    return False
             # Check for attribute access (could be used to access dangerous modules)
             if isinstance(node, ast.Attribute):
                 # Only allow math module attributes
-                if isinstance(node.value, ast.Name) and node.value.id == "math":
+                if (
+                    isinstance(node.value, ast.Name)
+                    and node.value.id == "math"
+                    and node.attr in _SAFE_MATH_ATTRIBUTES
+                ):
                     continue
-                # Other attribute access is not allowed
-                if not (isinstance(node.value, ast.Name) and node.value.id == "math"):
-                    return False
+                return False
             # Check for function calls
             elif isinstance(node, ast.Call):
-                # Only allow math function calls
-                if isinstance(node.func, ast.Attribute):
-                    if isinstance(node.func.value, ast.Name) and node.func.value.id == "math":
-                        continue
-                return False
+                if not (
+                    isinstance(node.func, ast.Attribute)
+                    and node.func.attr in _SAFE_MATH_ATTRIBUTES - {"pi", "e"}
+                    and len(node.args) == 1
+                    and not node.keywords
+                ):
+                    return False
             # Check for imports
             elif isinstance(node, (ast.Import, ast.ImportFrom)):
                 return False
@@ -180,23 +176,46 @@ def safe_eval_math(expr: str) -> float | None:
         raise SafeExecutionError(f"Unexpected error evaluating expression: {e}") from e
 
 
-def _child_preexec(timeout_seconds: float, mem_limit_mb: int):  # noqa: ANN202
-    """子进程资源限制(Linux): CPU 秒数 + 地址空间上限。失败则中止启动。"""
+def _worker_settings() -> tuple[str, str]:
+    url = os.environ.get("LLM_TEST_SANDBOX_URL", "").rstrip("/")
+    token = os.environ.get("LLM_TEST_SANDBOX_TOKEN", "")
+    if not url or not token:
+        raise SandboxUnavailableError(
+            "Sandbox unavailable: set LLM_TEST_SANDBOX_URL and LLM_TEST_SANDBOX_TOKEN "
+            "before evaluating generated code."
+        )
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username:
+        raise SandboxUnavailableError("Sandbox unavailable: worker URL must use HTTP(S).")
+    if len(token) < 32:
+        raise SandboxUnavailableError("Sandbox unavailable: worker token is too short.")
+    return url, token
 
-    def apply() -> None:  # pragma: no cover - 在子进程中运行
-        import resource
 
-        cpu = max(1, int(timeout_seconds)) + 5
-        resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
-        mem_bytes = max(64, mem_limit_mb) * 1024 * 1024
-        resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
-        # 收窄 fd 上限(硬上限不可低于当前 soft, 否则 EPERM)
-        cur_soft, cur_hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-        cap = min(cur_soft, 256)
-        resource.setrlimit(resource.RLIMIT_NOFILE, (cap, max(cur_hard, cap)))
-        os.umask(0o077)
+def _worker_request(method: str, url: str, token: str, timeout: float, **kwargs):
+    # Worker traffic must stay on the private network even if HTTP_PROXY is set.
+    with httpx.Client(timeout=timeout, follow_redirects=False, trust_env=False) as client:
+        return client.request(method, url, headers={"Authorization": f"Bearer {token}"}, **kwargs)
 
-    return apply
+
+def require_sandbox_available() -> None:
+    """Check the worker before model requests are sent for code benchmarks."""
+    url, token = _worker_settings()
+    try:
+        response = _worker_request("GET", f"{url}/health", token, 3.0)
+        payload = response.json() if response.status_code == 200 else None
+        if (
+            response.status_code != 200
+            or not isinstance(payload, dict)
+            or payload.get("status") != "ok"
+        ):
+            raise SandboxUnavailableError(
+                f"Sandbox unavailable: worker health check returned HTTP {response.status_code}."
+            )
+    except (httpx.HTTPError, ValueError) as exc:
+        raise SandboxUnavailableError(
+            f"Sandbox unavailable: worker health check failed: {exc}"
+        ) from exc
 
 
 def run_untrusted_code(
@@ -204,51 +223,51 @@ def run_untrusted_code(
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     mem_limit_mb: int = DEFAULT_MEM_LIMIT_MB,
 ) -> tuple[bool, str | None, str | None]:
-    """
-    在隔离子进程中执行不可信代码。
-
-    Args:
-        full_code: 待执行代码(如 HumanEval 提交 + 测试断言)
-        timeout_seconds: 墙钟超时, 到点强杀子进程(真实生效)
-        mem_limit_mb: 子进程地址空间上限(MB)
-
-    Returns:
-        Tuple of (success: bool, error_message: Optional[str], output: Optional[str])
-    """
+    """Execute untrusted code only through the isolated worker."""
+    url, token = _worker_settings()
+    if not full_code or not isinstance(full_code, str):
+        return False, "No code provided", None
+    if len(full_code.encode("utf-8")) > 256_000:
+        return False, "Submission exceeds the 256 KB code limit", None
     try:
-        proc = subprocess.run(
-            [sys.executable, "-I", "-c", _CHILD_TEMPLATE],
-            input=full_code,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-            preexec_fn=(
-                _child_preexec(timeout_seconds, mem_limit_mb) if os.name == "posix" else None
-            ),
+        response = _worker_request(
+            "POST",
+            f"{url}/execute",
+            token,
+            max(1.0, timeout_seconds) + 15.0,
+            json={
+                "code": full_code,
+                "timeout_seconds": timeout_seconds,
+                "mem_limit_mb": mem_limit_mb,
+            },
         )
-    except subprocess.TimeoutExpired:
+        if response.status_code != 200:
+            raise SandboxUnavailableError(
+                f"Sandbox unavailable: worker returned HTTP {response.status_code}."
+            )
+        result = response.json()
+        if not isinstance(result, dict) or not isinstance(result.get("success"), bool):
+            raise ValueError("missing success status")
+        error = result.get("error")
+        output = result.get("output")
+        if error is not None and not isinstance(error, str):
+            raise ValueError("invalid error field")
+        if output is not None and not isinstance(output, str):
+            raise ValueError("invalid output field")
         return (
-            False,
-            f"TimeoutError: execution exceeded {timeout_seconds}s",
-            None,
+            result["success"],
+            error[:2000] if error else None,
+            output[:_MAX_OUTPUT_BYTES] if output else None,
         )
-    except OSError as e:
-        return False, f"ExecutionError: failed to spawn sandbox process: {e}", None
-
-    output = (proc.stdout or "")[:_MAX_OUTPUT_BYTES] or None
-    if proc.returncode != 0:
-        err = (proc.stderr or "").strip()
-        # 压缩 traceback 噪音, 只保留最后一行错误摘要
-        tail = err.splitlines()[-1] if err else f"exit code {proc.returncode}"
-        return False, tail[:2000], output
-    return True, None, output
+    except (httpx.HTTPError, ValueError) as exc:
+        raise SandboxUnavailableError(f"Sandbox unavailable: worker request failed: {exc}") from exc
 
 
 def safe_exec_code(
     code: str, test_code: str | None = None, timeout_seconds: int = 5
 ) -> tuple[bool, str | None, str | None]:
     """
-    Safely execute code in an isolated child process with a real timeout.
+    Execute code in the isolated worker with a real timeout.
 
     Args:
         code: The code to execute (LLM-generated submission)
@@ -266,5 +285,3 @@ def safe_exec_code(
 
     full_code = code if not test_code else code + "\n" + test_code
     return run_untrusted_code(full_code, timeout_seconds=float(timeout_seconds))
-
-

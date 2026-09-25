@@ -4,6 +4,8 @@ Quality Assessment引擎 - 管理Dataset评估核心模块
 """
 
 import asyncio
+import hashlib
+import json
 import os
 import time
 from collections.abc import Callable
@@ -15,8 +17,27 @@ import pandas as pd
 from core.cancel_state import is_stop_requested
 from core.failure_analyzer import analyze_failures
 from core.providers.factory import get_provider
-from evaluators.base_evaluator import BaseEvaluator, EvaluationResult, SampleResult
+from core.safe_executor import SandboxUnavailableError, require_sandbox_available
+from evaluators.base_evaluator import (
+    BaseEvaluator,
+    DatasetUnavailableError,
+    EvaluationResult,
+    ProviderRequestError,
+    SampleResult,
+)
 from utils.logger import LogLevel
+
+
+def fingerprint_samples(samples: list[dict[str, Any]]) -> str:
+    """Hash the exact ordered samples that will be sent to a model."""
+    digest = hashlib.sha256()
+    for sample in samples:
+        encoded = json.dumps(
+            sample, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+        digest.update(len(encoded).to_bytes(8, "big"))
+        digest.update(encoded)
+    return digest.hexdigest()
 
 
 def _build_case_from_sample(
@@ -52,9 +73,7 @@ def _build_case_from_sample(
         success=bool(sample.is_correct) if sample.is_correct is not None else None,
         ttft_s=(sample.ttft_ms / 1000.0) if sample.ttft_ms else None,
         prefill_latency_s=(sample.ttft_ms / 1000.0) if sample.ttft_ms else None,
-        total_latency_s=(
-            (sample.total_time_ms / 1000.0) if sample.total_time_ms else None
-        ),
+        total_latency_s=((sample.total_time_ms / 1000.0) if sample.total_time_ms else None),
         decode_tps=sample.tps or None,
         input_tokens=sample.input_tokens or None,
         output_tokens=sample.output_tokens or None,
@@ -68,10 +87,7 @@ def _build_case_from_sample(
         external_level="internal",
         extra={
             "engine_version": engine_version or "",
-            "reasoning_quality_overall": getattr(
-                sample, "reasoning_quality_overall", None
-            )
-            or None,
+            "reasoning_quality_overall": getattr(sample, "reasoning_quality_overall", None) or None,
             "failure_category": getattr(sample, "failure_category", "") or "",
             "evaluation_method": getattr(sample, "evaluation_method", "") or "",
             "category": getattr(sample, "category", "") or "",
@@ -263,14 +279,10 @@ class QualityEvaluator:
                     return
 
             # 3. 最终失败
-            self._log(
-                f"no法Load tokenizer: {model_id}，willuse字符估算", LogLevel.WARNING
-            )
+            self._log(f"no法Load tokenizer: {model_id}，willuse字符估算", LogLevel.WARNING)
 
         except Exception as e:
-            self._log(
-                f"Initialize tokenizer 失败: {e}，willuse字符估算", LogLevel.WARNING
-            )
+            self._log(f"Initialize tokenizer 失败: {e}，willuse字符估算", LogLevel.WARNING)
             self.tokenizer = None
 
     def count_tokens(self, text: str) -> int:
@@ -308,9 +320,7 @@ class QualityEvaluator:
                 "total_entries": cache_stats.total_entries,
                 "total_bytes": cache_stats.total_bytes,
                 "total_bytes_mb": (
-                    cache_stats.total_bytes / (1024 * 1024)
-                    if cache_stats.total_bytes
-                    else 0
+                    cache_stats.total_bytes / (1024 * 1024) if cache_stats.total_bytes else 0
                 ),
             }
         except Exception:
@@ -368,9 +378,7 @@ class QualityEvaluator:
                     "content": cached_response,
                     "error": None,
                     "input_tokens": self.count_tokens(cache_key) if cache_key else 0,
-                    "output_tokens": (
-                        self.count_tokens(cached_response) if cached_response else 0
-                    ),
+                    "output_tokens": (self.count_tokens(cached_response) if cached_response else 0),
                     "ttft_ms": 0,
                     "tps": 0,
                     "total_time_ms": 0,
@@ -429,9 +437,7 @@ class QualityEvaluator:
 
                 # Calculate TPS
                 tps = 0
-                decode_time_ms = (
-                    total_time_ms - ttft_ms if ttft_ms > 0 else total_time_ms
-                )
+                decode_time_ms = total_time_ms - ttft_ms if ttft_ms > 0 else total_time_ms
                 if decode_time_ms > 0 and output_tokens > 0:
                     tps = output_tokens / (decode_time_ms / 1000)
 
@@ -494,10 +500,7 @@ class QualityEvaluator:
             "from_cache": False,
         }
 
-
-    def register_evaluator(
-        self, dataset_name: str, evaluator_class: type[BaseEvaluator]
-    ):
+    def register_evaluator(self, dataset_name: str, evaluator_class: type[BaseEvaluator]):
         """RegisterEvaluator类"""
         self.EVALUATOR_CLASSES[dataset_name] = evaluator_class
 
@@ -526,9 +529,7 @@ class QualityEvaluator:
             actual_dataset_name = "custom_needle"
 
         if actual_dataset_name not in self.EVALUATOR_CLASSES:
-            self._log(
-                f"Not foundDataset '{actual_dataset_name}' Evaluator", LogLevel.WARNING
-            )
+            self._log(f"Not foundDataset '{actual_dataset_name}' Evaluator", LogLevel.WARNING)
             return None
 
         dataset_path = self.DATASET_PATHS.get(
@@ -585,21 +586,27 @@ class QualityEvaluator:
         Returns:
             Evaluation result
         """
-        self._log(
-            f"开始评估Dataset: {dataset_name}"
-            + (f" (子集: {subset})" if subset else "")
-        )
+        self._log(f"开始评估Dataset: {dataset_name}" + (f" (子集: {subset})" if subset else ""))
 
         evaluator = self.get_evaluator(dataset_name, config)
         if not evaluator:
-            return None
+            raise DatasetUnavailableError(f"No evaluator is registered for '{dataset_name}'.")
 
         try:
             # LoadDataset
+            evaluator.dataset_source = "configured_dataset"
             samples = evaluator.load_dataset(subset=subset)
             if not samples:
-                self._log(f"Dataset '{dataset_name}' Load failedoris空", LogLevel.ERROR)
-                return None
+                raise DatasetUnavailableError(
+                    f"Dataset '{dataset_name}' has no usable samples"
+                    + (f" for subset '{subset}'" if subset else "")
+                    + "."
+                )
+
+            sample_hash = fingerprint_samples(samples)
+
+            if getattr(evaluator, "requires_code_execution", False):
+                require_sandbox_available()
 
             self._log(f"已Load {len(samples)}  samples")
 
@@ -642,7 +649,7 @@ class QualityEvaluator:
                     raise asyncio.CancelledError("评估已停止")
 
                 # 传递参数
-                return await self._get_response_with_metrics(
+                response = await self._get_response_with_metrics(
                     prompt,
                     temperature=req_temperature,
                     max_tokens=req_max_tokens,
@@ -650,6 +657,9 @@ class QualityEvaluator:
                     messages=messages,
                     **req_extra_params,
                 )
+                if response.get("error"):
+                    raise ProviderRequestError(f"Provider request failed: {response['error']}")
+                return response
 
             # 用于追踪样本Result列表（用于实时Statistics）
             live_sample_results: list[SampleResult] = []
@@ -660,9 +670,7 @@ class QualityEvaluator:
                 if live_sample_results:
                     correct_count = sum(1 for r in live_sample_results if r.is_correct)
                     current_accuracy = correct_count / len(live_sample_results) * 100
-                    status_text = (
-                        "Pass" if live_sample_results[-1].is_correct else "Fail"
-                    )
+                    status_text = "Pass" if live_sample_results[-1].is_correct else "Fail"
 
                     # 输出Verbose Logging
                     last_result = live_sample_results[-1]
@@ -674,9 +682,7 @@ class QualityEvaluator:
                     )
 
                 if progress_callback:
-                    progress_callback(
-                        current, total, f"评估 {dataset_name}: {current}/{total}"
-                    )
+                    progress_callback(current, total, f"评估 {dataset_name}: {current}/{total}")
 
             # ResultCallback - 收集每 samplesResult用于Real-time logging
             def on_result_complete(result):
@@ -693,10 +699,42 @@ class QualityEvaluator:
             )
             duration = time.time() - start_time
 
+            if len(sample_results) != len(samples):
+                raise RuntimeError(
+                    f"Evaluation of '{dataset_name}' returned {len(sample_results)} "
+                    f"results for {len(samples)} samples; no accuracy score was issued."
+                )
+
+            if any(
+                result.error and result.error.startswith("Sandbox unavailable:")
+                for result in sample_results
+            ):
+                raise SandboxUnavailableError(
+                    "Sandbox unavailable: code evaluation stopped; no accuracy score was issued."
+                )
+            if any(
+                result.error and result.error.startswith("Provider request failed:")
+                for result in sample_results
+            ):
+                raise ProviderRequestError(
+                    "Model API failed for at least one sample; no accuracy score was issued."
+                )
+
             # Calculate指标
             accuracy, by_category = evaluator.compute_metrics(sample_results)
 
             # BuildResult
+            result_config = config.to_dict()
+            result_config["dataset_provenance"] = {
+                "source": evaluator.dataset_source,
+                "path": evaluator.dataset_path,
+                "subset": subset,
+                "sample_count": len(samples),
+                "sample_sha256": sample_hash,
+                "few_shot_count": len(evaluator.few_shot_examples),
+                "few_shot_sha256": fingerprint_samples(evaluator.few_shot_examples),
+                "selection_seed": evaluator.seed,
+            }
             result = EvaluationResult(
                 dataset_name=dataset_name + (f"_{subset}" if subset else ""),
                 model_id=self.model_id,
@@ -707,7 +745,7 @@ class QualityEvaluator:
                 details=sample_results,
                 timestamp=time.strftime("%Y-%m-%d %H:%M:%S"),
                 duration_seconds=duration,
-                config=config.to_dict(),
+                config=result_config,
             )
 
             # Calculate性能Statistics
@@ -719,15 +757,12 @@ class QualityEvaluator:
                 failed_dicts = [
                     s.to_dict()
                     for s in sample_results
-                    if not s.is_correct
-                    and not s.error  # 排除系统Error，只分析逻辑Error
+                    if not s.is_correct and not s.error  # 排除系统Error，只分析逻辑Error
                 ]
 
                 if failed_dicts:
                     self._log(f"currently分析 {len(failed_dicts)} 失败案例...")
-                    failure_report = analyze_failures(
-                        failed_dicts, total=len(sample_results)
-                    )
+                    failure_report = analyze_failures(failed_dicts, total=len(sample_results))
 
                     # will分析报告摘要存入 extended_metrics
                     result.extended_metrics["failure_analysis"] = {
@@ -737,9 +772,7 @@ class QualityEvaluator:
                         "suggestions": failure_report.improvement_suggestions,
                     }
 
-                    self._log(
-                        f"分析完成: 主要问题 - {', '.join(failure_report.top_issues[:2])}"
-                    )
+                    self._log(f"分析完成: 主要问题 - {', '.join(failure_report.top_issues[:2])}")
             except Exception as e:
                 self._log(f"失败分析出错: {e}", LogLevel.WARNING)
             # --------------------------
@@ -762,12 +795,11 @@ class QualityEvaluator:
         except asyncio.CancelledError:
             self._log("评估被Cancel", LogLevel.WARNING)
             return None
+        except (DatasetUnavailableError, SandboxUnavailableError, ProviderRequestError):
+            raise
         except Exception as e:
             self._log(f"评估出错: {e}", LogLevel.ERROR)
-            import traceback
-
-            traceback.print_exc()
-            return None
+            raise
 
     async def run_evaluation(
         self,
@@ -811,9 +843,7 @@ class QualityEvaluator:
                     self.should_stop = True
                     break
 
-                self._log(
-                    f"=== 评估Dataset [{i + 1}/{total_datasets}]: {dataset_name} ==="
-                )
+                self._log(f"=== 评估Dataset [{i + 1}/{total_datasets}]: {dataset_name} ===")
 
                 # Checkis否has指定子集
                 subsets = None
@@ -907,9 +937,7 @@ class QualityEvaluator:
 
         # Save JSON Detailed Results
         for name, result in self.results.items():
-            filepath = os.path.join(
-                self.output_dir, self.model_id, f"{name}_{timestamp}.json"
-            )
+            filepath = os.path.join(self.output_dir, self.model_id, f"{name}_{timestamp}.json")
             result.save_to_json(filepath)
             self._log(f"ResultSaved: {filepath}")
 
@@ -918,21 +946,23 @@ class QualityEvaluator:
         for name, result in self.results.items():
             # 从result.configin提取Thinking modeConfigure
             config = result.config or {}
+            provenance = config.get("dataset_provenance", {})
             thinking_enabled = config.get("thinking_enabled", False)
             thinking_budget = config.get("thinking_budget", 0)
             reasoning_effort = config.get("reasoning_effort", "N/A")
 
             # BuildThinking mode描述
             if thinking_enabled:
-                thinking_mode = (
-                    f"Enabled (Budget: {thinking_budget}, Effort: {reasoning_effort})"
-                )
+                thinking_mode = f"Enabled (Budget: {thinking_budget}, Effort: {reasoning_effort})"
             else:
                 thinking_mode = "Disabled"
 
             summary_data.append(
                 {
                     "Dataset": name,
+                    "Dataset Source": provenance.get("source", "legacy_unverified"),
+                    "Sample SHA-256": provenance.get("sample_sha256", ""),
+                    "Few-shot SHA-256": provenance.get("few_shot_sha256", ""),
                     "Model": result.model_id,
                     "Thinking Mode": thinking_mode,
                     "Thinking Budget": thinking_budget if thinking_enabled else "N/A",
@@ -947,9 +977,7 @@ class QualityEvaluator:
 
         if summary_data:
             df = pd.DataFrame(summary_data)
-            csv_path = os.path.join(
-                self.output_dir, self.model_id, f"summary_{timestamp}.csv"
-            )
+            csv_path = os.path.join(self.output_dir, self.model_id, f"summary_{timestamp}.csv")
             os.makedirs(os.path.dirname(csv_path), exist_ok=True)
             df.to_csv(csv_path, index=False)
             self._log(f"汇总Saved: {csv_path}")
@@ -1043,9 +1071,7 @@ class QualityEvaluator:
             os.makedirs(report_dir, exist_ok=True)
 
             # Export多种格式
-            json_path = exporter.to_json(
-                os.path.join(report_dir, f"standard_{timestamp}.json")
-            )
+            json_path = exporter.to_json(os.path.join(report_dir, f"standard_{timestamp}.json"))
             self._log(f"标准报告Saved: {json_path}")
 
             lm_eval_path = exporter.to_lm_eval_format(
@@ -1053,9 +1079,7 @@ class QualityEvaluator:
             )
             self._log(f"lm-eval 格式Saved: {lm_eval_path}")
 
-            md_path = exporter.to_markdown(
-                os.path.join(report_dir, f"report_{timestamp}.md")
-            )
+            md_path = exporter.to_markdown(os.path.join(report_dir, f"report_{timestamp}.md"))
             self._log(f"Markdown 报告Saved: {md_path}")
 
         except ImportError:
@@ -1072,6 +1096,7 @@ class QualityEvaluator:
         for name, result in self.results.items():
             # 从result.configin提取Thinking modeConfigure
             config = result.config or {}
+            provenance = config.get("dataset_provenance", {})
             thinking_enabled = config.get("thinking_enabled", False)
             thinking_budget = config.get("thinking_budget", 0)
             reasoning_effort = config.get("reasoning_effort", "N/A")
@@ -1087,6 +1112,9 @@ class QualityEvaluator:
             data.append(
                 {
                     "Dataset": name,
+                    "Dataset Source": provenance.get("source", "legacy_unverified"),
+                    "Sample SHA-256": provenance.get("sample_sha256", ""),
+                    "Few-shot SHA-256": provenance.get("few_shot_sha256", ""),
                     "Model": result.model_id,
                     "Thinking mode": thinking_mode,
                     "Thinking budget": budget_display,
@@ -1144,12 +1172,8 @@ async def quick_evaluate(
     )
     ```
     """
-    config = QualityTestConfig(
-        datasets=datasets, num_shots=num_shots, max_samples=max_samples
-    )
+    config = QualityTestConfig(datasets=datasets, num_shots=num_shots, max_samples=max_samples)
 
-    evaluator = QualityEvaluator(
-        api_base_url=api_base_url, model_id=model_id, api_key=api_key
-    )
+    evaluator = QualityEvaluator(api_base_url=api_base_url, model_id=model_id, api_key=api_key)
 
     return await evaluator.run_evaluation(config)

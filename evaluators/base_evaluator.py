@@ -39,6 +39,14 @@ class DatasetType(Enum):
     CMMLU = "cmmlu"
 
 
+class DatasetUnavailableError(RuntimeError):
+    """A benchmark dataset is missing or has no samples for the requested split."""
+
+
+class ProviderRequestError(RuntimeError):
+    """A model API failure invalidated the quality score for this run."""
+
+
 @dataclass
 class SampleResult:
     """Individual sample evaluation result."""
@@ -55,9 +63,7 @@ class SampleResult:
     tokens_used: int = 0
     error: str | None = None
     is_judge_corrected: bool = False  # Whether it was corrected by an AI judge
-    evaluation_method: str = (
-        "regex"  # Evaluation method: regex, llm_judge, smart_parser
-    )
+    evaluation_method: str = "regex"  # Evaluation method: regex, llm_judge, smart_parser
 
     # Performance Metrics
     input_tokens: int = 0  # Input token count
@@ -67,9 +73,7 @@ class SampleResult:
     total_time_ms: float = 0.0  # Total time (milliseconds)
 
     # Reasoning-related fields
-    reasoning_content: str = (
-        ""  # Reasoning process (extracted from thought tag or field)
-    )
+    reasoning_content: str = ""  # Reasoning process (extracted from thought tag or field)
     reasoning_tokens: int = 0  # Reasoning token count
     ttut_ms: float = 0.0  # Time To User Text (first non-reasoning token)
 
@@ -138,6 +142,8 @@ class EvaluationResult:
         if not self.details:
             return
 
+        self._compute_extended_metrics()
+
         valid_results = [d for d in self.details if not d.error]
         if not valid_results:
             return
@@ -153,12 +159,8 @@ class EvaluationResult:
             # Token Statistics
             "total_input_tokens": sum(input_tokens) if input_tokens else 0,
             "total_output_tokens": sum(output_tokens) if output_tokens else 0,
-            "avg_input_tokens": (
-                sum(input_tokens) / len(input_tokens) if input_tokens else 0
-            ),
-            "avg_output_tokens": (
-                sum(output_tokens) / len(output_tokens) if output_tokens else 0
-            ),
+            "avg_input_tokens": (sum(input_tokens) / len(input_tokens) if input_tokens else 0),
+            "avg_output_tokens": (sum(output_tokens) / len(output_tokens) if output_tokens else 0),
             # TTFT Statistics
             "avg_ttft_ms": sum(ttft_values) / len(ttft_values) if ttft_values else 0,
             "min_ttft_ms": min(ttft_values) if ttft_values else 0,
@@ -172,14 +174,9 @@ class EvaluationResult:
             "min_latency_ms": min(latencies) if latencies else 0,
             "max_latency_ms": max(latencies) if latencies else 0,
             # Success Rate
-            "success_rate": (
-                len(valid_results) / len(self.details) if self.details else 0
-            ),
+            "success_rate": (len(valid_results) / len(self.details) if self.details else 0),
             "error_count": len(self.details) - len(valid_results),
         }
-
-        # Compute extended statistical metrics
-        self._compute_extended_metrics()
 
     def _compute_extended_metrics(self):
         """Compute statistical indicators like standard error and confidence intervals."""
@@ -194,9 +191,7 @@ class EvaluationResult:
             )
 
             # Collect correct/incorrect scores
-            is_correct = [
-                1.0 if d.is_correct else 0.0 for d in self.details if not d.error
-            ]
+            is_correct = [1.0 if d.is_correct else 0.0 for d in self.details]
 
             if not is_correct:
                 return
@@ -208,9 +203,7 @@ class EvaluationResult:
             ci = bootstrap_confidence_interval(is_correct, confidence=0.95)
 
             # Compute Wilson score interval
-            wilson_ci = wilson_score_interval(
-                self.correct_samples, self.total_samples, 0.95
-            )
+            wilson_ci = wilson_score_interval(self.correct_samples, self.total_samples, 0.95)
 
             self.extended_metrics = {
                 "stderr": stderr,
@@ -298,6 +291,7 @@ class BaseEvaluator(ABC):
         self.max_samples = max_samples
         self.seed = seed
         self.prompt_format = prompt_format
+        self.dataset_source = "configured_dataset"
 
         self.samples: list[dict[str, Any]] = []
         self.few_shot_examples: list[dict[str, Any]] = []
@@ -305,6 +299,19 @@ class BaseEvaluator(ABC):
         # Initialize template system
         self._prompt_template = prompt_template
         self._init_template()
+
+    def _fallback_to_demo_samples(
+        self, create_samples: Callable[[], list[dict[str, Any]]]
+    ) -> list[dict[str, Any]]:
+        """Keep embedded examples out of production scores unless demo mode is explicit."""
+        if os.environ.get("LLM_TEST_ALLOW_EMBEDDED_SAMPLES") != "1":
+            raise DatasetUnavailableError(
+                f"Dataset '{self.dataset_name}' has no usable samples at '{self.dataset_path}'. "
+                "Install the official dataset before benchmarking. "
+                "Set LLM_TEST_ALLOW_EMBEDDED_SAMPLES=1 only for demonstrations."
+            )
+        self.dataset_source = "embedded_demo"
+        return create_samples()
 
     def _init_template(self):
         """Initialize prompt templates from YAML or factory."""
@@ -337,7 +344,6 @@ class BaseEvaluator(ABC):
         """Return the current prompt template."""
         return self._prompt_template
 
-
     @abstractmethod
     def load_dataset(self, subset: str | None = None) -> list[dict[str, Any]]:
         """
@@ -352,9 +358,7 @@ class BaseEvaluator(ABC):
         pass
 
     @abstractmethod
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """
         Format a single sample into a prompt string.
 
@@ -441,9 +445,7 @@ class BaseEvaluator(ABC):
         Returns:
             List of message dictionaries.
         """
-        if self._prompt_template is not None and hasattr(
-            self._prompt_template, "render_messages"
-        ):
+        if self._prompt_template is not None and hasattr(self._prompt_template, "render_messages"):
             try:
                 result = self._prompt_template.render_messages(
                     sample, self.few_shot_examples[: self.num_shots]
@@ -599,6 +601,8 @@ class BaseEvaluator(ABC):
                         else:
                             evaluation_method = "llm_judge_rejected"
 
+                except ProviderRequestError:
+                    raise
                 except Exception as e:
                     print(f"LLM Judge Error: {e}")
 
@@ -697,21 +701,14 @@ class BaseEvaluator(ABC):
         if not results:
             return 0.0, {}
 
-        # Filter out empty responses
-        valid_results = [
-            r for r in results if r.model_response and r.model_response.strip()
-        ]
-
-        if not valid_results:
-            return 0.0, {}
-
-        # Overall Accuracy
-        correct_count = sum(1 for r in valid_results if r.is_correct)
-        accuracy = correct_count / len(valid_results)
+        # Every submitted sample contributes to accuracy. Empty model responses
+        # and code assertions that fail are incorrect answers, not exclusions.
+        correct_count = sum(1 for r in results if r.is_correct)
+        accuracy = correct_count / len(results)
 
         # Per-category stats
         by_category: dict[str, dict[str, Any]] = {}
-        for result in valid_results:
+        for result in results:
             cat = result.category or "unknown"
             if cat not in by_category:
                 by_category[cat] = {"correct": 0, "total": 0}

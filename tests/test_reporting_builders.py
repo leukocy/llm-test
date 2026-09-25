@@ -45,6 +45,46 @@ def test_build_concurrency_summary_rejects_missing_concurrency_column():
         build_concurrency_summary(pd.DataFrame({"session_id": ["a"]}))
 
 
+@pytest.mark.parametrize(
+    "builder",
+    [build_concurrency_summary, build_prefill_summary, build_long_context_summary],
+)
+def test_report_summary_rejects_mixed_metric_contracts(builder):
+    rows = pd.DataFrame(
+        {
+            "concurrency": [1, 1],
+            "input_tokens_target": [1024, 1024],
+            "context_length_target": [4096, 4096],
+            "metric_contract_version": ["decode-interval-v2", None],
+        }
+    )
+
+    with pytest.raises(ValueError, match="mixed metric contract"):
+        builder(rows)
+
+
+def test_long_context_summary_has_no_infinite_output_rate_without_tpot():
+    rows = pd.DataFrame(
+        {
+            "context_length_target": [4096],
+            "session_id": [1],
+            "error": [None],
+            "token_calc_method": ["API"],
+            "prefill_tokens": [4096],
+            "decode_tokens": [1],
+            "ttft": [0.4],
+            "tpot": [0.0],
+            "tps": [0.0],
+            "metric_contract_version": ["decode-interval-v2"],
+        }
+    )
+
+    summary = build_long_context_summary(rows)
+
+    assert pd.isna(summary.loc[0, "Max_System_Output_Throughput"])
+    assert summary.attrs["metric_contract_version"] == "decode-interval-v2"
+
+
 def test_build_prefill_summary_masks_invalid_zeros_and_sorts_by_input_tokens():
     df = pd.DataFrame(
         {

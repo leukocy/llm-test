@@ -1,7 +1,9 @@
+import csv
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.benchmark.metrics import METRIC_CONTRACT_VERSION
 from core.benchmark_runner import BenchmarkRunner
 
 
@@ -18,7 +20,7 @@ class TestBenchmarkRunner:
             placeholder=placeholder,
             progress_bar=progress_bar,
             status_text=status_text,
-            api_base_url="http://test",
+            api_base_url="http://127.0.0.1:9999/v1",
             model_id="test-model",
             tokenizer_option="字符数 (Fallback)",
             csv_filename="test.csv",
@@ -42,8 +44,8 @@ class TestBenchmarkRunner:
 
         # Total time = 2.0
         # Generation time = 2.0 - 0.5 = 1.5
-        # TPS = 10 / 1.5
-        expected_tps = 10 / (2.0 - expected_ttft)
+        # Ten output tokens span nine decode intervals.
+        expected_tps = 9 / (2.0 - expected_ttft)
 
         assert ttft == pytest.approx(expected_ttft)
         assert tps == pytest.approx(expected_tps)
@@ -83,9 +85,7 @@ class TestBenchmarkRunner:
         assert metrics["token_calc_method"] == "Error"
 
     @pytest.mark.asyncio
-    async def test_get_completion_decode_time_uses_skip_first_token_window(
-        self, runner
-    ):
+    async def test_get_completion_decode_time_uses_skip_first_token_window(self, runner):
         class FakeProvider:
             async def get_completion(self, *args, **kwargs):
                 return {
@@ -105,8 +105,52 @@ class TestBenchmarkRunner:
         result = await runner.get_completion(None, 1, "prompt", 4)
 
         assert result["decode_time"] == pytest.approx(0.8)
-        assert result["decode_tokens_for_tps"] == 3
-        assert result["tps"] == pytest.approx(3 / 0.8)
+        assert result["decode_tokens_for_tps"] == 2
+        assert result["tps"] == pytest.approx(2 / 0.8)
+        assert result["tpot"] == pytest.approx(0.8 / 2)
+        assert result["metric_contract_version"] == METRIC_CONTRACT_VERSION
+
+    @pytest.mark.asyncio
+    async def test_segmented_prefill_keeps_decode_interval_contract(self, runner):
+        runner.get_completion = AsyncMock(
+            return_value={
+                "error": None,
+                "ttft": 0.4,
+                "tps": 2.5,
+                "tpot": 0.4,
+                "prefill_tokens": 16,
+                "decode_tokens": 4,
+                "decode_tokens_for_tps": 2,
+                "decode_time": 0.8,
+                "total_time": 1.2,
+                "cache_hit_tokens": 0,
+                "token_calc_method": "API",
+            }
+        )
+        runner._update_log = MagicMock()
+
+        result = await runner._run_segmented_request("prompt", 4, 1, 16, 1, 0, False)
+
+        assert result["tps"] == pytest.approx(2.5)
+        assert result["tpot"] == pytest.approx(0.4)
+        assert result["system_output_throughput"] == pytest.approx(2.5)
+
+    def test_csv_row_and_database_metadata_carry_metric_contract(self, runner, tmp_path):
+        runner.csv_file = str(tmp_path / "metrics.csv")
+        columns = ["tps", "metric_contract_version"]
+        with open(runner.csv_file, "w", newline="", encoding="utf-8") as handle:
+            csv.writer(handle).writerow(columns)
+        result = {"tps": 2.5, "extra_metrics": {"cell_resource_peaks": {"gpu": 1}}}
+
+        runner._append_metric_csv(result, columns)
+
+        assert result["extra_metrics"] == {
+            "cell_resource_peaks": {"gpu": 1},
+            "metric_contract_version": METRIC_CONTRACT_VERSION,
+        }
+        with open(runner.csv_file, newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        assert rows[0]["metric_contract_version"] == METRIC_CONTRACT_VERSION
 
     @pytest.mark.asyncio
     async def test_long_context_system_output_throughput_uses_skip_adjusted_decode_tokens(
@@ -142,14 +186,12 @@ class TestBenchmarkRunner:
         assert df.loc[0, "system_output_throughput"] == pytest.approx(3.75)
 
     @pytest.mark.asyncio
-    async def test_concurrency_prompt_generation_subtracts_template_tokens(
-        self, tmp_path
-    ):
+    async def test_concurrency_prompt_generation_subtracts_template_tokens(self, tmp_path):
         runner = BenchmarkRunner(
             placeholder=MagicMock(),
             progress_bar=MagicMock(),
             status_text=MagicMock(),
-            api_base_url="http://test",
+            api_base_url="http://127.0.0.1:9999/v1",
             model_id="test-model",
             tokenizer_option="Character Count (Fallback)",
             csv_filename=str(tmp_path / "concurrency.csv"),
@@ -170,9 +212,7 @@ class TestBenchmarkRunner:
             [2], rounds_per_level=1, max_tokens=4, input_tokens_target=20
         )
 
-        calibrated_targets = [
-            call.args[0] for call in runner._calibrate_prompt.call_args_list
-        ]
+        calibrated_targets = [call.args[0] for call in runner._calibrate_prompt.call_args_list]
         assert calibrated_targets == [15, 15]
 
 
@@ -190,7 +230,7 @@ class TestBenchmarkRunnerSystemInfo:
             placeholder=placeholder,
             progress_bar=progress_bar,
             status_text=status_text,
-            api_base_url="http://test",
+            api_base_url="http://127.0.0.1:9999/v1",
             model_id="test-model",
             tokenizer_option="字符数 (Fallback)",
             csv_filename="test.csv",
@@ -257,9 +297,7 @@ class TestBenchmarkRunnerSystemInfo:
         """update_ui 把实时结果交给注入的 render_progress 回调，不直接调 st.*（模式 F）"""
         runner.results_list = [{"session_id": 7, "tps": 50.0, "error": None}]
         captured = []
-        runner.render_progress = lambda df, out, sid: captured.append(
-            (len(df), out, sid)
-        )
+        runner.render_progress = lambda df, out, sid: captured.append((len(df), out, sid))
         runner.output_placeholder = None  # 不触发 latest_output
 
         runner.update_ui()
@@ -305,7 +343,7 @@ class TestBenchmarkRunnerInitialization:
     def test_initialization_basic_params(self, mock_dependencies):
         """Test基本参数Initialize"""
         runner = BenchmarkRunner(
-            api_base_url="http://test.api",
+            api_base_url="http://127.0.0.1:9999/v1",
             model_id="test-model",
             tokenizer_option="API (usage field)",
             csv_filename="test.csv",
@@ -314,7 +352,7 @@ class TestBenchmarkRunnerInitialization:
             **mock_dependencies,
         )
 
-        assert runner.api_base_url == "http://test.api"
+        assert runner.api_base_url == "http://127.0.0.1:9999/v1"
         assert runner.model_id == "test-model"
         assert runner.tokenizer_option == "API (usage field)"
         assert runner.csv_file == "test.csv"
@@ -323,7 +361,7 @@ class TestBenchmarkRunnerInitialization:
     def test_initialization_thinking_params(self, mock_dependencies):
         """TestThinking parametersInitialize"""
         runner = BenchmarkRunner(
-            api_base_url="http://test",
+            api_base_url="http://127.0.0.1:9999/v1",
             model_id="thinking-model",
             tokenizer_option="API",
             csv_filename="test.csv",
@@ -342,7 +380,7 @@ class TestBenchmarkRunnerInitialization:
     def test_initialization_counters(self, mock_dependencies):
         """Test计数器Initialize"""
         runner = BenchmarkRunner(
-            api_base_url="http://test",
+            api_base_url="http://127.0.0.1:9999/v1",
             model_id="test-model",
             tokenizer_option="API",
             csv_filename="test.csv",
@@ -359,7 +397,7 @@ class TestBenchmarkRunnerInitialization:
     def test_initialization_combined_csv_columns(self, mock_dependencies):
         """Test CSV 列定义"""
         runner = BenchmarkRunner(
-            api_base_url="http://test",
+            api_base_url="http://127.0.0.1:9999/v1",
             model_id="test-model",
             tokenizer_option="API",
             csv_filename="test.csv",
@@ -384,6 +422,7 @@ class TestBenchmarkRunnerInitialization:
             "api_decode",
             "cache_hit_tokens",
             "token_calc_method",
+            "metric_contract_version",
             "prompt_source",
             "error",
             "system_output_throughput",
@@ -410,7 +449,7 @@ class TestBenchmarkRunnerMetrics:
             placeholder=placeholder,
             progress_bar=progress_bar,
             status_text=status_text,
-            api_base_url="http://test",
+            api_base_url="http://127.0.0.1:9999/v1",
             model_id="test-model",
             tokenizer_option="字符数 (Fallback)",
             csv_filename="test.csv",
@@ -477,7 +516,7 @@ class TestBenchmarkRunnerMetrics:
             start_time, first_token_time, end_time, completion_tokens
         )
 
-        expected_tps = 10000 / (10.0 - 1.0)
+        expected_tps = 9999 / (10.0 - 1.0)
         assert tps == pytest.approx(expected_tps)
 
 
@@ -495,7 +534,7 @@ class TestBenchmarkRunnerEdgeCases:
             placeholder=placeholder,
             progress_bar=progress_bar,
             status_text=status_text,
-            api_base_url="http://test",
+            api_base_url="http://127.0.0.1:9999/v1",
             model_id="test-model",
             tokenizer_option="字符数 (Fallback)",
             csv_filename="test.csv",
@@ -585,7 +624,7 @@ class TestBenchmarkRunnerResume:
             placeholder=placeholder,
             progress_bar=progress_bar,
             status_text=status_text,
-            api_base_url="http://test",
+            api_base_url="http://127.0.0.1:9999/v1",
             model_id="test-model",
             tokenizer_option="Character Count (Fallback)",
             csv_filename=str(tmp_path / "resume.csv"),
@@ -759,12 +798,8 @@ class TestBenchmarkRunnerResume:
         runner._calibrate_prompt = MagicMock(return_value="prompt")
         runner._run_concurrency_batch = AsyncMock(
             side_effect=[
-                [
-                    {"session_id": 4 + i, "error": None} for i in range(4)
-                ],  # conc=4 round0
-                [
-                    {"session_id": 8 + i, "error": None} for i in range(4)
-                ],  # conc=4 round1
+                [{"session_id": 4 + i, "error": None} for i in range(4)],  # conc=4 round0
+                [{"session_id": 8 + i, "error": None} for i in range(4)],  # conc=4 round1
             ]
         )
 
@@ -797,9 +832,7 @@ class TestBenchmarkRunnerResume:
         def side_effect(*args, **kwargs):
             nonlocal call_count
             call_count += 1
-            return [
-                {"session_id": call_count * 2 - 2 + i, "error": None} for i in range(2)
-            ]
+            return [{"session_id": call_count * 2 - 2 + i, "error": None} for i in range(2)]
 
         runner._run_concurrency_batch = AsyncMock(side_effect=side_effect)
 

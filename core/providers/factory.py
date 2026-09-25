@@ -1,17 +1,9 @@
+import ipaddress
+import os
+
 from .base import LLMProvider
 from .gemini import GeminiProvider
 from .openai import OpenAIProvider
-
-# 本地推理端点是合法场景(llama.cpp/LM Studio/Ollama/vLLM 均为私网地址),
-# 放行私网但保留协议白名单与格式校验; 公网 URL 走默认拦截规则。
-_LOCAL_ENDPOINT_PREFIXES = (
-    "http://127.",
-    "http://localhost",
-    "http://0.0.0.0",
-    "http://[::1]",
-    "https://127.",
-    "https://localhost",
-)
 
 
 def _validate_base_url(api_base_url: str) -> str:
@@ -36,8 +28,20 @@ def _validate_base_url(api_base_url: str) -> str:
         return api_base_url
 
     # 空字符串占位("Custom (OpenAI Compatible)" 未填)交由后续请求阶段报错
-    allow_private = api_base_url.strip().lower().startswith(_LOCAL_ENDPOINT_PREFIXES)
-    return validate_and_normalize_url(api_base_url, allow_private=allow_private)
+    hostname = (parsed.hostname or "").lower()
+    try:
+        local_endpoint = ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        local_endpoint = hostname == "localhost"
+    allow_private = local_endpoint or os.environ.get("LLM_TEST_ALLOW_PRIVATE_ENDPOINTS") == "1"
+    trusted_hosts = {
+        host.strip().lower()
+        for host in os.environ.get("LLM_TEST_TRUSTED_API_HOSTS", "").split(",")
+        if host.strip()
+    }
+    return validate_and_normalize_url(
+        api_base_url, allow_private=allow_private, custom_safe_domains=trusted_hosts
+    )
 
 
 def get_provider(provider_name: str, api_base_url: str, api_key: str, model_id: str) -> LLMProvider:
