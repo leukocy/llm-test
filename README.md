@@ -58,6 +58,7 @@ The platform uses benchmark datasets for **quality evaluation** and **prompt-suf
 pools** (the builder-class tests draw questions from these pools).
 
 ### Self-contained (shipped)
+
 - **AIME** (2024/2025/2026) — 90 math problems, pre-measured and bucketed in
   `aime_stable_pools.json` by stable decode-fill window. The **Math** prompt-suffix
   type and **Custom Text → Test Pool Problems** work immediately after clone. [OK]
@@ -174,6 +175,7 @@ python -m pytest tests/ -v --cov=core --cov=evaluators --cov=utils
 | Document | Description |
 |----------|-------------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Architecture overview |
+| [docs/ARCHITECTURE_MODERNIZATION.md](docs/ARCHITECTURE_MODERNIZATION.md) | Industrial architecture upgrade plan and delivery gates |
 | [CLAUDE.md](CLAUDE.md) | Development guide for AI assistants |
 | [docs/API.md](docs/API.md) | API reference (FastAPI backend) |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Development workflow |

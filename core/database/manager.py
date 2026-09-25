@@ -201,8 +201,6 @@ class DatabaseManager:
         Returns:
             is否succeeded
         """
-        run.complete(success)
-
         # 计算统计信息
         stats: dict[str, Any] = {}
         if calculate_stats and run.id:
@@ -249,7 +247,10 @@ class DatabaseManager:
             }
 
         run_stats: dict[str, Any] | None = stats or None
-        return self._run_repo.complete(cast(int, run.id), success, run_stats)
+        completed = self._run_repo.complete(cast(int, run.id), success, run_stats)
+        if completed:
+            run.complete(success)
+        return completed
 
     def update_publish_metadata(self, run_id: int, fields: dict[str, Any]) -> bool:
         """更新测试的可对外元数据（tester / external_level / next_action / notes /

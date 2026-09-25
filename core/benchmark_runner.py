@@ -25,6 +25,7 @@ except ImportError:
 
 # Prefill calibration constant (token overhead for calibration prompts)
 PREFILL_PROMPT_OVERHEAD = 0
+UI_REFRESH_INTERVAL_SECONDS = 0.5
 
 # ---------------------------------------------------------------------------
 # Lazy-loaded suffix prompt pool from evaluation datasets
@@ -841,6 +842,7 @@ class BenchmarkRunner:
         # UI 注入的实时进度渲染回调（取代 update_ui 直接调 st.*；模式 F 解耦）。
         # 签名：render_progress(df, latest_output, session_id)。None 时跳过渲染（headless/测试）。
         self.render_progress = render_progress
+        self._last_ui_refresh_at: float | None = None
         # UI 注入的日志渲染回调（取代 _update_log 直接调 render_log_viewer；模式 F2 解耦）。
         # 签名：render_log(logger)。None 时跳过（仅内存日志 + WebSocket 广播）。
         self.render_log = render_log
@@ -1012,6 +1014,8 @@ class BenchmarkRunner:
 
     def _complete_db_run(self, success: bool = True):
         """完成DatabaseTest运行"""
+        if self.results_list:
+            self.update_ui(force=True)
         if self._db_run is None:
             self._safe_stop_monitor()
             self._safe_stop_engine_poller()
@@ -2559,7 +2563,16 @@ class BenchmarkRunner:
             "error": None,
         }
 
-    def update_ui(self):
+    def update_ui(self, force: bool = False):
+        """Refresh the live view at most twice per second, with a final flush."""
+        now = time.monotonic()
+        if (
+            not force
+            and self._last_ui_refresh_at is not None
+            and now - self._last_ui_refresh_at < UI_REFRESH_INTERVAL_SECONDS
+        ):
+            return
+        self._last_ui_refresh_at = now
         self.progress_bar.progress(
             self.completed_requests / self.total_requests
             if self.total_requests > 0
