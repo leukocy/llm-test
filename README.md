@@ -190,6 +190,7 @@ python -m pytest tests/ -v --cov=core --cov=evaluators --cov=utils
 | [docs/API.md](docs/API.md) | API reference (FastAPI backend) |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Development workflow |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security guidelines |
+| [docs/METRICS_CONTRACT.md](docs/METRICS_CONTRACT.md) | Versioned performance metric definitions |
 | [docs/INDUSTRIAL_READINESS.md](docs/INDUSTRIAL_READINESS.md) | Single-tenant readiness gates and rollout plan |
 
 ---

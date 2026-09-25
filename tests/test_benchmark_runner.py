@@ -1,7 +1,9 @@
+import csv
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.benchmark.metrics import METRIC_CONTRACT_VERSION
 from core.benchmark_runner import BenchmarkRunner
 
 
@@ -42,8 +44,8 @@ class TestBenchmarkRunner:
 
         # Total time = 2.0
         # Generation time = 2.0 - 0.5 = 1.5
-        # TPS = 10 / 1.5
-        expected_tps = 10 / (2.0 - expected_ttft)
+        # Ten output tokens span nine decode intervals.
+        expected_tps = 9 / (2.0 - expected_ttft)
 
         assert ttft == pytest.approx(expected_ttft)
         assert tps == pytest.approx(expected_tps)
@@ -103,8 +105,52 @@ class TestBenchmarkRunner:
         result = await runner.get_completion(None, 1, "prompt", 4)
 
         assert result["decode_time"] == pytest.approx(0.8)
-        assert result["decode_tokens_for_tps"] == 3
-        assert result["tps"] == pytest.approx(3 / 0.8)
+        assert result["decode_tokens_for_tps"] == 2
+        assert result["tps"] == pytest.approx(2 / 0.8)
+        assert result["tpot"] == pytest.approx(0.8 / 2)
+        assert result["metric_contract_version"] == METRIC_CONTRACT_VERSION
+
+    @pytest.mark.asyncio
+    async def test_segmented_prefill_keeps_decode_interval_contract(self, runner):
+        runner.get_completion = AsyncMock(
+            return_value={
+                "error": None,
+                "ttft": 0.4,
+                "tps": 2.5,
+                "tpot": 0.4,
+                "prefill_tokens": 16,
+                "decode_tokens": 4,
+                "decode_tokens_for_tps": 2,
+                "decode_time": 0.8,
+                "total_time": 1.2,
+                "cache_hit_tokens": 0,
+                "token_calc_method": "API",
+            }
+        )
+        runner._update_log = MagicMock()
+
+        result = await runner._run_segmented_request("prompt", 4, 1, 16, 1, 0, False)
+
+        assert result["tps"] == pytest.approx(2.5)
+        assert result["tpot"] == pytest.approx(0.4)
+        assert result["system_output_throughput"] == pytest.approx(2.5)
+
+    def test_csv_row_and_database_metadata_carry_metric_contract(self, runner, tmp_path):
+        runner.csv_file = str(tmp_path / "metrics.csv")
+        columns = ["tps", "metric_contract_version"]
+        with open(runner.csv_file, "w", newline="", encoding="utf-8") as handle:
+            csv.writer(handle).writerow(columns)
+        result = {"tps": 2.5, "extra_metrics": {"cell_resource_peaks": {"gpu": 1}}}
+
+        runner._append_metric_csv(result, columns)
+
+        assert result["extra_metrics"] == {
+            "cell_resource_peaks": {"gpu": 1},
+            "metric_contract_version": METRIC_CONTRACT_VERSION,
+        }
+        with open(runner.csv_file, newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        assert rows[0]["metric_contract_version"] == METRIC_CONTRACT_VERSION
 
     @pytest.mark.asyncio
     async def test_long_context_system_output_throughput_uses_skip_adjusted_decode_tokens(
@@ -376,6 +422,7 @@ class TestBenchmarkRunnerInitialization:
             "api_decode",
             "cache_hit_tokens",
             "token_calc_method",
+            "metric_contract_version",
             "prompt_source",
             "error",
             "system_output_throughput",
@@ -469,7 +516,7 @@ class TestBenchmarkRunnerMetrics:
             start_time, first_token_time, end_time, completion_tokens
         )
 
-        expected_tps = 10000 / (10.0 - 1.0)
+        expected_tps = 9999 / (10.0 - 1.0)
         assert tps == pytest.approx(expected_tps)
 
 

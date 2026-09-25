@@ -7,6 +7,23 @@ from typing import Iterable
 
 import numpy as np
 
+METRIC_CONTRACT_VERSION = "decode-interval-v2"
+
+
+def count_decode_intervals(
+    completion_tokens: int,
+    token_timestamps: Iterable[float] | None = None,
+    *,
+    skip_first_token: bool = False,
+) -> int:
+    """Return the output-token intervals represented by the decode window."""
+    if completion_tokens <= 1:
+        return 0
+    timestamps = list(token_timestamps or [])
+    if skip_first_token and completion_tokens >= 3 and len(timestamps) == completion_tokens:
+        return completion_tokens - 2
+    return completion_tokens - 1
+
 
 @dataclass(frozen=True)
 class RequestMetrics:
@@ -44,6 +61,7 @@ def empty_metrics() -> dict[str, object]:
         "decode_time": 0,
         "total_time": 0,
         "cache_hit_tokens": 0,
+        "metric_contract_version": METRIC_CONTRACT_VERSION,
         "token_calc_method": "Error",
         "error": None,
     }
@@ -61,11 +79,12 @@ def calculate_request_metrics(
 ) -> RequestMetrics:
     """Calculate TTFT, TPS, TPOT, and stream chunk latency percentiles.
 
-    When *skip_first_token* is True **and** at least 2 token timestamps are
-    available, the first streamed chunk is treated as part of the prefill phase.
-    TPS / TPOT then use the **second** chunk timestamp as the start of decode, so
-    the prefill-decode gap does not distort generation-speed metrics.  TTFT is
-    **never** affected.
+    Decode throughput and TPOT share the same token intervals: N-1 intervals
+    after the first output token. When *skip_first_token* is requested, the
+    second timestamp can anchor the interval only if the stream supplies one
+    timestamp for each counted output token. Otherwise chunk boundaries cannot
+    identify a single token, so the normal first-token window is used.
+    Percentiles describe streamed chunk gaps, not individual token gaps.
     """
     ttft = 0.0
     tps = 0.0
@@ -74,21 +93,24 @@ def calculate_request_metrics(
     tpot_p99 = 0.0
     generation_time = 0.0
 
-    if first_token_time:
+    if first_token_time is not None:
         ttft_raw = first_token_time - start_time
         ttft = max(0.000001, ttft_raw - latency_offset)
 
         timestamps = list(token_timestamps or [])
-        use_skip = skip_first_token and len(timestamps) >= 2
+        use_skip = (
+            skip_first_token and completion_tokens >= 3 and len(timestamps) == completion_tokens
+        )
+        interval_tokens = count_decode_intervals(
+            completion_tokens, timestamps, skip_first_token=skip_first_token
+        )
 
         if use_skip:
-            # Use second streamed chunk timestamp as generation start
-            generation_time = end_time - timestamps[1]
-            effective_tokens = completion_tokens - 1
-            if effective_tokens > 0 and generation_time > 0:
-                tps = effective_tokens / generation_time
-            if effective_tokens > 1 and generation_time > 0:
-                tpot = generation_time / (effective_tokens - 1)
+            # Use second streamed output timestamp as generation start.
+            generation_time = max(0.0, end_time - timestamps[1])
+            if interval_tokens > 0 and generation_time > 0:
+                tps = interval_tokens / generation_time
+                tpot = generation_time / interval_tokens
 
             # Stream chunk latencies: skip the first interval (prefill→decode)
             if len(timestamps) > 2:
@@ -101,11 +123,10 @@ def calculate_request_metrics(
                     tpot_p95 = float(np.percentile(latencies, 95))
                     tpot_p99 = float(np.percentile(latencies, 99))
         else:
-            generation_time = end_time - first_token_time
-            tps = completion_tokens / generation_time if generation_time > 0 else 0
-
-            if completion_tokens > 1 and generation_time > 0:
-                tpot = generation_time / (completion_tokens - 1)
+            generation_time = max(0.0, end_time - first_token_time)
+            if interval_tokens > 0 and generation_time > 0:
+                tps = interval_tokens / generation_time
+                tpot = generation_time / interval_tokens
 
             if len(timestamps) > 1:
                 latencies = []

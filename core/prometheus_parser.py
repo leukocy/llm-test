@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, cast
 
 # 匹配一行：metric_name 可含冒号；可选 {labels}；末尾数值
 _LINE_RE = re.compile(
@@ -89,9 +89,9 @@ def _gauge(parsed: dict, *names: str) -> float | None:
     labeled = parsed["labeled"]
     for name in names:
         if name in v:
-            return v[name]
+            return cast(float | None, v[name])
         if name in labeled and labeled[name]:
-            return labeled[name][0].get("value")
+            return cast(float | None, labeled[name][0].get("value"))
     return None
 
 
@@ -100,7 +100,7 @@ def _hist_mean(parsed: dict, *names: str) -> float | None:
     h = parsed["histograms"]
     for name in names:
         if name in h:
-            return h[name].get("mean")
+            return cast(float | None, h[name].get("mean"))
     return None
 
 
@@ -141,9 +141,7 @@ def extract_vllm_runtime(parsed: dict[str, Any]) -> dict[str, Any]:
         "num_requests_waiting": _gauge(parsed, "vllm:num_requests_waiting"),
         "num_requests_swapped": _gauge(parsed, "vllm:num_requests_swapped"),
         # 抢占数:新版 num_preemptions_total,旧版 num_preemption
-        "num_preemption": _counter(
-            parsed, "vllm:num_preemptions_total", "vllm:num_preemption"
-        ),
+        "num_preemption": _counter(parsed, "vllm:num_preemptions_total", "vllm:num_preemption"),
         "gpu_prefix_cache_hit_rate": _ratio_from_counters(
             _counter(parsed, "vllm:gpu_prefix_cache_hits_total"),
             _counter(parsed, "vllm:gpu_prefix_cache_queries_total"),
@@ -160,15 +158,9 @@ def extract_vllm_runtime(parsed: dict[str, Any]) -> dict[str, Any]:
             "block_size": _to_int(cache_cfg.get("block_size")),
             "num_gpu_blocks": _to_int(cache_cfg.get("num_gpu_blocks")),
             "num_cpu_blocks": _to_int(cache_cfg.get("num_cpu_blocks")),
-            "kv_cache_size_tokens": _to_int(
-                cache_cfg.get("kv_cache_size_tokens")
-            ),
-            "kv_cache_max_concurrency": _to_float(
-                cache_cfg.get("kv_cache_max_concurrency")
-            ),
-            "gpu_memory_utilization": _to_float(
-                cache_cfg.get("gpu_memory_utilization")
-            ),
+            "kv_cache_size_tokens": _to_int(cache_cfg.get("kv_cache_size_tokens")),
+            "kv_cache_max_concurrency": _to_float(cache_cfg.get("kv_cache_max_concurrency")),
+            "gpu_memory_utilization": _to_float(cache_cfg.get("gpu_memory_utilization")),
         },
     }
 
@@ -188,9 +180,7 @@ def extract_sglang_runtime(parsed: dict[str, Any]) -> dict[str, Any]:
         "cache_hit_rate": v.get("sglang:cache_hit_rate"),
         "gpu_prefix_cache_hit_rate": v.get("sglang:cache_hit_rate"),  # 别名统一
         "ttft_mean_s": (
-            h.get("sglang:gen_decode_latency")
-            or h.get("sglang:time_to_first_token")
-            or {}
+            h.get("sglang:gen_decode_latency") or h.get("sglang:time_to_first_token") or {}
         ).get("mean"),
         "tpot_mean_s": (h.get("sglang:gen_throughput") or {}).get("mean"),
         # SGLang 推测解码(SGLang 0.4+ 暴露 spec 接受率)
@@ -201,9 +191,7 @@ def extract_sglang_runtime(parsed: dict[str, Any]) -> dict[str, Any]:
 
 def detect_engine_family(parsed: dict[str, Any]) -> str:
     """根据出现的指标前缀判断引擎族（vllm / sglang / unknown）。"""
-    names = (
-        set(parsed["values"]) | set(parsed["labeled"]) | set(parsed["histograms"] or {})
-    )
+    names = set(parsed["values"]) | set(parsed["labeled"]) | set(parsed["histograms"] or {})
     if any(n.startswith("vllm:") for n in names):
         return "vllm"
     if any(n.startswith("sglang:") for n in names):

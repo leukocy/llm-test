@@ -17,6 +17,22 @@ from core.result_metrics import (
 )
 
 
+def _metric_contract_version(df: pd.DataFrame) -> str:
+    """Refuse summaries that mix incompatible metric definitions."""
+    if "metric_contract_version" not in df.columns:
+        return "legacy-unversioned"
+    versions = set(
+        df["metric_contract_version"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .replace("", "legacy-unversioned")
+    )
+    if len(versions) != 1:
+        raise ValueError("Cannot summarize rows with mixed metric contract versions.")
+    return str(versions.pop())
+
+
 def build_concurrency_summary(df_group: pd.DataFrame) -> pd.DataFrame:
     """Build the concurrency report summary without Streamlit dependencies."""
     if "concurrency" not in df_group.columns:
@@ -27,6 +43,7 @@ def build_concurrency_summary(df_group: pd.DataFrame) -> pd.DataFrame:
     work = work[work["concurrency"] > 0].copy()
     if work.empty:
         raise ValueError("Concurrency summary failed: no valid concurrency data.")
+    contract_version = _metric_contract_version(work)
 
     rounds_per_level = work.groupby("concurrency")["round"].max().max()
 
@@ -118,6 +135,7 @@ def build_concurrency_summary(df_group: pd.DataFrame) -> pd.DataFrame:
     summary = pd.merge(summary, summary_sys_tps, on="concurrency", how="left")
     summary = pd.merge(summary, req_stats, on="concurrency", how="left")
     summary.attrs["rounds_per_level"] = int(rounds_per_level)
+    summary.attrs["metric_contract_version"] = contract_version
     return summary
 
 
@@ -129,6 +147,7 @@ def build_prefill_summary(df_group: pd.DataFrame) -> pd.DataFrame:
     work = df_group.copy()
     if work.empty:
         raise ValueError("Prefill summary failed: no valid prefill data.")
+    contract_version = _metric_contract_version(work)
 
     requests_per_level = work.groupby("input_tokens_target").size().max()
 
@@ -179,6 +198,7 @@ def build_prefill_summary(df_group: pd.DataFrame) -> pd.DataFrame:
     summary["x_label"] = (summary["input_tokens_target"] / 1024).round(1).astype(str) + "k"
     summary = summary.sort_values(by="input_tokens_target").reset_index(drop=True)
     summary.attrs["requests_per_level"] = int(requests_per_level)
+    summary.attrs["metric_contract_version"] = contract_version
     return summary
 
 
@@ -192,6 +212,7 @@ def build_long_context_summary(df_group: pd.DataFrame) -> pd.DataFrame:
     work = df_group.copy()
     if work.empty:
         raise ValueError("Long context summary failed: no valid long context data.")
+    contract_version = _metric_contract_version(work)
 
     requests_per_level = work.groupby("context_length_target").size().max()
 
@@ -271,7 +292,8 @@ def build_long_context_summary(df_group: pd.DataFrame) -> pd.DataFrame:
     # TPOT_Mean. Averaging tps separately would NOT invert mean(tpot), because
     # mean(1/x) != 1/mean(x); the gap widens with per-round variance (e.g. 32k).
     summary_sys_output = stats[["context_length_target", "TPOT_Mean"]].copy()
-    summary_sys_output["Max_System_Output_Throughput"] = 1000.0 / summary_sys_output["TPOT_Mean"]
+    valid_tpot = summary_sys_output["TPOT_Mean"].where(summary_sys_output["TPOT_Mean"] > 0)
+    summary_sys_output["Max_System_Output_Throughput"] = 1000.0 / valid_tpot
     summary_sys_output = summary_sys_output.drop(columns=["TPOT_Mean"])
     summary_sys_total = summarize_metric_extreme(
         work,
@@ -284,4 +306,5 @@ def build_long_context_summary(df_group: pd.DataFrame) -> pd.DataFrame:
     summary = pd.merge(summary, summary_sys_total, on="context_length_target", how="left")
     summary["x_label"] = (summary["context_length_target"] / 1024).round(1).astype(str) + "k"
     summary.attrs["requests_per_level"] = int(requests_per_level)
+    summary.attrs["metric_contract_version"] = contract_version
     return summary
