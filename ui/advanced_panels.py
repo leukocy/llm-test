@@ -513,21 +513,30 @@ def _run_quality_test(
         ]
         if missing:
             missing_names = [_DATASET_DISPLAY_NAMES.get(d, d) for d in missing]
-            st.warning(f"Missing datasets: {', '.join(missing_names)}. Attempting auto-download...")
-            for ds_name in missing:
-                display_name = _DATASET_DISPLAY_NAMES.get(ds_name, ds_name)
-                with st.spinner(f"Downloading {display_name}..."):
-                    ok = manager.download(ds_name)
-                if ok:
-                    st.success(f"Downloaded {display_name}")
-                else:
-                    st.error(f"Failed to download {display_name}. Skipping.")
-            # Re-check and filter out still-missing datasets
-            still_missing = [ds for ds in missing if not manager.is_available(ds)]
-            if still_missing:
-                selected_datasets = [ds for ds in selected_datasets if ds not in still_missing]
-                if not selected_datasets:
-                    st.error("No datasets available after download attempts.")
+            if os.environ.get("LLM_TEST_ALLOW_EMBEDDED_SAMPLES") == "1":
+                st.warning(
+                    "Demonstration mode is enabled. Missing datasets may use labeled "
+                    f"embedded examples: {', '.join(missing_names)}."
+                )
+            else:
+                st.warning(
+                    f"Missing datasets: {', '.join(missing_names)}. Attempting auto-download..."
+                )
+                for ds_name in missing:
+                    display_name = _DATASET_DISPLAY_NAMES.get(ds_name, ds_name)
+                    with st.spinner(f"Downloading {display_name}..."):
+                        ok = manager.download(ds_name)
+                    if ok:
+                        st.success(f"Downloaded {display_name}")
+                    else:
+                        st.error(f"Failed to download {display_name}.")
+                # A selected benchmark must never silently disappear from the run.
+                still_missing = [ds for ds in missing if not manager.is_available(ds)]
+                if still_missing:
+                    st.error(
+                        "Quality assessment stopped: selected datasets are unavailable: "
+                        + ", ".join(_DATASET_DISPLAY_NAMES.get(ds, ds) for ds in still_missing)
+                    )
                     return False
     except Exception:
         pass  # DatasetManager not available, proceed without pre-check
@@ -630,6 +639,11 @@ def _run_quality_test(
             sniffio.current_async_library_cvar.reset(token)
             loop.close()
             asyncio.set_event_loop(None)  # Cleanup event loop reference
+
+        if not results:
+            raise RuntimeError(
+                "Quality assessment produced no results. Check dataset availability and logs."
+            )
 
         st.session_state.quality_results = results
 

@@ -127,7 +127,7 @@ class LongBenchEvaluator(BaseEvaluator):
                             print(f"Load {filepath} 失败: {e}")
 
         if not samples:
-            samples = self._create_sample_data()
+            samples = self._fallback_to_demo_samples(self._create_sample_data)
 
         samples = self._normalize_samples(samples)
         random.shuffle(samples)

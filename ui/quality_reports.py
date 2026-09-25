@@ -27,6 +27,7 @@ def generate_quality_summary(results: dict[str, EvaluationResult]) -> pd.DataFra
     data = []
     for name, result in results.items():
         stats = result.performance_stats or {}
+        provenance = (result.config or {}).get("dataset_provenance", {})
 
         # Calculate AI judge correction count
         judge_corrected = sum(1 for s in result.details if getattr(s, "is_judge_corrected", False))
@@ -36,6 +37,9 @@ def generate_quality_summary(results: dict[str, EvaluationResult]) -> pd.DataFra
 
         row = {
             "Dataset": name,
+            "Dataset Source": provenance.get("source", "legacy_unverified"),
+            "Sample SHA-256": provenance.get("sample_sha256", ""),
+            "Few-shot SHA-256": provenance.get("few_shot_sha256", ""),
             "Model": result.model_id,
             "Accuracy": result.accuracy,
             "Correct": result.correct_samples,
@@ -564,6 +568,18 @@ def render_quality_report(
     # Title
     st.header("Model Quality Assessment Report")
     st.subheader(f"Model: `{model_id}`")
+
+    demo_datasets = [
+        name
+        for name, result in results.items()
+        if (result.config or {}).get("dataset_provenance", {}).get("source") == "embedded_demo"
+    ]
+    if demo_datasets:
+        st.warning(
+            "Demo samples were used for: "
+            + ", ".join(demo_datasets)
+            + ". These scores are for demonstration only."
+        )
 
     # Summary table
     st.markdown("### Evaluation Summary")

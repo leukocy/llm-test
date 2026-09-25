@@ -9,10 +9,17 @@ This test suite verifies that security fixes are working correctly.
 import os
 import tempfile
 
+import httpx
 import pytest
 
 from core.dataset_loader import DatasetLoader
-from core.safe_executor import SafeExecutionError, safe_eval_math, safe_exec_code
+from core.safe_executor import (
+    SafeExecutionError,
+    SandboxUnavailableError,
+    require_sandbox_available,
+    safe_eval_math,
+    safe_exec_code,
+)
 from core.url_validator import SSRFError, is_safe_url, validate_and_normalize_url
 
 
@@ -49,42 +56,46 @@ class TestSafeCodeExecution:
         with pytest.raises(SafeExecutionError):
             safe_eval_math("().__class__")
 
-    def test_safe_code_execution(self):
-        """Test safe code execution."""
-        code = """
-def add(a, b):
-    return a + b
-"""
-        test_code = "assert add(2, 3) == 5"
+    @pytest.mark.parametrize(
+        "expression",
+        ["2**1000000000", "math.factorial(10000000)", "2**64**64", "1+" * 200 + "1"],
+    )
+    def test_math_evaluation_rejects_resource_exhaustion(self, expression):
+        with pytest.raises(SafeExecutionError):
+            safe_eval_math(expression)
 
-        success, error, output = safe_exec_code(code, test_code)
-        assert success is True
-        assert error is None
+    def test_code_execution_requires_isolated_worker(self, monkeypatch):
+        monkeypatch.delenv("LLM_TEST_SANDBOX_URL", raising=False)
+        monkeypatch.delenv("LLM_TEST_SANDBOX_TOKEN", raising=False)
+        with pytest.raises(SandboxUnavailableError, match="Sandbox unavailable"):
+            safe_exec_code("print('hello')")
 
-    def test_blocked_imports(self):
-        """Test that imports are blocked (子进程白名单无 __import__)。"""
-        code = "import os\nprint(os.getcwd())"
+    def test_code_is_sent_to_worker_without_local_execution(self, monkeypatch):
+        monkeypatch.setenv("LLM_TEST_SANDBOX_URL", "http://sandbox-worker:8765")
+        monkeypatch.setenv("LLM_TEST_SANDBOX_TOKEN", "t" * 40)
+        calls = []
 
-        success, error, output = safe_exec_code(code)
-        assert success is False
-        assert error  # 拒绝执行即可(旧文案 'not allowed' 已随沙箱重写演进)
+        def fake_request(method, url, token, timeout, **kwargs):
+            calls.append((method, url, token, timeout, kwargs))
+            return httpx.Response(200, json={"success": True, "error": None, "output": "ok"})
 
-    def test_syntax_error_handling(self):
-        """Test that syntax errors are handled gracefully."""
-        code = "def foo(\n"  # Invalid syntax
+        monkeypatch.setattr("core.safe_executor._worker_request", fake_request)
+        assert safe_exec_code("print('hello')") == (True, None, "ok")
+        assert calls[0][0:3] == (
+            "POST",
+            "http://sandbox-worker:8765/execute",
+            "t" * 40,
+        )
+        assert calls[0][4]["json"]["code"] == "print('hello')"
 
-        success, error, output = safe_exec_code(code)
-        assert success is False
-        assert "SyntaxError" in error
-
-    def test_assertion_failure(self):
-        """Test that assertion failures are caught."""
-        code = "def foo(): return 42"
-        test_code = "assert foo() == 999"
-
-        success, error, output = safe_exec_code(code, test_code)
-        assert success is False
-        assert "AssertionError" in error
+    def test_unhealthy_worker_blocks_code_benchmark(self, monkeypatch):
+        monkeypatch.setenv("LLM_TEST_SANDBOX_URL", "http://sandbox-worker:8765")
+        monkeypatch.setenv("LLM_TEST_SANDBOX_TOKEN", "t" * 40)
+        monkeypatch.setattr(
+            "core.safe_executor._worker_request", lambda *args, **kwargs: httpx.Response(503)
+        )
+        with pytest.raises(SandboxUnavailableError, match="health check"):
+            require_sandbox_available()
 
 
 class TestSSRFProtection:
@@ -113,6 +124,33 @@ class TestSSRFProtection:
         is_safe, error = is_safe_url("http://127.0.0.2/api")
         assert is_safe is False
 
+    @pytest.mark.parametrize("host", ["2130706433", "0x7f000001", "127.1", "0177.0.0.1"])
+    def test_blocks_noncanonical_loopback_aliases(self, host):
+        is_safe, error = is_safe_url(f"http://{host}/v1", allow_private=True)
+        assert is_safe is False
+        assert "Non-canonical IP" in error
+
+    def test_unknown_provider_requires_admin_trust(self):
+        is_safe, error = is_safe_url("https://unconfigured.example/v1")
+        assert is_safe is False
+        assert "not trusted" in error
+
+    def test_trusted_host_must_not_resolve_to_private_without_opt_in(self, monkeypatch):
+        monkeypatch.setattr(
+            "core.url_validator.socket.getaddrinfo",
+            lambda *args, **kwargs: [(None, None, None, None, ("10.1.2.3", 443))],
+        )
+        url = "https://trusted.example/v1"
+        is_safe, error = is_safe_url(url, custom_safe_domains={"trusted.example"})
+        assert is_safe is False
+        assert "private/internal" in error
+
+        is_safe, error = is_safe_url(
+            url, allow_private=True, custom_safe_domains={"trusted.example"}
+        )
+        assert is_safe is True
+        assert error is None
+
     def test_allows_safe_domains(self):
         """Test that known safe domains are allowed."""
         is_safe, error = is_safe_url("https://api.openai.com/v1")
@@ -125,9 +163,13 @@ class TestSSRFProtection:
         is_safe, error = is_safe_url("https://generativelanguage.googleapis.com")
         assert is_safe is True
 
-    def test_allows_private_when_flagged(self):
-        """Test that private IPs are allowed when flag is set."""
-        is_safe, error = is_safe_url("http://192.168.1.1/api", allow_private=True)
+    def test_private_ip_requires_explicit_trust_and_opt_in(self):
+        url = "http://192.168.1.1/api"
+        is_safe, error = is_safe_url(url, allow_private=True)
+        assert is_safe is False
+        assert "explicitly trusted" in error
+
+        is_safe, error = is_safe_url(url, allow_private=True, custom_safe_domains={"192.168.1.1"})
         assert is_safe is True
 
     def test_blocks_invalid_protocols(self):
@@ -279,66 +321,6 @@ class TestRateLimiter:
 
         # Second request should fail (would block)
         assert limiter.acquire(blocking=False, timeout=0.01) is False
-
-
-class TestSandboxIsolation:
-    """安全审查 #1/#2 回归: 子进程隔离沙箱(2026-08 加固)。"""
-
-    def test_normal_code_executes(self):
-        from core.safe_executor import safe_exec_code
-
-        success, error, output = safe_exec_code(
-            "def add(a, b):\n    return a + b", "assert add(2, 3) == 5"
-        )
-        assert success is True
-        assert error is None
-
-    def test_infinite_loop_times_out(self):
-        """timeout_seconds 必须真实生效(旧实现文档自认未实现)。"""
-        import time
-
-        from core.safe_executor import safe_exec_code
-
-        start = time.time()
-        success, error, _ = safe_exec_code("while True: pass", timeout_seconds=2)
-        elapsed = time.time() - start
-
-        assert success is False
-        assert "Timeout" in (error or "")
-        assert elapsed < 10  # 挂死则远超此值
-
-    def test_escape_poc_contained(self):
-        """运行时拼接属性链逃逸 PoC: 允许在子进程内执行, 但不得影响主进程。"""
-        from core.safe_executor import safe_exec_code
-
-        poc = (
-            "u='_'\n"
-            "nc=u*2+'cl'+'ass'+u*2; nb=u*2+'ba'+'se'+u*2; ns=u*2+'su'+'bclasses'+u*2\n"
-            "A=type('A',(),{})\n"
-            "tpl='{0.'+nc+'.'+nb+'.'+ns+'}'\n"
-            "print(tpl.format(A()))\n"
-        )
-        # 子进程隔离后 PoC 无害(读到的只是子进程自身解释器对象)
-        success, error, output = safe_exec_code(poc)
-        assert success is True
-        assert "__subclasses__" in (output or "")
-
-    def test_memory_bomb_blocked(self):
-        from core.safe_executor import safe_exec_code
-
-        success, error, _ = safe_exec_code("x = [0] * (10**9)", timeout_seconds=15)
-        assert success is False
-
-    def test_output_and_error_capture(self):
-        from core.safe_executor import safe_exec_code
-
-        success, _, output = safe_exec_code("print('hello')")
-        assert success is True
-        assert "hello" in (output or "")
-
-        success, error, _ = safe_exec_code("raise ValueError('boom')")
-        assert success is False
-        assert "ValueError" in (error or "")
 
 
 class TestProviderSSRFValidation:

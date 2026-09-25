@@ -1,18 +1,20 @@
 # LLM Benchmark Platform
 
 > A comprehensive LLM performance & quality evaluation platform
-> **Tests**: 653+ unit tests | **Strategies**: 8 performance benchmarks | **Evaluators**: 17 quality datasets
+> Automated regression tests cover performance, quality, security, and reporting.
 
 ---
 
 ## Features
 
-- **8 Performance Benchmarks**: Concurrency, Prefill, Long Context, Matrix, Stability, and more
-- **17 Quality Evaluators**: MMLU, GSM8K, MATH500, HumanEval, GPQA, etc.
+- **Performance Benchmarks**: Concurrency, Prefill, Long Context, Matrix,
+  Stability, and more
+- **Quality Evaluators**: MMLU, GSM8K, MATH500, HumanEval, GPQA, etc.
 - **Real-time Dashboard**: Live progress, throughput charts, and system insights
 - **Reports**: Expert performance insights, grading, and interactive visual analysis
 - **CSV Export**: Auto-saved results with configurable column ordering
-- **10+ Providers**: DeepSeek, ZhiPu, MiniMax, OpenRouter, SiliconFlow, Gemini, and more
+- **Providers**: DeepSeek, ZhiPu, MiniMax, OpenRouter, SiliconFlow, Gemini,
+  and more
 
 ---
 
@@ -58,6 +60,7 @@ The platform uses benchmark datasets for **quality evaluation** and **prompt-suf
 pools** (the builder-class tests draw questions from these pools).
 
 ### Self-contained (shipped)
+
 - **AIME** (2024/2025/2026) — 90 math problems, pre-measured and bucketed in
   `aime_stable_pools.json` by stable decode-fill window. The **Math** prompt-suffix
   type and **Custom Text → Test Pool Problems** work immediately after clone. [OK]
@@ -67,6 +70,12 @@ pools** (the builder-class tests draw questions from these pools).
 These are **optional** — the platform runs without them, but the Science / Code /
 Longform prompt-suffix types will have empty pools:
 
+Quality benchmarks require their selected dataset. If it is missing, the run stops
+instead of scoring built-in examples. Demonstration examples require
+`LLM_TEST_ALLOW_EMBEDDED_SAMPLES=1` and are labeled in result files and reports.
+
+<!-- markdownlint-disable MD013 -->
+
 | Dataset | Type | Source |
 |---------|------|--------|
 | **GPQA Diamond** | Science | [Idavidrein/gpqa](https://huggingface.co/datasets/Idavidrein/gpqa) (gated) |
@@ -74,6 +83,8 @@ Longform prompt-suffix types will have empty pools:
 | **MBPP** | Code | [google-research-datasets/mbpp](https://huggingface.co/datasets/google-research-datasets/mbpp) |
 | **LongBench** | Longform | [THUDM/LongBench](https://huggingface.co/datasets/THUDM/LongBench) |
 | **SWE-Bench Lite** | Code | [princeton-nlp/SWE-bench_Lite](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Lite) |
+
+<!-- markdownlint-enable MD013 -->
 
 To download:
 
@@ -99,7 +110,7 @@ python scripts/download_datasets.py --status
 
 ## Project Structure
 
-```
+```text
 ├── app.py               # Streamlit entry point
 ├── config/              # Configuration & session state
 ├── core/                # Core engine
@@ -150,7 +161,8 @@ OpenAI Compatible (Custom URL) - DeepSeek - Moonshot (Kimi) - MiMo - Gemini -
 ZhiPu (GLM) - Volcengine - Alibaba Bailian - SiliconFlow -
 OpenRouter - MiniMax
 
-Any OpenAI-compatible endpoint is supported via the "Custom (OpenAI Compatible)" provider option.
+OpenAI-compatible endpoints are supported through the
+"Custom (OpenAI Compatible)" provider option.
 
 ---
 
@@ -178,6 +190,7 @@ python -m pytest tests/ -v --cov=core --cov=evaluators --cov=utils
 | [docs/API.md](docs/API.md) | API reference (FastAPI backend) |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Development workflow |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security guidelines |
+| [docs/INDUSTRIAL_READINESS.md](docs/INDUSTRIAL_READINESS.md) | Single-tenant readiness gates and rollout plan |
 
 ---
 

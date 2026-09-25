@@ -79,14 +79,12 @@ class MBPPEvaluator(BaseEvaluator):
                     print(f"Load {filepath} 失败: {e}")
 
         if not samples:
-            samples = self._create_sample_data()
+            samples = self._fallback_to_demo_samples(self._create_sample_data)
 
         samples = self._normalize_samples(samples)
         random.shuffle(samples)
 
-        total_needed = self.num_shots + (
-            self.max_samples if self.max_samples else len(samples)
-        )
+        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
@@ -185,9 +183,7 @@ class MBPPEvaluator(BaseEvaluator):
             },
         ]
 
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """Format MBPP 样本"""
         text = sample.get("text", "")
         test_list = sample.get("test_list", [])
@@ -231,8 +227,7 @@ class MBPPEvaluator(BaseEvaluator):
         """Build chat messages for the MBPP evaluator."""
         messages: list[dict[str, str]] = []
         system_instruction = (
-            "You are a Python programming expert. "
-            "Write a function to solve the given problem."
+            "You are a Python programming expert. " "Write a function to solve the given problem."
         )
         messages.append({"role": "system", "content": system_instruction})
 
