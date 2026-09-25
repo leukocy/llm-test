@@ -8,6 +8,13 @@ from typing import Any
 from core.database.connection import Database
 from core.models.test_run import TestRun, TestRunStatus
 from core.repositories.base import BaseRepository
+from core.run_lifecycle import (
+    InvalidRunTransition,
+    RunEvent,
+    RunStatus,
+    advance_run,
+    event_for_transition,
+)
 
 
 class TestRunRepository(BaseRepository[TestRun]):
@@ -52,12 +59,18 @@ class TestRunRepository(BaseRepository[TestRun]):
         """
         if run.id is None:
             return False
+        stored = self.db.fetch_one("SELECT status FROM test_runs WHERE id = ?", (run.id,))
+        if stored is None:
+            return False
+        previous = stored["status"]
+        if previous != run.status:
+            event_for_transition(previous, run.status)
 
         data = run.to_dict()
         set_clause = ", ".join([f"{k} = ?" for k in data if k != "id"])
-        values = [v for k, v in data.items() if k != "id"] + [run.id]
+        values = [v for k, v in data.items() if k != "id"] + [run.id, previous]
 
-        sql = f"UPDATE test_runs SET {set_clause} WHERE id = ?"
+        sql = f"UPDATE test_runs SET {set_clause} WHERE id = ? AND status = ?"
         cursor = self.db.execute(sql, tuple(values))
         return cursor.rowcount > 0
 
@@ -102,12 +115,43 @@ class TestRunRepository(BaseRepository[TestRun]):
         Returns:
             is否succeeded
         """
-        if progress is not None:
-            data = {"status": status, "progress_percent": progress}
-        else:
-            data = {"status": status}
+        row = self.db.fetch_one("SELECT status FROM test_runs WHERE id = ?", (run_id,))
+        if row is None:
+            return False
+        current = row["status"]
+        if current == status:
+            if progress is None:
+                return True
+            if current in {
+                RunStatus.CANCELLED.value,
+                RunStatus.COMPLETED.value,
+                RunStatus.FAILED.value,
+            }:
+                raise InvalidRunTransition(f"Cannot update progress of a {current} run")
+            return self.update_by(
+                {"progress_percent": progress}, "id = ? AND status = ?", (run_id, current)
+            ) > 0
+        event = event_for_transition(current, status)
+        fields = {"progress_percent": progress} if progress is not None else None
+        return self.advance(run_id, event, fields, expected_status=current)
 
-        return self.update_by(data, "id = ?", (run_id,)) > 0
+    def advance(
+        self,
+        run_id: int,
+        event: RunEvent,
+        fields: dict[str, Any] | None = None,
+        expected_status: str | None = None,
+    ) -> bool:
+        """Persist one legal transition if no other worker changed the state."""
+        row = self.db.fetch_one("SELECT status FROM test_runs WHERE id = ?", (run_id,))
+        if row is None:
+            return False
+        previous = row["status"]
+        if expected_status is not None and previous != expected_status:
+            return False
+        next_status = advance_run(previous, event)
+        data = {**(fields or {}), "status": next_status.value}
+        return self.update_by(data, "id = ? AND status = ?", (run_id, previous)) > 0
 
     def update_progress(
         self, run_id: int, completed: int, total: int, failed: int = 0
@@ -135,7 +179,16 @@ class TestRunRepository(BaseRepository[TestRun]):
             "success_rate": success_rate,
         }
 
-        return self.update_by(data, "id = ?", (run_id,)) > 0
+        return self.update_by(
+            data,
+            "id = ? AND status IN (?, ?, ?)",
+            (
+                run_id,
+                TestRunStatus.RUNNING.value,
+                TestRunStatus.PAUSING.value,
+                TestRunStatus.CANCELLING.value,
+            ),
+        ) > 0
 
     def update_statistics(self, run_id: int, stats: dict[str, Any]) -> bool:
         """
@@ -183,18 +236,15 @@ class TestRunRepository(BaseRepository[TestRun]):
         Returns:
             is否succeeded
         """
-        status = (
-            TestRunStatus.COMPLETED.value if success else TestRunStatus.FAILED.value
-        )
+        event = RunEvent.COMPLETE if success else RunEvent.FAIL
         data = {
-            "status": status,
             "completed_at": datetime.now().isoformat(),
         }
 
         if stats:
             data.update(stats)
 
-        return self.update_by(data, "id = ?", (run_id,)) > 0
+        return self.advance(run_id, event, data)
 
     def search(self, query: str, limit: int = 50) -> list[TestRun]:
         """
@@ -213,4 +263,3 @@ class TestRunRepository(BaseRepository[TestRun]):
             (pattern, pattern, pattern),
             limit,
         )
-

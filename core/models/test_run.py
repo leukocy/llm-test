@@ -6,18 +6,10 @@ import json
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from enum import Enum
 from typing import Any
 
-
-class TestRunStatus(Enum):
-    """Test运行Status"""
-
-    RUNNING = "running"
-    PAUSED = "paused"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
-    FAILED = "failed"
+from core.run_lifecycle import RunEvent, advance_run
+from core.run_lifecycle import RunStatus as TestRunStatus
 
 
 @dataclass
@@ -287,9 +279,8 @@ class TestRun:
 
     def complete(self, success: bool = True):
         """标记Test completed"""
-        self.status = (
-            TestRunStatus.COMPLETED.value if success else TestRunStatus.FAILED.value
-        )
+        event = RunEvent.COMPLETE if success else RunEvent.FAIL
+        self.status = advance_run(self.status, event).value
         self.completed_at = datetime.now()
         if self.started_at:
             self.duration_seconds = (
@@ -298,7 +289,7 @@ class TestRun:
 
     def cancel(self):
         """CancelTest"""
-        self.status = TestRunStatus.CANCELLED.value
+        self.status = advance_run(self.status, RunEvent.CANCEL).value
         self.completed_at = datetime.now()
         if self.started_at:
             self.duration_seconds = (
@@ -307,11 +298,11 @@ class TestRun:
 
     def pause(self):
         """Pause Test"""
-        self.status = TestRunStatus.PAUSED.value
+        self.status = advance_run(self.status, RunEvent.PAUSE).value
 
     def resume(self):
         """Resume Test"""
-        self.status = TestRunStatus.RUNNING.value
+        self.status = advance_run(self.status, RunEvent.RESUME).value
 
     def update_progress(self, completed: int, total: int):
         """Update进度"""

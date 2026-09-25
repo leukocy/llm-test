@@ -186,6 +186,7 @@ python -m pytest tests/ -v --cov=core --cov=evaluators --cov=utils
 | Document | Description |
 |----------|-------------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Architecture overview |
+| [docs/ARCHITECTURE_MODERNIZATION.md](docs/ARCHITECTURE_MODERNIZATION.md) | Industrial architecture upgrade plan and delivery gates |
 | [CLAUDE.md](CLAUDE.md) | Development guide for AI assistants |
 | [docs/API.md](docs/API.md) | API reference (FastAPI backend) |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Development workflow |

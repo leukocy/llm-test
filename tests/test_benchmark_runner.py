@@ -314,6 +314,20 @@ class TestBenchmarkRunnerSystemInfo:
         runner.output_placeholder = None
         runner.update_ui()  # 不应抛异常
 
+    def test_update_ui_throttles_full_dataframe_rebuild_and_flushes_final_result(self, runner):
+        snapshots = []
+        runner.render_progress = lambda df, _output, _session: snapshots.append(len(df))
+        runner.output_placeholder = None
+
+        with patch("core.benchmark_runner.time.monotonic", side_effect=[1.0, 1.1, 1.2, 1.2]):
+            for session_id in (1, 2, 3):
+                runner.results_list.append({"session_id": session_id})
+                runner.update_ui()
+            runner.update_ui(force=True)
+
+        assert snapshots == [1, 3]
+        assert runner.progress_bar.progress.call_count == 2
+
     def test_update_log_invokes_render_log_callback(self, runner):
         """_update_log 把日志渲染交给注入的 render_log 回调（模式 F2）"""
         captured = []
