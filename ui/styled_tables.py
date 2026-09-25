@@ -10,6 +10,8 @@ import importlib.util
 import numpy as np
 import pandas as pd
 
+from ui.reporting.theme import INK, SUBTLE
+
 HAS_MATPLOTLIB = importlib.util.find_spec("matplotlib") is not None
 
 
@@ -72,26 +74,11 @@ def create_styled_summary_table(df, highlight_cols=None, highlight_best=True):
                 # Normalize 0..1
                 norm = (v - min_v) / rng
 
-                # Red (Tomato) -> Yellow -> Green (MediumSeaGreen)
-                # Red: (255, 99, 71)
-                # Yellow: (255, 255, 0)
-                # Green: (60, 179, 113)
-
-                if norm < 0.5:
-                    # Red to Yellow
-                    local_norm = norm * 2
-                    r = 255
-                    g = int(99 + (255 - 99) * local_norm)
-                    b = int(71 + (0 - 71) * local_norm)
-                else:
-                    # Yellow to Green
-                    local_norm = (norm - 0.5) * 2
-                    r = int(255 + (60 - 255) * local_norm)
-                    g = int(255 + (179 - 255) * local_norm)
-                    b = int(0 + (113 - 0) * local_norm)
-
-                # Use black text for better contrast on light colors
-                styles.append(f"background-color: rgb({r}, {g}, {b}); color: black")
+                # Quiet sequential tint keeps the table readable in dense reports.
+                r = int(246 - 25 * norm)
+                g = int(248 - 18 * norm)
+                b = int(252 - 7 * norm)
+                styles.append(f"background-color: rgb({r}, {g}, {b}); color: {INK}")
             return styles
 
         for col in highlight_cols:
@@ -151,12 +138,12 @@ def create_styled_summary_table(df, highlight_cols=None, highlight_best=True):
             {
                 "selector": "thead th",
                 "props": [
-                    ("background-color", "#007bff"),
+                    ("background-color", INK),
                     ("color", "white"),
                     ("font-weight", "bold"),
                     ("text-align", "center"),
                     ("padding", "12px 8px"),
-                    ("border", "1px solid #0056b3"),
+                    ("border", f"1px solid {INK}"),
                     ("font-size", "13px"),
                 ],
             },
@@ -166,19 +153,19 @@ def create_styled_summary_table(df, highlight_cols=None, highlight_best=True):
                 "props": [
                     ("text-align", "center"),
                     ("padding", "10px 8px"),
-                    ("border", "1px solid #e6e9ef"),
+                    ("border", f"1px solid {SUBTLE}"),
                     ("font-size", "12px"),
                 ],
             },
             # Hover effect
             {
                 "selector": "tbody tr:hover",
-                "props": [("background-color", "#f1f8ff !important")],
+                "props": [("background-color", "#eef2ff !important")],
             },
             # Alternating rows
             {
                 "selector": "tbody tr:nth-child(even)",
-                "props": [("background-color", "#f8f9fa")],
+                "props": [("background-color", "#fafbfe")],
             },
             # Table border
             {
@@ -186,7 +173,7 @@ def create_styled_summary_table(df, highlight_cols=None, highlight_best=True):
                 "props": [
                     ("border-collapse", "collapse"),
                     ("width", "100%"),
-                    ("box-shadow", "0 2px 8px rgba(0,0,0,0.1)"),
+                    ("border", f"1px solid {SUBTLE}"),
                 ],
             },
         ]
@@ -200,18 +187,21 @@ def create_styled_summary_table(df, highlight_cols=None, highlight_best=True):
             if not pd.api.types.is_numeric_dtype(s):
                 return ["" for _ in s]
 
+            positive = pd.to_numeric(s, errors="coerce").replace([np.inf, -np.inf], np.nan)
+            positive = positive.where(positive > 0)
+            if positive.notna().sum() < 2:
+                return ["" for _ in s]
+
             # Determine if smaller or larger is better
             if any(keyword in s.name for keyword in ["TTFT", "TPOT", "time", "latency", "delay"]):
-                # Smaller is better
-                is_best = s == s.min()
+                is_best = positive == positive.min()
                 return [
-                    "background-color: #90EE90; font-weight: bold" if v else "" for v in is_best
+                    "background-color: #e8f1ff; font-weight: bold" if v else "" for v in is_best
                 ]
             elif any(keyword in s.name for keyword in ["TPS", "Speed", "Throughput", "Rate"]):
-                # Larger is better
-                is_best = s == s.max()
+                is_best = positive == positive.max()
                 return [
-                    "background-color: #90EE90; font-weight: bold" if v else "" for v in is_best
+                    "background-color: #e8f1ff; font-weight: bold" if v else "" for v in is_best
                 ]
 
             return ["" for _ in s]

@@ -306,6 +306,21 @@ div[data-testid="stAlert"] {
     font-size: 0.9rem;
 }
 
+.report-eyebrow {
+    margin-top: 0.5rem;
+    color: var(--accent-primary);
+    font-size: 0.72rem;
+    font-weight: 750;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
 @media (max-width: 900px) {
     [data-testid="stMainBlockContainer"] {
         padding: 1.35rem 1rem 3rem;
@@ -352,7 +367,7 @@ def status_badge_html(status: object) -> str:
 
     label = str(status or "Idle").strip() or "Idle"
     css_class = _STATUS_CLASSES.get(label.casefold(), "status-idle")
-    return f'<span class="status-badge {css_class}" role="status">' f"{escape(label)}</span>"
+    return f'<span class="status-badge {css_class}" role="status">{escape(label)}</span>'
 
 
 def apply_design_system() -> None:

@@ -3,12 +3,50 @@ Quality Test Reports Module
 Quality test report module - generates quality assessment visualization reports
 """
 
+import math
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
 from evaluators.base_evaluator import EvaluationResult
+from ui.reporting.statistics import wilson_interval
+from ui.reporting.theme import INDIGO, INK, PAPER, SUBTLE, TEAL
+from utils.spreadsheet import safe_download_filename
+
+
+def _positive_measurement(value):
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if math.isfinite(numeric) and numeric > 0 else None
+
+
+def _quality_accuracy(result: EvaluationResult) -> tuple[float | None, tuple[float, float] | None]:
+    """Use observed counts for an unweighted accuracy and its Wilson interval."""
+    total = result.total_samples
+    correct = result.correct_samples
+    interval = wilson_interval(correct, total)
+    if interval is None:
+        return None, None
+    return correct / total, interval
+
+
+def _quality_chart_style(fig: go.Figure, title: str, height: int = 370) -> go.Figure:
+    fig.update_layout(
+        title={"text": title, "x": 0, "font": {"size": 17, "color": INK}},
+        font={"family": "Inter, Segoe UI, PingFang SC, sans-serif", "color": INK},
+        paper_bgcolor=PAPER,
+        plot_bgcolor=PAPER,
+        margin={"l": 90, "r": 50, "t": 58, "b": 48},
+        height=height,
+        showlegend=False,
+        xaxis={"title": "Accuracy (%)", "range": [0, 105], "gridcolor": SUBTLE, "zeroline": False},
+        yaxis={"title": None, "showgrid": False},
+    )
+    return fig
 
 
 def generate_quality_summary(results: dict[str, EvaluationResult]) -> pd.DataFrame:
@@ -27,6 +65,7 @@ def generate_quality_summary(results: dict[str, EvaluationResult]) -> pd.DataFra
     data = []
     for name, result in results.items():
         stats = result.performance_stats or {}
+        accuracy, interval = _quality_accuracy(result)
 
         # Calculate AI judge correction count
         judge_corrected = sum(1 for s in result.details if getattr(s, "is_judge_corrected", False))
@@ -37,9 +76,11 @@ def generate_quality_summary(results: dict[str, EvaluationResult]) -> pd.DataFra
         row = {
             "Dataset": name,
             "Model": result.model_id,
-            "Accuracy": result.accuracy,
+            "Accuracy": accuracy,
             "Correct": result.correct_samples,
             "Total Samples": result.total_samples,
+            "Accuracy CI low (%)": interval[0] * 100 if interval else None,
+            "Accuracy CI high (%)": interval[1] * 100 if interval else None,
             "Judge Corrections": judge_corrected,
             "Parse Methods": eval_methods,
             "Duration (s)": round(result.duration_seconds, 1),
@@ -47,10 +88,12 @@ def generate_quality_summary(results: dict[str, EvaluationResult]) -> pd.DataFra
 
         # Add performance metrics (if available)
         if stats:
-            row["Avg TTFT(ms)"] = round(stats.get("avg_ttft_ms", 0), 0)
-            row["Avg TPS"] = round(stats.get("avg_tps", 0), 1)
-            row["Input Tokens"] = stats.get("total_input_tokens", 0)
-            row["Output Tokens"] = stats.get("total_output_tokens", 0)
+            ttft = _positive_measurement(stats.get("avg_ttft_ms"))
+            tps = _positive_measurement(stats.get("avg_tps"))
+            row["Avg TTFT(ms)"] = round(ttft, 1) if ttft is not None else None
+            row["Avg TPS"] = round(tps, 1) if tps is not None else None
+            row["Input Tokens"] = stats.get("total_input_tokens")
+            row["Output Tokens"] = stats.get("total_output_tokens")
 
         row["Eval Time"] = result.timestamp
         data.append(row)
@@ -84,74 +127,59 @@ def _compute_eval_method_breakdown(details: list) -> str:
 
 
 def render_accuracy_chart(results: dict[str, EvaluationResult]) -> go.Figure:
-    """
-    Render accuracy bar chart
-    """
+    """Show dataset accuracy with sample counts and Wilson intervals."""
     if not results:
         return go.Figure()
 
-    datasets = list(results.keys())
-    accuracies = [results[d].accuracy * 100 for d in datasets]
-
-    fig = go.Figure(
-        data=[
-            go.Bar(
-                x=datasets,
-                y=accuracies,
-                text=[f"{acc:.1f}%" for acc in accuracies],
-                textposition="outside",
-                marker_color="#4CAF50",
-                marker_line_color="#2E7D32",
-                marker_line_width=1,
+    rows = []
+    for name, result in results.items():
+        accuracy, interval = _quality_accuracy(result)
+        if accuracy is not None and interval is not None:
+            rows.append(
+                (name, accuracy * 100, interval[0] * 100, interval[1] * 100, result.total_samples)
             )
-        ]
+    if not rows:
+        return go.Figure()
+    names, values, lows, highs, counts = zip(*rows, strict=True)
+    fig = go.Figure(
+        go.Scatter(
+            x=values,
+            y=names,
+            mode="markers",
+            marker={"size": 12, "color": INDIGO},
+            error_x={
+                "type": "data",
+                "symmetric": False,
+                "array": [high - value for value, high in zip(values, highs, strict=True)],
+                "arrayminus": [value - low for value, low in zip(values, lows, strict=True)],
+                "color": TEAL,
+                "thickness": 2,
+                "width": 5,
+            },
+            customdata=list(zip(counts, lows, highs, strict=True)),
+            hovertemplate="%{y}<br>Accuracy: %{x:.1f}%<br>n=%{customdata[0]}<br>95% Wilson: %{customdata[1]:.1f}–%{customdata[2]:.1f}%<extra></extra>",
+        )
     )
-
-    fig.update_layout(
-        title="Accuracy by Dataset",
-        xaxis_title="Dataset",
-        yaxis_title="Accuracy (%)",
-        yaxis_range=[0, 105],
-        template="plotly_white",
-        showlegend=False,
-        height=400,
+    return _quality_chart_style(
+        fig, "Accuracy and sampling uncertainty", max(300, 58 * len(rows) + 130)
     )
-
-    return fig
 
 
 def render_radar_chart(results: dict[str, EvaluationResult]) -> go.Figure:
-    """
-    Render capability radar chart (for multi-dataset evaluation)
-    """
-    if not results or len(results) < 3:
+    """Show workload size without treating different datasets as a common capability scale."""
+    if not results:
         return go.Figure()
-
-    categories = list(results.keys())
-    values = [results[d].accuracy * 100 for d in categories]
-
-    # Close the radar chart
-    categories = categories + [categories[0]]
-    values = values + [values[0]]
-
     fig = go.Figure(
-        data=go.Scatterpolar(
-            r=values,
-            theta=categories,
-            fill="toself",
-            name="Model Capability",
-            line_color="#2196F3",
-            fillcolor="rgba(33, 150, 243, 0.3)",
+        go.Bar(
+            x=[result.total_samples for result in results.values()],
+            y=list(results),
+            orientation="h",
+            marker_color=TEAL,
+            hovertemplate="%{y}<br>Evaluated samples: %{x:,}<extra></extra>",
         )
     )
-
-    fig.update_layout(
-        polar={"radialaxis": {"visible": True, "range": [0, 100]}},
-        title="Model Capability Radar",
-        showlegend=False,
-        height=450,
-    )
-
+    _quality_chart_style(fig, "Evaluated sample coverage", max(300, 58 * len(results) + 130))
+    fig.update_xaxes(title="Samples", range=None)
     return fig
 
 
@@ -164,13 +192,16 @@ def render_category_heatmap(result: EvaluationResult) -> go.Figure:
 
     # Extract data (accuracy may be explicitly None in deserialized results)
     categories = list(result.by_category.keys())
-    accuracies = [(result.by_category[c].get("accuracy") or 0) * 100 for c in categories]
+    accuracies = []
+    for category in categories:
+        accuracy = result.by_category[category].get("accuracy")
+        accuracies.append(accuracy * 100 if accuracy is not None else float("nan"))
     counts = [result.by_category[c].get("count", 0) for c in categories]
 
     # Sort by accuracy
     sorted_data = sorted(
         zip(categories, accuracies, counts, strict=False),
-        key=lambda x: x[1],
+        key=lambda x: x[1] if pd.notna(x[1]) else -1,
         reverse=True,
     )
     if sorted_data:
@@ -193,13 +224,11 @@ def render_category_heatmap(result: EvaluationResult) -> go.Figure:
                 x=list(accuracies),
                 orientation="h",
                 text=[
-                    f"{acc:.1f}% (n={cnt})" for acc, cnt in zip(accuracies, counts, strict=False)
+                    f"{acc:.1f}% (n={cnt})" if pd.notna(acc) else f"No score (n={cnt})"
+                    for acc, cnt in zip(accuracies, counts, strict=False)
                 ],
                 textposition="outside",
-                marker_color=list(accuracies),
-                marker_colorscale="RdYlGn",
-                marker_cmin=0,
-                marker_cmax=100,
+                marker_color=INDIGO,
             )
         ]
     )
@@ -209,9 +238,12 @@ def render_category_heatmap(result: EvaluationResult) -> go.Figure:
         xaxis_title="Accuracy (%)",
         yaxis_title="Category",
         xaxis_range=[0, 110],
-        template="plotly_white",
         height=max(400, len(categories) * 25),
         showlegend=False,
+        paper_bgcolor=PAPER,
+        plot_bgcolor=PAPER,
+        font={"color": INK},
+        xaxis={"gridcolor": SUBTLE},
     )
 
     return fig
@@ -310,11 +342,15 @@ def render_error_analysis(result: EvaluationResult, max_errors: int = 20) -> Non
             export_data.append(row)
 
         if export_data:
+            from ui.export import safe_csv_bytes
+
             csv_df = pd.DataFrame(export_data)
             st.download_button(
                 label="Download Error Report",
-                data=csv_df.to_csv(index=False),
-                file_name=f"errors_{result.dataset_name}_{result.model_id}.csv",
+                data=safe_csv_bytes(csv_df),
+                file_name=safe_download_filename(
+                    f"errors_{result.dataset_name}_{result.model_id}.csv"
+                ),
                 mime="text/csv",
                 help="Download all error samples with prompts and full responses",
             )
@@ -462,88 +498,98 @@ def render_eval_method_breakdown(result: EvaluationResult) -> None:
 
 
 def render_performance_stats(results: dict[str, EvaluationResult]) -> None:
-    """
-    Render performance metrics panel
-    """
+    """Render sample-level timing distributions when measurements are present."""
     st.markdown("### Performance Metrics")
-
-    # Collect results with performance data
-    perf_data = []
-    for name, result in results.items():
-        stats = result.performance_stats or {}
-        if stats:
-            perf_data.append(
-                {
-                    "Dataset": name,
-                    "Avg TTFT (ms)": round(stats.get("avg_ttft_ms", 0), 1),
-                    "Avg TPS": round(stats.get("avg_tps", 0), 1),
-                    "Max TPS": round(stats.get("max_tps", 0), 1),
-                    "Avg Latency (ms)": round(stats.get("avg_latency_ms", 0), 0),
-                    "Input Tokens": stats.get("total_input_tokens", 0),
-                    "Output Tokens": stats.get("total_output_tokens", 0),
-                    "Success Rate": f"{stats.get('success_rate', 0):.1%}",
-                }
-            )
-
-    if not perf_data:
+    perf_df = build_quality_performance_summary(results)
+    if perf_df.empty:
         st.info("No performance metrics data yet")
         return
+    st.dataframe(perf_df, use_container_width=True, hide_index=True)
+    st.caption(
+        "P50/P95 TTFT and P50/P10 TPS use successful samples with positive measurements. "
+        "Aggregate averages are shown only when supplied by the evaluator. "
+        "Dataset workloads may differ."
+    )
 
-    # Performance summary table
-    perf_df = pd.DataFrame(perf_data)
-    st.dataframe(perf_df)
+    for fig in build_quality_performance_figures(perf_df):
+        st.plotly_chart(fig, use_container_width=True)
 
-    # Chart display
-    col1, col2 = st.columns(2)
 
-    with col1:
-        # TTFT chart
-        datasets = [d["Dataset"] for d in perf_data]
-        ttfts = [d["Avg TTFT (ms)"] for d in perf_data]
-
-        fig_ttft = go.Figure(
-            data=[
-                go.Bar(
-                    x=datasets,
-                    y=ttfts,
-                    text=[f"{t:.0f}ms" for t in ttfts],
-                    textposition="outside",
-                    marker_color="#FF9800",
+def build_quality_performance_figures(perf_df: pd.DataFrame) -> list[go.Figure]:
+    """Build the same sample distribution charts for screen and HTML export."""
+    if perf_df.empty:
+        return []
+    figures = []
+    chart_specs = (
+        ("TTFT (ms)", "TTFT P50 (ms)", "TTFT P95 (ms)", "TTFT valid n"),
+        ("TPS (tokens/s)", "TPS P50", "TPS P10", "TPS valid n"),
+    )
+    for title, median_col, tail_col, n_col in chart_specs:
+        if median_col not in perf_df or perf_df[median_col].notna().sum() == 0:
+            continue
+        fig = go.Figure()
+        for column, label, color, symbol in (
+            (median_col, "P50", INDIGO, "circle"),
+            (tail_col, "P95" if "P95" in tail_col else "P10", TEAL, "diamond"),
+        ):
+            fig.add_trace(
+                go.Scatter(
+                    x=perf_df[column],
+                    y=perf_df["Dataset"],
+                    mode="markers",
+                    name=label,
+                    marker={"color": color, "size": 10, "symbol": symbol},
+                    customdata=perf_df[[n_col]].to_numpy(),
+                    hovertemplate="%{y}<br>"
+                    + label
+                    + ": %{x:,.2f}<br>Valid n: %{customdata[0]}<extra></extra>",
                 )
-            ]
+            )
+        _quality_chart_style(fig, title, max(300, 52 * len(perf_df) + 130))
+        fig.update_xaxes(title=title, range=None)
+        fig.update_layout(
+            showlegend=True, legend={"orientation": "h", "y": 1.13, "x": 1, "xanchor": "right"}
         )
-        fig_ttft.update_layout(
-            title="Average TTFT",
-            xaxis_title="Dataset",
-            yaxis_title="TTFT (ms)",
-            template="plotly_white",
-            height=300,
-        )
-        st.plotly_chart(fig_ttft)
+        figures.append(fig)
+    return figures
 
-    with col2:
-        # TPS chart
-        tps_values = [d["Avg TPS"] for d in perf_data]
 
-        fig_tps = go.Figure(
-            data=[
-                go.Bar(
-                    x=datasets,
-                    y=tps_values,
-                    text=[f"{t:.1f}" for t in tps_values],
-                    textposition="outside",
-                    marker_color="#2196F3",
-                )
-            ]
+def build_quality_performance_summary(results: dict[str, EvaluationResult]) -> pd.DataFrame:
+    """Keep aggregate averages distinct from measured sample quantiles."""
+    records = []
+    for name, result in results.items():
+        valid = [sample for sample in result.details if not sample.error]
+        ttft = pd.Series(
+            [
+                value
+                for sample in valid
+                if (value := _positive_measurement(sample.ttft_ms)) is not None
+            ],
+            dtype=float,
         )
-        fig_tps.update_layout(
-            title="Average TPS",
-            xaxis_title="Dataset",
-            yaxis_title="Tokens/Second",
-            template="plotly_white",
-            height=300,
+        tps = pd.Series(
+            [value for sample in valid if (value := _positive_measurement(sample.tps)) is not None],
+            dtype=float,
         )
-        st.plotly_chart(fig_tps)
+        stats = result.performance_stats or {}
+        average_ttft = _positive_measurement(stats.get("avg_ttft_ms"))
+        average_tps = _positive_measurement(stats.get("avg_tps"))
+        if not len(ttft) and not len(tps) and average_ttft is None and average_tps is None:
+            continue
+        records.append(
+            {
+                "Dataset": name,
+                "TTFT valid n": len(ttft),
+                "TTFT P50 (ms)": float(ttft.median()) if len(ttft) else None,
+                "TTFT P95 (ms)": float(ttft.quantile(0.95)) if len(ttft) else None,
+                "TPS valid n": len(tps),
+                "TPS P50": float(tps.median()) if len(tps) else None,
+                "TPS P10": float(tps.quantile(0.10)) if len(tps) else None,
+                "Avg TTFT (ms)": average_ttft,
+                "Avg TPS": average_tps,
+            }
+        )
+    return pd.DataFrame.from_records(records)
 
 
 def render_quality_report(
@@ -569,11 +615,26 @@ def render_quality_report(
     st.markdown("### Evaluation Summary")
     summary_df = generate_quality_summary(results)
 
-    # Format accuracy column
-    if "Accuracy" in summary_df.columns:
-        summary_df["Accuracy"] = summary_df["Accuracy"].apply(lambda x: f"{x:.2%}")
-
-    st.dataframe(summary_df)
+    display_df = summary_df.copy()
+    display_df["Accuracy"] = display_df["Accuracy"].map(
+        lambda value: f"{value:.2%}" if pd.notna(value) else "Unavailable"
+    )
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    st.caption(
+        "Accuracy is correct / evaluated samples. Intervals use the 95% Wilson method; "
+        "they describe sampling uncertainty only when items can be treated as approximately independent. "
+        "Dataset scores represent different tasks and should not be averaged into one capability score."
+    )
+    for name, result in results.items():
+        accuracy, _ = _quality_accuracy(result)
+        if accuracy is not None and abs(accuracy - result.accuracy) > 1e-6:
+            st.warning(
+                f"{name}: stored accuracy differs from correct / total; charts and summary use the observed counts."
+            )
+        if result.total_samples < 20:
+            st.warning(
+                f"{name}: only {result.total_samples} evaluated samples; interpret the score cautiously."
+            )
 
     # Accuracy bar chart
     col1, col2 = st.columns(2)
@@ -583,11 +644,8 @@ def render_quality_report(
         st.plotly_chart(accuracy_chart)
 
     with col2:
-        if len(results) >= 3:
-            radar_chart = render_radar_chart(results)
-            st.plotly_chart(radar_chart)
-        else:
-            st.info("Need at least 3 datasets to display radar chart")
+        coverage_chart = render_radar_chart(results)
+        st.plotly_chart(coverage_chart, use_container_width=True)
 
     # Performance metrics panel
     render_performance_stats(results)
@@ -637,15 +695,17 @@ def render_quality_report(
     # Export options
     st.markdown("### Export Results")
 
-    col_export1, col_export2 = st.columns(2)
+    col_export1, col_export2, col_export3 = st.columns(3)
 
     with col_export1:
         # CSV Export
-        csv_data = summary_df.to_csv(index=False)
+        from ui.export import safe_csv_bytes
+
+        csv_data = safe_csv_bytes(summary_df)
         st.download_button(
             label="Download Summary CSV",
             data=csv_data,
-            file_name=f"quality_summary_{model_id}.csv",
+            file_name=safe_download_filename(f"quality_summary_{model_id}.csv"),
             mime="text/csv",
         )
 
@@ -657,6 +717,48 @@ def render_quality_report(
         st.download_button(
             label="Download Detailed JSON",
             data=json.dumps(json_data, ensure_ascii=False, indent=2),
-            file_name=f"quality_details_{model_id}.json",
+            file_name=safe_download_filename(f"quality_details_{model_id}.json"),
             mime="application/json",
+        )
+
+    with col_export3:
+        from ui.reporting.html_export import build_html_report
+
+        perf_df = build_quality_performance_summary(results)
+        tables = [("Quality outcomes", summary_df)]
+        if not perf_df.empty:
+            tables.append(("Sample-level performance", perf_df))
+        html_report = build_html_report(
+            [
+                render_accuracy_chart(results),
+                render_radar_chart(results),
+                *build_quality_performance_figures(perf_df),
+            ],
+            tables,
+            [
+                "Method: Accuracy uses correct / evaluated samples with 95% Wilson intervals.",
+                "Comparability: Datasets cover different tasks; compare like workloads and inspect sample counts.",
+                "Timing: P50/P95 TTFT and P50/P10 TPS use positive measurements from successful samples only.",
+            ],
+            title=f"Model quality assessment - {model_id}",
+            overview_cards=(
+                ("Model", model_id, "Evaluated model identifier"),
+                ("Datasets", str(len(results)), "Distinct evaluation workloads"),
+                (
+                    "Evaluated samples",
+                    f"{sum(r.total_samples for r in results.values()):,}",
+                    "Across all datasets",
+                ),
+                (
+                    "Correct answers",
+                    f"{sum(r.correct_samples for r in results.values()):,}",
+                    "Count only; dataset scores remain separate",
+                ),
+            ),
+        )
+        st.download_button(
+            label="Download quality HTML report",
+            data=html_report,
+            file_name=safe_download_filename(f"quality_report_{model_id}.html"),
+            mime="text/html",
         )

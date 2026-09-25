@@ -498,9 +498,6 @@ def _render_capability_sheet() -> None:
 
 def _sheet_to_csv(sheet: list[dict]) -> str:
     """客户能力表 → CSV 字符串（UTF-8 BOM）。"""
-    import csv
-    import io
-
     if not sheet:
         return ""
     # 取所有键的并集，但优先 CAPABILITY_COLUMNS 顺序
@@ -509,13 +506,9 @@ def _sheet_to_csv(sheet: list[dict]) -> str:
     fields = list(CAPABILITY_COLUMNS)
     extra = sorted({k for row in sheet for k in row} - set(fields))
     fields += extra
-    buf = io.StringIO()
-    buf.write("﻿")
-    writer = csv.DictWriter(buf, fieldnames=fields, lineterminator="\n", extrasaction="ignore")
-    writer.writeheader()
-    for row in sheet:
-        writer.writerow({k: ("" if v is None else v) for k, v in row.items()})
-    return buf.getvalue()
+    from utils.spreadsheet import safe_csv_text
+
+    return "\ufeff" + safe_csv_text(pd.DataFrame(sheet, columns=fields))
 
 
 # ---------------------------------------------------------------------------

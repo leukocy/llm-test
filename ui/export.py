@@ -5,298 +5,130 @@ Supports export to Excel, HTML, enhanced Markdown formats, and static PNG charts
 """
 
 import base64
+import re
+from html import escape
 from io import BytesIO
 
 import pandas as pd
 import streamlit as st
 
+from ui.reporting.theme import AMBER, BLUE, SERIES, TEAL
+from utils.spreadsheet import safe_csv_bytes as safe_csv_bytes
+from utils.spreadsheet import safe_spreadsheet_text
+
+
+def _excel_sheet_name(name, used):
+    cleaned = re.sub(r"[\\/*?:\[\]]", "_", str(name)).strip(" '\"") or "Results"
+    base = cleaned[:31]
+    candidate = base
+    suffix = 2
+    while candidate.casefold() in used:
+        tail = f"_{suffix}"
+        candidate = base[: 31 - len(tail)] + tail
+        suffix += 1
+    used.add(candidate.casefold())
+    return candidate
+
 
 def export_to_excel(df_dict, filename="benchmark_results.xlsx"):
-    """
-    Export DataFrames to Excel with professional formatting.
-
-    Args:
-        df_dict: Dictionary of {sheet_name: dataframe}
-        filename: Output filename
-
-    Returns:
-        BytesIO object containing Excel file
-    """
+    """Export typed values with readable formatting and safe text cells."""
     try:
+        from ui.reporting.theme import INK, SUBTLE
+
         output = BytesIO()
+        used_names: set[str] = set()
+        prepared = []
+        for sheet_name, df in df_dict.items():
+            safe = df.copy()
+            for column in safe.columns:
+                if not pd.api.types.is_numeric_dtype(safe[column]):
+                    safe[column] = safe[column].map(safe_spreadsheet_text)
+            prepared.append((_excel_sheet_name(sheet_name, used_names), safe))
+        if not prepared:
+            raise ValueError("No worksheets to export")
 
-        # Try xlsxwriter first (better formatting)
         try:
-            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            with pd.ExcelWriter(
+                output,
+                engine="xlsxwriter",
+                engine_kwargs={"options": {"strings_to_formulas": False, "strings_to_urls": False}},
+            ) as writer:
                 workbook = writer.book
-
-                # Define formats
-                header_format = workbook.add_format(
+                header = workbook.add_format(
                     {
                         "bold": True,
-                        "bg_color": "#007bff",
-                        "font_color": "white",
-                        "align": "center",
-                        "valign": "vcenter",
-                        "border": 1,
+                        "bg_color": INK,
+                        "font_color": "#ffffff",
                         "font_size": 11,
-                    }
-                )
-
-                number_format = workbook.add_format(
-                    {
-                        "align": "center",
                         "valign": "vcenter",
-                        "border": 1,
-                        "num_format": "0.00",
-                        "font_size": 10,
+                        "bottom": 2,
+                        "bottom_color": SUBTLE,
                     }
                 )
-
-                for sheet_name, df in df_dict.items():
-                    # Write data
-                    df.to_excel(
-                        writer,
-                        sheet_name=sheet_name[:31],
-                        index=False,
-                        startrow=1,
-                        header=False,
-                    )
-
-                    worksheet = writer.sheets[sheet_name[:31]]
-
-                    # Write header
-                    for col_num, value in enumerate(df.columns.values):
-                        worksheet.write(0, col_num, value, header_format)
-
-                    # Set column widths
-                    for i, col in enumerate(df.columns):
-                        # Calculate max width
-                        max_len = (
-                            max(
-                                (df[col].astype(str).map(len).max() if len(df) > 0 else 10),
-                                len(str(col)),
-                            )
-                            + 2
+                integer = workbook.add_format({"num_format": "#,##0", "font_color": INK})
+                decimal = workbook.add_format({"num_format": "#,##0.00", "font_color": INK})
+                for name, df in prepared:
+                    df.to_excel(writer, sheet_name=name, index=False, startrow=1, header=False)
+                    sheet = writer.sheets[name]
+                    sheet.set_row(0, 34)
+                    sheet.freeze_panes(1, 0)
+                    for index, column in enumerate(df.columns):
+                        sheet.write_string(
+                            0, index, str(safe_spreadsheet_text(str(column))), header
                         )
-                        worksheet.set_column(i, i, min(max_len, 30))
-
-                    # Apply number format to numeric columns
-                    for i, col in enumerate(df.columns):
-                        if pd.api.types.is_numeric_dtype(df[col]):
-                            worksheet.set_column(i, i, None, number_format)
-
+                        samples = df[column].dropna().head(200).astype(str).map(len)
+                        width = min(
+                            44,
+                            max(
+                                12,
+                                len(str(column)) + 2,
+                                int(samples.max()) + 2 if len(samples) else 12,
+                            ),
+                        )
+                        fmt = None
+                        if pd.api.types.is_integer_dtype(df[column]):
+                            fmt = integer
+                        elif pd.api.types.is_float_dtype(df[column]):
+                            fmt = decimal
+                        sheet.set_column(index, index, width, fmt)
+                    if len(df.columns):
+                        sheet.autofilter(0, 0, len(df), len(df.columns) - 1)
         except ImportError:
-            # Fallback to openpyxl
+            from openpyxl.styles import Alignment, Font, PatternFill
+
             with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                for sheet_name, df in df_dict.items():
-                    df.to_excel(writer, sheet_name=sheet_name[:31], index=False)
+                for name, df in prepared:
+                    df.to_excel(writer, sheet_name=name, index=False)
+                    sheet = writer.sheets[name]
+                    sheet.freeze_panes = "A2"
+                    sheet.auto_filter.ref = sheet.dimensions
+                    for cell in sheet[1]:
+                        cell.font = Font(bold=True, color="FFFFFF")
+                        cell.fill = PatternFill("solid", fgColor=INK.removeprefix("#"))
+                        cell.alignment = Alignment(vertical="center")
+                    sheet.row_dimensions[1].height = 26
+                    for index, column in enumerate(df.columns, 1):
+                        letter = sheet.cell(1, index).column_letter
+                        sheet.column_dimensions[letter].width = min(
+                            44, max(12, len(str(column)) + 2)
+                        )
 
         output.seek(0)
         return output
-
-    except Exception as e:
-        st.error(f"Excel Export failed: {e}")
+    except Exception as error:
+        st.error(f"Excel Export failed: {error}")
         return None
 
 
 def export_interactive_html(
-    figures_list, tables_list, insights_list=None, title="LLM Benchmark Report"
+    figures_list, tables_list, insights_list=None, title="LLM Benchmark Report", analysis=None
 ):
-    """
-    Export interactive HTML report with all charts and tables.
+    """Export a self-contained, escaped HTML report with statistical evidence."""
+    from ui.reporting.html_export import build_html_report
 
-    Args:
-        figures_list: List of plotly figures
-        tables_list: List of styled DataFrames
-        insights_list: Optional list of insight strings
-        title: Report title
-
-    Returns:
-        HTML string
-    """
-    html_parts = []
-
-    # HTML header
-    html_parts.append(
-        f"""
-    <!DOCTYPE html>
-    <html lang="zh-CN">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>{title}</title>
-        <style>
-            * {{
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }}
-
-            body {{
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-                line-height: 1.6;
-                color: #333;
-                background-color: #f5f5f5;
-                padding: 20px;
-            }}
-
-            .container {{
-                max-width: 1400px;
-                margin: 0 auto;
-                background-color: white;
-                padding: 40px;
-                border-radius: 8px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            }}
-
-            h1 {{
-                color: #007bff;
-                border-bottom: 3px solid #007bff;
-                padding-bottom: 15px;
-                margin-bottom: 30px;
-                font-size: 32px;
-            }}
-
-            h2 {{
-                color: #333;
-                margin-top: 40px;
-                margin-bottom: 20px;
-                font-size: 24px;
-            }}
-
-            .chart-container {{
-                margin: 30px 0;
-                padding: 20px;
-                background-color: #fafafa;
-                border-radius: 8px;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            }}
-
-            table {{
-                border-collapse: collapse;
-                width: 100%;
-                margin: 20px 0;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            }}
-
-            th {{
-                background-color: #007bff;
-                color: white;
-                padding: 12px;
-                text-align: center;
-                font-weight: 600;
-                font-size: 13px;
-            }}
-
-            td {{
-                padding: 10px;
-                border: 1px solid #e6e9ef;
-                text-align: center;
-                font-size: 12px;
-            }}
-
-            tr:nth-child(even) {{
-                background-color: #f8f9fa;
-            }}
-
-            tr:hover {{
-                background-color: #f1f8ff;
-            }}
-
-            .insights {{
-                background-color: #e7f3ff;
-                border-left: 4px solid #007bff;
-                padding: 20px;
-                margin: 30px 0;
-                border-radius: 4px;
-            }}
-
-            .insights h3 {{
-                color: #007bff;
-                margin-bottom: 15px;
-            }}
-
-            .insights ul {{
-                list-style-type: none;
-                padding-left: 0;
-            }}
-
-            .insights li {{
-                padding: 8px 0;
-                border-bottom: 1px solid #cce5ff;
-            }}
-
-            .insights li:last-child {{
-                border-bottom: none;
-            }}
-
-            .timestamp {{
-                text-align: right;
-                color: #666;
-                font-size: 14px;
-                margin-top: 40px;
-                padding-top: 20px;
-                border-top: 1px solid #e6e9ef;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>{title}</h1>
-    """
+    return build_html_report(
+        figures_list, tables_list, insights_list, title=title, analysis=analysis
     )
-
-    # Add insights if provided
-    if insights_list and len(insights_list) > 0:
-        html_parts.append(
-            """
-            <div class="insights">
-                <h3>Performance Insights</h3>
-                <ul>
-        """
-        )
-        for insight in insights_list:
-            # Remove markdown formatting for HTML
-            clean_insight = insight.replace("**", "").replace("*", "")
-            html_parts.append(f"<li>{clean_insight}</li>")
-        html_parts.append("</ul></div>")
-
-    # Add charts
-    for i, fig in enumerate(figures_list):
-        if fig is not None:
-            html_parts.append(f"<h2>Chart {i+1}</h2>")
-            # Use 'cdn' for the first chart to include the library, 'False' for others to reuse it
-            include_js = "cdn" if i == 0 else False
-            html_parts.append(
-                fig.to_html(include_plotlyjs=include_js, full_html=False, div_id=f"chart{i}")
-            )
-
-    # Add tables
-    for i, table in enumerate(tables_list):
-        if table is not None:
-            html_parts.append(f"<h2>Data Table {i+1}</h2>")
-            if hasattr(table, "to_html"):
-                html_parts.append(table.to_html(index=False, escape=False))
-            else:
-                html_parts.append(table)
-
-    # Add timestamp
-    import datetime
-
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    html_parts.append(f'<div class="timestamp">Generated: {timestamp}</div>')
-
-    # Close HTML
-    html_parts.append(
-        """
-        </div>
-    </body>
-    </html>
-    """
-    )
-
-    return "".join(html_parts)
 
 
 def create_html_download_link(
@@ -314,7 +146,7 @@ def create_html_download_link(
         HTML download link
     """
     b64 = base64.b64encode(html_content.encode()).decode()
-    href = f'<a href="data:text/html;base64,{b64}" download="{filename}" class="download-btn">{link_text}</a>'
+    href = f'<a href="data:text/html;base64,{b64}" download="{escape(str(filename), quote=True)}" class="download-btn">{escape(str(link_text))}</a>'
     return href
 
 
@@ -356,13 +188,13 @@ def _resolve_col(df: pd.DataFrame, *candidates: str) -> str | None:
 
 
 def _safe_col_list(df: pd.DataFrame, col: str | None) -> list[float]:
-    """Safely extract column data, convert to float list.
-
-    NaN/NA values become 0.0 — float(pd.NA) would raise, and matplotlib
-    chokes on raw NA sentinels."""
+    """Extract numeric chart values; leave missing measurements as gaps."""
     if col is None or col not in df.columns:
         return []
-    return [float(v) if pd.notna(v) else 0.0 for v in df[col].tolist()]
+    import numpy as np
+
+    numeric = pd.to_numeric(df[col], errors="coerce").replace([np.inf, -np.inf], np.nan)
+    return [float(value) for value in numeric]
 
 
 def export_benchmark_summary_chart(
@@ -455,16 +287,7 @@ def export_benchmark_summary_chart(
 
             if "concurrency" in df.columns:
                 unique_concurrencies = sorted(df["concurrency"].unique())
-                palette = [
-                    "#4bc0c0",
-                    "#ff6384",
-                    "#36a2eb",
-                    "#ff9f40",
-                    "#9966ff",
-                    "#4bc07a",
-                    "#ffcd56",
-                    "#c9cbcf",
-                ]
+                palette = SERIES
 
                 datasets = []
                 for i, conc in enumerate(unique_concurrencies):
@@ -472,7 +295,7 @@ def export_benchmark_summary_chart(
                     data_points = []
                     for ctx in unique_contexts:
                         val = subset[subset[x_col] == ctx][y_col].values
-                        data_points.append(float(val[0]) if len(val) > 0 else 0.0)
+                        data_points.append(float(val[0]) if len(val) > 0 else float("nan"))
 
                     datasets.append(
                         {
@@ -549,7 +372,7 @@ def export_benchmark_summary_chart(
                 "y_data": _safe_col_list(df_sorted, col_ttft),
                 "title": "Time To First Token (TTFT)",
                 "y_label": "TTFT (s)",
-                "color": "#4bc0c0",  # Teal - Input/Prefill related
+                "color": TEAL,
             }
 
         chart_tpot = None
@@ -558,7 +381,7 @@ def export_benchmark_summary_chart(
                 "y_data": _safe_col_list(df_sorted, col_tpot),
                 "title": "Average Time Per Output Token (TPOT)",
                 "y_label": "TPOT (ms)",
-                "color": "#ff9f40",
+                "color": AMBER,
             }
 
         bottom_charts = []
@@ -569,7 +392,7 @@ def export_benchmark_summary_chart(
                     "y_data": _safe_col_list(df_sorted, col_cache_rate),
                     "title": "Cache Hit Rate",
                     "y_label": "Cache Hit Rate (%)",
-                    "color": "#36a2eb",
+                    "color": BLUE,
                 }
             )
 
@@ -581,7 +404,7 @@ def export_benchmark_summary_chart(
                         "y_data": _safe_col_list(df_sorted, col_prefill),
                         "title": "Prefill Speed",
                         "y_label": "Prefill Speed (tokens/s)",
-                        "color": "#4bc0c0",
+                        "color": TEAL,
                     }
                 )
             elif col_sys_input:
@@ -590,7 +413,7 @@ def export_benchmark_summary_chart(
                         "y_data": _safe_col_list(df_sorted, col_sys_input),
                         "title": "System Input Throughput",
                         "y_label": "Input Throughput (tokens/s)",
-                        "color": "#4bc0c0",
+                        "color": TEAL,
                     }
                 )
         else:
@@ -600,7 +423,7 @@ def export_benchmark_summary_chart(
                         "y_data": _safe_col_list(df_sorted, col_sys_input),
                         "title": "System Input Throughput",
                         "y_label": "Input Throughput (tokens/s)",
-                        "color": "#4bc0c0",
+                        "color": TEAL,
                     }
                 )
             elif col_prefill:
@@ -609,7 +432,7 @@ def export_benchmark_summary_chart(
                         "y_data": _safe_col_list(df_sorted, col_prefill),
                         "title": "Prefill Speed",
                         "y_label": "Prefill Speed (tokens/s)",
-                        "color": "#4bc0c0",
+                        "color": TEAL,
                     }
                 )
 
@@ -620,7 +443,7 @@ def export_benchmark_summary_chart(
                     "y_data": _safe_col_list(df_sorted, col_sys_output),
                     "title": "System Output Throughput",
                     "y_label": "Output Throughput (tokens/s)",
-                    "color": "#ff9f40",  # Orange - Output/Decode related
+                    "color": AMBER,
                 }
             )
 

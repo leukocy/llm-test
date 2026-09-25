@@ -11,10 +11,15 @@ Provides batch test user interface:
 import json
 from pathlib import Path
 
+import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 from core.batch_test import BatchTestConfig, BatchTestItem, batch_test_manager
 from ui.design_system import material_icon
+from ui.reporting.statistics import wilson_interval
+from ui.reporting.theme import INDIGO, INK, PAPER, SUBTLE, TEAL
+from utils.spreadsheet import safe_download_filename
 
 # ============================================================================
 # Batch test configuration editor
@@ -295,12 +300,6 @@ def render_batch_test_executor():
                 cancel_state.request_stop()
             except ImportError:
                 pass
-            try:
-                from core.providers.gemini import abort_all_clients as abort_gemini
-
-                abort_gemini()
-            except ImportError:
-                pass
             st.toast("Stopping batch test...", icon="Stop")
             st.rerun()
 
@@ -378,6 +377,74 @@ def _run_batch_test(config: BatchTestConfig):
 # ============================================================================
 
 
+def add_batch_success_intervals(comparison: pd.DataFrame) -> pd.DataFrame:
+    """Add binomial intervals only where recorded outcome counts are available."""
+    display = comparison.copy()
+    if "Requests" not in display or "Succeeded" not in display:
+        return display
+    bounds: list[tuple[float | None, float | None]] = []
+    for total, succeeded in zip(display["Requests"], display["Succeeded"], strict=True):
+        if pd.isna(total) or pd.isna(succeeded):
+            bounds.append((None, None))
+            continue
+        interval = wilson_interval(int(succeeded), int(total))
+        bounds.append((interval[0] * 100, interval[1] * 100) if interval else (None, None))
+    display["Success CI low (%)"] = [bound[0] for bound in bounds]
+    display["Success CI high (%)"] = [bound[1] for bound in bounds]
+    return display
+
+
+def build_batch_success_figure(comparison: pd.DataFrame) -> go.Figure | None:
+    """Compare observed batch success rates with count-based uncertainty."""
+    required = {
+        "Test名称",
+        "Model",
+        "Requests",
+        "Request Success (%)",
+        "Success CI low (%)",
+        "Success CI high (%)",
+    }
+    if not required.issubset(comparison.columns):
+        return None
+    valid = comparison.dropna(subset=list(required - {"Test名称", "Model"})).copy()
+    if valid.empty:
+        return None
+    valid["Label"] = valid["Test名称"].astype(str) + " · " + valid["Model"].astype(str)
+    values = valid["Request Success (%)"].astype(float)
+    lower = valid["Success CI low (%)"].astype(float)
+    upper = valid["Success CI high (%)"].astype(float)
+    fig = go.Figure(
+        go.Scatter(
+            x=values,
+            y=valid["Label"],
+            mode="markers",
+            marker={"color": INDIGO, "size": 11},
+            error_x={
+                "type": "data",
+                "symmetric": False,
+                "array": upper - values,
+                "arrayminus": values - lower,
+                "color": TEAL,
+                "thickness": 2,
+                "width": 5,
+            },
+            customdata=valid[["Requests"]].to_numpy(),
+            hovertemplate="%{y}<br>Success: %{x:.1f}%<br>Recorded requests: %{customdata[0]}<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        title={"text": "Request success by test item", "x": 0, "font": {"color": INK, "size": 17}},
+        paper_bgcolor=PAPER,
+        plot_bgcolor=PAPER,
+        font={"color": INK},
+        xaxis={"title": "Success (%)", "range": [0, 105], "gridcolor": SUBTLE},
+        yaxis={"title": None, "showgrid": False},
+        margin={"l": 100, "r": 45, "t": 65, "b": 55},
+        height=max(310, 55 * len(valid) + 145),
+    )
+    return fig
+
+
 def render_batch_test_results():
     """Render batch test results"""
     st.subheader("Batch Test Results")
@@ -424,16 +491,51 @@ def render_batch_test_results():
 
     comparison_df = result.get_comparison_df()
     if not comparison_df.empty:
-        st.dataframe(comparison_df, use_container_width=True)
+        from ui.export import safe_csv_bytes
+        from ui.reporting.html_export import build_html_report
+
+        comparison_df = add_batch_success_intervals(comparison_df)
+        st.dataframe(comparison_df, use_container_width=True, hide_index=True)
+        st.caption(
+            "Request success includes partial failures. TTFT and TPS use positive values from successful requests. "
+            "Historical batch results without outcome counts show unavailable intervals."
+        )
+        success_figure = build_batch_success_figure(comparison_df)
+        if success_figure is not None:
+            st.plotly_chart(success_figure, use_container_width=True)
 
         # Download button
-        csv = comparison_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="Download Comparison CSV",
-            icon=material_icon("download"),
-            data=csv,
-            file_name=f"{result.batch_name}_comparison.csv",
+        export_col1, export_col2 = st.columns(2)
+        export_col1.download_button(
+            "Download comparison CSV",
+            data=safe_csv_bytes(comparison_df),
+            file_name=safe_download_filename(f"{result.batch_name}_comparison.csv"),
             mime="text/csv",
+            icon=material_icon("download"),
+        )
+        html_report = build_html_report(
+            [success_figure] if success_figure is not None else [],
+            [("Observed test items", comparison_df)],
+            [
+                "Method: Request success includes every recorded outcome; timing quantiles use valid successful measurements.",
+                "Comparability: Check workload, configuration and sample counts before ranking items.",
+            ],
+            title=f"Batch comparison - {result.batch_name}",
+            deck="Batch outcomes, request-level statistics, and comparability notes in one portable report.",
+            table_heading="Batch comparison",
+            table_subtitle="Observed outcomes and timing distribution",
+            overview_cards=(
+                ("Test items", str(result.total_items), "Configured items"),
+                ("Completed", str(result.completed_items), "Scheduler count"),
+                ("Failed", str(result.failed_items), "Scheduler count"),
+                ("Duration", f"{result.duration_seconds:.1f} s", "Batch wall time"),
+            ),
+        )
+        export_col2.download_button(
+            "Download batch HTML report",
+            data=html_report,
+            file_name=safe_download_filename(f"{result.batch_name}_comparison.html"),
+            mime="text/html",
         )
     else:
         st.info("No data available")

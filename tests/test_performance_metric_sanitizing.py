@@ -80,6 +80,41 @@ def test_chart_data_marks_zero_performance_points_as_missing():
     assert y_values[1] == 0.931
 
 
+def test_chart_uses_numeric_workload_distance_for_token_sweeps():
+    df = pd.DataFrame(
+        {
+            "x_label": ["4k", "1k"],
+            "input_tokens_target": [4096, 1024],
+            "TTFT": [0.5, 0.2],
+        }
+    )
+
+    fig = plot_plotly_line(
+        df,
+        "x_label",
+        "TTFT",
+        "TTFT",
+        "Input tokens",
+        "s",
+        "model",
+        2,
+        force_linear_scale=True,
+    )
+
+    assert list(fig.data[0].x) == [1024, 4096]
+    assert fig.layout.xaxis.type == "linear"
+
+
+def test_log_scale_chart_uses_logarithmic_axis_range_and_labels_it():
+    df = pd.DataFrame({"size": [1, 2], "TTFT": [0.0001, 100.0]})
+
+    fig = plot_plotly_line(df, "size", "TTFT", "TTFT", "Size", "s", "model", 2)
+
+    assert fig.layout.yaxis.type == "log"
+    assert fig.layout.yaxis.range[0] < 0 < fig.layout.yaxis.range[1]
+    assert "Log Scale" in fig.layout.title.text
+
+
 def test_grouped_extreme_ignores_zero_performance_values():
     df = pd.DataFrame(
         {
@@ -107,15 +142,11 @@ def test_grouped_extreme_ignores_zero_performance_values():
     assert best_ttft.loc[best_ttft["concurrency"] == 1, "Best_TTFT"].item() == 1.25
     assert pd.isna(best_ttft.loc[best_ttft["concurrency"] == 2, "Best_TTFT"].item())
     assert (
-        max_output.loc[
-            max_output["concurrency"] == 1, "Max_System_Output_Throughput"
-        ].item()
+        max_output.loc[max_output["concurrency"] == 1, "Max_System_Output_Throughput"].item()
         == 550.0
     )
     assert pd.isna(
-        max_output.loc[
-            max_output["concurrency"] == 2, "Max_System_Output_Throughput"
-        ].item()
+        max_output.loc[max_output["concurrency"] == 2, "Max_System_Output_Throughput"].item()
     )
 
 
@@ -146,12 +177,8 @@ def test_concurrency_report_table_uses_valid_values_instead_of_zero_extremes(
     st.metric = MagicMock()
     st.subheader = MagicMock()
 
-    monkeypatch.setattr(
-        reports, "export_benchmark_summary_chart", lambda *args, **kwargs: None
-    )
-    monkeypatch.setattr(
-        reports, "generate_performance_insights", lambda *args, **kwargs: ([], [])
-    )
+    monkeypatch.setattr(reports, "export_benchmark_summary_chart", lambda *args, **kwargs: None)
+    monkeypatch.setattr(reports, "generate_performance_insights", lambda *args, **kwargs: ([], []))
 
     df = pd.DataFrame(
         {
@@ -200,12 +227,8 @@ def test_concurrency_report_success_rate_uses_percent_and_blank_errors(monkeypat
     st.metric = MagicMock()
     st.subheader = MagicMock()
 
-    monkeypatch.setattr(
-        reports, "export_benchmark_summary_chart", lambda *args, **kwargs: None
-    )
-    monkeypatch.setattr(
-        reports, "generate_performance_insights", lambda *args, **kwargs: ([], [])
-    )
+    monkeypatch.setattr(reports, "export_benchmark_summary_chart", lambda *args, **kwargs: None)
+    monkeypatch.setattr(reports, "generate_performance_insights", lambda *args, **kwargs: ([], []))
 
     df = pd.DataFrame(
         {
