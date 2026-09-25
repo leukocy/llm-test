@@ -21,10 +21,12 @@ from pathlib import Path
 from tempfile import gettempdir
 from typing import Any, Callable
 
+import numpy as np
 import pandas as pd
 
 from core.cancel_state import is_batch_stop_requested
 from core.result_metrics import success_mask_from_error
+from utils.spreadsheet import safe_csv_bytes
 
 # LatencyImport BenchmarkRunner（仅inTest执行时Load）
 _BenchmarkRunner = None
@@ -170,9 +172,7 @@ class BatchTestConfig:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "BatchTestConfig":
         """从字典Create"""
-        items = [
-            BatchTestItem.from_dict(item_data) for item_data in data.get("items", [])
-        ]
+        items = [BatchTestItem.from_dict(item_data) for item_data in data.get("items", [])]
         return cls(
             name=data["name"],
             description=data.get("description", ""),
@@ -265,7 +265,6 @@ class BatchTestResult:
     # 对比Data
     comparison_data: pd.DataFrame | None = None
 
-
     def get_comparison_df(self) -> pd.DataFrame:
         """Get对比 DataFrame"""
         if self.comparison_data is not None:
@@ -274,18 +273,28 @@ class BatchTestResult:
         # if没has对比Data，从 item_results Generate
         data = []
         for item_result in self.item_results:
-            if item_result.get("status") == "completed":
-                data.append(
-                    {
-                        "Test名称": item_result.get("name", "未知"),
-                        "Model": item_result.get("model_id", "未知"),
-                        "Accuracy": item_result.get("accuracy", 0),
-                        "AverageLatency": item_result.get("avg_latency_ms", 0),
-                        "AverageTPS": item_result.get("avg_tps", 0),
-                        "输入Tokens": item_result.get("total_input_tokens", 0),
-                        "输出Tokens": item_result.get("total_output_tokens", 0),
-                    }
-                )
+            success_rate = item_result.get("success_rate")
+            data.append(
+                {
+                    "Test名称": item_result.get("name", "未知"),
+                    "Model": item_result.get("model_id", "未知"),
+                    "Status": item_result.get("status"),
+                    "Requests": item_result.get("request_count"),
+                    "Succeeded": item_result.get("success_count"),
+                    "Failed": item_result.get("failed_count"),
+                    "Request Success (%)": success_rate * 100 if success_rate is not None else None,
+                    "TTFT valid n": item_result.get("ttft_valid_n"),
+                    "TTFT P50 (ms)": item_result.get("ttft_p50_ms"),
+                    "TTFT P95 (ms)": item_result.get("ttft_p95_ms"),
+                    "TPS valid n": item_result.get("tps_valid_n"),
+                    "TPS P50": item_result.get("tps_p50"),
+                    "TPS P10": item_result.get("tps_p10"),
+                    "AverageLatency": item_result.get("avg_latency_ms"),
+                    "AverageTPS": item_result.get("avg_tps"),
+                    "输入Tokens": item_result.get("total_input_tokens"),
+                    "输出Tokens": item_result.get("total_output_tokens"),
+                }
+            )
 
         return pd.DataFrame(data) if data else pd.DataFrame()
 
@@ -304,55 +313,72 @@ def _create_batch_csv_filename(item: BatchTestItem) -> str:
     return str(temp_dir / f"batch_{safe_name}_{timestamp}.csv")
 
 
-def _extract_metrics_from_dataframe(
-    df: pd.DataFrame, item: BatchTestItem
-) -> dict[str, Any]:
+def _extract_metrics_from_dataframe(df: pd.DataFrame, item: BatchTestItem) -> dict[str, Any]:
     """从Test Results DataFrame in提取关键指标"""
     if df.empty:
         return {
             "name": item.name,
             "model_id": item.model_id,
-            "status": "completed",
+            "status": "failed",
             "error": "Empty results",
-            "avg_latency_ms": 0,
-            "avg_tps": 0,
-            "accuracy": 0,
+            "request_count": 0,
+            "success_count": 0,
+            "failed_count": 0,
+            "success_rate": None,
+            "avg_latency_ms": None,
+            "avg_tps": None,
             "total_input_tokens": 0,
             "total_output_tokens": 0,
         }
 
+    has_status = "error" in df
+    success = (
+        success_mask_from_error(df["error"]) if has_status else pd.Series(True, index=df.index)
+    )
+    success_count = int(success.sum()) if has_status else None
+    failed_count = len(df) - success_count if success_count is not None else None
+
+    def measured(column: str) -> pd.Series:
+        if column not in df:
+            return pd.Series(dtype=float)
+        numeric = pd.to_numeric(df[column], errors="coerce").replace([np.inf, -np.inf], np.nan)
+        return numeric.loc[success & numeric.gt(0)].dropna()
+
+    ttft = measured("ttft") * 1000
+    tps = measured("tps")
     result = {
         "name": item.name,
         "model_id": item.model_id,
-        "status": "completed",
-        "avg_latency_ms": 0.0,
-        "avg_tps": 0.0,
+        "status": "partial_failure" if failed_count else "completed",
+        "request_count": len(df),
+        "success_count": success_count,
+        "failed_count": failed_count,
+        "success_rate": success_count / len(df) if success_count is not None else None,
+        "ttft_valid_n": len(ttft),
+        "ttft_p50_ms": float(ttft.median()) if len(ttft) else None,
+        "ttft_p95_ms": float(ttft.quantile(0.95)) if len(ttft) else None,
+        "tps_valid_n": len(tps),
+        "tps_p50": float(tps.median()) if len(tps) else None,
+        "tps_p10": float(tps.quantile(0.10)) if len(tps) else None,
+        "avg_latency_ms": float(ttft.mean()) if len(ttft) else None,
+        "avg_tps": float(tps.mean()) if len(tps) else None,
         "total_input_tokens": 0,
         "total_output_tokens": 0,
-        "accuracy": 1.0,
     }
-
-    # 提取 TTFT (Time To First Token) - Convertis毫seconds
-    if "ttft" in df.columns:
-        result["avg_latency_ms"] = float(df["ttft"].mean() * 1000)
-
-    # 提取 TPS (Tokens Per Second)
-    if "tps" in df.columns:
-        result["avg_tps"] = float(df["tps"].mean())
 
     # 提取输入/输出 token 总数
     if "prefill_tokens" in df.columns:
-        result["total_input_tokens"] = int(df["prefill_tokens"].sum())
+        result["total_input_tokens"] = int(
+            pd.to_numeric(df["prefill_tokens"], errors="coerce").clip(lower=0).sum()
+        )
 
     if "decode_tokens" in df.columns:
-        result["total_output_tokens"] = int(df["decode_tokens"].sum())
+        result["total_output_tokens"] = int(
+            pd.to_numeric(df["decode_tokens"], errors="coerce").clip(lower=0).sum()
+        )
 
-    # Checkis否hasError
-    if "error" in df.columns:
-        error_count = int((~success_mask_from_error(df["error"])).sum())
-        if error_count > 0:
-            result["status"] = "partial_failure"
-            result["error"] = f"{error_count} requests failed"
+    if failed_count:
+        result["error"] = f"{failed_count} requests failed"
 
     return result
 
@@ -368,7 +394,7 @@ class BatchTestScheduler:
     def __init__(
         self,
         config: BatchTestConfig,
-        test_function: Callable,
+        test_function: Callable | None = None,
         progress_callback: Callable[[BatchTestProgress], None] | None = None,
         log_callback: Callable[[str], None] | None = None,
     ):
@@ -594,12 +620,8 @@ class BatchTestScheduler:
                 provider="OpenAI",
                 dashboard=None,
                 output_placeholder=output_placeholder,
-                thinking_enabled=(
-                    item.thinking_enabled if item.thinking_enabled else None
-                ),
-                thinking_budget=(
-                    item.thinking_budget if item.thinking_budget > 0 else None
-                ),
+                thinking_enabled=(item.thinking_enabled if item.thinking_enabled else None),
+                thinking_budget=(item.thinking_budget if item.thinking_budget > 0 else None),
                 reasoning_effort=item.reasoning_effort or None,
             )
 
@@ -615,9 +637,7 @@ class BatchTestScheduler:
                 )
 
             elif item.test_type == "prefill":
-                token_levels = item.extra_params.get(
-                    "token_levels", [512, 1024, 2048, 4096]
-                )
+                token_levels = item.extra_params.get("token_levels", [512, 1024, 2048, 4096])
                 result_df = await runner.run_prefill_test(
                     token_levels=token_levels,
                     requests_per_level=1,
@@ -625,9 +645,7 @@ class BatchTestScheduler:
                 )
 
             elif item.test_type == "long_context":
-                context_lengths = item.extra_params.get(
-                    "context_lengths", [1024, 2048, 4096, 8192]
-                )
+                context_lengths = item.extra_params.get("context_lengths", [1024, 2048, 4096, 8192])
                 result_df = await runner.run_long_context_test(
                     context_lengths=context_lengths,
                     rounds_per_level=1,
@@ -700,9 +718,7 @@ class BatchTestManager:
     def load_config(self, name: str) -> BatchTestConfig | None:
         """Load批量Test Configuration"""
         try:
-            safe_name = "".join(
-                c if c.isalnum() or c in (" ", "-", "_") else "_" for c in name
-            )
+            safe_name = "".join(c if c.isalnum() or c in (" ", "-", "_") else "_" for c in name)
             pattern = safe_name.lower().replace(" ", "_") + ".json"
             matching_files = list(self.save_dir.glob(pattern))
 
@@ -730,9 +746,9 @@ class BatchTestManager:
                         "name": data.get("name", config_file.stem),
                         "description": data.get("description", ""),
                         "test_count": len(data.get("items", [])),
-                        "file_time": datetime.fromtimestamp(
-                            config_file.stat().st_mtime
-                        ).strftime("%Y-%m-%d %H:%M:%S"),
+                        "file_time": datetime.fromtimestamp(config_file.stat().st_mtime).strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        ),
                     }
                 )
             except Exception:
@@ -744,8 +760,7 @@ class BatchTestManager:
         """Save批量Test Results"""
         try:
             safe_name = "".join(
-                c if c.isalnum() or c in (" ", "-", "_") else "_"
-                for c in result.batch_name
+                c if c.isalnum() or c in (" ", "-", "_") else "_" for c in result.batch_name
             )
             filename = f"{safe_name.lower().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             filepath = self.save_dir / "results" / filename
@@ -767,12 +782,8 @@ class BatchTestManager:
                 json.dump(result_data, f, ensure_ascii=False, indent=2)
 
             # Save对比CSV
-            csv_path = (
-                self.save_dir
-                / "results"
-                / filepath.stem.replace(".json", "_comparison.csv")
-            )
-            result.get_comparison_df().to_csv(csv_path, index=False, encoding="utf-8")
+            csv_path = self.save_dir / "results" / filepath.stem.replace(".json", "_comparison.csv")
+            csv_path.write_bytes(safe_csv_bytes(result.get_comparison_df()))
 
             return True
         except Exception as e:

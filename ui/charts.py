@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from ui.metric_sanitizer import sanitize_performance_metrics
+from ui.reporting.theme import AMBER, BLUE, INDIGO, INK, MUTED, PAPER, SUBTLE, TEAL
 
 
 # ===== SMART VALUE FORMATTING =====
@@ -90,35 +91,35 @@ def generate_color_gradient(base_hex, n_steps):
 
 # ===== UNIFIED CHART THEME =====
 CHART_THEME = {
-    "plot_bgcolor": "white",
-    "paper_bgcolor": "white",
+    "plot_bgcolor": PAPER,
+    "paper_bgcolor": PAPER,
     "font": {
-        "family": 'Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        "family": 'Inter, "Segoe UI", "PingFang SC", sans-serif',
         "size": 12,
-        "color": "#333",
+        "color": INK,
     },
     "title": {
-        "font": {"size": 16, "color": "#1a1a1a", "family": "Arial"},
-        "x": 0.5,
-        "xanchor": "center",
+        "font": {"size": 17, "color": INK},
+        "x": 0,
+        "xanchor": "left",
         "pad": {"b": 10},
     },
     "xaxis": {
         "showgrid": False,
         "showline": True,
         "linewidth": 1,
-        "linecolor": "#e6e9ef",
-        "title_font": {"size": 13, "color": "#555"},
+        "linecolor": SUBTLE,
+        "title_font": {"size": 13, "color": MUTED},
         "tickfont": {"size": 11},
     },
     "yaxis": {
         "showgrid": True,
-        "gridcolor": "#f0f2f6",
+        "gridcolor": SUBTLE,
         "gridwidth": 1,
         "showline": True,
         "linewidth": 1,
-        "linecolor": "#e6e9ef",
-        "title_font": {"size": 13, "color": "#555"},
+        "linecolor": SUBTLE,
+        "title_font": {"size": 13, "color": MUTED},
         "tickfont": {"size": 11},
     },
     "hovermode": "x unified",
@@ -126,7 +127,7 @@ CHART_THEME = {
         "bgcolor": "white",
         "font_size": 11,
         "font_family": "monospace",
-        "bordercolor": "#007bff",
+        "bordercolor": INDIGO,
     },
     "legend": {
         "orientation": "h",
@@ -135,20 +136,20 @@ CHART_THEME = {
         "xanchor": "right",
         "x": 1,
         "bgcolor": "rgba(255, 255, 255, 0.8)",
-        "bordercolor": "#e6e9ef",
+        "bordercolor": SUBTLE,
         "borderwidth": 1,
     },
-    "margin": {"l": 60, "r": 40, "t": 80, "b": 60},
+    "margin": {"l": 60, "r": 30, "t": 70, "b": 60},
 }
 
 # Color palette
 COLORS = {
-    "primary": "#007bff",
-    "success": "#28a745",
-    "warning": "#ffc107",
-    "danger": "#dc3545",
-    "info": "#17a2b8",
-    "gradient": ["#007bff", "#0056b3", "#003d82", "#002455"],
+    "primary": INDIGO,
+    "success": TEAL,
+    "warning": AMBER,
+    "danger": "#b42318",
+    "info": BLUE,
+    "gradient": [INDIGO, BLUE, TEAL, AMBER],
 }
 
 
@@ -178,11 +179,28 @@ def plot_plotly_line(
     try:
         df = sanitize_performance_metrics(df, [y])
 
+        # Legacy report builders carry a short string label for display. Use
+        # the underlying numeric workload size so spacing has real meaning.
+        if x == "concurrency_str" and "concurrency" in df:
+            plot_x = "concurrency"
+        elif x == "x_label" and "context_length_target" in df:
+            plot_x = "context_length_target"
+        elif x == "x_label" and "input_tokens_target" in df:
+            plot_x = "input_tokens_target"
+        else:
+            plot_x = x
+        numeric_x = pd.api.types.is_numeric_dtype(df[plot_x])
+        if numeric_x:
+            df = df.sort_values(plot_x)
+
         # Simplified title,removed hardware/model info subtitle for clean UI
         fig_title = title
 
         # Determine target color
-        target_color = line_color if line_color else "#4bc0c0"
+        legacy_colors = {"#4bc0c0": TEAL, "#ff9f40": AMBER, "#36a2eb": BLUE}
+        target_color = (
+            legacy_colors.get(str(line_color).lower(), line_color) if line_color else INDIGO
+        )
 
         # Color sequence logic
         color_seq = None
@@ -197,17 +215,16 @@ def plot_plotly_line(
         # Create chart
         fig = px.line(
             df,
-            x=x,
+            x=plot_x,
             y=y,
             title=fig_title,
-            labels={x: xlabel, y: ylabel},
+            labels={plot_x: xlabel, y: ylabel},
             markers=True,
             color=color,
             color_discrete_sequence=color_seq,
             hover_data=hover_data,
             error_y=error_y_col,
-            text=y,
-        )  # Display value labels
+        )
 
         # Add relative performance view
         if (
@@ -221,15 +238,15 @@ def plot_plotly_line(
                 # Add secondary relative performance line
                 fig.add_trace(
                     go.Scatter(
-                        x=df_rel[x],
+                        x=df_rel[plot_x],
                         y=df_rel[f"{y}_relative"],
                         mode="lines+markers",
                         name="Relative Perf (%)",
                         line={
-                            "color": "#ffcd56",
+                            "color": AMBER,
                             "dash": "dash",
                         },  # Yellow for relative
-                        marker={"size": 8, "color": "#ffcd56"},
+                        marker={"size": 7, "color": AMBER},
                         yaxis="y2",
                     )
                 )
@@ -281,38 +298,37 @@ def plot_plotly_line(
 
         # 3. Only when ratio is extremely large (> 100,000) enable log scale
         if not force_linear_scale and (ratio > 100000):
-            fig.update_yaxes(type="log")
-            fig.update_layout(title=title + " [Log Scale]")
+            fig.update_yaxes(
+                type="log",
+                range=[math.log10(calc_min) - 0.08, math.log10(y_max) + 0.08],
+            )
+            fig_title = title + " [Log Scale]"
 
         # Improved layout and styles
         fig.update_layout(
             title_x=0,  # Left-align title
             xaxis_title=xlabel,
-            plot_bgcolor="white",
-            paper_bgcolor="white",
-            font_color="#333",
+            plot_bgcolor=PAPER,
+            paper_bgcolor=PAPER,
+            font_color=INK,
             xaxis={
                 "title_font": {"size": 14, "weight": "bold"},
                 "tickfont": {"size": 12},
-                "type": "category",  # Force X-axis to categorical for equal spacing
+                "type": "linear" if numeric_x else "category",
                 "showgrid": False,
             },
             yaxis={
                 "title_font": {"size": 14, "weight": "bold"},
                 "tickfont": {"size": 12},
-                "gridcolor": "#e6e9ef",
+                "gridcolor": SUBTLE,
                 "showgrid": True,
             },
         )
 
         # Distinguish confidence interval and error bars
         # Common style update - Use smart formatting
-        smart_fmt = get_smart_format_string(y_max)
         fig.update_traces(
-            textposition="top center",
-            texttemplate=f"<b>%{{y:{smart_fmt}}}</b>",  # Bold values, smart formatting
-            textfont={"size": 14},  # Larger value font
-            error_y_color="rgba(255, 0, 0, 0.7)",
+            error_y_color=AMBER,
             error_y_thickness=2,
             error_y_width=3,
         )
@@ -320,19 +336,17 @@ def plot_plotly_line(
         # Special style for single line (custom color)
         if color is None:
             fig.update_traces(
-                # Simulate static chart hollow/bullseye effect: white fill + thick colored border
                 marker={
-                    "size": 14,
-                    "color": "white",
-                    "line": {"width": 3, "color": target_color},
+                    "size": 8,
+                    "color": target_color,
+                    "line": {"width": 1, "color": PAPER},
                 },
-                line={"width": 4, "color": target_color},  # Thicker line
+                line={"width": 2.5, "color": target_color},
             )
         else:
-            # Multi-line: keep auto-color (or gradient), enlarge markers
             fig.update_traces(
-                marker={"size": 10, "line": {"width": 2, "color": "white"}},
-                line={"width": 3},
+                marker={"size": 7, "line": {"width": 1, "color": PAPER}},
+                line={"width": 2},
             )
 
         # Title and layout enhancement
@@ -340,18 +354,17 @@ def plot_plotly_line(
             title={
                 "text": fig_title,
                 "font": {
-                    "size": 22,
-                    "color": "black",
-                    "family": "sans-serif",
-                    "weight": "bold",
-                },  # Larger and darker title
-                "x": 0.5,  # Center
+                    "size": 17,
+                    "color": INK,
+                    "family": "Inter, Segoe UI, sans-serif",
+                },
+                "x": 0,
                 "y": 0.95,
             },
             xaxis={
                 "title_font": {"size": 14, "weight": "bold"},
                 "tickfont": {"size": 12},
-                "type": "category",  # Force X-axis to categorical for equal spacing
+                "type": "linear" if numeric_x else "category",
                 "showgrid": False,
             },
             yaxis={

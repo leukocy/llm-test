@@ -46,7 +46,9 @@ from ui.reporting.builders import (
     build_prefill_summary,
 )
 from ui.reporting.columns import COLUMN_RENAME_MAP, COLUMN_TOOLTIPS
+from ui.reporting.statistics import build_scientific_summary
 from ui.styled_tables import create_styled_summary_table
+from utils.spreadsheet import safe_download_filename
 
 
 def safe_to_markdown(df, **kwargs):
@@ -1163,25 +1165,23 @@ def generate_concurrency_report(
     figs_list = [f for f in [fig1, fig3, fig_input, fig2, fig_qpm] if f is not None]
 
     # Tables
-    from ui.export import create_html_download_link, export_interactive_html
+    from ui.export import export_interactive_html
 
-    if figs_list:
-        html_report = export_interactive_html(
-            figures_list=figs_list,
-            tables_list=[styled_table],
-            insights_list=insights,
-            title=f"Concurrency Performance Test Report - {model_id}",
+    html_report = export_interactive_html(
+        figures_list=figs_list,
+        tables_list=[styled_table],
+        insights_list=insights,
+        title=f"Concurrency Performance Test Report - {model_id}",
+        analysis=build_scientific_summary(df_group, "concurrency"),
+    )
+
+    with chart_col2:
+        st.download_button(
+            "Download full HTML report",
+            data=html_report,
+            file_name=safe_download_filename(f"concurrency_full_{model_id}.html"),
+            mime="text/html",
         )
-
-        with chart_col2:
-            st.markdown(
-                create_html_download_link(
-                    html_report,
-                    f"concurrency_full_{model_id}.html",
-                    "Download Full HTML Report (All Charts)",
-                ),
-                unsafe_allow_html=True,
-            )
 
     report_md += "(See charts in Web UI)\n"
     return report_md
@@ -1378,25 +1378,23 @@ def generate_prefill_report(
     # === Export Full Report (HTML) ===
     figs_list = [f for f in [fig1, fig2] if f is not None]
 
-    from ui.export import create_html_download_link, export_interactive_html
+    from ui.export import export_interactive_html
 
-    if figs_list:
-        html_report = export_interactive_html(
-            figures_list=figs_list,
-            tables_list=[styled_table],
-            insights_list=insights,
-            title=f"Prefill Performance Test Report - {model_id}",
+    html_report = export_interactive_html(
+        figures_list=figs_list,
+        tables_list=[styled_table],
+        insights_list=insights,
+        title=f"Prefill Performance Test Report - {model_id}",
+        analysis=build_scientific_summary(df_group, "prefill"),
+    )
+
+    with chart_col2:
+        st.download_button(
+            "Download full HTML report",
+            data=html_report,
+            file_name=safe_download_filename(f"prefill_full_{model_id}.html"),
+            mime="text/html",
         )
-
-        with chart_col2:
-            st.markdown(
-                create_html_download_link(
-                    html_report,
-                    f"prefill_full_{model_id}.html",
-                    "Download Full HTML Report (All Charts)",
-                ),
-                unsafe_allow_html=True,
-            )
 
     report_md += "(See charts in Web UI)\n"
     return report_md
@@ -1681,25 +1679,23 @@ def generate_long_context_report(
     # === Export Full Report (HTML) ===
     figs_list = [f for f in [fig1, fig_tpot, fig3, fig2, fig4] if f is not None]
 
-    from ui.export import create_html_download_link, export_interactive_html
+    from ui.export import export_interactive_html
 
-    if figs_list:
-        html_report = export_interactive_html(
-            figures_list=figs_list,
-            tables_list=[styled_table],
-            insights_list=insights,
-            title=f"Long Context Performance Test Report - {model_id}",
+    html_report = export_interactive_html(
+        figures_list=figs_list,
+        tables_list=[styled_table],
+        insights_list=insights,
+        title=f"Long Context Performance Test Report - {model_id}",
+        analysis=build_scientific_summary(df_group, "long_context"),
+    )
+
+    with chart_col2:
+        st.download_button(
+            "Download full HTML report",
+            data=html_report,
+            file_name=safe_download_filename(f"long_context_full_{model_id}.html"),
+            mime="text/html",
         )
-
-        with chart_col2:
-            st.markdown(
-                create_html_download_link(
-                    html_report,
-                    f"long_context_full_{model_id}.html",
-                    "Download Full HTML Report (All Charts)",
-                ),
-                unsafe_allow_html=True,
-            )
 
     report_md += "(See charts in Web UI)\n"
     return report_md
@@ -2131,25 +2127,23 @@ def generate_matrix_report(
     # === Export Full Report (HTML) ===
     figs_list = [f for f in [fig1, fig_tpot, fig3, fig2, fig4, fig_qpm] if f is not None]
 
-    from ui.export import create_html_download_link, export_interactive_html
+    from ui.export import export_interactive_html
 
-    if figs_list:
-        html_report = export_interactive_html(
-            figures_list=figs_list,
-            tables_list=[styled_table],
-            insights_list=insights,
-            title=f"Concurrency-Context Matrix Test Report - {model_id}",
+    html_report = export_interactive_html(
+        figures_list=figs_list,
+        tables_list=[styled_table],
+        insights_list=insights,
+        title=f"Concurrency-Context Matrix Test Report - {model_id}",
+        analysis=build_scientific_summary(df_group, "matrix"),
+    )
+
+    with chart_col2:
+        st.download_button(
+            "Download full HTML report",
+            data=html_report,
+            file_name=safe_download_filename(f"matrix_full_{model_id}.html"),
+            mime="text/html",
         )
-
-        with chart_col2:
-            st.markdown(
-                create_html_download_link(
-                    html_report,
-                    f"matrix_full_{model_id}.html",
-                    "Download Full HTML Report (All Charts)",
-                ),
-                unsafe_allow_html=True,
-            )
 
     return report_md
 
@@ -2587,25 +2581,23 @@ def generate_segmented_report(
     # === Export Full Report (HTML) ===
     figs_list = [f for f in [fig1, fig2, fig3, fig4, fig5] if f is not None]
 
-    from ui.export import create_html_download_link, export_interactive_html
+    from ui.export import export_interactive_html
 
-    if figs_list:
-        html_report = export_interactive_html(
-            figures_list=figs_list,
-            tables_list=[styled_table],
-            insights_list=insights,
-            title=f"Segmented Context Test Report (Prefix Caching) - {model_id}",
+    html_report = export_interactive_html(
+        figures_list=figs_list,
+        tables_list=[styled_table],
+        insights_list=insights,
+        title=f"Segmented Context Test Report (Prefix Caching) - {model_id}",
+        analysis=build_scientific_summary(df_group, "segmented"),
+    )
+
+    with chart_col2:
+        st.download_button(
+            "Download full HTML report",
+            data=html_report,
+            file_name=safe_download_filename(f"segmented_full_{model_id}.html"),
+            mime="text/html",
         )
-
-        with chart_col2:
-            st.markdown(
-                create_html_download_link(
-                    html_report,
-                    f"segmented_full_{model_id}.html",
-                    "Download Full HTML Report (All Charts)",
-                ),
-                unsafe_allow_html=True,
-            )
 
     report_md += "(See charts in Web UI)\n"
     return report_md

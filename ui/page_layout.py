@@ -8,9 +8,16 @@ Provides page layout and navigation, including:
 - Report display
 """
 
+from pathlib import Path
+
+import pandas as pd
 import streamlit as st
 
 from ui import reports
+from ui.export import safe_csv_bytes
+from ui.reporting.presentation import render_scientific_panel
+from ui.reporting.statistics import analysis_to_markdown, build_scientific_summary
+from utils.spreadsheet import safe_download_filename
 
 
 def apply_custom_css():
@@ -196,6 +203,27 @@ def _detect_test_type_from_df(df):
     return None
 
 
+def filter_result_rows(df: pd.DataFrame, status: str = "All", query: str = "") -> pd.DataFrame:
+    """Filter the explorer only; reports and downloads retain the complete run."""
+    from core.result_metrics import success_mask_from_error
+
+    filtered = df
+    if "error" in filtered.columns and status in ("Succeeded", "Failed"):
+        success = success_mask_from_error(filtered["error"])
+        filtered = filtered.loc[success if status == "Succeeded" else ~success]
+    query = query.strip()
+    if query:
+        search_columns = [
+            column
+            for column in ("session_id", "prompt_source", "test_type", "error", "round")
+            if column in filtered.columns
+        ]
+        if search_columns:
+            haystack = filtered[search_columns].fillna("").astype(str).agg(" ".join, axis=1)
+            filtered = filtered.loc[haystack.str.contains(query, case=False, regex=False, na=False)]
+    return filtered
+
+
 def render_results_section(test_type=None):
     """Render results display area
 
@@ -205,7 +233,7 @@ def render_results_section(test_type=None):
     results_df = st.session_state.get("results_df")
     if results_df is not None and not results_df.empty:
         st.markdown("---")
-        st.header("Test Results")
+        st.header("Request explorer")
 
         raw_df = results_df
 
@@ -214,22 +242,47 @@ def render_results_section(test_type=None):
         inferred_type = _detect_test_type_from_df(raw_df)
         display_type = inferred_type or test_type
 
+        filter_col, search_col = st.columns([1, 2])
+        with filter_col:
+            status = st.radio(
+                "Request status",
+                ["All", "Succeeded", "Failed"],
+                horizontal=True,
+                disabled="error" not in raw_df.columns,
+                key="request_explorer_status",
+            )
+        with search_col:
+            query = st.text_input(
+                "Search identifiers and errors",
+                placeholder="Session, source, test type, error or round",
+                key="request_explorer_search",
+            )
+        visible_df = filter_result_rows(raw_df, status=status, query=query)
+        st.caption(
+            f"Showing {len(visible_df):,} of {len(raw_df):,} recorded rows. Report statistics and downloads use the complete run."
+        )
+
         # Unified formatted display
-        display_df = format_results_for_display(raw_df, display_type)
+        display_df = format_results_for_display(visible_df, display_type)
 
         # Display formatted dataframe
-        st.dataframe(display_df, use_container_width=True, height=400)
+        st.dataframe(display_df, use_container_width=True, hide_index=True, height=460)
 
         # Expand to view raw data
-        with st.expander("View Full Raw Data", expanded=False):
-            st.dataframe(raw_df, use_container_width=True, height=300)
+        with st.expander("Raw records and provenance", expanded=False):
+            st.dataframe(raw_df, use_container_width=True, hide_index=True, height=340)
 
         # Download button (always downloads full raw data)
-        csv = raw_df.to_csv(index=False).encode("utf-8")
+        csv = safe_csv_bytes(raw_df)
+        csv_name = safe_download_filename(
+            Path(str(st.session_state.get("current_csv_file") or "results.csv")).name
+        )
+        if not csv_name.lower().endswith(".csv"):
+            csv_name += ".csv"
         st.download_button(
-            label="Download Results CSV (Full Data)",
+            label="Download complete CSV",
             data=csv,
-            file_name=f"results_{st.session_state.get('current_csv_file', 'results')}",
+            file_name=csv_name,
             mime="text/csv",
         )
 
@@ -280,6 +333,18 @@ def render_report_section(test_type):
     # using leftover Concurrency data (which causes missing-column errors).
     inferred_type = _detect_test_type_from_df(results_df)
     report_type = inferred_type or test_type
+
+    analysis_type = _DISPLAY_TO_INTERNAL.get(report_type, str(report_type).strip().lower())
+    try:
+        analysis = build_scientific_summary(results_df, analysis_type)
+    except ValueError as error:
+        st.error(f"Report statistics unavailable: {error}")
+        return
+    render_scientific_panel(analysis)
+    st.subheader("Observed extrema and request details")
+    st.caption(
+        "The charts below show observed best or maximum values; use the distribution and sample counts above for comparisons."
+    )
 
     # Warn the user when the displayed report type differs from the
     # currently selected sidebar option.
@@ -347,14 +412,18 @@ def render_report_section(test_type):
             f"# Test Completed ({report_type})\n\nPlease refer to the data table above for results."
         )
 
-    # Display report
+    # Display and export the same statistical evidence shown above.
+    if st.session_state.report:
+        st.session_state.report += "\n\n" + analysis_to_markdown(analysis)
     st.markdown(st.session_state.report)
 
     # Download report
     st.download_button(
         label="Download Report (Markdown)",
         data=st.session_state.report,
-        file_name=f"report_{st.session_state.get('current_csv_file', 'report')}.md",
+        file_name=safe_download_filename(
+            f"report_{st.session_state.get('current_csv_file', 'report')}.md"
+        ),
         mime="text/markdown",
     )
 

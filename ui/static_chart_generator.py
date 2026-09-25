@@ -20,19 +20,21 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ui.reporting.theme import AMBER, BLUE, INDIGO, INK, MUTED, SUBTLE, TEAL
+
 # ===== Color Scheme =====
 COLORS = {
-    "prefill": "#4bc0c0",  # Teal - Prefill speed
-    "output": "#ff6384",  # Pink - Output speed
-    "ttft": "#36a2eb",  # Blue - TTFT
-    "throughput": "#9966ff",  # Purple - Throughput
-    "tps": "#ff9f40",  # Orange - TPS
-    "success": "#4bc07a",  # Green - Success rate
-    "primary": "#007bff",  # Primary - Blue
-    "secondary": "#6c757d",  # Secondary - Gray
-    "grid": "#e0e0e0",  # Grid line color
-    "axis": "#000000",  # Axis color
-    "text": "#000000",  # Text color
+    "prefill": TEAL,
+    "output": AMBER,
+    "ttft": INDIGO,
+    "throughput": BLUE,
+    "tps": AMBER,
+    "success": TEAL,
+    "primary": INDIGO,
+    "secondary": MUTED,
+    "grid": SUBTLE,
+    "axis": INK,
+    "text": INK,
     "background": "#ffffff",  # Background color
 }
 
@@ -108,7 +110,14 @@ class StaticChartGenerator:
 
     def _setup_matplotlib(self):
         """Configure matplotlib global settings"""
-        plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "Arial"]
+        plt.rcParams["font.sans-serif"] = [
+            "DejaVu Sans",
+            "Droid Sans Fallback",
+            "AR PL UKai CN",
+            "Microsoft YaHei",
+            "SimHei",
+            "Arial",
+        ]
         plt.rcParams["axes.unicode_minus"] = False
         plt.rcParams["figure.facecolor"] = "white"
         plt.rcParams["axes.facecolor"] = "white"
@@ -187,7 +196,8 @@ class StaticChartGenerator:
         x_positions = list(range(1, n_points + 1))  # Start from 1, leave room for 0 position
 
         # Calculate Y-axis range
-        y_max = self._get_nice_max_value(max(y_data)) if y_data else 100
+        finite_y = [value for value in y_data if np.isfinite(value)]
+        y_max = self._get_nice_max_value(max(finite_y)) if finite_y else 100
         y_ticks = np.linspace(0, y_max, 5)
 
         # X-axis ticks: 0 + actual data labels
@@ -229,6 +239,8 @@ class StaticChartGenerator:
 
         # Data point value labels
         for i, (x_pos, y) in enumerate(zip(x_positions, y_data, strict=False)):
+            if not np.isfinite(y):
+                continue
             value_text = (
                 smart_format_value(float(y), y_max) if isinstance(y, (int, float)) else str(y)
             )
@@ -316,13 +328,14 @@ class StaticChartGenerator:
     ):
         """Draw single line chart on given Axes (equal-width categorical X-axis)"""
         # Ensure all y_data are numeric
-        y_data = [float(y) if y is not None else 0.0 for y in y_data]
+        y_data = [float(y) if y is not None else float("nan") for y in y_data]
         n_points = len(x_data)
 
         # Use equal-width categorical X-axis: use index as actual plot position
         x_positions = list(range(1, n_points + 1))  # Start from 1, leave room for 0 position
 
-        y_max = self._get_nice_max_value(max(y_data)) if y_data and max(y_data) > 0 else 100
+        finite_y = [value for value in y_data if np.isfinite(value)]
+        y_max = self._get_nice_max_value(max(finite_y)) if finite_y and max(finite_y) > 0 else 100
         y_ticks = np.linspace(0, y_max, 5)
 
         # Process X-axis labels
@@ -379,6 +392,8 @@ class StaticChartGenerator:
             skip_step = 2  # Simple sampling
 
         for i, (x_pos, y) in enumerate(zip(x_positions, y_data, strict=False)):
+            if not np.isfinite(y):
+                continue
             if i % skip_step == 0:
                 value_text = smart_format_value(float(y), y_max)
                 ax.annotate(
@@ -632,7 +647,7 @@ class StaticChartGenerator:
         # Calculate global Y Max
         all_y_values = []
         for ds in datasets:
-            all_y_values.extend([v for v in ds["data"] if v is not None])
+            all_y_values.extend([v for v in ds["data"] if v is not None and np.isfinite(v)])
 
         if not all_y_values:
             all_y_values = [100]
@@ -647,7 +662,7 @@ class StaticChartGenerator:
         def format_label(x):
             if isinstance(x, (int, float)):
                 if x >= 1000:
-                    return f"{x/1000:.1f}k"
+                    return f"{x / 1000:.1f}k"
                 return str(int(x)) if x == int(x) else f"{x:.1f}"
             return str(x)
 
@@ -1003,7 +1018,7 @@ def generate_static_html_report(
     <div class="container">
         <img src="data:image/png;base64,{img_base64}" class="chart-image" alt="Performance Test Report">
         <div class="buttons">
-            <a href="data:image/png;base64,{img_base64}" download="llm_performance_chart_{test_time.strftime('%Y%m%d_%H%M%S')}.png" class="download-btn">
+            <a href="data:image/png;base64,{img_base64}" download="llm_performance_chart_{test_time.strftime("%Y%m%d_%H%M%S")}.png" class="download-btn">
                 Download Image
             </a>
         </div>

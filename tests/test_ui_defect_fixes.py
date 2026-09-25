@@ -112,11 +112,11 @@ class TestRadarChartGuards:
 
 
 class TestSafeColList:
-    def test_na_values_become_zero(self):
+    def test_na_values_remain_gaps(self):
         df = pd.DataFrame({"x": [1.0, None, float("nan"), pd.NA, 3.5]})
         result = _safe_col_list(df, "x")
-        assert result == [1.0, 0.0, 0.0, 0.0, 3.5]
-        assert all(isinstance(v, float) and math.isfinite(v) for v in result)
+        assert result[0] == 1.0 and result[-1] == 3.5
+        assert all(math.isnan(value) for value in result[1:4])
 
     def test_missing_column_returns_empty(self):
         assert _safe_col_list(pd.DataFrame({"a": [1]}), "b") == []
