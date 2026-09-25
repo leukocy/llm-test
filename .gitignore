@@ -108,3 +108,21 @@ bench_workspace/reports/
 bench_workspace/archives/
 bench_workspace/logs/
 .claude/
+
+# Local runtime directories may be symlinks outside the repository.
+# Match both directories and symlinks so local data stays out of Git status.
+/api_logs
+/batch_tests
+/cache
+/data
+/logs
+/presets
+/quality_results
+/raw_data
+/results
+/test_presets
+/test_progress
+
+# Personal research workspace and editor plans live outside this repository.
+bench_workspace/
+.zcode/
