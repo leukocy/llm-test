@@ -46,8 +46,7 @@ def _fake_subprocess(commands_map: dict[tuple, str | None]):
 
 NVIDIA_SMI_GPU = (
     # 5 字段（memory.type 是无效 nvidia-smi 字段，已从查询移除）
-    "0, NVIDIA H100 80GB HBM3, 81920, 5, 16\n"
-    "1, NVIDIA RTX 4090, 24564, 4, 16\n"
+    "0, NVIDIA H100 80GB HBM3, 81920, 5, 16\n1, NVIDIA RTX 4090, 24564, 4, 16\n"
 )
 
 LSCPU_OUT = (
@@ -94,9 +93,7 @@ def test_query_gpus_parses_nvidia_smi_and_uses_bandwidth_table():
 
 def test_query_gpus_empty_when_no_nvidia_smi_and_no_torch():
     with (
-        patch(
-            "core.hardware_fingerprint.subprocess.run", side_effect=_fake_subprocess({})
-        ),
+        patch("core.hardware_fingerprint.subprocess.run", side_effect=_fake_subprocess({})),
         patch("core.hardware_fingerprint.shutil.which", return_value=None),
         patch.dict("sys.modules", {"torch": None}),
     ):
@@ -124,8 +121,10 @@ def test_pcie_bandwidth_formula_fallback():
 
 def test_query_cpu_topology_parses_lscpu():
     cmds = {("lscpu",): LSCPU_OUT}
-    with patch(
-        "core.hardware_fingerprint.subprocess.run", side_effect=_fake_subprocess(cmds)
+    with (
+        patch("core.hardware_fingerprint.subprocess.run", side_effect=_fake_subprocess(cmds)),
+        # /proc/cpuinfo 兜底会覆盖 lscpu 值; 不 mock 时单 socket 机器(CI)上断言必挂
+        patch("core.hardware_fingerprint._proc_socket_count", return_value=2),
     ):
         cpu = hf._query_cpu_topology()
     assert cpu["model_name"] == "AMD EPYC 9654 96-Core Processor"
@@ -142,9 +141,7 @@ def test_query_cpu_topology_psutil_fallback():
             "core.hardware_fingerprint.subprocess.run",
             side_effect=_fake_subprocess(cmds),
         ),
-        patch(
-            "core.hardware_fingerprint._platform_cpu_model", return_value="fallback cpu"
-        ),
+        patch("core.hardware_fingerprint._platform_cpu_model", return_value="fallback cpu"),
         patch("core.hardware_fingerprint._proc_socket_count", return_value=None),
         patch("core.hardware_fingerprint._psutil_cpu_count", side_effect=[64, 128]),
     ):
@@ -209,9 +206,7 @@ def test_compute_machine_id_works_with_empty_gpus():
 
 def test_capture_hardware_fingerprint_never_raises_and_has_machine_id():
     with (
-        patch(
-            "core.hardware_fingerprint._query_gpus", side_effect=RuntimeError("boom")
-        ),
+        patch("core.hardware_fingerprint._query_gpus", side_effect=RuntimeError("boom")),
         patch(
             "core.hardware_fingerprint._query_cpu_topology",
             return_value={"model_name": "CPU"},
@@ -252,6 +247,7 @@ def test_capture_hardware_fingerprint_full_shape():
             "core.hardware_fingerprint._query_cuda_versions",
             return_value={"driver": "535", "cuda_version": "12.2"},
         ),
+        patch("core.hardware_fingerprint._proc_socket_count", return_value=2),
         patch("core.hardware_fingerprint.shutil.which", return_value=None),
     ):
         fp = hf.capture_hardware_fingerprint()

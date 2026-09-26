@@ -36,6 +36,7 @@ dependencies = [
   "matplotlib>=3.10.0",
   "SQLAlchemy>=2.0.0,<3",
   "fastapi>=0.115.0,<1",
+  "python-multipart>=0.0.9",
   "pydantic>=2.10.0,<3",
   "uvicorn>=0.30.0,<1",
   "requests>=2.32.0",
