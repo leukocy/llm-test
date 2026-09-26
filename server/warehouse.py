@@ -210,6 +210,7 @@ class WarehouseReader:
                             "external_level",
                             "tester",
                             "config_hash",
+                            "tags",
                         )
                     },
                 }

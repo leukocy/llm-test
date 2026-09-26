@@ -172,6 +172,7 @@ def project_run(run: TestRun) -> dict[str, Any]:
         "test_id": run.test_id or "",
         "date": date_str,
         "tester": run.tester or "",
+        "tags": run.tags or "",
         "machine_id": run.machine_id or fp.get("machine_id") or "",
         # ---- 引擎 / 服务 ----
         "engine": serving.get("engine") or config.get("engine") or "",

@@ -32,6 +32,7 @@ export type WarehouseRow = {
   external_level: string;
   tester: string;
   config_hash: string;
+  tags: string | null;
 };
 export type WarehouseData = {
   scope: {

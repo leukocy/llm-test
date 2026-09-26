@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   api,
   downloadFile,
@@ -36,6 +36,8 @@ export function Detail({
   const [events, setEvents] = useState<JobEvent[]>([]);
   const [results, setResults] = useState<RequestResult[]>([]);
   const [error, setError] = useState("");
+  const resultsRef = useRef<RequestResult[]>([]);
+  resultsRef.current = results;
   useEffect(() => {
     let alive = true;
     setSummary(null);
@@ -76,6 +78,33 @@ export function Detail({
       alive = false;
     };
   }, [job.job_id, job.result_run_id, job.result_artifact, job.status, token]);
+
+  // 运行中：since_id 游标增量轮询逐请求样本（去重追加）
+  useEffect(() => {
+    if (!job.result_run_id || !activeStates.has(job.status)) return;
+    let alive = true;
+    const timer = window.setInterval(() => {
+      const current = resultsRef.current;
+      const lastId = current.length ? current[current.length - 1].id : 0;
+      api<{ items: RequestResult[] }>(
+        token,
+        `/api/v1/jobs/${job.job_id}/results?limit=200&since_id=${lastId}`,
+      )
+        .then((data) => {
+          if (!alive || !data.items.length) return;
+          setResults((prev) => {
+            const seen = new Set(prev.map((row) => row.id));
+            const fresh = data.items.filter((row) => !seen.has(row.id));
+            return fresh.length ? [...prev, ...fresh] : prev;
+          });
+        })
+        .catch(() => {});
+    }, 2000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [job.job_id, job.result_run_id, job.status, token]);
 
   async function download(format: "json" | "html" | "csv") {
     try {

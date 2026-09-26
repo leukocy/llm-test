@@ -42,10 +42,16 @@ async def execute_job(
     job_id = job["job_id"]
     job_dir = settings.artifact_root / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
+
+    # `_run_config` 保留键：提交时并入 parameters_json, 执行前拆出
+    # （spec 校验在此前已完成, 方法实参不受污染）
+    params = dict(job["parameters"])
+    run_config = params.pop("_run_config", {}) or {}
+
     if job["test_type"] == "quality":
         from core.quality_evaluator import QualityEvaluator, QualityTestConfig
 
-        config = QualityTestConfig(**job["parameters"])
+        config = QualityTestConfig(**params)
         evaluator = QualityEvaluator(
             api_base_url=endpoint.api_base_url,
             model_id=endpoint.model_id,
@@ -89,13 +95,23 @@ async def execute_job(
         status_text=output,
         api_base_url=endpoint.api_base_url,
         model_id=endpoint.model_id,
-        tokenizer_option=endpoint.tokenizer_option,
+        tokenizer_option=run_config.get("tokenizer_option") or endpoint.tokenizer_option,
         csv_filename=str(job_dir / "requests.csv"),
         api_key=endpoint.api_key(),
         log_placeholder=None,
         provider=endpoint.provider,
         external_test_id=job_id,
         enable_live_log_server=False,
+        hf_tokenizer_model_id=run_config.get("hf_tokenizer_model_id"),
+        latency_offset=run_config.get("latency_offset", 0.0),
+        thinking_enabled=run_config.get("thinking_enabled"),
+        thinking_budget=run_config.get("thinking_budget"),
+        reasoning_effort=run_config.get("reasoning_effort"),
+        random_seed=run_config.get("random_seed"),
+        skip_first_token_for_tps=run_config.get("skip_first_token_for_tps", False),
+        template_tokens=run_config.get("template_tokens", 0),
+        temperature=run_config.get("temperature"),
+        custom_params=run_config.get("custom_params"),
     )
     methods: dict[str, Callable[..., Awaitable[Any]]] = {
         "concurrency": runner.run_concurrency_test,
@@ -107,7 +123,7 @@ async def execute_job(
         "custom_text": runner.run_custom_text_test,
     }
     try:
-        await methods[job["test_type"]](**job["parameters"])
+        await methods[job["test_type"]](**params)
     finally:
         if runner._db_run is not None:
             runner._complete_db_run(success=False)

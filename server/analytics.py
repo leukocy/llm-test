@@ -159,7 +159,10 @@ def run_summary(db_path: str, run_id: int) -> dict[str, Any]:
     }
 
 
-def run_results(db_path: str, run_id: int, *, limit: int, offset: int) -> dict[str, Any]:
+def run_results(
+    db_path: str, run_id: int, *, limit: int, offset: int, since_id: int = 0
+) -> dict[str, Any]:
+    """逐请求结果分页；since_id > 0 时只返回 id 更大的增量行（运行中轮询用）。"""
     conn = sqlite3.connect(db_path, timeout=30)
     conn.row_factory = sqlite3.Row
     try:
@@ -171,12 +174,19 @@ def run_results(db_path: str, run_id: int, *, limit: int, offset: int) -> dict[s
                       input_tokens_target, context_length_target, ttft, tpot, tps,
                       total_time, prefill_tokens, decode_tokens, token_source,
                       token_calc_method, cache_hit_source, error, error_type
-               FROM test_results WHERE run_id = ? ORDER BY id LIMIT ? OFFSET ?""",
-            (run_id, limit, offset),
+               FROM test_results WHERE run_id = ? AND id > ?
+               ORDER BY id LIMIT ? OFFSET ?""",
+            (run_id, since_id, limit, offset),
         ).fetchall()
     finally:
         conn.close()
-    return {"total": count, "items": [dict(row) for row in rows], "limit": limit, "offset": offset}
+    return {
+        "total": count,
+        "items": [dict(row) for row in rows],
+        "limit": limit,
+        "offset": offset,
+        "since_id": since_id,
+    }
 
 
 def run_results_csv(db_path: str, run_id: int) -> str:

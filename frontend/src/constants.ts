@@ -151,3 +151,66 @@ export function date(value: number | null | undefined) {
 export function shortId(value: string) {
   return value.slice(0, 8);
 }
+
+// ---- 趋势/对比目录（与后端 ui/warehouse_charts.py 同口径） ----
+export const trendMetrics: Record<string, string> = {
+  decode_tps: "decode TPS",
+  prefill_tps: "prefill TPS",
+  ttft_s: "TTFT (s)",
+  p50_latency_s: "p50 (s)",
+  p95_latency_s: "p95 (s)",
+  p99_latency_s: "p99 (s)",
+  effective_bandwidth_gbps: "等效带宽 (GB/s)",
+  bandwidth_utilization_pct: "带宽利用率 (%)",
+  gpu_vram_peak_gb: "显存峰值 (GB)",
+  system_memory_peak_gb: "内存峰值 (GB)",
+  gpu_util_pct: "GPU 利用率 (%)",
+  cpu_util_pct: "CPU 利用率 (%)",
+};
+export const trendDims: Record<string, string> = {
+  model_name: "模型",
+  machine_id: "硬件",
+  engine: "引擎",
+  parallel_strategy: "并行",
+  quantization: "量化",
+  tester: "测试员",
+};
+export const compareGroups = ["性能", "资源峰值"];
+
+// ---- spec 字段中文标签（SchemaForm 表头用，缺省回退字段名） ----
+export const fieldLabels: Record<string, string> = {
+  selected_concurrencies: "并发档位（逗号分隔）",
+  rounds_per_level: "每档轮数",
+  max_tokens: "最大输出 tokens",
+  input_tokens_target: "输入 tokens 目标（0 = 不加压）",
+  token_levels: "输入长度档位",
+  requests_per_level: "每档请求数",
+  segment_levels: "分段长度档位",
+  requests_per_segment: "每段请求数",
+  cumulative_mode: "累积模式（前缀复用）",
+  total_rounds: "总轮数",
+  per_round_unique: "每轮独立内容",
+  concurrency: "并发数",
+  context_lengths: "上下文长度档位",
+  concurrencies: "并发档位",
+  rounds: "轮数",
+  enable_warmup: "启用预热",
+  duration_seconds: "持续时长（秒）",
+  base_prompt: "基础提示词",
+  suffix_instruction: "附加指令",
+  avoid_cache: "避开缓存",
+  datasets: "数据集（逗号分隔）",
+  max_samples: "每数据集样本数",
+  num_shots: "few-shot 数",
+  temperature: "温度",
+  use_cache: "使用缓存",
+  thinking_enabled: "启用思考模式",
+  thinking_budget: "思考预算 tokens",
+  reasoning_effort: "推理强度",
+  random_seed: "随机种子",
+  skip_first_token_for_tps: "TPS 不计首 token",
+  template_tokens: "模板 tokens",
+  latency_offset: "延迟校准（秒）",
+  tokenizer_option: "Tokenizer 选择",
+  hf_tokenizer_model_id: "HF Tokenizer 模型 ID",
+};

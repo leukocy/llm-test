@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
 
@@ -160,6 +160,27 @@ SPEC_MODELS: dict[str, type[StrictSpec]] = {
 }
 
 
+class RunConfig(StrictSpec):
+    """BenchmarkRunner 构造器级旋钮（全部可选；未设走端点/引擎默认）。
+
+    随作业提交存入 parameters_json 的 `_run_config` 保留键，worker 执行时
+    由 runner_adapter 拆出并透传。仅对性能类测试生效（quality 作业参数
+    已含 temperature 等自有字段）。
+    """
+
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    thinking_enabled: bool | None = None
+    thinking_budget: int | None = Field(default=None, ge=0, le=131072)
+    reasoning_effort: Literal["low", "medium", "high"] | None = None
+    random_seed: int | None = Field(default=None, ge=0)
+    skip_first_token_for_tps: bool = False
+    template_tokens: int = Field(default=0, ge=0, le=131072)
+    latency_offset: float = Field(default=0.0, ge=-10.0, le=10.0)
+    tokenizer_option: str | None = Field(default=None, max_length=120)
+    hf_tokenizer_model_id: str | None = Field(default=None, max_length=200)
+    custom_params: list[dict[str, str]] | None = Field(default=None, max_length=20)
+
+
 class JobSubmission(StrictSpec):
     schema_version: Literal[1] = 1
     endpoint_id: str = Field(min_length=1, max_length=64)
@@ -174,6 +195,7 @@ class JobSubmission(StrictSpec):
         "quality",
     ]
     parameters: dict
+    run_config: RunConfig | None = None
 
     @model_validator(mode="after")
     def validate_parameters(self) -> JobSubmission:
@@ -217,3 +239,25 @@ def expected_requests(test_type: str, parameters: dict) -> int:
     if test_type == "quality":
         return int(len(parameters["datasets"]) * parameters["max_samples"])
     return 0
+
+
+def spec_catalog() -> dict[str, dict[str, Any]]:
+    """全部测试类型的展示元数据 + JSON Schema（驱动前端表单）。
+
+    label 优先取 config/test_types 的中文展示名，取不到回退原始 id。
+    schema 来自 pydantic model_json_schema（含字段默认值/取值范围/约束）。
+    """
+    try:
+        from config.test_types import test_type_label
+    except Exception:  # noqa: BLE001  配置模块缺失不阻断 API
+        test_type_label = None  # type: ignore[assignment]
+    items: dict[str, dict[str, Any]] = {}
+    for test_type, model in SPEC_MODELS.items():
+        label = test_type
+        if test_type_label is not None:
+            try:
+                label = test_type_label(test_type)
+            except Exception:  # noqa: BLE001
+                pass
+        items[test_type] = {"label": label, "schema": model.model_json_schema()}
+    return items

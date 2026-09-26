@@ -1,92 +1,35 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  api,
-  downloadFile,
-  type WarehouseData,
-  type WarehouseDetail,
-} from "../api";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { api, type WarehouseData } from "../api";
 import { Empty, MetricCard } from "../components";
 import { formatNumber, labels } from "../constants";
+import { WarehouseHistory } from "./WarehouseHistory";
+import { WarehouseTrend } from "./WarehouseTrend";
+import { WarehouseCases, WarehouseCapability } from "./WarehouseCases";
+import { WarehouseAdmin, WarehouseExport } from "./WarehouseAdmin";
 
-type Tab = "history" | "matrix" | "inventory" | "scaling";
+type Tab =
+  | "history"
+  | "trend"
+  | "matrix"
+  | "scaling"
+  | "inventory"
+  | "cases"
+  | "capability"
+  | "export"
+  | "admin";
 
-const detailGroups = [
-  [
-    "标识",
-    [
-      "test_id",
-      "date",
-      "tester",
-      "machine_id",
-      "external_level",
-      "config_hash",
-    ],
-  ],
-  [
-    "模型与服务",
-    [
-      "model_name",
-      "model_version",
-      "model_type",
-      "quantization",
-      "dtype",
-      "max_context",
-      "engine",
-      "engine_version",
-      "parallel_strategy",
-      "engine_params",
-    ],
-  ],
-  [
-    "性能",
-    [
-      "concurrency",
-      "decode_tps",
-      "prefill_tps",
-      "ttft_s",
-      "p50_latency_s",
-      "p95_latency_s",
-      "p99_latency_s",
-      "effective_bandwidth_gbps",
-      "bandwidth_utilization_pct",
-    ],
-  ],
-  [
-    "资源与硬件",
-    [
-      "gpu_vram_peak_gb",
-      "system_memory_peak_gb",
-      "gpu_util_pct",
-      "power_w",
-      "temp_c",
-      "cpu_model",
-      "memory_capacity_gb",
-      "gpu_model",
-      "gpu_count",
-      "gpu_vram_gb",
-      "os",
-      "driver",
-    ],
-  ],
-  [
-    "归因",
-    [
-      "status",
-      "bottleneck",
-      "error_type",
-      "error_detail",
-      "next_action",
-      "supersedes_test_id",
-      "log_path",
-    ],
-  ],
-] as const;
-
-function fieldText(value: string | number | boolean | null | undefined) {
-  if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "boolean") return value ? "是" : "否";
-  return String(value);
-}
+const TABS: [Tab, string][] = [
+  ["history", "运行历史"],
+  ["trend", "趋势对比"],
+  ["matrix", "硬件 × 模型"],
+  ["scaling", "扩展效率"],
+  ["inventory", "硬件盘点"],
+  ["cases", "应用用例"],
+  ["capability", "客户能力表"],
+  ["export", "模板导出"],
+  ["admin", "数据管理"],
+];
 
 export function Warehouse({
   token,
@@ -107,34 +50,19 @@ export function Warehouse({
   const [search, setSearch] = useState("");
   const [metric, setMetric] = useState("decode_tps");
   const [aggregate, setAggregate] = useState("latest");
-  const [tab, setTab] = useState<Tab>("history");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedRunId, setSelectedRunId] = useState("");
-  const [detail, setDetail] = useState<WarehouseDetail | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = (searchParams.get("tab") as Tab) || "history";
 
-  useEffect(() => {
-    if (!selectedRunId) {
-      setDetail(null);
-      return;
-    }
-    let active = true;
-    setDetail(null);
-    api<WarehouseDetail>(
-      token,
-      `/api/v1/warehouse/runs/${encodeURIComponent(selectedRunId)}`,
-    )
-      .then((result) => {
-        if (active) setDetail(result);
-      })
-      .catch((exc) => {
-        if (active)
-          setError(exc instanceof Error ? exc.message : "读取记录失败");
-      });
-    return () => {
-      active = false;
-    };
-  }, [token, selectedRunId]);
+  function setTab(next: Tab) {
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current);
+      if (next === "history") params.delete("tab");
+      else params.set("tab", next);
+      return params;
+    });
+  }
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setSearch(searchInput.trim()), 300);
@@ -152,48 +80,30 @@ export function Warehouse({
     return params;
   }, [model, machine, testType, status, external, search]);
 
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
+  const reload = useCallback(() => {
     const params = new URLSearchParams(query);
     params.set("metric", metric);
     params.set("aggregate", aggregate);
-    api<WarehouseData>(token, `/api/v1/warehouse?${params}`)
+    return api<WarehouseData>(token, `/api/v1/warehouse?${params}`)
       .then((result) => {
-        if (active) {
-          setData(result);
-          setError("");
-        }
+        setData(result);
+        setError("");
       })
-      .catch((exc) => {
-        if (active)
-          setError(exc instanceof Error ? exc.message : "仓库查询失败");
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+      .catch((exc) =>
+        setError(exc instanceof Error ? exc.message : "仓库查询失败"),
+      );
+  }, [token, query, metric, aggregate]);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    reload().finally(() => {
+      if (active) setLoading(false);
+    });
     return () => {
       active = false;
     };
-  }, [token, query, metric, aggregate]);
-
-  async function exportRows(
-    template: "hwInventory" | "hmTest",
-    format: "csv" | "json",
-  ) {
-    try {
-      const params = new URLSearchParams(query);
-      params.set("template", template);
-      params.set("format", format);
-      await downloadFile(
-        token,
-        `/api/v1/warehouse/export?${params}`,
-        `llm-test-${template}.${format}`,
-      );
-    } catch (exc) {
-      setError(exc instanceof Error ? exc.message : "导出失败");
-    }
-  }
+  }, [reload]);
 
   const matrix = data?.matrix;
   const maxMatrix = Math.max(
@@ -213,7 +123,7 @@ export function Warehouse({
         <div>
           <span className="eyebrow">MEASUREMENT WAREHOUSE</span>
           <h1>数据仓库</h1>
-          <p>按模型与硬件检索历史测量，查看透视矩阵、扩展效率和可复用数据。</p>
+          <p>按模型与硬件检索历史测量，查看趋势、透视、用例和可复用数据。</p>
         </div>
       </div>
       <section className="surface warehouse-filter-surface">
@@ -356,48 +266,12 @@ export function Warehouse({
               ` ${data.scope.invalid_rows} 条元数据无法解析。`}
           </div>
           <section className="surface warehouse-results">
-            <div className="section-head">
-              <div>
-                <span className="eyebrow">EXPLORE</span>
-                <h2>分析视图</h2>
-              </div>
-              <div className="warehouse-export">
-                <button
-                  className="button subtle"
-                  disabled={exportBlocked}
-                  onClick={() => void exportRows("hmTest", "csv")}
-                >
-                  测量 CSV ↓
-                </button>
-                <button
-                  className="button subtle"
-                  disabled={exportBlocked}
-                  onClick={() => void exportRows("hwInventory", "csv")}
-                >
-                  硬件 CSV ↓
-                </button>
-                <button
-                  className="button subtle"
-                  disabled={exportBlocked}
-                  onClick={() => void exportRows("hmTest", "json")}
-                >
-                  测量 JSON ↓
-                </button>
-              </div>
-            </div>
             <div
               className="warehouse-tabs"
               role="tablist"
               aria-label="仓库视图"
             >
-              {(
-                [
-                  ["history", "运行历史"],
-                  ["matrix", "硬件 × 模型"],
-                  ["inventory", "硬件盘点"],
-                  ["scaling", "扩展效率"],
-                ] as const
-              ).map(([id, label]) => (
+              {TABS.map(([id, label]) => (
                 <button
                   key={id}
                   role="tab"
@@ -409,99 +283,24 @@ export function Warehouse({
                 </button>
               ))}
             </div>
-            {tab === "history" &&
-              (data.rows.length ? (
-                <div className="table-scroll">
-                  <table className="data-table stats-table">
-                    <thead>
-                      <tr>
-                        <th>日期 / 类型</th>
-                        <th>模型</th>
-                        <th>硬件</th>
-                        <th>并发</th>
-                        <th>TTFT</th>
-                        <th>decode TPS</th>
-                        <th>带宽</th>
-                        <th>等级</th>
-                        <th>操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.rows.map((row) => (
-                        <tr key={row.test_id}>
-                          <td>
-                            <strong>{row.date || "—"}</strong>
-                            <small>
-                              {labels[row.test_type] || row.test_type}
-                            </small>
-                          </td>
-                          <td>{row.model_name || "—"}</td>
-                          <td>{row.machine_id || "未记录"}</td>
-                          <td>{row.concurrency ?? "—"}</td>
-                          <td>{formatNumber(row.ttft_s, 3)} s</td>
-                          <td>{formatNumber(row.decode_tps, 1)}</td>
-                          <td>
-                            {formatNumber(row.effective_bandwidth_gbps, 1)} GB/s
-                          </td>
-                          <td>{row.external_level}</td>
-                          <td>
-                            <button
-                              className="text-button"
-                              onClick={() => setSelectedRunId(row.test_id)}
-                            >
-                              查看字段 →
-                            </button>
-                            {jobIds.has(row.test_id) ? (
-                              <button
-                                className="text-button"
-                                onClick={() => onOpenJob(row.test_id)}
-                              >
-                                运行报告 ↗
-                              </button>
-                            ) : null}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <Empty title="暂无匹配记录" text="调整筛选条件后重试。" />
-              ))}
-            {tab === "history" && selectedRunId && (
-              <div className="warehouse-detail">
-                <div className="section-head">
-                  <div>
-                    <span className="eyebrow">RECORD / {selectedRunId}</span>
-                    <h3>测量字段</h3>
-                  </div>
-                  <button
-                    className="text-button"
-                    onClick={() => setSelectedRunId("")}
-                  >
-                    收起
-                  </button>
-                </div>
-                {detail ? (
-                  <div className="warehouse-detail-grid">
-                    {detailGroups.map(([title, fields]) => (
-                      <div key={title}>
-                        <h4>{title}</h4>
-                        <dl>
-                          {fields.map((field) => (
-                            <div key={field}>
-                              <dt>{field}</dt>
-                              <dd>{fieldText(detail.fields[field])}</dd>
-                            </div>
-                          ))}
-                        </dl>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="muted-cell">正在读取字段…</p>
-                )}
-              </div>
+            {tab === "history" && (
+              <WarehouseHistory
+                token={token}
+                rows={data.rows}
+                jobIds={jobIds}
+                onOpenJob={onOpenJob}
+                onChanged={() => void reload()}
+              />
+            )}
+            {tab === "trend" && (
+              <WarehouseTrend
+                token={token}
+                query={query}
+                candidateIds={data.rows.map((row) => ({
+                  test_id: row.test_id,
+                  label: `${row.date || "—"} · ${row.model_name || "—"} · ${row.machine_id || "—"}`,
+                }))}
+              />
             )}
             {tab === "matrix" && (
               <>
@@ -584,6 +383,46 @@ export function Warehouse({
                 </p>
               </>
             )}
+            {tab === "scaling" &&
+              (data.scaling.length ? (
+                <div className="table-scroll">
+                  <table className="data-table stats-table">
+                    <thead>
+                      <tr>
+                        <th>模型</th>
+                        <th>TP 规模</th>
+                        <th>decode TPS</th>
+                        <th>相对单卡加速</th>
+                        <th>扩展效率</th>
+                        <th>解释</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.scaling.map((row) => (
+                        <tr key={`${row.model_name}-${row.tp_size}`}>
+                          <td>
+                            <strong>{row.model_name}</strong>
+                          </td>
+                          <td>TP {row.tp_size}</td>
+                          <td>{formatNumber(row.decode_tps, 1)}</td>
+                          <td>{formatNumber(row.speedup_vs_tp1, 2)} ×</td>
+                          <td>
+                            {row.efficiency == null
+                              ? "—"
+                              : `${formatNumber(row.efficiency * 100, 1)}%`}
+                          </td>
+                          <td>{row.interpretation}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <Empty
+                  title="暂无扩展效率数据"
+                  text="需有带并行策略与 decode TPS 的有效记录。"
+                />
+              ))}
             {tab === "inventory" &&
               (data.inventory.length ? (
                 <div className="table-scroll">
@@ -639,46 +478,16 @@ export function Warehouse({
                   text="采集机器标识后可生成硬件清单。"
                 />
               ))}
-            {tab === "scaling" &&
-              (data.scaling.length ? (
-                <div className="table-scroll">
-                  <table className="data-table stats-table">
-                    <thead>
-                      <tr>
-                        <th>模型</th>
-                        <th>TP 规模</th>
-                        <th>decode TPS</th>
-                        <th>相对单卡加速</th>
-                        <th>扩展效率</th>
-                        <th>解释</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.scaling.map((row) => (
-                        <tr key={`${row.model_name}-${row.tp_size}`}>
-                          <td>
-                            <strong>{row.model_name}</strong>
-                          </td>
-                          <td>TP {row.tp_size}</td>
-                          <td>{formatNumber(row.decode_tps, 1)}</td>
-                          <td>{formatNumber(row.speedup_vs_tp1, 2)} ×</td>
-                          <td>
-                            {row.efficiency == null
-                              ? "—"
-                              : `${formatNumber(row.efficiency * 100, 1)}%`}
-                          </td>
-                          <td>{row.interpretation}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <Empty
-                  title="暂无扩展效率数据"
-                  text="需有带并行策略与 decode TPS 的有效记录。"
-                />
-              ))}
+            {tab === "cases" && <WarehouseCases token={token} />}
+            {tab === "capability" && <WarehouseCapability token={token} />}
+            {tab === "export" && (
+              <WarehouseExport
+                token={token}
+                query={query}
+                exportBlocked={exportBlocked}
+              />
+            )}
+            {tab === "admin" && <WarehouseAdmin token={token} />}
           </section>
         </>
       )}

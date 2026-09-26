@@ -13,7 +13,7 @@ from typing import Any, Callable, cast
 
 from core.database.connection import Database, db
 from core.models.test_result import TestResult
-from core.models.test_run import TestRun, TestRunStatus
+from core.models.test_run import TestRun
 from core.repositories.test_result import TestResultRepository
 from core.repositories.test_run import TestRunRepository
 
@@ -92,8 +92,8 @@ class DataImportService:
             run.csv_path = str(path)
             run.config = {"metric_contract_version": versions.pop()}
             run.total_requests = len(rows)
-            run.status = TestRunStatus.COMPLETED.value
-
+            # 保持 create 的 RUNNING 状态: 末尾由 run_repo.complete 走合法
+            # 生命周期转换; 预置 COMPLETED 会被状态机拒绝(非法转换)
             run_id = cast(int, self.run_repo.insert(run))
 
             # ImportResult
