@@ -11,9 +11,11 @@ import os
 import random
 from typing import Any
 
+from . import register_evaluator
 from .base_evaluator import BaseEvaluator, extract_choice_answer
 
 
+@register_evaluator("truthfulqa")
 class TruthfulQAEvaluator(BaseEvaluator):
     """
     TruthfulQA DatasetEvaluator

@@ -11,10 +11,12 @@ import re
 import time
 from typing import Any
 
+from . import register_evaluator
 from .answer_parser import CodeAnswerParser
 from .base_evaluator import BaseEvaluator, SampleResult
 
 
+@register_evaluator("humaneval")
 class HumanEvalEvaluator(BaseEvaluator):
     """
     HumanEval Dataset Evaluator.

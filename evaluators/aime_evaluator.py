@@ -17,10 +17,12 @@ import random
 import re
 from typing import Any
 
+from . import register_evaluator
 from .answer_parser import MathAnswerParser
 from .base_evaluator import BaseEvaluator
 
 
+@register_evaluator("aime2025")
 class AIME2025Evaluator(BaseEvaluator):
     """
     AIME 2025 DatasetEvaluator

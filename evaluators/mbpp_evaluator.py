@@ -12,10 +12,12 @@ import random
 import re
 from typing import Any
 
+from . import register_evaluator
 from .answer_parser import CodeAnswerParser
 from .base_evaluator import BaseEvaluator
 
 
+@register_evaluator("mbpp")
 class MBPPEvaluator(BaseEvaluator):
     """
     MBPP DatasetEvaluator

@@ -22,9 +22,11 @@ import random
 import re
 from typing import Any
 
+from . import register_evaluator
 from .base_evaluator import BaseEvaluator, extract_choice_answer
 
 
+@register_evaluator("global_piqa")
 class GlobalPIQAEvaluator(BaseEvaluator):
     """
     Global PIQA Evaluator

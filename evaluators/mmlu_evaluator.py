@@ -7,9 +7,11 @@ MMLU consists of multiple-choice questions across 57 subjects in STEM, Humanitie
 import random
 from typing import Any
 
+from . import register_evaluator
 from .base_evaluator import BaseEvaluator, extract_choice_answer
 
 
+@register_evaluator("mmlu")
 class MMLUEvaluator(BaseEvaluator):
     """
     MMLU Dataset Evaluator.

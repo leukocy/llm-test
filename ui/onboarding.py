@@ -430,11 +430,6 @@ def render_onboarding_guide():
             st.button("Skip Onboarding", on_click=_skip_onboarding, key="onb_skip")
 
 
-def render_onboarding_modal():
-    """Legacy modal — now routes to inline guide. Kept for backward compat."""
-    render_onboarding_guide()
-
-
 def render_onboarding_trigger():
     """Render onboarding trigger in the sidebar."""
     with st.sidebar:

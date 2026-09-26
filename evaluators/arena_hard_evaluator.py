@@ -21,9 +21,11 @@ import os
 import random
 from typing import Any
 
+from . import register_evaluator
 from .base_evaluator import BaseEvaluator
 
 
+@register_evaluator("arena_hard")
 class ArenaHardEvaluator(BaseEvaluator):
     """
     Arena-Hard Evaluator

@@ -618,7 +618,11 @@ def _collect_report_context(test_type: str, model_id: str) -> dict[str, Any]:
 
                     base_sc = (
                         ServingConfig(
-                            **{k: v for k, v in sc.items() if k in ServingConfig.model_fields and v}
+                            **{
+                                k: v
+                                for k, v in sc.items()
+                                if k in ServingConfig.__dataclass_fields__ and v
+                            }
                         )
                         if sc
                         else None

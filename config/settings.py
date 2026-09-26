@@ -122,12 +122,3 @@ TOKENIZER_SOURCES: dict[str, str | dict[str, str]] = {
     "gpt-oss-120b": {"ms": "openai-mirror/gpt-oss-120b", "hf": "openai/gpt-oss-120b"},
     "MiniMax-M3": "MiniMax/MiniMax-M3",
 }
-
-# 兼容层：从 TOKENIZER_SOURCES 自动生成旧变量
-TOKENIZER_MODELSCOPE_MAPPING = {
-    k: (v if isinstance(v, str) else v["ms"]) for k, v in TOKENIZER_SOURCES.items()
-}
-
-TOKENIZER_HF_MAPPING = {
-    k: (v if isinstance(v, str) else v["hf"]) for k, v in TOKENIZER_SOURCES.items()
-}

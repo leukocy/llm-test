@@ -7,10 +7,12 @@ GSM8K is a dataset of 8.5K high-quality grade school math word problems.
 import re
 from typing import Any
 
+from . import register_evaluator
 from .answer_parser import MathAnswerParser
 from .base_evaluator import BaseEvaluator, extract_numeric_answer
 
 
+@register_evaluator("gsm8k")
 class GSM8KEvaluator(BaseEvaluator):
     """
     GSM8K Dataset Evaluator.
@@ -57,9 +59,7 @@ class GSM8KEvaluator(BaseEvaluator):
             print(f"[WARNING] GSM8K load failed: {e}")
             return []
 
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """Format GSM8K sample into a prompt."""
         question = sample.get("question", "")
         prompt = f"Question: {question}\nAnswer:"

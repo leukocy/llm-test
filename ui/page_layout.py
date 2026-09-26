@@ -132,18 +132,6 @@ def render_page_header():
 # =====================================================================
 from ui.formatters import format_results_for_display
 
-# Test type name mapping: English display name → Chinese (for backward compatibility with report generators)
-_TEST_TYPE_MAP = {
-    "Concurrency Test": "并发性能测试",
-    "Prefill Stress Test": "Prefill 压力测试",
-    "Long Context Test": "长上下文测试",
-    "Concurrency-Context Matrix Test": "并发-上下文 综合测试",
-    "Segmented Context Test": "分段上下文测试",
-    "Custom Text Test": "Custom文本测试",
-    "All Tests": "全部测试",
-    "Stability Test": "稳定性测试",
-}
-
 # Internal raw test_type values (stored in results_df) → UI display names
 _INTERNAL_TO_DISPLAY = {
     "concurrency": "Concurrency Test",
@@ -354,8 +342,8 @@ def render_report_section(test_type):
             f"Switch back to that test type to run a new test."
         )
 
-    # Map test type for backward compatibility
-    internal_type = _TEST_TYPE_MAP.get(report_type, report_type)
+    # Report generators accept both Chinese internal names and English display names.
+    internal_type = report_type
 
     # Auto-detect test type and generate corresponding report
     if internal_type in ("并发性能测试", "并发性能Test", "Concurrency Test"):

@@ -88,7 +88,6 @@ class ModelSpec:
 
     # KV cache precision（手册强调：KV 精度与权重精度可不同）
     kv_dtype: str = ""  # fp16 / fp8 ...
-    kv_cache_dtype: str = ""  # 同 kv_dtype，便于兼容命名
     kv_quant_method: str = ""
 
     # MTP / 推测解码

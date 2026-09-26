@@ -11,10 +11,12 @@ import random
 import re
 from typing import Any
 
+from . import register_evaluator
 from .answer_parser import MathAnswerParser
 from .base_evaluator import BaseEvaluator, extract_numeric_answer
 
 
+@register_evaluator("math500")
 class MATH500Evaluator(BaseEvaluator):
     """
     MATH-500 Dataset Evaluator.

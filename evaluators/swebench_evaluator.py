@@ -12,9 +12,11 @@ import random
 import re
 from typing import Any
 
+from . import register_evaluator
 from .base_evaluator import BaseEvaluator
 
 
+@register_evaluator("swebench_lite")
 class SWEBenchLiteEvaluator(BaseEvaluator):
     """
     SWE-Bench Lite DatasetEvaluator
