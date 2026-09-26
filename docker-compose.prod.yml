@@ -1,7 +1,7 @@
 # 离线/生产部署专用 compose 文件
 # 最小依赖：只需本文件 + 已加载的 llm-benchmark:latest 镜像。
 # data/cache/api_logs/presets/results/datasets 若不存在，Docker 会自动创建空目录。
-# .streamlit 配置已烤进镜像，无需挂载。
+# Streamlit 已退役: 平台 API 在 8000 端口直接托管前端产物。
 #
 # 用法（镜像已通过 docker load 加载后）：
 #   docker compose -f docker-compose.prod.yml up -d
@@ -11,13 +11,10 @@ services:
     image: llm-benchmark:latest
     container_name: llm-benchmark
 
-    command:
-    - --server.port=8501
-    - --server.address=0.0.0.0
-    - --browser.gatherUsageStats=false
+    command: [uvicorn, server.main:app, --host, 0.0.0.0, --port, '8000']
 
     ports:
-    - ${BIND_HOST:-127.0.0.1}:${PORT:-8501}:8501
+    - ${BIND_HOST:-127.0.0.1}:${PORT:-8000}:8000
 
     environment:
     - TZ=Asia/Shanghai

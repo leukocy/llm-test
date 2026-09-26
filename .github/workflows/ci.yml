@@ -110,7 +110,7 @@ jobs:
         run: |
           docker compose config -q
           docker compose -f docker-compose.prod.yml config -q
-          docker build --target app-code -t llm-benchmark-app-code:ci .
+          docker build -f Dockerfile.platform -t llm-test-platform:ci .
           docker build -f Dockerfile.sandbox-worker -t llm-benchmark-sandbox-worker:ci .
 
       - name: Verify real sandbox container isolation

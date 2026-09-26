@@ -2,19 +2,16 @@ services:
   llm-benchmark:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.platform
     image: llm-benchmark:latest
     container_name: llm-benchmark
 
-    # ── Command ──
-    command:
-    - --server.port=8501
-    - --server.address=0.0.0.0
-    - --browser.gatherUsageStats=false
+    # ── Command（Streamlit 已退役, 平台 API 托管前端产物）──
+    command: [uvicorn, server.main:app, --host, 0.0.0.0, --port, '8000']
 
     # ── Ports ──
     ports:
-    - ${BIND_HOST:-127.0.0.1}:${PORT:-8501}:8501
+    - ${BIND_HOST:-127.0.0.1}:${PORT:-8000}:8000
 
     # ── Environment ──
     environment:
