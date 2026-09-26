@@ -33,9 +33,9 @@ from core.warehouse.query import WarehouseFilter, build_hardware_inventory_rows,
 # 故不在模块顶层 import，避免用默认 data/benchmark.db 抢先初始化。
 
 
-def _expand_paths(args_paths: list[str]) -> list[str]:
+def _expand_paths(args_paths: list[str]) -> list[str | Path]:
     """展开 CLI 路径参数（支持 shell 未展开的 *.json glob）。"""
-    paths: list[str] = []
+    paths: list[str | Path] = []
     for p in args_paths:
         pp = Path(p)
         # 含通配符且 shell 未展开 → 手动 glob

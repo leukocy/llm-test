@@ -26,7 +26,7 @@ from config.session_state import init_session_state, is_test_running
 
 # === Lazy import modules (on-demand loading) ===
 # The following modules are only imported when needed, reducing startup time
-_lazy_modules = {}
+_lazy_modules: dict = {}
 
 
 def _get_advanced_panels():

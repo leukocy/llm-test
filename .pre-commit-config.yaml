@@ -61,10 +61,12 @@ repos:
   # Type checking with mypy
   # ============================================
 - repo: https://github.com/pre-commit/mirrors-mypy
-  rev: v1.8.0
+  rev: v2.2.0
   hooks:
   - id: mypy
-    args: [--ignore-missing-imports, --warn-unused-ignores]
+    # 不加 --warn-unused-ignores: 隔离钩子环境装不全可选依赖(httpx/jinja2 等),
+    # 与本地环境的 ignore 必要性判断必然不一致, 该警告在此只会产生噪音
+    args: [--ignore-missing-imports]
     additional_dependencies:
     - types-setuptools
     - types-requests

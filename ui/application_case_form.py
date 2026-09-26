@@ -84,10 +84,10 @@ def _render_form() -> None:
                 model_name = st.text_input("或手填模型名", key="ac_model_manual")
         with c2:
             machine_opts = [""] + distinct_values(db, "machine_id")
-            machine_id = st.selectbox("machine_id", machine_opts, key="ac_machine")
+            machine_id = st.selectbox("machine_id", machine_opts, key="ac_machine") or ""
         with c3:
             engine_opts = [""] + distinct_values(db, "engine")
-            engine = st.selectbox("引擎 engine", engine_opts, key="ac_engine")
+            engine = st.selectbox("引擎 engine", engine_opts, key="ac_engine") or ""
         with c4:
             tester = st.text_input(
                 "测试员 tester *",

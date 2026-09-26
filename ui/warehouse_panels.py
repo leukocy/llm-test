@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import streamlit as st
 
 from core.model_spec import resolve_spec
@@ -176,7 +178,7 @@ def render_model_spec_panel(model_id: str) -> None:
         )
 
         # 只收集非零/非空字段作为 override（None 字段交由 resolve_spec 用注册表默认）
-        override = {}
+        override: dict[str, Any] = {}
         if total > 0:
             override["total_params_b"] = float(total)
         if active > 0:

@@ -39,7 +39,7 @@ try:
     try:
         import tomllib  # Python 3.11+
     except ImportError:  # pragma: no cover
-        import tomli as tomllib  # type: ignore[no-redef]
+        import tomli as tomllib
     _PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
     if _PYPROJECT.exists():
         with _PYPROJECT.open("rb") as _f:

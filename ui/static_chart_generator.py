@@ -187,7 +187,7 @@ class StaticChartGenerator:
         # [left, bottom, width, height]
         # bottom starts at 0.15, height dynamically calculated to chart_top, leaving a small gap
         ax_height = chart_top - 0.20
-        ax = fig.add_axes([0.1, 0.15, 0.85, ax_height])
+        ax = fig.add_axes((0.1, 0.15, 0.85, ax_height))
 
         # Use equal-width categorical X-axis: use index as actual plot position
 
@@ -565,7 +565,7 @@ class StaticChartGenerator:
         # Add prefill speed chart
         # Move chart down, leave space at top
         # [left, bottom, width, height]
-        ax1 = fig.add_axes([0.1, 0.48, 0.85, 0.28])
+        ax1 = fig.add_axes((0.1, 0.48, 0.85, 0.28))
         self._draw_single_chart(
             ax1,
             input_lengths,
@@ -577,7 +577,7 @@ class StaticChartGenerator:
         )
 
         # Add output speed chart
-        ax2 = fig.add_axes([0.1, 0.08, 0.85, 0.28])
+        ax2 = fig.add_axes((0.1, 0.08, 0.85, 0.28))
         self._draw_single_chart(
             ax2,
             input_lengths,
@@ -638,7 +638,7 @@ class StaticChartGenerator:
 
         # Chart area
         ax_height = chart_top - 0.20
-        ax = fig.add_axes([0.1, 0.15, 0.85, ax_height])
+        ax = fig.add_axes((0.1, 0.15, 0.85, ax_height))
 
         # X Axis setup
         n_points = len(x_data)
@@ -849,20 +849,20 @@ class StaticChartGenerator:
 
         # Sub-chart positions: [left, bottom, width, height]
         positions = [
-            [left_margin, chart_top - chart_h, chart_w, chart_h],  # Top-left
-            [
+            (left_margin, chart_top - chart_h, chart_w, chart_h),  # Top-left
+            (
                 left_margin + chart_w + h_gap,
                 chart_top - chart_h,
                 chart_w,
                 chart_h,
-            ],  # Top-right
-            [left_margin, bottom_margin, chart_w, chart_h],  # Bottom-left
-            [
+            ),  # Top-right
+            (left_margin, bottom_margin, chart_w, chart_h),  # Bottom-left
+            (
                 left_margin + chart_w + h_gap,
                 bottom_margin,
                 chart_w,
                 chart_h,
-            ],  # Bottom-right
+            ),  # Bottom-right
         ]
 
         for i, chart_cfg in enumerate(charts):

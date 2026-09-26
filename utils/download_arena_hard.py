@@ -36,9 +36,7 @@ def download_from_huggingface():
             ds = load_dataset("lmarena-ai/arena-hard-auto", split="train")
         except Exception:
             try:
-                ds = load_dataset(
-                    "lmarena-ai/arena-hard-auto", "default", split="train"
-                )
+                ds = load_dataset("lmarena-ai/arena-hard-auto", "default", split="train")
             except Exception:
                 ds = load_dataset(
                     "lmarena-ai/arena-hard-auto", trust_remote_code=True, split="train"
@@ -76,7 +74,7 @@ def download_from_huggingface():
         json.dump(all_samples, f, ensure_ascii=False, indent=2)
 
     # Statistics类别
-    categories = {}
+    categories: dict[str, int] = {}
     for s in all_samples:
         cat = s.get("category", "unknown")
         categories[cat] = categories.get(cat, 0) + 1

@@ -30,7 +30,7 @@ def download_from_huggingface():
     output_dir = os.path.join(project_root, "datasets", "aime2025")
     os.makedirs(output_dir, exist_ok=True)
 
-    all_samples = []
+    all_samples: list = []
 
     # 尝试从 opencompass/AIME2025 under载
     try:
@@ -74,7 +74,7 @@ def download_from_huggingface():
 
             for i, item in enumerate(ds):
                 sample = {
-                    "id": item.get("id", f"aime_2025_{i+1}"),
+                    "id": item.get("id", f"aime_2025_{i + 1}"),
                     "problem": item.get("problem", item.get("question", "")),
                     "answer": str(item.get("answer", "")),
                     "source": "2025-I" if i < 15 else "2025-II",
@@ -101,9 +101,7 @@ def download_from_huggingface():
     print(
         f"   - AIME I: {len([s for s in all_samples if '2025-I' in s.get('source', '') and 'II' not in s.get('source', '')])} 道题"
     )
-    print(
-        f"   - AIME II: {len([s for s in all_samples if '2025-II' in s.get('source', '')])} 道题"
-    )
+    print(f"   - AIME II: {len([s for s in all_samples if '2025-II' in s.get('source', '')])} 道题")
     print(f"   - 总计: {len(all_samples)} 道题")
 
     return True
@@ -126,7 +124,7 @@ def download_from_url():
         "https://huggingface.co/datasets/opencompass/AIME2025/resolve/main/AIME2025-II/test.json",
     ]
 
-    all_samples = []
+    all_samples: list = []
 
     for url in urls:
         try:

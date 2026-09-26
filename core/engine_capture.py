@@ -23,7 +23,8 @@ from typing import Any
 try:
     import httpx
 except ImportError:  # pragma: no cover
-    httpx = None
+    # unused-ignore: 隔离钩子环境无 httpx 包时本行无错, ignore 为有包环境准备
+    httpx = None  # type: ignore[assignment, unused-ignore]  # 可选依赖缺失时的占位
 
 
 def _run(args: list[str], timeout: float = 12.0) -> str | None:
@@ -167,9 +168,7 @@ class EngineCaptureAdapter:
         return {}
 
     @classmethod
-    def normalize_params(
-        cls, launch_cmd: str, parsed: dict[str, Any]
-    ) -> dict[str, Any]:  # noqa: ARG003
+    def normalize_params(cls, launch_cmd: str, parsed: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG003
         """把引擎参数归一化到标准 schema:parallel/schedule/runtime。默认空。"""
         return {}
 
@@ -301,9 +300,7 @@ class VLLMAdapter(EngineCaptureAdapter):
         return out
 
     @classmethod
-    def normalize_params(
-        cls, launch_cmd: str, parsed: dict[str, Any]
-    ) -> dict[str, Any]:  # noqa: ARG003
+    def normalize_params(cls, launch_cmd: str, parsed: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG003
         args = parsed.get("args") or {}
         out: dict[str, Any] = {}
         if args:
@@ -443,9 +440,7 @@ class KTransformersAdapter(EngineCaptureAdapter):
     cmd_keywords = ("ktransformers",)
 
     @classmethod
-    def normalize_params(
-        cls, launch_cmd: str, parsed: dict[str, Any]
-    ) -> dict[str, Any]:  # noqa: ARG003
+    def normalize_params(cls, launch_cmd: str, parsed: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG003
         # ktransformers 配置在 yaml/gguf,API 暴露有限;记 launch_cmd 即可
         return {"parallel": {"note": "ktransformers 配置见 yaml(本采集仅记 launch_cmd)"}}
 

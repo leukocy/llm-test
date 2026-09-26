@@ -30,7 +30,7 @@ import os
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, ClassVar
 
 import pandas as pd
 
@@ -139,7 +139,9 @@ class ComparisonEntry:
         else:
             # 对于 higher_is_better=False 的指标（如 TTFT、TPOT 等延迟指标）
             # 需要过滤掉 0 值，因为 0 通常表示测试失败或数据无效
-            positive_values = {k: v for k, v in valid_values.items() if v > 0}
+            positive_values = {
+                k: v for k, v in valid_values.items() if isinstance(v, (int, float)) and v > 0
+            }
             if not positive_values:
                 return None  # 所有值都是 0 或负数，没有有效最佳值
             return min(positive_values.values())
@@ -162,7 +164,11 @@ class ComparisonEntry:
         if best is None or best == 0:
             return None
         return {
-            label: (((value - best) / best * 100) if isinstance(best, (int, float)) else 0)
+            label: (
+                ((value - best) / best * 100)
+                if isinstance(best, (int, float)) and isinstance(value, (int, float))
+                else 0
+            )
             for label, value in self.values.items()
         }
 
@@ -220,7 +226,7 @@ class ResultComparator:
     """
 
     # 定义Comparison Metrics
-    METRIC_DEFINITIONS = [
+    METRIC_DEFINITIONS: ClassVar[list[dict[str, Any]]] = [
         {
             "name": "Accuracy",
             "key": "accuracy",
@@ -623,7 +629,7 @@ class ResultComparator:
 
         data = []
         for comparison in self.report.comparisons:
-            row = {"Metric": comparison.metric_name}
+            row: dict[str, Any] = {"Metric": comparison.metric_name}
             row.update(comparison.values)
             data.append(row)
 
@@ -786,6 +792,8 @@ class ResultComparator:
         """
         if self.report is None:
             self.compare_results()
+        if self.report is None:
+            raise RuntimeError("对比报告生成失败, 无法导出")
 
         # 确保目录存in
         os.makedirs(
@@ -849,10 +857,11 @@ def compare_files(
     comparator = ResultComparator()
 
     # AddResult
-    if labels is None:
-        labels = [None] * len(filepaths)
+    effective_labels: list[str | None] = (
+        list(labels) if labels is not None else [None] * len(filepaths)
+    )
 
-    for filepath, label in zip(filepaths, labels, strict=False):
+    for filepath, label in zip(filepaths, effective_labels, strict=False):
         comparator.add_result(filepath, label)
 
     # Generate对比

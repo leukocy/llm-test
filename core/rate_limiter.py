@@ -43,7 +43,7 @@ class RateLimiter:
         """
         self.rate = rate
         self.burst = int(burst or rate)
-        self.tokens = self.burst
+        self.tokens: float = self.burst
         self.last_update = time.monotonic()
         self._lock = Lock()
 
@@ -109,9 +109,3 @@ class RateLimiter:
 
 # Global rate limiter instance for API calls
 _global_limiter: RateLimiter | None = None
-
-
-
-
-
-

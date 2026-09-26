@@ -98,7 +98,7 @@ class DatasetDownloader:
 
             # use datasets-server API，分页under载
             url = f"{self.HF_API_BASE}/rows"
-            all_samples = []
+            all_samples: list = []
 
             # 每次最多请求 100 条，避免超时
             page_size = 100
@@ -106,7 +106,7 @@ class DatasetDownloader:
             max_total = max_rows or 100000  # default最大 10 万条
 
             while len(all_samples) < max_total:
-                params = {
+                params: dict[str, Any] = {
                     "dataset": hf_id,
                     "config": hf_config,
                     "split": split,
@@ -224,10 +224,6 @@ class DatasetDownloader:
         print("=" * 60)
 
 
-
-
-
-
 # CLI 入口
 if __name__ == "__main__":
     import argparse
@@ -235,9 +231,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Datasetunder载工具")
     parser.add_argument("--dataset", "-d", type=str, help="要under载Dataset名称")
     parser.add_argument("--all", "-a", action="store_true", help="under载所hasDataset")
-    parser.add_argument(
-        "--status", "-s", action="store_true", help="DisplayDatasetStatus"
-    )
+    parser.add_argument("--status", "-s", action="store_true", help="DisplayDatasetStatus")
     parser.add_argument("--force", "-f", action="store_true", help="强制重新under载")
     parser.add_argument("--max-rows", "-m", type=int, default=None, help="最大行数")
 
@@ -250,9 +244,7 @@ if __name__ == "__main__":
     elif args.all:
         downloader.download_all(force=args.force)
     elif args.dataset:
-        downloader.download_dataset(
-            args.dataset, max_rows=args.max_rows, force=args.force
-        )
+        downloader.download_dataset(args.dataset, max_rows=args.max_rows, force=args.force)
     else:
         parser.print_help()
         print("\n示例:")

@@ -118,9 +118,7 @@ class LLMJudge:
         ]
 
         for criterion in request.criteria:
-            prompt_parts.append(
-                f"- **{criterion.value}**: {criteria_desc[criterion]}\n"
-            )
+            prompt_parts.append(f"- **{criterion.value}**: {criteria_desc[criterion]}\n")
 
         prompt_parts.append(f"\nScore范围: 0-{request.max_score} 分\n")
 
@@ -139,19 +137,17 @@ class LLMJudge:
         prompt_parts.append(request.answer)
 
         prompt_parts.append("\n\n---")
-        prompt_parts.append(
-            "\n请以 JSON 格式ReturnEvaluation result，包含以under字段："
-        )
+        prompt_parts.append("\n请以 JSON 格式ReturnEvaluation result，包含以under字段：")
         prompt_parts.append("```json")
         prompt_parts.append("{")
         prompt_parts.append(f'  "total_score": <总分, 0-{request.max_score}>,')
         prompt_parts.append('  "reasoning": "<Score理由，解释is什么给这分数>",')
         prompt_parts.append('  "category_scores": {')
-        for i, criterion in enumerate(criteria_list):
+        for i, criterion_name in enumerate(criteria_list):
             if i < len(criteria_list) - 1:
-                prompt_parts.append(f'    "{criterion}": <分数>,')
+                prompt_parts.append(f'    "{criterion_name}": <分数>,')
             else:
-                prompt_parts.append(f'    "{criterion}": <分数>')
+                prompt_parts.append(f'    "{criterion_name}": <分数>')
         prompt_parts.append("  },")
         prompt_parts.append('  "suggestion": "<改进Suggestion，optional>",')
         prompt_parts.append('  "confidence": <置信度 0-1>')
@@ -206,9 +202,7 @@ class LLMJudge:
             return JudgeResult(
                 score=float(data.get("total_score", 0)),
                 reasoning=data.get("reasoning", ""),
-                category_scores={
-                    k: float(v) for k, v in data.get("category_scores", {}).items()
-                },
+                category_scores={k: float(v) for k, v in data.get("category_scores", {}).items()},
                 confidence=float(data.get("confidence", 0.8)),
                 suggestion=data.get("suggestion"),
             )
@@ -245,7 +239,7 @@ class LLMJudge:
             # 调用 LLM
             result = await self.provider.get_completion(
                 client=None,  # use provider 内部 client
-                session_id="judge",
+                session_id=-1,  # 裁判调用不占业务请求编号(provider 仅用于日志标注)
                 prompt=prompt,
                 max_tokens=1000,
                 log_callback=log_callback,
@@ -257,9 +251,7 @@ class LLMJudge:
             response_content = result.get("full_response_content", "")
 
             # Parse result
-            judge_result = self._parse_judge_response(
-                response_content, request.max_score
-            )
+            judge_result = self._parse_judge_response(response_content, request.max_score)
 
             if log_callback:
                 log_callback(
@@ -303,36 +295,6 @@ class LLMJudge:
             results.append(result)
 
         return results
-
-    def compare_answers(
-        self,
-        question: str,
-        answers: list[str],
-        criteria: list[JudgeCriteria] | None = None,
-    ) -> list[tuple[int, str, JudgeResult]]:
-        """
-        比较多回答质量
-
-        Args:
-            question: 问题
-            answers: 回答列表
-            criteria: Evaluation Criteria（optional）
-
-        Returns:
-            Sort后 [(Index, 回答, Evaluation result)]，按分数降序
-        """
-        # is每回答Create请求
-        requests = [
-            JudgeRequest(
-                question=question,
-                answer=answer,
-                criteria=criteria or list(JudgeCriteria)[:4],
-            )
-            for answer in answers
-        ]
-
-        # 执行评估 (needinAsynconunder文in调用 evaluate_batch)
-        return requests
 
 
 # 便捷函数
