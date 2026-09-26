@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import Field, model_validator
 
 from core.run_lifecycle import InvalidRunTransition, RunStatus
-from server.analytics import run_results, run_results_csv, run_summary
+from server.analytics import MetricContractConflict, run_results, run_results_csv, run_summary
 from server.figures import compare_figures, run_detail_figures, trend_figure
 from server.quality_export import quality_errors_csv
 from server.reports import render_html, render_quality_html
@@ -817,6 +817,12 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         except JobNotFound as exc:
             raise HTTPException(404, "Job not found") from exc
 
+    def performance_summary(job: dict) -> dict:
+        try:
+            return run_summary(str(settings.db_path), job["result_run_id"], job=job)
+        except MetricContractConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+
     @app.get("/api/v1/jobs/{job_id}", dependencies=[auth])
     def get_job(job_id: str):
         return job_or_404(job_id)
@@ -840,7 +846,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         job = job_or_404(job_id)
         if job["result_run_id"] is None:
             raise HTTPException(409, "No persisted performance run for this job")
-        return run_summary(str(settings.db_path), job["result_run_id"])
+        return performance_summary(job)
 
     @app.get("/api/v1/jobs/{job_id}/results", dependencies=[auth])
     def results(
@@ -865,8 +871,12 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         job = job_or_404(job_id)
         if job["result_run_id"] is None:
             raise HTTPException(409, "No persisted performance run for this job")
+        try:
+            content = run_results_csv(str(settings.db_path), job["result_run_id"])
+        except MetricContractConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
         return Response(
-            run_results_csv(str(settings.db_path), job["result_run_id"]),
+            content,
             media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition": f'attachment; filename="llm-test-{job_id}.csv"'},
         )
@@ -875,7 +885,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
     def report(job_id: str, format: str = "json"):
         job = job_or_404(job_id)
         if job["result_run_id"] is not None:
-            data = run_summary(str(settings.db_path), job["result_run_id"])
+            data = performance_summary(job)
             if format == "html":
                 return HTMLResponse(render_html(job, data))
             if format == "json":

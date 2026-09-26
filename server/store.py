@@ -373,6 +373,26 @@ class JobStore:
             )
         return int(row["id"])
 
+    def verify_persisted_run(self, job_id: str, run_id: int, expected_rows: int) -> None:
+        """Reject success if the measured requests were not durably saved."""
+        if expected_rows <= 0:
+            raise RuntimeError("Measurement has no completed requests")
+        with self._connection() as conn:
+            row = conn.execute(
+                """SELECT test_id, status,
+                   (SELECT COUNT(*) FROM test_results WHERE run_id = test_runs.id) AS recorded
+                   FROM test_runs WHERE id = ?""",
+                (run_id,),
+            ).fetchone()
+        if row is None or row["test_id"] != job_id:
+            raise RuntimeError("Measurement run is not linked to the claimed job")
+        if row["status"] != RunStatus.COMPLETED.value:
+            raise RuntimeError("Measurement run did not complete successfully")
+        if row["recorded"] != expected_rows:
+            raise RuntimeError(
+                f"Measurement persistence mismatch: {row['recorded']} of {expected_rows} rows saved"
+            )
+
     def request_cancel(self, job_id: str, *, actor: str = "api") -> dict[str, Any]:
         now = time.time()
         with self._connection() as conn:

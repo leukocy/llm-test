@@ -113,6 +113,12 @@ export type Slice = {
 };
 export type Summary = {
   metric_contract_version: string;
+  integrity: {
+    verified: boolean;
+    expected_requests: number | null;
+    recorded_requests: number;
+    reasons: string[];
+  };
   run: Record<string, string | number | null>;
   overall: Slice;
   group_axis: string;

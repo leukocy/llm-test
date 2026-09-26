@@ -288,6 +288,29 @@ export function Detail({
       </div>
       {summary && (
         <>
+          <div
+            className={`report-integrity ${summary.integrity.verified ? "ready" : "limited"}`}
+            role="status"
+          >
+            <strong>
+              {summary.integrity.verified
+                ? "单次运行完整性核验通过"
+                : "仅供诊断 · 未通过完整性核验"}
+            </strong>
+            <span>
+              已记录 {summary.integrity.recorded_requests} 次请求
+              {summary.integrity.expected_requests !== null
+                ? ` / 计划 ${summary.integrity.expected_requests} 次`
+                : " / 计划请求数未知"}
+            </span>
+            {summary.integrity.reasons.length > 0 && (
+              <ul>
+                {summary.integrity.reasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            )}
+          </div>
           <div className="metric-grid">
             <MetricCard
               label="总请求"

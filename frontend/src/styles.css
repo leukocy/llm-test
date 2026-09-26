@@ -917,6 +917,38 @@ textarea:focus {
   font-size: 12px;
   line-height: 1.65;
 }
+.report-integrity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 18px;
+  padding: 17px 22px;
+  border: 1px solid;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.report-integrity strong {
+  font-size: 14px;
+}
+.report-integrity span {
+  opacity: 0.8;
+}
+.report-integrity ul {
+  flex-basis: 100%;
+  margin: 0;
+  padding-left: 20px;
+}
+.report-integrity.ready {
+  background: #edf8f5;
+  border-color: #b7e3d6;
+  color: #286a60;
+}
+.report-integrity.limited {
+  background: #fff8ea;
+  border-color: #efd6a4;
+  color: #845b16;
+}
 .methodology strong {
   color: #286a60;
 }

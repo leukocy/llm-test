@@ -19,6 +19,13 @@ from server.store import JobStore, LeaseLost
 logger = logging.getLogger(__name__)
 
 
+def _preserve_partial_run(store: JobStore, job_id: str, worker_id: str) -> None:
+    try:
+        store.sync_result_run(job_id, worker_id)
+    except Exception:
+        logger.exception("Could not link partial measurement to job: %s", job_id)
+
+
 def _monitor(store: JobStore, job_id: str, worker_id: str, stop: threading.Event) -> None:
     while not stop.wait(2.0):
         if not store.heartbeat(job_id, worker_id):
@@ -44,8 +51,15 @@ async def run_claimed_job(job: dict, settings: Settings, store: JobStore, worker
         outcome = (
             RunStatus.CANCELLED if current == RunStatus.CANCELLING.value else RunStatus.COMPLETED
         )
-        if output.total > 0 and output.completed < output.total and outcome == RunStatus.COMPLETED:
-            raise RuntimeError("Measurement ended before all scheduled requests completed")
+        if outcome == RunStatus.COMPLETED and output.completed != output.total:
+            raise RuntimeError("Measurement request count differs from the scheduled count")
+        if outcome == RunStatus.COMPLETED and job["test_type"] not in {"quality", "robustness"}:
+            if output.result_run_id is None:
+                raise RuntimeError("Measurement run was not persisted")
+            planned = store.get(job["job_id"])["progress_total"]
+            if planned > 0 and planned != output.completed:
+                raise RuntimeError("Measurement request count differs from the submitted plan")
+            store.verify_persisted_run(job["job_id"], output.result_run_id, output.completed)
         store.update_progress(
             job["job_id"], worker_id, completed=output.completed, total=output.total
         )
@@ -59,6 +73,7 @@ async def run_claimed_job(job: dict, settings: Settings, store: JobStore, worker
     except asyncio.CancelledError:
         logger.info("Job execution interrupted: %s", job["job_id"])
         try:
+            _preserve_partial_run(store, job["job_id"], worker_id)
             cancelling = store.get(job["job_id"])["status"] == RunStatus.CANCELLING.value
             store.finish(
                 job["job_id"],
@@ -74,6 +89,7 @@ async def run_claimed_job(job: dict, settings: Settings, store: JobStore, worker
     except Exception:
         logger.exception("Job execution failed: %s", job["job_id"])
         try:
+            _preserve_partial_run(store, job["job_id"], worker_id)
             cancelling = store.get(job["job_id"])["status"] == RunStatus.CANCELLING.value
             store.finish(
                 job["job_id"],
