@@ -252,6 +252,7 @@ jobs:
         run: pip-audit --local --desc --format json --output audit-report.json
 
       - name: Upload audit report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dependency-audit-report
