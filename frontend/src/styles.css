@@ -1311,3 +1311,325 @@ textarea:focus {
     flex-direction: column;
   }
 }
+
+.preset-surface {
+  padding: 22px 28px;
+}
+.preset-controls,
+.warehouse-export,
+.warehouse-matrix-controls,
+.quality-error-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.preset-controls select,
+.preset-controls input,
+.warehouse-filters select,
+.warehouse-filters input,
+.warehouse-matrix-controls select,
+.quality-analysis-picker select,
+.quality-error-controls select,
+.quality-error-controls input {
+  min-height: 40px;
+  padding: 9px 11px;
+  border: 1px solid #dbe4ee;
+  border-radius: 7px;
+  background: #fff;
+  color: #26394c;
+  font: inherit;
+}
+.preset-controls select,
+.preset-controls input {
+  min-width: 210px;
+  flex: 1 1 210px;
+}
+.preset-controls .button {
+  white-space: nowrap;
+}
+.warehouse-filter-surface {
+  padding: 25px 28px;
+}
+.warehouse-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 15px;
+}
+.warehouse-filters label,
+.warehouse-matrix-controls label {
+  display: grid;
+  gap: 7px;
+  color: #718298;
+  font-size: 11px;
+  font-weight: 700;
+}
+.warehouse-filters select,
+.warehouse-filters input {
+  width: 100%;
+  min-width: 0;
+  font-size: 12px;
+}
+.warehouse-scope {
+  padding: 13px 16px;
+  border: 1px solid #dcebe8;
+  border-radius: 8px;
+  background: #f5fbf8;
+  color: #477268;
+  font-size: 11px;
+}
+.warehouse-scope.warn {
+  border-color: #f0d7ac;
+  background: #fff9ed;
+  color: #966d33;
+}
+.warehouse-results {
+  min-width: 0;
+}
+.warehouse-export .button {
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+.warehouse-tabs {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e8eef3;
+  margin-bottom: 20px;
+}
+.warehouse-tabs button {
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #8191a0;
+  padding: 10px 15px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.warehouse-tabs button.active {
+  color: #137b67;
+  background: #e9f7f2;
+}
+.warehouse-matrix-controls {
+  margin-bottom: 18px;
+}
+.warehouse-matrix-controls select {
+  min-width: 175px;
+  font-size: 12px;
+}
+.warehouse-matrix td:not(:first-child) {
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  text-align: center;
+}
+.warehouse-matrix td.matrix-empty {
+  color: #b5c2cc;
+  background: #f6f8fa;
+}
+.warehouse-detail {
+  margin-top: 22px;
+  padding: 22px;
+  border: 1px solid #dceae8;
+  border-radius: 10px;
+  background: #f8fbfa;
+}
+.warehouse-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.warehouse-detail-grid h4 {
+  color: #1c7161;
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+.warehouse-detail-grid dl {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+.warehouse-detail-grid dl > div {
+  display: grid;
+  grid-template-columns: minmax(100px, 38%) minmax(0, 1fr);
+  gap: 8px;
+  font-size: 11px;
+}
+.warehouse-detail-grid dt {
+  color: #8a9baa;
+}
+.warehouse-detail-grid dd {
+  color: #354a5d;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.quality-analysis {
+  display: grid;
+  gap: 18px;
+}
+.quality-analysis-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  color: #778ca0;
+  font-size: 11px;
+}
+.quality-analysis-picker label {
+  font-weight: 800;
+  color: #4f6276;
+}
+.quality-analysis-picker select {
+  min-width: 180px;
+}
+.quality-analysis-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 18px;
+  align-items: start;
+}
+.quality-category-list {
+  display: grid;
+  gap: 17px;
+}
+.quality-category-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) minmax(100px, 2fr) 55px;
+  gap: 13px;
+  align-items: center;
+  font-size: 11px;
+}
+.quality-category-row strong,
+.quality-category-row small {
+  display: block;
+}
+.quality-category-row small {
+  color: #9aabba;
+  margin-top: 3px;
+}
+.quality-category-track {
+  height: 8px;
+  border-radius: 50px;
+  background: #eaf1f3;
+  overflow: hidden;
+}
+.quality-category-track i {
+  display: block;
+  height: 100%;
+  border-radius: 50px;
+  background: linear-gradient(90deg, #39c6a5, #177fbd);
+}
+.quality-count-list {
+  display: grid;
+  gap: 8px;
+}
+.quality-count-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 11px;
+  border-radius: 6px;
+  background: #f5f9fa;
+  color: #52697b;
+  font-size: 12px;
+}
+.quality-count-list strong {
+  color: #1a7967;
+  white-space: nowrap;
+}
+.quality-provenance dl {
+  margin: 0;
+  display: grid;
+  gap: 7px;
+}
+.quality-provenance dt {
+  color: #8da0af;
+  font-size: 10px;
+}
+.quality-provenance dd {
+  margin: 0 0 8px;
+  color: #344a5d;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.quality-provenance .mono {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+}
+.quality-error-controls {
+  margin-bottom: 18px;
+}
+.quality-error-controls input {
+  flex: 1 1 230px;
+}
+.quality-error-controls > span {
+  color: #99a9b8;
+  font-size: 11px;
+}
+.quality-question {
+  max-width: 360px;
+  line-height: 1.5;
+}
+.quality-sample {
+  margin-top: 22px;
+  padding: 22px;
+  border: 1px solid #e3ecee;
+  border-radius: 10px;
+  background: #f8fbfc;
+}
+.quality-sample-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.quality-sample-columns strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #405669;
+  font-size: 12px;
+}
+.quality-sample pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 14px;
+  border: 1px solid #e3eaed;
+  border-radius: 7px;
+  background: #fff;
+  color: #526779;
+  font:
+    11px/1.6 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+}
+.quality-sample p {
+  color: #74889a;
+  font-size: 11px;
+}
+@media (max-width: 1000px) {
+  .warehouse-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .quality-analysis-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 650px) {
+  .warehouse-filters,
+  .quality-sample-columns,
+  .warehouse-detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .warehouse-export {
+    width: 100%;
+  }
+  .warehouse-export .button {
+    flex: 1 1 120px;
+  }
+  .quality-category-row {
+    grid-template-columns: minmax(90px, 1fr) minmax(65px, 1.3fr) 48px;
+    gap: 8px;
+  }
+}

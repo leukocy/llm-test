@@ -45,7 +45,7 @@ mypy core/ evaluators/ utils/
 
 ### Entry Point & UI Layer
 
-`frontend/src/App.tsx` → React shell, with reusable components in `frontend/src/components.tsx` and screens in `frontend/src/pages/`. `server/main.py` → FastAPI app, with versioned routes in `server/api.py`. `server/worker.py` claims persisted jobs and calls the existing measurement engine through `server/runner_adapter.py`. `server/store.py` owns the SQLite WAL queue and event log; `server/specs.py` validates bounded run specifications. `server/analytics.py` calculates report statistics from persisted observations. `app.py`, `ui/` and `config/session_state.py` remain as the legacy Streamlit path.
+`frontend/src/App.tsx` → React shell, with reusable components in `frontend/src/components.tsx` and screens in `frontend/src/pages/`. `server/main.py` → FastAPI app, with versioned routes in `server/api.py`. `server/worker.py` claims persisted jobs and calls the existing measurement engine through `server/runner_adapter.py`. `server/store.py` owns the SQLite WAL queue, event log and saved test plans; `server/specs.py` validates bounded run specifications. `server/analytics.py` calculates report statistics from persisted observations. `server/warehouse.py` provides bounded reads, matrix/inventory views and exports over legacy measurements; `server/quality_export.py` exports quality failures safely. `app.py`, `ui/` and `config/session_state.py` remain as the legacy Streamlit path.
 
 ### Provider System
 

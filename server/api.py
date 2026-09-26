@@ -6,7 +6,7 @@ import hmac
 import json
 import re
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
@@ -14,10 +14,17 @@ from fastapi.staticfiles import StaticFiles
 
 from core.run_lifecycle import InvalidRunTransition, RunStatus
 from server.analytics import run_results, run_results_csv, run_summary
+from server.quality_export import quality_errors_csv
 from server.reports import render_html, render_quality_html
 from server.settings import Settings
-from server.specs import JobSubmission, expected_requests
-from server.store import IdempotencyConflict, JobNotFound, JobStore
+from server.specs import JobSubmission, PresetSubmission, expected_requests
+from server.store import IdempotencyConflict, JobNotFound, JobStore, PresetConflict, PresetNotFound
+from server.warehouse import (
+    ExportScopeTooLarge,
+    WarehouseReader,
+    WarehouseRunNotFound,
+    WarehouseSelection,
+)
 
 _KEY = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 
@@ -25,6 +32,7 @@ _KEY = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 def create_app(settings: Settings | None = None, store: JobStore | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     store = store or JobStore(settings.db_path)
+    warehouse_reader = WarehouseReader(settings.db_path)
     app = FastAPI(title="LLM Test Control API", version="1.0.0", docs_url=None, redoc_url=None)
 
     def authenticate(authorization: Annotated[str | None, Header()] = None) -> None:
@@ -68,6 +76,102 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
     @app.get("/api/v1/endpoints", dependencies=[auth])
     def endpoints():
         return {"items": [endpoint.public() for endpoint in settings.endpoints.values()]}
+
+    @app.get("/api/v1/presets", dependencies=[auth])
+    def presets():
+        return {"items": store.list_presets()}
+
+    def validate_preset_endpoint(body: PresetSubmission) -> None:
+        if body.endpoint_id not in settings.endpoints:
+            raise HTTPException(422, "Unknown endpoint ID")
+
+    @app.post("/api/v1/presets", dependencies=[auth], status_code=201)
+    def create_preset(body: PresetSubmission):
+        validate_preset_endpoint(body)
+        try:
+            return store.save_preset(
+                name=body.name,
+                endpoint_id=body.endpoint_id,
+                test_type=body.test_type,
+                parameters=body.parameters,
+            )
+        except PresetConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.put("/api/v1/presets/{preset_id}", dependencies=[auth])
+    def update_preset(preset_id: str, body: PresetSubmission):
+        validate_preset_endpoint(body)
+        try:
+            return store.save_preset(
+                preset_id=preset_id,
+                name=body.name,
+                endpoint_id=body.endpoint_id,
+                test_type=body.test_type,
+                parameters=body.parameters,
+            )
+        except PresetNotFound as exc:
+            raise HTTPException(404, "Preset not found") from exc
+        except PresetConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.delete("/api/v1/presets/{preset_id}", dependencies=[auth], status_code=204)
+    def delete_preset(preset_id: str):
+        try:
+            store.delete_preset(preset_id)
+        except PresetNotFound as exc:
+            raise HTTPException(404, "Preset not found") from exc
+        return Response(status_code=204)
+
+    def warehouse_selection(
+        model_id: Annotated[str | None, Query(max_length=200)] = None,
+        machine_id: Annotated[str | None, Query(max_length=120)] = None,
+        test_type: Annotated[str | None, Query(max_length=80)] = None,
+        status: Annotated[str | None, Query(max_length=80)] = None,
+        external_level: Literal["internal", "review", "publishable"] | None = None,
+        search: Annotated[str | None, Query(max_length=120)] = None,
+    ) -> WarehouseSelection:
+        return WarehouseSelection(
+            model_id=model_id,
+            machine_id=machine_id,
+            test_type=test_type,
+            status=status,
+            external_level=external_level,
+            search=search.strip() or None if search else None,
+        )
+
+    @app.get("/api/v1/warehouse", dependencies=[auth])
+    def warehouse(
+        selection: WarehouseSelection = Depends(warehouse_selection),
+        metric: Literal["decode_tps", "effective_bandwidth_gbps"] = "decode_tps",
+        aggregate: Literal["latest", "best"] = "latest",
+    ):
+        return warehouse_reader.dashboard(selection, metric=metric, aggregate=aggregate)
+
+    @app.get("/api/v1/warehouse/runs/{test_id}", dependencies=[auth])
+    def warehouse_run(test_id: str):
+        try:
+            return warehouse_reader.detail(test_id)
+        except WarehouseRunNotFound as exc:
+            raise HTTPException(404, "Warehouse run not found") from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/api/v1/warehouse/export", dependencies=[auth])
+    def warehouse_export(
+        template: Literal["hwInventory", "hmTest"],
+        selection: WarehouseSelection = Depends(warehouse_selection),
+        format: Literal["csv", "json"] = "csv",
+    ):
+        try:
+            content = warehouse_reader.export(selection, template, format)
+        except ExportScopeTooLarge as exc:
+            raise HTTPException(409, str(exc)) from exc
+        media_type = "text/csv; charset=utf-8" if format == "csv" else "application/json"
+        return Response(
+            content,
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="llm-test-{template}.{format}"'},
+        )
 
     @app.post("/api/v1/jobs", dependencies=[auth], status_code=201)
     def submit(
@@ -171,13 +275,37 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             raise HTTPException(409, "No report is available for this job")
         if format not in {"json", "html"}:
             raise HTTPException(422, "Format must be json or html")
-        artifact = (settings.artifact_root / job["result_artifact"]).resolve()
-        if not artifact.is_relative_to(settings.artifact_root.resolve()) or not artifact.is_file():
-            raise HTTPException(404, "Report artifact missing")
-        payload = json.loads(artifact.read_text(encoding="utf-8"))
+        payload = quality_payload(job)
         if format == "html":
             return HTMLResponse(render_quality_html(job, payload))
         return JSONResponse(payload)
+
+    def quality_payload(job: dict[str, Any]) -> dict[str, Any]:
+        if job["result_run_id"] is not None or not job["result_artifact"]:
+            raise HTTPException(409, "No quality report is available for this job")
+        artifact = (settings.artifact_root / job["result_artifact"]).resolve()
+        if not artifact.is_relative_to(settings.artifact_root.resolve()) or not artifact.is_file():
+            raise HTTPException(404, "Report artifact missing")
+        try:
+            payload: object = json.loads(artifact.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise HTTPException(422, "Quality report is invalid") from exc
+        if not isinstance(payload, dict) or not isinstance(payload.get("datasets"), dict):
+            raise HTTPException(422, "Quality report is invalid")
+        return cast(dict[str, Any], payload)
+
+    @app.get("/api/v1/jobs/{job_id}/report/errors.csv", dependencies=[auth])
+    def quality_errors(job_id: str):
+        payload = quality_payload(job_or_404(job_id))
+        try:
+            csv_content = quality_errors_csv(payload)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return Response(
+            csv_content,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="llm-test-{job_id}-errors.csv"'},
+        )
 
     frontend = Path(__file__).resolve().parent.parent / "frontend" / "dist"
     if frontend.is_dir():

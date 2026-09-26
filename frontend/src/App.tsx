@@ -5,6 +5,7 @@ import { Mark, MetricCard, JobTable } from "./components";
 import { Login } from "./pages/Login";
 import { NewRun } from "./pages/NewRun";
 import { Detail } from "./pages/Detail";
+import { Warehouse } from "./pages/Warehouse";
 
 export default function App() {
   const [token, setToken] = useState("");
@@ -133,6 +134,15 @@ export default function App() {
           >
             <span>＋</span> 创建测量
           </button>
+          <button
+            className={view === "warehouse" ? "active" : ""}
+            onClick={() => {
+              setView("warehouse");
+              setSelectedId(null);
+            }}
+          >
+            <span>▦</span> 数据仓库
+          </button>
         </nav>
         <div className="sidebar-bottom">
           <div className="worker-indicator">
@@ -161,9 +171,11 @@ export default function App() {
                 ? "运行详情"
                 : view === "new"
                   ? "创建测量"
-                  : view === "runs"
-                    ? "运行记录"
-                    : "总览"}
+                  : view === "warehouse"
+                    ? "数据仓库"
+                    : view === "runs"
+                      ? "运行记录"
+                      : "总览"}
             </strong>
           </div>
           <div className="topbar-right">
@@ -187,7 +199,21 @@ export default function App() {
               onCancel={cancel}
             />
           ) : view === "new" ? (
-            <NewRun endpoints={endpoints} onSubmit={submit} busy={busy} />
+            <NewRun
+              endpoints={endpoints}
+              token={token}
+              onSubmit={submit}
+              busy={busy}
+            />
+          ) : view === "warehouse" ? (
+            <Warehouse
+              token={token}
+              jobIds={new Set(jobs.map((job) => job.job_id))}
+              onOpenJob={(id) => {
+                setSelectedId(id);
+                setView("runs");
+              }}
+            />
           ) : view === "runs" ? (
             <div className="page-grid">
               <div className="page-head">

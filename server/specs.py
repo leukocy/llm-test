@@ -182,6 +182,18 @@ class JobSubmission(StrictSpec):
         return self
 
 
+class PresetSubmission(JobSubmission):
+    name: str = Field(min_length=1, max_length=80)
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        name = value.strip()
+        if not name:
+            raise ValueError("Preset name cannot be blank")
+        return name
+
+
 def expected_requests(test_type: str, parameters: dict) -> int:
     """Estimate a finite workload for queue display; stability runs are time bounded."""
     if test_type in {"concurrency", "custom_text"}:

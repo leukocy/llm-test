@@ -27,6 +27,14 @@ class LeaseLost(RuntimeError):
     """The worker no longer owns this running job."""
 
 
+class PresetNotFound(LookupError):
+    """The requested preset does not exist."""
+
+
+class PresetConflict(ValueError):
+    """A preset already uses this name."""
+
+
 JobList = list[dict[str, Any]]
 
 
@@ -59,6 +67,83 @@ class JobStore:
         job = dict(row)
         job["parameters"] = json.loads(job.pop("parameters_json"))
         return job
+
+    @staticmethod
+    def _as_preset(row: sqlite3.Row | None) -> dict[str, Any] | None:
+        if row is None:
+            return None
+        preset = dict(row)
+        preset["parameters"] = json.loads(preset.pop("parameters_json"))
+        return preset
+
+    def list_presets(self, *, limit: int = 200) -> JobList:
+        if not 1 <= limit <= 200:
+            raise ValueError("Invalid preset limit")
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM control_presets ORDER BY updated_at DESC, name LIMIT ?", (limit,)
+            ).fetchall()
+        return [self._as_preset(row) for row in rows]  # type: ignore[misc]
+
+    def get_preset(self, preset_id: str) -> dict[str, Any]:
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM control_presets WHERE preset_id = ?", (preset_id,)
+            ).fetchone()
+        preset = self._as_preset(row)
+        if preset is None:
+            raise PresetNotFound(preset_id)
+        return preset
+
+    def save_preset(
+        self,
+        *,
+        name: str,
+        endpoint_id: str,
+        test_type: str,
+        parameters: dict[str, Any],
+        preset_id: str | None = None,
+    ) -> dict[str, Any]:
+        now = time.time()
+        identifier = preset_id or str(uuid.uuid4())
+        parameters_json = json.dumps(
+            parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if (
+                preset_id
+                and not conn.execute(
+                    "SELECT 1 FROM control_presets WHERE preset_id = ?", (preset_id,)
+                ).fetchone()
+            ):
+                conn.rollback()
+                raise PresetNotFound(preset_id)
+            try:
+                if preset_id:
+                    conn.execute(
+                        """UPDATE control_presets SET name = ?, endpoint_id = ?, test_type = ?,
+                           parameters_json = ?, updated_at = ? WHERE preset_id = ?""",
+                        (name, endpoint_id, test_type, parameters_json, now, identifier),
+                    )
+                else:
+                    conn.execute(
+                        """INSERT INTO control_presets
+                           (preset_id, name, endpoint_id, test_type, parameters_json, created_at, updated_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (identifier, name, endpoint_id, test_type, parameters_json, now, now),
+                    )
+            except sqlite3.IntegrityError as exc:
+                conn.rollback()
+                raise PresetConflict("Preset name is already in use") from exc
+            conn.commit()
+        return self.get_preset(identifier)
+
+    def delete_preset(self, preset_id: str) -> None:
+        with self._connection() as conn:
+            cursor = conn.execute("DELETE FROM control_presets WHERE preset_id = ?", (preset_id,))
+        if cursor.rowcount == 0:
+            raise PresetNotFound(preset_id)
 
     @staticmethod
     def _event(

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   api,
+  downloadFile,
   type Job,
   type JobEvent,
   type QualityReport,
@@ -8,6 +9,7 @@ import {
   type Summary,
 } from "../api";
 import { Status, MetricCard, SlicesChart, Empty } from "../components";
+import { QualityAnalysis } from "./QualityAnalysis";
 import {
   activeStates,
   labels,
@@ -81,16 +83,11 @@ export function Detail({
         format === "csv"
           ? `/api/v1/jobs/${job.job_id}/export.csv`
           : `/api/v1/jobs/${job.job_id}/report?format=${format}`;
-      const response = await fetch(path, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) throw new Error("报告下载失败");
-      const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `llm-test-${shortId(job.job_id)}.${format}`;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      await downloadFile(
+        token,
+        path,
+        `llm-test-${shortId(job.job_id)}.${format}`,
+      );
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "下载失败");
     }
@@ -351,6 +348,20 @@ export function Detail({
             可查看逐样本结果与完整来源信息。
           </p>
         </section>
+      )}
+      {quality && (
+        <QualityAnalysis
+          report={quality}
+          onExportErrors={() => {
+            void downloadFile(
+              token,
+              `/api/v1/jobs/${job.job_id}/report/errors.csv`,
+              `llm-test-${shortId(job.job_id)}-errors.csv`,
+            ).catch((exc) =>
+              setError(exc instanceof Error ? exc.message : "下载失败"),
+            );
+          }}
+        />
       )}
       {!summary && !quality && (
         <section className="surface">

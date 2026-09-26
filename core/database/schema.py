@@ -4,7 +4,7 @@ Database Schema 定义
 包含所has表 SQL 定义andMigration语句。
 """
 
-SCHEMA_VERSION = "1.6.0"
+SCHEMA_VERSION = "1.7.0"
 
 # ============================================
 # Table schema定义
@@ -367,6 +367,18 @@ CREATE TABLE IF NOT EXISTS job_events (
 );
 """
 
+CREATE_CONTROL_PRESETS = """
+CREATE TABLE IF NOT EXISTS control_presets (
+    preset_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    endpoint_id TEXT NOT NULL,
+    test_type TEXT NOT NULL,
+    parameters_json TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+"""
+
 # ============================================
 # Index定义
 # ============================================
@@ -417,6 +429,7 @@ def get_schema_sql() -> str:
         CREATE_APPLICATION_CASES,
         CREATE_CONTROL_JOBS,
         CREATE_JOB_EVENTS,
+        CREATE_CONTROL_PRESETS,
     ]
     return "\n".join(tables + CREATE_INDEXES)
 
@@ -441,6 +454,7 @@ def create_tables(conn) -> None:
         CREATE_APPLICATION_CASES,
         CREATE_CONTROL_JOBS,
         CREATE_JOB_EVENTS,
+        CREATE_CONTROL_PRESETS,
     ]:
         cursor.execute(sql)
 

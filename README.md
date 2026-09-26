@@ -23,7 +23,9 @@
 ### New control plane (recommended for single-tenant intranets)
 
 The new React/TypeScript console uses a FastAPI control API and a separate,
-durable worker. Copy `config/endpoints.platform.example.json` to
+durable worker. It includes saved test plans, a searchable measurement warehouse,
+quality sample diagnosis, and printable/downloadable reports. Copy
+`config/endpoints.platform.example.json` to
 `config/endpoints.platform.json` and `.env.platform.example` to `.env.platform`,
 then set the endpoint, API key and a random control token of at least 32 characters.
 

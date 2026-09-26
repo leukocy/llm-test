@@ -1,4 +1,4 @@
-export type View = "overview" | "runs" | "new";
+export type View = "overview" | "runs" | "new" | "warehouse";
 export type JobType =
   | "concurrency"
   | "prefill"
