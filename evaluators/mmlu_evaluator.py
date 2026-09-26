@@ -7,9 +7,11 @@ MMLU consists of multiple-choice questions across 57 subjects in STEM, Humanitie
 import random
 from typing import Any
 
+from . import register_evaluator
 from .base_evaluator import BaseEvaluator, extract_choice_answer
 
 
+@register_evaluator("mmlu")
 class MMLUEvaluator(BaseEvaluator):
     """
     MMLU Dataset Evaluator.
@@ -124,15 +126,9 @@ class MMLUEvaluator(BaseEvaluator):
 
                 if all_samples:
                     if "subject" in all_samples[0]:
-                        samples = [
-                            s
-                            for s in all_samples
-                            if s.get("subject") in subjects_to_keep
-                        ]
+                        samples = [s for s in all_samples if s.get("subject") in subjects_to_keep]
                     else:
-                        print(
-                            "[WARNING] MMLU samples lack 'subject' field, cannot filter."
-                        )
+                        print("[WARNING] MMLU samples lack 'subject' field, cannot filter.")
                         samples = all_samples
                 else:
                     samples = []
@@ -145,7 +141,7 @@ class MMLUEvaluator(BaseEvaluator):
 
         # Fallback to sample data if empty
         if not samples:
-            samples = self._create_sample_data()
+            samples = self._fallback_to_demo_samples(self._create_sample_data)
 
         random.shuffle(samples)
 
@@ -199,7 +195,9 @@ class MMLUEvaluator(BaseEvaluator):
 
         subject = sample.get("subject", "general knowledge")
         subject_display = subject.replace("_", " ").title()
-        system_instruction = f"The following are multiple choice questions (with answers) about {subject_display}."
+        system_instruction = (
+            f"The following are multiple choice questions (with answers) about {subject_display}."
+        )
         messages.append({"role": "system", "content": system_instruction})
 
         for ex in self.few_shot_examples[: self.num_shots]:
@@ -209,9 +207,7 @@ class MMLUEvaluator(BaseEvaluator):
                     "content": self.format_prompt(ex, include_answer=False),
                 }
             )
-            messages.append(
-                {"role": "assistant", "content": self.get_correct_answer(ex)}
-            )
+            messages.append({"role": "assistant", "content": self.get_correct_answer(ex)})
 
         messages.append(
             {
@@ -221,9 +217,7 @@ class MMLUEvaluator(BaseEvaluator):
         )
         return messages
 
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """Format MMLU question and choices."""
         question = sample.get("question", "")
         choices = sample.get("choices", [])

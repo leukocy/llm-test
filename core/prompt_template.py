@@ -47,7 +47,8 @@ try:
     JINJA2_AVAILABLE = True
 except ImportError:
     JINJA2_AVAILABLE = False
-    Environment = None
+    # unused-ignore: 隔离钩子环境无 jinja2 包时本行无错, ignore 为有包环境准备
+    Environment = None  # type: ignore[assignment, misc, unused-ignore]  # 可选依赖缺失时的占位
 
 
 # ============================================
@@ -84,7 +85,7 @@ def create_jinja_env() -> "Environment":
     # AddCustomFilter器
     env.filters["choice_letter"] = lambda idx: chr(ord("A") + int(idx))
     env.filters["strip"] = lambda s: s.strip() if isinstance(s, str) else s
-    env.filters["escape_newlines"] = lambda s: (s.replace("\n", "\\n") if isinstance(s, str) else s)
+    env.filters["escape_newlines"] = lambda s: s.replace("\n", "\\n") if isinstance(s, str) else s
 
     return env
 
@@ -233,8 +234,6 @@ class PromptTemplate:
 # ============================================
 # Chat 模板类
 # ============================================
-
-
 
 
 @dataclass
@@ -506,7 +505,6 @@ class TemplateFactory:
         return PromptTemplate.from_yaml(yaml_path)
 
 
-
 # ============================================
 # 便捷函数
 # ============================================
@@ -515,5 +513,3 @@ class TemplateFactory:
 def get_template(name: str, format: str = "completion") -> Union[PromptTemplate, ChatTemplate]:
     """Get模板便捷函数"""
     return TemplateFactory.get(name, format)
-
-

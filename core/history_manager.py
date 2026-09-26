@@ -1,5 +1,6 @@
 import glob
 import os
+from typing import Any
 
 import pandas as pd
 
@@ -12,7 +13,7 @@ class HistoryManager:
     def __init__(self, base_dir: str = "raw_data"):
         self.base_dir = base_dir
 
-    def list_history(self) -> list[dict[str, str]]:
+    def list_history(self) -> list[dict[str, Any]]:
         """
         List all available benchmark result CSV files.
         Returns a list of dicts with metadata (filename, model_id, timestamp, path).
@@ -21,11 +22,9 @@ class HistoryManager:
             return []
 
         # Find all CSV files recursively
-        csv_files = glob.glob(
-            os.path.join(self.base_dir, "**", "*.csv"), recursive=True
-        )
+        csv_files = glob.glob(os.path.join(self.base_dir, "**", "*.csv"), recursive=True)
 
-        history = []
+        history: list[dict[str, Any]] = []
         for path in csv_files:
             try:
                 filename = os.path.basename(path)

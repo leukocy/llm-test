@@ -1,19 +1,30 @@
 # AGENTS.md
 
+<!-- markdownlint-disable MD013 -->
+
 This file provides guidance to AI coding agents when working with code in this repository.
 
 ## Project Overview
 
-LLM Benchmark Platform - A comprehensive LLM performance & quality evaluation platform. Streamlit UI (app.py) is the main interface. Python 3.10+, install with `pip install -e ".[dev]"`.
+LLM Benchmark Platform - a performance and quality evaluation platform. The single-tenant interface is React/TypeScript in `frontend/`, backed by the FastAPI control API and independent worker in `server/` (the Streamlit interface was retired in 2026-09). Python 3.10+, install with `pip install -e ".[dev]"`.
 
 ## Commands
 
 ```bash
-# Run the app
-streamlit run app.py
+# Run the new platform (see docs/PLATFORM_V3.md for configuration)
+docker compose --env-file .env.platform -f compose.platform.yml up -d --build
+
+# Develop locally: run the API and worker separately
+python -m uvicorn server.main:app --reload
+python -m server.worker
+cd frontend && npm ci && npm run dev
+
+# Frontend production build (served by the API at /)
+cd frontend && npm ci && npm run build
 
 # Run all tests
 python -m pytest tests/ -v
+python -m pytest tests/server/ -v
 
 # Run specific test file or module
 python -m pytest tests/test_benchmark_runner.py -v
@@ -27,18 +38,19 @@ ruff check .
 ruff format .
 
 # Type check
-mypy core/ evaluators/ utils/
+mypy core/ server/ evaluators/ utils/
 ```
 
 ## Architecture
 
 ### Entry Point & UI Layer
 
-`app.py` → Streamlit UI. UI components live in `ui/` (sidebar, test panels, charts, insights, reporting). Session state centralized in `config/session_state.py`.
+`frontend/src/App.tsx` → React shell, with reusable components in `frontend/src/components.tsx` and screens in `frontend/src/pages/`. `server/main.py` → FastAPI app, with versioned routes in `server/api.py`. `server/worker.py` claims persisted jobs and calls the existing measurement engine through `server/runner_adapter.py`. `server/store.py` owns the SQLite WAL queue, event log and saved test plans; `server/specs.py` validates bounded run specifications. `server/analytics.py` calculates report statistics from persisted observations. `server/warehouse.py` provides bounded reads, matrix/inventory views and exports over legacy measurements; `server/figures.py` renders plotly figure JSON for the SPA; `server/quality_export.py` exports quality failures safely. The Streamlit path (`app.py`, `ui/`, `config/session_state.py`) was removed; shared chart builders live in `core/warehouse/charts.py`.
 
 ### Provider System
 
 Two provider implementations in `core/providers/`:
+
 - **OpenAIProvider** (`openai.py`): OpenAI-compatible API adapter (covers DeepSeek, Moonshot, MiMo, ZhiPu, Volcengine, Alibaba, SiliconFlow, OpenRouter, Ollama, local models)
 - **GeminiProvider** (`gemini.py`): Google Gemini native API
 - **Factory** (`factory.py`): `get_provider()` routes by provider name — defaults to OpenAI-compatible
@@ -47,7 +59,8 @@ All providers inherit `LLMProvider` ABC from `base.py`. Key methods: `get_comple
 
 ### Benchmark Runner
 
-`core/benchmark_runner.py` (~2,700 lines) is the main orchestrator. Test methods:
+`core/benchmark_runner.py` is the existing measurement orchestrator. Test methods:
+
 - `run_concurrency_test()` — throughput across concurrency levels
 - `run_prefill_test()` — TTFT at different input token sizes
 - `run_segmented_prefill_test()` — prefix caching effectiveness
@@ -62,6 +75,7 @@ Metrics calculated in `core/benchmark/metrics.py`. Results saved to CSV via `uti
 ### Evaluator Plugin System
 
 Evaluators in `evaluators/` are auto-discovered via `@register_evaluator` decorator (defined in `evaluators/__init__.py`). Each evaluator:
+
 - Inherits `BaseEvaluator` (`evaluators/base_evaluator.py`)
 - Implements `evaluate()` / `evaluate_batch()` for dataset-specific evaluation
 - Returns `EvaluationResult` with accuracy metrics
@@ -69,7 +83,7 @@ Evaluators in `evaluators/` are auto-discovered via `@register_evaluator` decora
 
 ### Data Layer
 
-- **SQLite** via SQLAlchemy: `core/database/` (connection, manager, schema)
+- **SQLite** via `sqlite3`: `core/database/` (connection, manager, schema); queue operations in `server/store.py` use short write transactions and worker leases.
 - **Repository pattern**: `core/repositories/` for data access, `core/models/` for ORM models
 - **Services**: `core/services/` for business logic
 
@@ -100,5 +114,5 @@ Evaluators in `evaluators/` are auto-discovered via `@register_evaluator` decora
 ## Code Style
 
 - Ruff config in `pyproject.toml`: line length 100, double quotes, isort enabled
-- First-party packages: `config`, `core`, `ui`, `utils`, `evaluators`
+- First-party packages: `config`, `core`, `server`, `utils`, `evaluators`
 - pytest markers: `slow`, `integration`, `security`

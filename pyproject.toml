@@ -6,7 +6,7 @@ requires = ["setuptools>=68.0", "wheel"]
 
 [project]
 authors = [
-  {name = "llm-test contributors"}
+  { name = "llm-test contributors" }
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -21,13 +21,12 @@ classifiers = [
   "Topic :: Software Development :: Testing"
 ]
 dependencies = [
-  "streamlit>=1.50.0",
-  "pandas>=2.0.0",
-  "numpy>=2.0.0",
-  "plotly>=6.0.0",
-  "httpx>=0.28.0",
+  "pandas>=2.0.0,<3",
+  "numpy>=2.0.0,<3",
+  "plotly>=6.0.0,<7",
+  "httpx>=0.28.0,<1",
   "tiktoken>=0.12.0",
-  "transformers>=4.51.0",
+  "transformers>=5.10.0,<6",
   "python-dotenv>=1.2.0",
   "PyYAML>=6.0.0",
   "Jinja2>=3.1.0",
@@ -35,23 +34,24 @@ dependencies = [
   "openpyxl>=3.1.0",
   "xlsxwriter>=3.2.0",
   "matplotlib>=3.10.0",
-  "SQLAlchemy>=2.0.0",
-  "fastapi>=0.115.0",
-  "uvicorn>=0.30.0",
+  "SQLAlchemy>=2.0.0,<3",
+  "fastapi>=0.115.0,<1",
+  "python-multipart>=0.0.9",
+  "pydantic>=2.10.0,<3",
+  "uvicorn>=0.30.0,<1",
   "requests>=2.32.0",
   "websockets>=15.0.0",
   "psutil>=7.0.0",
   "nvidia-ml-py>=12.0.0",  # NVML bindings for GPU hardware fingerprint (graceful no-op if no NVIDIA GPU)
-  "modelscope>=1.25.0",
+  "modelscope>=1.25.0,<2",
   "huggingface-hub>=0.36.0",
-  "datasets>=3.0.0",
+  "datasets>=3.0.0,<6",
   "sympy>=1.13.0",
-  "sniffio>=1.3.0",
-  "modelscope>=1.20.0"
+  "sniffio>=1.3.0"
 ]
 description = "LLM 性能基准测试平台 V2 - LLM Performance Benchmarking Platform"
 keywords = ["llm", "benchmark", "performance", "testing", "evaluation"]
-license = {text = "MIT"}
+license = { text = "MIT" }
 name = "llm-test"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -71,7 +71,7 @@ dev = [
 ]
 ml = [
   "torch>=2.9.0",
-  "transformers>=4.51.0"
+  "transformers>=5.10.0,<6"
 ]
 
 [project.urls]
@@ -162,11 +162,12 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 ignore_missing_imports = true
 module = [
-  "streamlit.*",
   "plotly.*",
   "transformers.*",
   "torch.*",
-  "modelscope.*"
+  "modelscope.*",
+  "datasets",
+  "datasets.*"
 ]
 
 # pytest configuration
@@ -271,14 +272,14 @@ select = [
 unfixable = []
 
 [tool.ruff.lint.isort]
-known-first-party = ["config", "core", "ui", "utils", "evaluators"]
+known-first-party = ["config", "core", "server", "utils", "evaluators"]
 
 [tool.ruff.lint.per-file-ignores]
 "app_old.py" = ["ALL"]
 "tests/conftest.py" = ["F401"]
 
 [tool.setuptools]
-package-dir = {"" = "."}
+package-dir = { "" = "." }
 
 [tool.setuptools.packages.find]
 exclude = ["tests*", "docs*", "api_tests*"]

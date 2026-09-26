@@ -38,7 +38,7 @@ class ModelConfig:
 class DatasetConfig:
     """DatasetConfigure"""
 
-    name: str
+    name: str = ""
     path: str = ""
     subset: str = ""
     samples: int = 0  # 0 = use全部
@@ -196,9 +196,7 @@ class TestConfigLoader:
             markdown_export=output_data.get("markdown_export", True),
             html_export=output_data.get("html_export", True),
             include_raw_responses=output_data.get("include_raw_responses", False),
-            include_reasoning_content=output_data.get(
-                "include_reasoning_content", True
-            ),
+            include_reasoning_content=output_data.get("include_reasoning_content", True),
         )
 
         return TestConfig(
@@ -234,9 +232,7 @@ class TestConfigLoader:
         data = self._config_to_dict(config)
 
         with open(path, "w", encoding="utf-8") as f:
-            yaml.dump(
-                data, f, default_flow_style=False, allow_unicode=True, sort_keys=False
-            )
+            yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
     def _config_to_dict(self, config: TestConfig) -> dict[str, Any]:
         """willConfigureConvertis字典"""
@@ -332,7 +328,6 @@ class TestConfigLoader:
     def list_configs(self) -> list[str]:
         """列出所hasConfigure文件"""
         return [f.name for f in self.config_dir.glob("*.yaml")]
-
 
 
 def load_test_config(filepath: str) -> TestConfig:

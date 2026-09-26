@@ -40,24 +40,56 @@ _KV_PROBE_LOCK = threading.Lock()
 # ---------------------------------------------------------------------------
 
 
+def _record_max_model_len(result: dict[str, Any], api_base_url: str, timeout: float) -> None:
+    """向 /v1/models 请求 max_model_len 并记入 result['max_model_len']（不作 budget）。
+
+    供 per-rank 场景参考用：不覆盖 kv_capacity_tokens / source，避免误导调用方。
+    任何异常静默吞掉（探测兜底，绝不抛）。
+    """
+    try:
+        import httpx
+
+        with httpx.Client(timeout=timeout) as c:
+            resp = c.get(api_base_url.rstrip("/") + "/models")
+            if resp.status_code == 200:
+                data = resp.json()
+                models = data.get("data") if isinstance(data, dict) else None
+                if models:
+                    mml = models[0].get("max_model_len")
+                    if mml:
+                        result["max_model_len"] = int(mml)
+    except Exception as e:  # noqa: BLE001
+        logger.debug(f"probe_kv_capacity /v1/models (参考) 失败: {e}")
+
+
 def probe_kv_capacity(api_base_url: str | None, timeout: float = 5.0) -> dict[str, Any]:
     """测试前一次性探测 KV 缓存容量（tokens），用于自适应跳过超预算 cell。
 
     优先级：
       1. 引擎 /metrics 的 cache_config_info：优先使用 vLLM 的
-         kv_cache_size_tokens（group-aware），旧版才回退 block_size×num_gpu_blocks。
+         kv_cache_size_tokens（group-aware，已聚合 TP 的全局容量）。
       2. /v1/models 的 max_model_len——模型上下文上限，作 KV 预算上界（保守，
          实际 KV 池可能更小，但引擎不在跑 / /metrics 不可达时是唯一来源）。
       3. 都拿不到 → kv_capacity_tokens=None（调用方回退到不跳过，全跑）。
 
+    关于 per-rank 回退：旧版 vLLM / 某些 TP 配置下 /metrics 不暴露
+    kv_cache_size_tokens，只有 num_gpu_blocks 与 block_size。此时
+    num_gpu_blocks×block_size 是【单卡 per-rank 容量】（vLLM 在 TP>1 时每个
+    rank 各自 profiling，metrics 不暴露 TP size），远小于全局 KV 池容量
+    （实测 TP=8/DCP=4 的 GLM-5.2：per-rank 粗算 504,256 vs 全局 2,017,024）。
+    直接拿它当跳过 budget 会误杀高并发大上下文 cell。因此该回退值不写入
+    kv_capacity_tokens，而是单独放进 per_rank_capacity 并把 source 标为
+    "metrics_per_rank"，由调用方（_probe_kv_budget）决定保守不跳过。
+
     纯函数、不启动线程、永不抛异常（探测失败比采集不到更糟，回退到全跑）。
-    返回 {kv_capacity_tokens, source, max_model_len, metrics_ok}。
+    返回 {kv_capacity_tokens, source, max_model_len, metrics_ok, per_rank_capacity}。
     """
     result: dict[str, Any] = {
         "kv_capacity_tokens": None,
-        "source": None,  # "metrics" / "models" / None
+        "source": None,  # "metrics"(全局) / "metrics_per_rank"(单卡) / "models" / None
         "max_model_len": None,
         "metrics_ok": False,
+        "per_rank_capacity": None,  # num_gpu_blocks×block_size（per-rank，不可直接当 budget）
     }
     metrics_url = default_metrics_url(api_base_url)
 
@@ -81,18 +113,27 @@ def probe_kv_capacity(api_base_url: str | None, timeout: float = 5.0) -> dict[st
                     blocks = cc.get("num_gpu_blocks")
                     bsize = cc.get("block_size")
                     if capacity:
+                        # group-aware 全局容量（已聚合 TP），可直接当 budget
                         result["kv_capacity_tokens"] = int(capacity)
                         result["source"] = "metrics"
                         result["metrics_ok"] = True
+                        # 顺带记录 per-rank 粗算值供参考
+                        if blocks and bsize:
+                            result["per_rank_capacity"] = int(blocks) * int(bsize)
                     elif blocks and bsize:
-                        result["kv_capacity_tokens"] = int(blocks) * int(bsize)
-                        result["source"] = "metrics"
+                        # 旧版 vLLM 回退：num_gpu_blocks×block_size 是 per-rank 值，
+                        # TP>1 时严重低估全局容量，不能直接当跳过 budget（见文档字符串）。
+                        result["per_rank_capacity"] = int(blocks) * int(bsize)
+                        result["source"] = "metrics_per_rank"
                         result["metrics_ok"] = True
         except Exception as e:  # noqa: BLE001  探测兜底，绝不抛
             logger.debug(f"probe_kv_capacity /metrics 失败: {e}")
 
     # 2. /v1/models → max_model_len 兜底
-    if result["kv_capacity_tokens"] is None and api_base_url:
+    # 仅当 /metrics 完全没给信号（source 仍 None）时才把 max_model_len 当 budget；
+    # per-rank 场景（source="metrics_per_rank"）不覆盖 kv_capacity_tokens，让调用方
+    # 明确走"不可靠不跳过"分支（max_model_len 仍记录供参考）。
+    if result["source"] is None and api_base_url:
         try:
             import httpx
 
@@ -108,9 +149,12 @@ def probe_kv_capacity(api_base_url: str | None, timeout: float = 5.0) -> dict[st
                             # max_model_len 是单请求上下文上限；KV 池通常 ≥ 它但
                             # 多并发时总占用受限于池大小。作保守上界用。
                             result["kv_capacity_tokens"] = int(mml)
-                            result["source"] = result["source"] or "models"
+                            result["source"] = "models"
         except Exception as e:  # noqa: BLE001
             logger.debug(f"probe_kv_capacity /v1/models 失败: {e}")
+    elif api_base_url:
+        # per-rank 或 metrics 不可达但想记录 max_model_len 供参考（不作 budget）
+        _record_max_model_len(result, api_base_url, timeout)
 
     return result
 
@@ -200,9 +244,7 @@ class EngineMetricsPoller:
 
     _MAX_CONSECUTIVE_FAILURES = 3
 
-    def __init__(
-        self, metrics_url: str | None, interval: float = 5.0, timeout: float = 2.0
-    ):
+    def __init__(self, metrics_url: str | None, interval: float = 5.0, timeout: float = 2.0):
         self.metrics_url = metrics_url
         self.interval = max(0.2, float(interval))
         self.timeout = timeout
@@ -234,9 +276,7 @@ class EngineMetricsPoller:
         self._stop_event.clear()
         self._samples = []
         self._start_ts = time.monotonic()
-        self._thread = threading.Thread(
-            target=self._run, name="EngineMetricsPoller", daemon=True
-        )
+        self._thread = threading.Thread(target=self._run, name="EngineMetricsPoller", daemon=True)
         self._thread.start()
 
     def stop(self) -> dict[str, Any]:
@@ -312,17 +352,14 @@ class EngineMetricsPoller:
 
     def _extract(self, parsed: dict[str, Any]) -> dict[str, Any]:
         if self._engine_family == "sglang" or (
-            self._engine_family == "unknown"
-            and detect_engine_family(parsed) == "sglang"
+            self._engine_family == "unknown" and detect_engine_family(parsed) == "sglang"
         ):
             return extract_sglang_runtime(parsed)
         return extract_vllm_runtime(parsed)
 
     # ------------------------------------------------------------------
     def _summarize(self) -> dict[str, Any]:
-        duration = (self._end_ts or time.monotonic()) - (
-            self._start_ts or time.monotonic()
-        )
+        duration = (self._end_ts or time.monotonic()) - (self._start_ts or time.monotonic())
         if not self._samples:
             return self._empty_summary(duration)
 
@@ -339,9 +376,7 @@ class EngineMetricsPoller:
 
         # num_preemption 是累加 counter：取窗口内增量（需 ≥2 个样本才能算）
         preemption_vals = [
-            s["num_preemption"]
-            for s in self._samples
-            if s.get("num_preemption") is not None
+            s["num_preemption"] for s in self._samples if s.get("num_preemption") is not None
         ]
         preemption_total = None
         if len(preemption_vals) >= 2:
@@ -349,12 +384,12 @@ class EngineMetricsPoller:
 
         cc = self._cache_config or {}
         kv_capacity_tokens = cc.get("kv_cache_size_tokens")
-        if (
-            kv_capacity_tokens is None
-            and cc.get("num_gpu_blocks")
-            and cc.get("block_size")
-        ):
-            kv_capacity_tokens = cc["num_gpu_blocks"] * cc["block_size"]
+        per_rank_capacity = None
+        if cc.get("num_gpu_blocks") and cc.get("block_size"):
+            per_rank_capacity = cc["num_gpu_blocks"] * cc["block_size"]
+        if kv_capacity_tokens is None and per_rank_capacity is not None:
+            # 旧版 vLLM 回退：per-rank 值，TP>1 时低估全局容量（见 probe_kv_capacity 文档）
+            kv_capacity_tokens = per_rank_capacity
 
         return {
             "engine_family": self._engine_family,
@@ -386,6 +421,10 @@ class EngineMetricsPoller:
                 "kv_cache_size_tokens": cc.get("kv_cache_size_tokens"),
                 "kv_cache_max_concurrency": cc.get("kv_cache_max_concurrency"),
                 "kv_capacity_tokens": kv_capacity_tokens,
+                # per-rank 粗算值（num_gpu_blocks×block_size）；当
+                # kv_cache_size_tokens 缺失时 kv_capacity_tokens 回退到它，
+                # 但 TP>1 下它低估全局容量，仅供报告参考。
+                "kv_capacity_per_rank": per_rank_capacity,
             },
             "timeline": self._downsample(),
         }

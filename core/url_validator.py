@@ -2,7 +2,8 @@
 URL validation utilities to prevent SSRF (Server-Side Request Forgery) attacks.
 """
 
-import re
+import ipaddress
+import socket
 from urllib.parse import ParseResult, urlparse
 
 
@@ -25,22 +26,7 @@ DEFAULT_SAFE_DOMAINS = {
     "api.moonshot.cn",
     "generativelanguage.googleapis.com",
     "xiaomimimo.com",
-    # Local development servers
-    "localhost",
-    "127.0.0.1",
 }
-
-# Blocklist of dangerous IP ranges (CIDR notation converted to regex)
-BLOCKED_IP_PATTERNS = [
-    r"192\.168\.\d+\.\d+",  # Private network (Class C)
-    r"10\.\d+\.\d+\.\d+",  # Private network (Class A)
-    r"172\.(1[6-9]|2[0-9]|3[01])\.\d+\.\d+",  # Private network (Class B)
-    r"127\.\d+\.\d+\.\d+",  # Loopback (beyond localhost)
-    r"0\.\d+\.\d+\.\d+",  # Invalid
-    r"169\.254\.\d+\.\d+",  # Link-local
-    r"224\.\d+\.\d+\.\d+",  # Multicast
-    r"240\.\d+\.\d+\.\d+",  # Reserved
-]
 
 
 def is_safe_url(
@@ -76,65 +62,79 @@ def is_safe_url(
     if not parsed.hostname:
         return False, "URL must have a valid hostname"
 
+    if parsed.username or parsed.password:
+        return False, "Credentials in provider URLs are not allowed"
+    try:
+        _ = parsed.port
+    except ValueError:
+        return False, "URL has an invalid port"
+
     hostname = parsed.hostname.lower()
-
-    # Check for IP-based SSRF
-    # First, check if it's an IP address
-    ip_pattern = r"^(\d{1,3}\.){3}\d{1,3}$"
-    if re.match(ip_pattern, hostname):
-        # Check against blocked IP patterns
-        for blocked_pattern in BLOCKED_IP_PATTERNS:
-            if re.match(blocked_pattern, hostname):
-                if not allow_private:
-                    return (
-                        False,
-                        f"Private/internal IP addresses are not allowed: {hostname}",
-                    )
-
-        # Validate IP octets are all <= 255
-        octets = hostname.split(".")
-        for octet in octets:
-            if int(octet) > 255:
-                return False, f"Invalid IP address: {hostname}"
-
-    # Check for private/internal hostnames
-    private_patterns = ["localhost", "127.0.0.1", "0.0.0.0", "::1"]
-    if hostname in private_patterns and not allow_private:
-        return False, f"Local addresses are not allowed: {hostname}"
-
-    # Check for metadata endpoints (AWS, GCP, Azure)
-    if "metadata" in hostname.lower():
+    if "metadata" in hostname:
         return False, "Metadata endpoints are not allowed"
 
-    # Check against allowlist (if provided)
-    safe_domains = DEFAULT_SAFE_DOMAINS.copy()
-    if custom_safe_domains:
-        safe_domains.update(custom_safe_domains)
+    # getaddrinfo()/HTTP clients accept integer, hex, octal and shortened IPv4
+    # forms. Reject them before applying an allowlist to textual hostnames.
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        address = None
+        try:
+            socket.inet_aton(hostname)
+        except OSError:
+            pass
+        else:
+            return False, f"Non-canonical IP address is not allowed: {hostname}"
 
-    # If hostname is in allowlist, it's safe
-    if hostname in safe_domains:
+    if address is not None:
+        if address.is_link_local or address.is_multicast or address.is_unspecified:
+            return False, f"Special-use IP address is not allowed: {hostname}"
+        if not address.is_global:
+            if allow_private and (
+                address.is_loopback or (custom_safe_domains and hostname in custom_safe_domains)
+            ):
+                return True, None
+            return False, f"Private/internal IP address must be explicitly trusted: {hostname}"
+        if custom_safe_domains and hostname in custom_safe_domains:
+            return True, None
+        return False, f"IP endpoint must be explicitly trusted: {hostname}"
+
+    if hostname == "localhost":
+        if allow_private:
+            return True, None
+        return False, "Local addresses are not allowed: localhost"
+
+    if any(
+        hostname == domain or hostname.endswith("." + domain) for domain in DEFAULT_SAFE_DOMAINS
+    ):
         return True, None
 
-    # Check if it's a subdomain of a safe domain
-    for safe_domain in safe_domains:
-        if hostname.endswith("." + safe_domain):
-            return True, None
+    if custom_safe_domains and hostname in custom_safe_domains:
+        try:
+            resolved = {
+                ipaddress.ip_address(info[4][0])
+                for info in socket.getaddrinfo(
+                    hostname, parsed.port or 443, type=socket.SOCK_STREAM
+                )
+            }
+        except (OSError, ValueError) as exc:
+            return False, f"Trusted endpoint could not be resolved: {exc}"
+        if not resolved:
+            return False, "Trusted endpoint has no resolved address"
+        if any(ip.is_link_local or ip.is_multicast or ip.is_unspecified for ip in resolved):
+            return False, "Trusted endpoint resolves to a special-use address"
+        if any(not ip.is_global for ip in resolved) and not allow_private:
+            return False, "Trusted endpoint resolves to a private/internal address"
+        return True, None
 
-    # For unknown domains, warn but allow (with logging recommendation)
-    # In production, you might want to be more strict
-    import warnings
-
-    warnings.warn(
-        f"Unrecognized domain: {hostname}. Ensure this is a trusted API provider.",
-        UserWarning,
-        stacklevel=2,
-    )
-
-    return True, None
+    return False, f"Endpoint host is not trusted: {hostname}"
 
 
 def validate_and_normalize_url(
-    url: str, allow_private: bool = False, require_https: bool = False
+    url: str,
+    allow_private: bool = False,
+    require_https: bool = False,
+    custom_safe_domains: set[str] | None = None,
 ) -> str:
     """
     Validate and normalize a URL.
@@ -150,7 +150,9 @@ def validate_and_normalize_url(
     Raises:
         SSRFError: If URL is invalid or unsafe
     """
-    is_safe, error = is_safe_url(url, allow_private=allow_private)
+    is_safe, error = is_safe_url(
+        url, allow_private=allow_private, custom_safe_domains=custom_safe_domains
+    )
     if not is_safe:
         raise SSRFError(f"URL validation failed: {error}")
 
@@ -171,5 +173,3 @@ def validate_and_normalize_url(
         normalized = normalized + "/"
 
     return normalized
-
-

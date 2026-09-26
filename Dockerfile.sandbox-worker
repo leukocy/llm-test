@@ -1,0 +1,10 @@
+FROM python:3.12-slim
+
+WORKDIR /srv
+COPY sandbox_worker.py /srv/sandbox_worker.py
+COPY core/__init__.py /srv/core/__init__.py
+COPY core/sandbox_child.py /srv/core/sandbox_child.py
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+EXPOSE 8765
+CMD ["python", "sandbox_worker.py"]

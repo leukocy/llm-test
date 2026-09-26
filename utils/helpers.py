@@ -24,10 +24,6 @@ def append_to_csv(result_dict, columns, filename):
         logger.error(f"写入 CSV 失败: {e}")
 
 
-
-
-
-
 def reorder_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
     Reorder DataFrame columns to ensure a logical, intuitive order.
@@ -97,6 +93,7 @@ def reorder_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
         "first_token_time",
         "end_time",
         "token_calc_method",
+        "metric_contract_version",
         "api_prefill",
         "api_decode",
         "effective_prefill_tokens",
@@ -108,13 +105,7 @@ def reorder_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     # Construct final order based on what exists in the dataframe
     all_defined = (
-        identity_cols
-        + config_cols
-        + input_cols
-        + output_cols
-        + system_cols
-        + time_cols
-        + meta_cols
+        identity_cols + config_cols + input_cols + output_cols + system_cols + time_cols + meta_cols
     )
 
     final_order = []

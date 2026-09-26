@@ -1,88 +1,81 @@
-from unittest.mock import AsyncMock, patch
+"""Configuration and admission tests for the replacement control API."""
+
+import json
+from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
-# Need to set env var for config if needed, or mock settings dependency
-# But settings has defaults.
-from server.app import app
-
-client = TestClient(app)
+from server.settings import Settings
+from server.specs import JobSubmission
 
 
-def test_health_check():
-    # We don't have explicit /health endpoint in app.py currently,
-    # but let's check accessible endpoints.
-    # Actually I should add /api/health in app.py as per plan.
-    # But I can check /api/strategies.
-    response = client.get("/api/strategies")
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, dict)
-    # Check if some known strategy exists (e.g. prefill)
-    if not data:
-        pytest.skip(
-            "No strategies registered yet? Strategies should auto-register on import."
-        )
-    assert "prefill" in data
-    assert "concurrency" in data
+def test_settings_fail_closed_without_token(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    config = tmp_path / "endpoints.json"
+    config.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "lab",
+                    "label": "Lab",
+                    "provider": "OpenAI",
+                    "api_base_url": "http://127.0.0.1:9010/v1",
+                    "model_id": "org/model",
+                    "api_key_env": "LAB_KEY",  # pragma: allowlist secret
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("LLM_TEST_ENDPOINTS_FILE", str(config))
+    monkeypatch.delenv("LLM_TEST_API_TOKEN", raising=False)
+    with pytest.raises(ValueError, match="LLM_TEST_API_TOKEN"):
+        Settings.from_env()
+    monkeypatch.setenv("LLM_TEST_API_TOKEN", "a" * 40)
+    assert Settings.from_env().endpoints["lab"].model_id == "org/model"
 
 
-def test_list_providers():
-    response = client.get("/api/providers/")
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)
-    if data:
-        assert "base_url" in data[0]
+def test_settings_reject_path_escape_in_model_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    config = tmp_path / "endpoints.json"
+    config.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "lab",
+                    "label": "Lab",
+                    "provider": "OpenAI",
+                    "api_base_url": "https://api.example.com/v1",
+                    "model_id": "../escape",
+                    "api_key_env": "LAB_KEY",  # pragma: allowlist secret
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("LLM_TEST_ENDPOINTS_FILE", str(config))
+    monkeypatch.setenv("LLM_TEST_API_TOKEN", "a" * 40)
+    with pytest.raises(ValueError, match="Invalid model ID"):
+        Settings.from_env()
 
 
-def test_list_models():
-    response = client.get("/api/providers/models")
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data, list)
-
-
-def test_start_run():
-    with patch("server.routes.tests.TestRunner") as MockRunner:
-        # Mock runner instance
-        mock_runner_instance = MockRunner.return_value
-        mock_runner_instance.run = AsyncMock(return_value=[])
-
-        payload = {
-            "test_type": "prefill",
-            "base": {
-                "api_base_url": "http://localhost:11434/v1",
-                "model_id": "llama2",
-                "api_key": "dummy",
-                "provider": "Ollama",
+def test_run_spec_rejects_unbounded_and_unknown_parameters():
+    with pytest.raises(ValueError):
+        JobSubmission(
+            endpoint_id="lab",
+            test_type="concurrency",
+            parameters={
+                "selected_concurrencies": [128],
+                "rounds_per_level": 20,
+                "max_tokens": 1024,
             },
-            "params": {"input_tokens_list": [10], "rounds": 1},
-        }
-
-        response = client.post("/api/tests/run", json=payload)
-        assert response.status_code == 200
-        data = response.json()
-        assert "run_id" in data
-        assert data["status"] == "started"
-
-        run_id = data["run_id"]
-
-        # Check status
-        status_resp = client.get(f"/api/tests/{run_id}/status")
-        assert status_resp.status_code == 200
-        status_data = status_resp.json()
-        assert status_data["run_id"] == run_id
-
-        # Check control endpoints
-        stop_resp = client.post(f"/api/tests/{run_id}/stop")
-        assert stop_resp.status_code == 200
-
-        pause_resp = client.post(f"/api/tests/{run_id}/pause")
-        assert pause_resp.status_code == 200
-
-
-def test_get_nonexistent_run():
-    response = client.get("/api/results/invalid_id")
-    assert response.status_code == 404
+        )
+    with pytest.raises(ValueError):
+        JobSubmission(
+            endpoint_id="lab",
+            test_type="prefill",
+            parameters={
+                "token_levels": [100],
+                "requests_per_level": 1,
+                "max_tokens": 10,
+                "api_key": "leak",  # pragma: allowlist secret
+            },
+        )

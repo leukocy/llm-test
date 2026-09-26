@@ -2,26 +2,26 @@ services:
   llm-benchmark:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.platform
     image: llm-benchmark:latest
     container_name: llm-benchmark
 
-    # ── Command ──
-    command: >
-      streamlit run app.py
-      --server.port=8501
-      --server.address=0.0.0.0
-      --browser.gatherUsageStats=false
+    # ── Command（Streamlit 已退役, 平台 API 托管前端产物）──
+    command: [uvicorn, server.main:app, --host, 0.0.0.0, --port, '8000']
 
     # ── Ports ──
     ports:
-    - ${PORT:-8501}:8501
+    - ${BIND_HOST:-127.0.0.1}:${PORT:-8000}:8000
 
     # ── Environment ──
     environment:
     - TZ=Asia/Shanghai
     - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
     - MODELSCOPE_CACHE=/app/cache/modelscope
+    - LLM_TEST_SANDBOX_URL=http://sandbox-worker:8765
+    - LLM_TEST_SANDBOX_TOKEN=${LLM_TEST_SANDBOX_TOKEN:-}
+    - LLM_TEST_TRUSTED_API_HOSTS=${LLM_TEST_TRUSTED_API_HOSTS:-}
+    - LLM_TEST_ALLOW_PRIVATE_ENDPOINTS=${LLM_TEST_ALLOW_PRIVATE_ENDPOINTS:-0}
     env_file:
     - path: .env
       required: false
@@ -31,17 +31,9 @@ services:
       resources:
         limits:
           memory: 16G
-        reservations:
-          devices:
-          - driver: nvidia
-            count: all
-            capabilities: [gpu]
 
     # ── Volumes ──
     volumes:
-      # Docker socket + CLI:让容器内 engine_capture 能 docker inspect/logs 引擎容器
-    - /var/run/docker.sock:/var/run/docker.sock
-    - /usr/bin/docker:/usr/bin/docker:ro
       # 持久化数据
     - ./data:/app/data
     - ./cache:/app/cache
@@ -49,8 +41,6 @@ services:
     - ./presets:/app/presets
     - ./results:/app/results
     - ./datasets:/app/datasets
-      # Tokenizer: 符号链接指向 /DATA/Model
-    - ./tokenizers:/app/tokenizers
     - /DATA/Model:/DATA/Model:ro
       # Streamlit 配置
     - ./.streamlit:/app/.streamlit:ro
@@ -77,3 +67,35 @@ services:
     labels:
       com.llm-test.description: LLM Benchmark Platform
       com.llm-test.version: 2.0.0
+    networks:
+    - default
+    - sandbox-private
+
+  sandbox-worker:
+    profiles: [code-eval]
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox-worker
+    image: llm-benchmark-sandbox-worker:latest
+    environment:
+    - LLM_TEST_SANDBOX_TOKEN=${LLM_TEST_SANDBOX_TOKEN:-}
+    - LLM_TEST_SANDBOX_IMAGE=${LLM_TEST_SANDBOX_IMAGE:-python:3.12-slim}
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    - /usr/bin/docker:/usr/bin/docker:ro
+    user: 65534:65534
+    group_add:
+    - ${DOCKER_GID:-999}
+    read_only: true
+    tmpfs:
+    - /tmp:rw,nosuid,nodev,noexec,size=16m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 256m
+    networks: [sandbox-private]
+    restart: unless-stopped
+
+networks:
+  sandbox-private:
+    internal: true

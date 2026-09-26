@@ -15,6 +15,7 @@ import zipfile
 from typing import Any
 
 from core.warehouse.templates import TEMPLATE_DESCRIPTIONS, TEMPLATE_FIELDS, TEMPLATE_TITLES
+from utils.spreadsheet import safe_spreadsheet_text
 
 
 def _blank(value: Any) -> Any:
@@ -35,7 +36,7 @@ def export_template_csv(template: str, rows: list[dict[str, Any]]) -> str:
     writer = csv.writer(buf, lineterminator="\n")
     writer.writerow(fields)
     for row in rows:
-        writer.writerow([_blank(row.get(f)) for f in fields])
+        writer.writerow([safe_spreadsheet_text(_blank(row.get(f))) for f in fields])
     return buf.getvalue()
 
 

@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
@@ -172,6 +172,7 @@ def project_run(run: TestRun) -> dict[str, Any]:
         "test_id": run.test_id or "",
         "date": date_str,
         "tester": run.tester or "",
+        "tags": run.tags or "",
         "machine_id": run.machine_id or fp.get("machine_id") or "",
         # ---- 引擎 / 服务 ----
         "engine": serving.get("engine") or config.get("engine") or "",
@@ -188,14 +189,11 @@ def project_run(run: TestRun) -> dict[str, Any]:
         "top_k": spec.get("num_experts_per_tok"),
         "quantization": serving.get("serving_quant") or spec.get("quant_method") or "",
         "dtype": spec.get("weight_dtype") or "",
-        "max_context": spec.get("max_position_embeddings")
-        or serving.get("max_model_len"),
+        "max_context": spec.get("max_position_embeddings") or serving.get("max_model_len"),
         # ---- 测试配置 ----
         "concurrency": run.concurrency,
         "usecase_set_version": config.get("usecase_set_version") or "",
-        "prompt_tokens": config.get("prompt_tokens")
-        or config.get("total_prefill_tokens")
-        or "",
+        "prompt_tokens": config.get("prompt_tokens") or config.get("total_prefill_tokens") or "",
         "output_tokens": config.get("output_tokens") or run.max_tokens,
         "load_time_s": _num(config.get("load_time_s")),
         # ---- 性能 ----
@@ -208,9 +206,7 @@ def project_run(run: TestRun) -> dict[str, Any]:
         "p99_latency_s": _num(run.p99_ttft),
         # ---- 资源峰值 ----
         "gpu_vram_peak_gb": _num(run.gpu_vram_peak_gb or peaks.get("gpu_vram_gb")),
-        "system_memory_peak_gb": _num(
-            run.system_memory_peak_gb or peaks.get("system_memory_gb")
-        ),
+        "system_memory_peak_gb": _num(run.system_memory_peak_gb or peaks.get("system_memory_gb")),
         "effective_bandwidth_gbps": _num(run.effective_bandwidth_gbps),
         "bandwidth_utilization_pct": _num(run.bandwidth_utilization_pct),
         "cpu_threads_used": config.get("cpu_threads") or "",
@@ -247,8 +243,7 @@ def project_run(run: TestRun) -> dict[str, Any]:
         "gpu_bandwidth_gbps": gpu0.get("nominal_bandwidth_gbps"),
         "pcie_gen": gpu0.get("pcie_gen"),
         "pcie_width": gpu0.get("pcie_width"),
-        "ssd_model": config.get("ssd_model")
-        or _largest_ssd_model(fp.get("disks") or []),
+        "ssd_model": config.get("ssd_model") or _largest_ssd_model(fp.get("disks") or []),
         "ssd_capacity_tb": config.get("ssd_capacity_tb")
         or _largest_ssd_size(fp.get("disks") or []),
         "os": fp.get("os") or sysinfo.get("os") or "",
@@ -336,6 +331,17 @@ def query_runs(db, flt: WarehouseFilter | None = None) -> list[TestRun]:
     return runs
 
 
+def count_runs(db, flt: WarehouseFilter | None = None) -> int:
+    """匹配筛选条件的运行总数（不受 flt.limit 截断，供"显示 N / 共 M"）。
+
+    过滤与 query_runs 同口径（含 supersedes 折叠），只是把候选上限放大到全表。
+    """
+    flt = flt or WarehouseFilter()
+    total = db.get_run_count() if hasattr(db, "get_run_count") else 100000
+    big = replace(flt, limit=max(1, total))
+    return len(query_runs(db, big))
+
+
 def _collapse_superseded(runs: list[TestRun]) -> list[TestRun]:
     """把被 supersedes_test_id 指向的旧 run 从结果里剔除，只留最新一版。"""
     superseded_ids = {r.supersedes_test_id for r in runs if r.supersedes_test_id}
@@ -366,6 +372,29 @@ def distinct_values(db, field: str, limit: int = 200) -> list[Any]:
     if all(isinstance(v, str) for v in seen):
         seen.sort()
     return seen
+
+
+# distinct_run_field_values 的列白名单（防 SQL 注入；只放筛选 UI 需要的 run 级列）
+_DISTINCT_RUN_FIELDS = {"test_type", "comparison_group", "status", "external_level", "tester"}
+
+
+def distinct_run_field_values(db, field: str, limit: int = 500) -> list[str]:
+    """test_runs 原生列（run 级，非投影字段）的不重复非空值，SQL 直取。
+
+    与 distinct_values（投影字段、Python 扫描）互补：test_type / comparison_group
+    不进 project_run，筛选下拉需要直接查原生列。列名走白名单，不拼接外部输入。
+    """
+    if field not in _DISTINCT_RUN_FIELDS:
+        return []
+    inner = getattr(db, "db", None)  # DatabaseManager.db → Database
+    if inner is None or not hasattr(inner, "fetch_all"):
+        return []
+    rows = inner.fetch_all(
+        f"SELECT DISTINCT {field} AS v FROM test_runs"
+        f" WHERE {field} IS NOT NULL AND {field} != '' ORDER BY v LIMIT ?",
+        (limit,),
+    )
+    return [r["v"] for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -527,9 +556,7 @@ def build_cross_matrix(
             chosen = max(numeric) if numeric else None
         else:
             # latest：按 created_at 取最新；None created_at 退化为列表最后一个
-            samples_sorted = sorted(
-                samples, key=lambda x: x[0] or datetime.min, reverse=True
-            )
+            samples_sorted = sorted(samples, key=lambda x: x[0] or datetime.min, reverse=True)
             chosen = samples_sorted[0][1] if samples_sorted else None
         cells.setdefault(rv, {})[cv] = chosen
 

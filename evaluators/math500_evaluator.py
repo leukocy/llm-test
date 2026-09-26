@@ -11,10 +11,12 @@ import random
 import re
 from typing import Any
 
+from . import register_evaluator
 from .answer_parser import MathAnswerParser
 from .base_evaluator import BaseEvaluator, extract_numeric_answer
 
 
+@register_evaluator("math500")
 class MATH500Evaluator(BaseEvaluator):
     """
     MATH-500 Dataset Evaluator.
@@ -117,7 +119,7 @@ class MATH500Evaluator(BaseEvaluator):
                 ]
 
         if not samples:
-            samples = self._create_sample_data()
+            samples = self._fallback_to_demo_samples(self._create_sample_data)
             if subset:
                 subset_lower = subset.lower().replace(" ", "_")
                 samples = [
@@ -157,9 +159,7 @@ class MATH500Evaluator(BaseEvaluator):
             }
         ]
 
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """Format sample using CoT (Chain-of-Thought) pattern."""
         problem = sample.get("problem", "")
         prompt_lines = [f"Problem: {problem}"]
@@ -313,11 +313,7 @@ class MATH500Evaluator(BaseEvaluator):
 
         answer = answer.strip()
         # Remove common LaTeX markers
-        answer = (
-            answer.replace("^\\circ", "")
-            .replace("^{\\circ}", "")
-            .replace("\\degree", "")
-        )
+        answer = answer.replace("^\\circ", "").replace("^{\\circ}", "").replace("\\degree", "")
         answer = answer.replace("$", "").replace("\\%", "")
 
         # Handle \text{}, \mathrm{}, etc.

@@ -17,7 +17,7 @@ import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Any, TypeVar
+from typing import Any, NoReturn, TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +34,7 @@ class RetryConfig:
     exponential_base: float = 2.0  # 指数基数
     jitter: bool = True  # is否Add随机抖动
     jitter_range: tuple[float, float] = (0.5, 1.5)  # 抖动范围倍数
-    retryable_status_codes: set[int] = field(
-        default_factory=lambda: {429, 500, 502, 503, 504}
-    )
+    retryable_status_codes: set[int] = field(default_factory=lambda: {429, 500, 502, 503, 504})
     retryable_exceptions: tuple = (ConnectionError, TimeoutError)
 
 
@@ -50,6 +48,16 @@ class RetryResult:
     attempts: int = 0
     total_delay: float = 0.0
     last_status_code: int | None = None
+
+
+def _reraise(result: RetryResult) -> NoReturn:
+    """抛出重试失败的原始异常。
+
+    execute_* 在 success=False 时必然设置 error; None 分支仅作防御兜底。
+    """
+    if result.error is not None:
+        raise result.error
+    raise RuntimeError("Retry failed without an error")
 
 
 class RetryHandler:
@@ -109,9 +117,7 @@ class RetryHandler:
 
         return delay
 
-    def _is_retryable_error(
-        self, error: Exception
-    ) -> tuple[bool, int | None, float | None]:
+    def _is_retryable_error(self, error: Exception) -> tuple[bool, int | None, float | None]:
         """
         判断is否is可重试Error
 
@@ -309,7 +315,7 @@ class RetryHandler:
                 result = await self.execute_async(func, *args, **kwargs)
                 if result.success:
                     return result.result
-                raise result.error
+                _reraise(result)
 
             return async_wrapper
         else:
@@ -319,7 +325,7 @@ class RetryHandler:
                 result = self.execute_sync(func, *args, **kwargs)
                 if result.success:
                     return result.result
-                raise result.error
+                _reraise(result)
 
             return sync_wrapper
 
@@ -344,8 +350,8 @@ async def retry_async(func: Callable[..., Awaitable[T]], *args, **kwargs) -> T:
     """
     result = await default_retry_handler.execute_async(func, *args, **kwargs)
     if result.success:
-        return result.result
-    raise result.error
+        return cast(T, result.result)
+    _reraise(result)
 
 
 def retry_sync(func: Callable[..., T], *args, **kwargs) -> T:
@@ -364,5 +370,5 @@ def retry_sync(func: Callable[..., T], *args, **kwargs) -> T:
     """
     result = default_retry_handler.execute_sync(func, *args, **kwargs)
     if result.success:
-        return result.result
-    raise result.error
+        return cast(T, result.result)
+    _reraise(result)

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ master ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ master ]
   workflow_dispatch:
 
 jobs:
@@ -29,20 +29,20 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff black mypy bandit safety
+          pip install ruff mypy bandit
 
       - name: Run Ruff linter
         run: ruff check . --output-format=github
 
-      - name: Check code formatting with Black
-        run: black --check .
+      - name: Verify platform compose
+        run: docker compose -f compose.platform.yml config -q
 
       - name: Run type checking with mypy
         run: mypy core/ evaluators/ --ignore-missing-imports
         continue-on-error: true
 
       - name: Run Bandit security linter
-        run: bandit -r . -f json -o bandit-report.json
+        run: bandit -c pyproject.toml -r core evaluators ui utils server -f json -o bandit-report.json
         continue-on-error: true
 
       - name: Upload Bandit report
@@ -51,12 +51,36 @@ jobs:
           name: bandit-report
           path: bandit-report.json
 
-      - name: Check dependencies for security issues
-        run: safety check --json
-
   # ============================================
   # 安全测试
   # ============================================
+  frontend:
+    name: React Console Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run format:check
+      - run: npm run build
+
+  platform-image:
+    name: Platform Image Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f Dockerfile.platform -t llm-test-platform:ci .
+      - run: docker run --rm llm-test-platform:ci python -c "import server.api, server.worker"
+
   security-tests:
     name: Security Tests
     runs-on: ubuntu-latest
@@ -75,11 +99,24 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -e ".[dev]"
 
       - name: Run security tests
         run: |
           pytest tests/test_security.py -v --tb=short
+          pytest tests/server/ -q --tb=short
+
+      - name: Verify deployment manifests and worker image
+        run: |
+          docker compose config -q
+          docker compose -f docker-compose.prod.yml config -q
+          docker build -f Dockerfile.platform -t llm-test-platform:ci .
+          docker build -f Dockerfile.sandbox-worker -t llm-benchmark-sandbox-worker:ci .
+
+      - name: Verify real sandbox container isolation
+        run: |
+          docker pull python:3.12-slim
+          RUN_SANDBOX_INTEGRATION=1 pytest tests/test_sandbox_worker.py -v --tb=short
 
       - name: Upload security test results
         uses: actions/upload-artifact@v4
@@ -97,7 +134,7 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.10', '3.11', '3.12', '3.13']
 
     steps:
       - name: Checkout code
@@ -112,8 +149,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-cov pytest-asyncio
+          pip install -e ".[dev]"
 
       - name: Run unit tests with coverage
         run: |
@@ -169,7 +205,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -e .
 
       - name: Verify core imports
         run: |
@@ -208,13 +244,15 @@ jobs:
           python-version: '3.10'
 
       - name: Install pip-audit
-        run: pip install pip-audit
+        run: |
+          python -m pip install --upgrade pip setuptools
+          pip install -e . pip-audit
 
       - name: Run dependency audit
-        run: pip-audit --desc --format json --output audit-report.json
-        continue-on-error: true
+        run: pip-audit --local --desc --format json --output audit-report.json
 
       - name: Upload audit report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dependency-audit-report
@@ -292,13 +330,15 @@ jobs:
   status-check:
     name: Status Check
     runs-on: ubuntu-latest
-    needs: [lint, security-tests, unit-tests, import-check, dependency-check]
+    needs: [lint, frontend, platform-image, security-tests, unit-tests, import-check, dependency-check]
     if: always()
 
     steps:
       - name: Check all jobs status
         run: |
           if [ "${{ needs.lint.result }}" != "success" ] || \
+             [ "${{ needs.frontend.result }}" != "success" ] || \
+             [ "${{ needs.platform-image.result }}" != "success" ] || \
              [ "${{ needs.security-tests.result }}" != "success" ] || \
              [ "${{ needs.unit-tests.result }}" != "success" ] || \
              [ "${{ needs.import-check.result }}" != "success" ] || \

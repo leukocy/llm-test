@@ -83,43 +83,6 @@ for _importer, _module_name, _is_pkg in pkgutil.iter_modules([str(_package_dir)]
             pass
 
 
-# === Legacy compatibility: manually register evaluators that don't use @register_evaluator yet ===
-def _legacy_register():
-    """Register evaluators that haven't been updated with the decorator yet."""
-    legacy_mappings = {
-        "mmlu": "mmlu_evaluator.MMLUEvaluator",
-        "gsm8k": "gsm8k_evaluator.GSM8KEvaluator",
-        "math500": "math500_evaluator.MATH500Evaluator",
-        "humaneval": "humaneval_evaluator.HumanEvalEvaluator",
-        "gpqa": "gpqa_evaluator.GPQAEvaluator",
-        "arc": "arc_evaluator.ARCEvaluator",
-        "truthfulqa": "truthfulqa_evaluator.TruthfulQAEvaluator",
-        "hellaswag": "hellaswag_evaluator.HellaSwagEvaluator",
-        "winogrande": "winogrande_evaluator.WinoGrandeEvaluator",
-        "mbpp": "mbpp_evaluator.MBPPEvaluator",
-        "longbench": "longbench_evaluator.LongBenchEvaluator",
-        "swebench_lite": "swebench_evaluator.SWEBenchLiteEvaluator",
-        "needle_haystack": "needle_haystack_evaluator.NeedleHaystackEvaluator",
-        "custom_needle": "custom_needle_evaluator.CustomNeedleEvaluator",
-        "aime2025": "aime_evaluator.AIME2025Evaluator",
-        "arena_hard": "arena_hard_evaluator.ArenaHardEvaluator",
-        "global_piqa": "global_piqa_evaluator.GlobalPIQAEvaluator",
-    }
-
-    for name, class_path in legacy_mappings.items():
-        if name not in _EVALUATOR_REGISTRY:
-            module_name, class_name = class_path.rsplit(".", 1)
-            try:
-                mod = importlib.import_module(f".{module_name}", package=__name__)
-                cls = getattr(mod, class_name)
-                _EVALUATOR_REGISTRY[name] = cls
-            except (ImportError, AttributeError):
-                pass
-
-
-_legacy_register()
-
-
 # === YAML Evaluator support ===
 
 

@@ -1,0 +1,510 @@
+"""SQLite-backed, process-safe benchmark job queue and lifecycle audit log."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import time
+import uuid
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Iterator
+
+from core.database.migrations import run_migrations
+from core.database.schema import create_tables
+from core.run_lifecycle import RunEvent, RunStatus, advance_run
+
+
+class IdempotencyConflict(ValueError):
+    """An idempotency key was reused with different job content."""
+
+
+class JobNotFound(LookupError):
+    """The requested job does not exist."""
+
+
+class LeaseLost(RuntimeError):
+    """The worker no longer owns this running job."""
+
+
+class PresetNotFound(LookupError):
+    """The requested preset does not exist."""
+
+
+class PresetConflict(ValueError):
+    """A preset already uses this name."""
+
+
+JobList = list[dict[str, Any]]
+
+
+class JobStore:
+    """A short transaction per operation, safe across API and worker processes."""
+
+    def __init__(self, db_path: str | Path = "data/benchmark.db") -> None:
+        self.path = Path(db_path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self._connection() as conn:
+            create_tables(conn)
+            run_migrations(conn)
+
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        conn = sqlite3.connect(str(self.path), timeout=30, isolation_level=None)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA busy_timeout = 30000")
+        conn.execute("PRAGMA journal_mode = WAL")
+        try:
+            yield conn
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _as_job(row: sqlite3.Row | None) -> dict[str, Any] | None:
+        if row is None:
+            return None
+        job = dict(row)
+        job["parameters"] = json.loads(job.pop("parameters_json"))
+        return job
+
+    @staticmethod
+    def _as_preset(row: sqlite3.Row | None) -> dict[str, Any] | None:
+        if row is None:
+            return None
+        preset = dict(row)
+        preset["parameters"] = json.loads(preset.pop("parameters_json"))
+        return preset
+
+    def list_presets(self, *, limit: int = 200) -> JobList:
+        if not 1 <= limit <= 200:
+            raise ValueError("Invalid preset limit")
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM control_presets ORDER BY updated_at DESC, name LIMIT ?", (limit,)
+            ).fetchall()
+        return [self._as_preset(row) for row in rows]  # type: ignore[misc]
+
+    def get_preset(self, preset_id: str) -> dict[str, Any]:
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM control_presets WHERE preset_id = ?", (preset_id,)
+            ).fetchone()
+        preset = self._as_preset(row)
+        if preset is None:
+            raise PresetNotFound(preset_id)
+        return preset
+
+    def save_preset(
+        self,
+        *,
+        name: str,
+        endpoint_id: str,
+        test_type: str,
+        parameters: dict[str, Any],
+        preset_id: str | None = None,
+    ) -> dict[str, Any]:
+        now = time.time()
+        identifier = preset_id or str(uuid.uuid4())
+        parameters_json = json.dumps(
+            parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if (
+                preset_id
+                and not conn.execute(
+                    "SELECT 1 FROM control_presets WHERE preset_id = ?", (preset_id,)
+                ).fetchone()
+            ):
+                conn.rollback()
+                raise PresetNotFound(preset_id)
+            try:
+                if preset_id:
+                    conn.execute(
+                        """UPDATE control_presets SET name = ?, endpoint_id = ?, test_type = ?,
+                           parameters_json = ?, updated_at = ? WHERE preset_id = ?""",
+                        (name, endpoint_id, test_type, parameters_json, now, identifier),
+                    )
+                else:
+                    conn.execute(
+                        """INSERT INTO control_presets
+                           (preset_id, name, endpoint_id, test_type, parameters_json, created_at, updated_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (identifier, name, endpoint_id, test_type, parameters_json, now, now),
+                    )
+            except sqlite3.IntegrityError as exc:
+                conn.rollback()
+                raise PresetConflict("Preset name is already in use") from exc
+            conn.commit()
+        return self.get_preset(identifier)
+
+    def delete_preset(self, preset_id: str) -> None:
+        with self._connection() as conn:
+            cursor = conn.execute("DELETE FROM control_presets WHERE preset_id = ?", (preset_id,))
+        if cursor.rowcount == 0:
+            raise PresetNotFound(preset_id)
+
+    @staticmethod
+    def _event(
+        conn: sqlite3.Connection,
+        job_id: str,
+        before: str | None,
+        after: str,
+        event: str,
+        actor: str,
+        now: float,
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        conn.execute(
+            """INSERT INTO job_events
+               (job_id, from_status, to_status, event, actor, detail_json, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                job_id,
+                before,
+                after,
+                event,
+                actor,
+                json.dumps(detail, sort_keys=True) if detail else None,
+                now,
+            ),
+        )
+
+    def submit(
+        self,
+        *,
+        test_type: str,
+        endpoint_id: str,
+        model_id: str,
+        parameters: dict[str, Any],
+        progress_total: int = 0,
+        idempotency_key: str | None = None,
+        parent_job_id: str | None = None,
+    ) -> dict[str, Any]:
+        if progress_total < 0:
+            raise ValueError("Progress total cannot be negative")
+        parameters_json = json.dumps(
+            parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+        now = time.time()
+        job_id = str(uuid.uuid4())
+        status = advance_run(RunStatus.CREATED, RunEvent.ENQUEUE).value
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if idempotency_key:
+                existing = conn.execute(
+                    "SELECT * FROM control_jobs WHERE idempotency_key = ?", (idempotency_key,)
+                ).fetchone()
+                if existing is not None:
+                    if (
+                        existing["test_type"] != test_type
+                        or existing["endpoint_id"] != endpoint_id
+                        or existing["model_id"] != model_id
+                        or existing["parameters_json"] != parameters_json
+                    ):
+                        conn.rollback()
+                        raise IdempotencyConflict("Idempotency key is already used for another job")
+                    conn.commit()
+                    return self._as_job(existing)  # type: ignore[return-value]
+            conn.execute(
+                """INSERT INTO control_jobs
+                   (job_id, idempotency_key, parent_job_id, status, test_type, endpoint_id,
+                    model_id, parameters_json, progress_total, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    job_id,
+                    idempotency_key,
+                    parent_job_id,
+                    status,
+                    test_type,
+                    endpoint_id,
+                    model_id,
+                    parameters_json,
+                    progress_total,
+                    now,
+                    now,
+                ),
+            )
+            self._event(conn, job_id, RunStatus.CREATED.value, status, "enqueue", "api", now)
+            conn.commit()
+        return self.get(job_id)
+
+    def get(self, job_id: str) -> dict[str, Any]:
+        with self._connection() as conn:
+            row = conn.execute("SELECT * FROM control_jobs WHERE job_id = ?", (job_id,)).fetchone()
+        job = self._as_job(row)
+        if job is None:
+            raise JobNotFound(job_id)
+        return job
+
+    def list(
+        self,
+        *,
+        status: RunStatus | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        parent_job_id: str | None = None,
+    ) -> tuple[JobList, int]:
+        if not 1 <= limit <= 200 or offset < 0:
+            raise ValueError("Invalid pagination")
+        clauses: list[str] = []
+        params_list: list[Any] = []
+        if status:
+            clauses.append("status = ?")
+            params_list.append(status.value)
+        if parent_job_id:
+            clauses.append("parent_job_id = ?")
+            params_list.append(parent_job_id)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params = tuple(params_list)
+        with self._connection() as conn:
+            count = int(
+                conn.execute(f"SELECT COUNT(*) FROM control_jobs {where}", params).fetchone()[0]
+            )
+            rows = conn.execute(
+                f"SELECT * FROM control_jobs {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                params + (limit, offset),
+            ).fetchall()
+        return [self._as_job(row) for row in rows if row is not None], count  # type: ignore[misc]
+
+    def events(self, job_id: str, *, limit: int = 100) -> JobList:
+        if not 1 <= limit <= 500:
+            raise ValueError("Invalid event limit")
+        self.get(job_id)
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM job_events WHERE job_id = ? ORDER BY id DESC LIMIT ?",
+                (job_id, limit),
+            ).fetchall()
+        return [dict(row) for row in reversed(rows)]
+
+    def claim(self, worker_id: str, *, lease_seconds: int = 60) -> dict[str, Any] | None:
+        if not worker_id or lease_seconds < 5:
+            raise ValueError("Invalid worker lease")
+        now = time.time()
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            queued = conn.execute(
+                "SELECT job_id FROM control_jobs WHERE status = ? ORDER BY created_at LIMIT 1",
+                (RunStatus.QUEUED.value,),
+            ).fetchone()
+            if queued is None:
+                conn.commit()
+                return None
+            job_id = str(queued["job_id"])
+            running = advance_run(RunStatus.QUEUED, RunEvent.START).value
+            conn.execute(
+                """UPDATE control_jobs SET status = ?, lease_owner = ?, lease_until = ?,
+                   attempts = attempts + 1, started_at = COALESCE(started_at, ?), updated_at = ?
+                   WHERE job_id = ? AND status = ?""",
+                (running, worker_id, now + lease_seconds, now, now, job_id, RunStatus.QUEUED.value),
+            )
+            self._event(conn, job_id, RunStatus.QUEUED.value, running, "start", worker_id, now)
+            row = conn.execute("SELECT * FROM control_jobs WHERE job_id = ?", (job_id,)).fetchone()
+            conn.commit()
+        return self._as_job(row)
+
+    def heartbeat(self, job_id: str, worker_id: str, *, lease_seconds: int = 60) -> bool:
+        now = time.time()
+        with self._connection() as conn:
+            cursor = conn.execute(
+                """UPDATE control_jobs SET lease_until = ?, updated_at = ?
+                   WHERE job_id = ? AND lease_owner = ? AND status IN (?, ?, ?)""",
+                (
+                    now + lease_seconds,
+                    now,
+                    job_id,
+                    worker_id,
+                    RunStatus.RUNNING.value,
+                    RunStatus.PAUSING.value,
+                    RunStatus.CANCELLING.value,
+                ),
+            )
+        return cursor.rowcount == 1
+
+    def update_progress(self, job_id: str, worker_id: str, *, completed: int, total: int) -> bool:
+        if completed < 0 or total < 0:
+            raise ValueError("Progress cannot be negative")
+        with self._connection() as conn:
+            cursor = conn.execute(
+                """UPDATE control_jobs SET
+                   progress_completed = MAX(progress_completed, ?),
+                   progress_total = MAX(progress_total, ?), updated_at = ?
+                   WHERE job_id = ? AND lease_owner = ? AND status IN (?, ?)""",
+                (
+                    completed,
+                    total,
+                    time.time(),
+                    job_id,
+                    worker_id,
+                    RunStatus.RUNNING.value,
+                    RunStatus.CANCELLING.value,
+                ),
+            )
+        return cursor.rowcount == 1
+
+    def sync_result_run(self, job_id: str, worker_id: str) -> int | None:
+        """Expose durable observations while the measurement is still running."""
+        with self._connection() as conn:
+            row = conn.execute(
+                """SELECT id, total_requests,
+                   (SELECT COUNT(*) FROM test_results WHERE run_id = test_runs.id) AS recorded_requests
+                   FROM test_runs WHERE test_id = ?""",
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            conn.execute(
+                """UPDATE control_jobs SET result_run_id = ?,
+                   progress_completed = MAX(progress_completed, ?),
+                   progress_total = MAX(progress_total, ?), updated_at = ?
+                   WHERE job_id = ? AND lease_owner = ? AND status IN (?, ?)""",
+                (
+                    row["id"],
+                    row["recorded_requests"] or 0,
+                    row["total_requests"] or 0,
+                    time.time(),
+                    job_id,
+                    worker_id,
+                    RunStatus.RUNNING.value,
+                    RunStatus.CANCELLING.value,
+                ),
+            )
+        return int(row["id"])
+
+    def request_cancel(self, job_id: str, *, actor: str = "api") -> dict[str, Any]:
+        now = time.time()
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT * FROM control_jobs WHERE job_id = ?", (job_id,)).fetchone()
+            if row is None:
+                conn.rollback()
+                raise JobNotFound(job_id)
+            before = RunStatus(row["status"])
+            if before in (RunStatus.CANCELLING, RunStatus.CANCELLED):
+                conn.commit()
+                return self._as_job(row)  # type: ignore[return-value]
+            event = (
+                RunEvent.CANCEL
+                if before in (RunStatus.QUEUED, RunStatus.PAUSED)
+                else RunEvent.REQUEST_CANCEL
+            )
+            after = advance_run(before, event)
+            terminal = after == RunStatus.CANCELLED
+            conn.execute(
+                """UPDATE control_jobs SET status = ?, updated_at = ?,
+                   finished_at = CASE WHEN ? THEN ? ELSE finished_at END,
+                   lease_owner = CASE WHEN ? THEN NULL ELSE lease_owner END,
+                   lease_until = CASE WHEN ? THEN NULL ELSE lease_until END
+                   WHERE job_id = ? AND status = ?""",
+                (after.value, now, terminal, now, terminal, terminal, job_id, before.value),
+            )
+            self._event(conn, job_id, before.value, after.value, event.value, actor, now)
+            updated = conn.execute(
+                "SELECT * FROM control_jobs WHERE job_id = ?", (job_id,)
+            ).fetchone()
+            conn.commit()
+        return self._as_job(updated)  # type: ignore[return-value]
+
+    def finish(
+        self,
+        job_id: str,
+        worker_id: str,
+        *,
+        outcome: RunStatus,
+        result_run_id: int | None = None,
+        result_artifact: str | None = None,
+        error_code: str | None = None,
+        error_message: str | None = None,
+    ) -> dict[str, Any]:
+        now = time.time()
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT * FROM control_jobs WHERE job_id = ?", (job_id,)).fetchone()
+            if row is None:
+                conn.rollback()
+                raise JobNotFound(job_id)
+            if (
+                row["lease_owner"] != worker_id
+                or row["lease_until"] is None
+                or row["lease_until"] < now
+            ):
+                conn.rollback()
+                raise LeaseLost(job_id)
+            before = RunStatus(row["status"])
+            if before == RunStatus.CANCELLING:
+                event = RunEvent.CANCEL
+            elif outcome == RunStatus.COMPLETED:
+                event = RunEvent.COMPLETE
+            elif outcome == RunStatus.CANCELLED:
+                event = RunEvent.CANCEL
+            elif outcome == RunStatus.FAILED:
+                event = RunEvent.FAIL
+            else:
+                conn.rollback()
+                raise ValueError("Invalid terminal outcome")
+            after = advance_run(before, event)
+            conn.execute(
+                """UPDATE control_jobs SET status = ?,
+                   result_run_id = COALESCE(?, result_run_id),
+                   result_artifact = COALESCE(?, result_artifact),
+                   error_code = ?, error_message = ?, lease_owner = NULL, lease_until = NULL,
+                   finished_at = ?, updated_at = ? WHERE job_id = ? AND status = ? AND lease_owner = ?""",
+                (
+                    after.value,
+                    result_run_id,
+                    result_artifact,
+                    error_code,
+                    (error_message or "")[:1000] or None,
+                    now,
+                    now,
+                    job_id,
+                    before.value,
+                    worker_id,
+                ),
+            )
+            self._event(conn, job_id, before.value, after.value, event.value, worker_id, now)
+            updated = conn.execute(
+                "SELECT * FROM control_jobs WHERE job_id = ?", (job_id,)
+            ).fetchone()
+            conn.commit()
+        return self._as_job(updated)  # type: ignore[return-value]
+
+    def reap_expired(self) -> int:
+        """Mark abandoned measurements failed; never blend retries into a score."""
+        now = time.time()
+        recovered = 0
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            rows = conn.execute(
+                """SELECT job_id, status FROM control_jobs WHERE status IN (?, ?, ?)
+                   AND lease_until < ?""",
+                (
+                    RunStatus.RUNNING.value,
+                    RunStatus.PAUSING.value,
+                    RunStatus.CANCELLING.value,
+                    now,
+                ),
+            ).fetchall()
+            for row in rows:
+                before = RunStatus(row["status"])
+                after = advance_run(before, RunEvent.FAIL)
+                conn.execute(
+                    """UPDATE control_jobs SET status = ?, error_code = ?, error_message = ?,
+                       lease_owner = NULL, lease_until = NULL, finished_at = ?, updated_at = ?
+                       WHERE job_id = ? AND status = ?""",
+                    (
+                        after.value,
+                        "WORKER_LOST",
+                        "Worker lease expired; measurement is invalid",
+                        now,
+                        now,
+                        row["job_id"],
+                        before.value,
+                    ),
+                )
+                self._event(conn, row["job_id"], before.value, after.value, "fail", "reaper", now)
+                recovered += 1
+            conn.commit()
+        return recovered

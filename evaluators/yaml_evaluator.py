@@ -169,7 +169,8 @@ class YAMLEvaluator(BaseEvaluator):
         # if本地没has，尝试从 HuggingFace Load
         if not samples and config.dataset_path:
             try:
-                from datasets import load_dataset  # type: ignore[attr-defined]
+                # 仓内 datasets/ 数据目录与 HF 包同名, mypy 命名空间遮蔽误解析, 用 ignore 豁免
+                from datasets import load_dataset  # type: ignore[attr-defined, unused-ignore]
 
                 ds_path = config.dataset_path
                 ds_name = config.dataset_name
@@ -204,9 +205,7 @@ class YAMLEvaluator(BaseEvaluator):
         self.samples = samples
         return samples
 
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """use YAML 模板Format prompt"""
         renderer = _get_prompt_renderer()
         assert self.config is not None
@@ -226,9 +225,7 @@ class YAMLEvaluator(BaseEvaluator):
         assert self.config is not None
 
         return str(
-            renderer.build_prompt(
-                self.config, sample, self.few_shot_examples, include_target=False
-            )
+            renderer.build_prompt(self.config, sample, self.few_shot_examples, include_target=False)
         )
 
     def parse_response(self, response: str) -> str:
@@ -307,8 +304,6 @@ class YAMLEvaluator(BaseEvaluator):
         assert self.config is not None
 
         return str(renderer.render(self.config.doc_to_target, sample))
-
-
 
 
 def list_yaml_tasks(config_dir: str = "task_configs") -> list[str]:

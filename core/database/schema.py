@@ -4,7 +4,7 @@ Database Schema 定义
 包含所has表 SQL 定义andMigration语句。
 """
 
-SCHEMA_VERSION = "1.5.0"
+SCHEMA_VERSION = "1.7.0"
 
 # ============================================
 # Table schema定义
@@ -326,6 +326,59 @@ CREATE TABLE IF NOT EXISTS application_cases (
 );
 """
 
+CREATE_CONTROL_JOBS = """
+CREATE TABLE IF NOT EXISTS control_jobs (
+    job_id TEXT PRIMARY KEY,
+    idempotency_key TEXT UNIQUE,
+    parent_job_id TEXT,
+    status TEXT NOT NULL,
+    test_type TEXT NOT NULL,
+    endpoint_id TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    parameters_json TEXT NOT NULL,
+    progress_completed INTEGER NOT NULL DEFAULT 0,
+    progress_total INTEGER NOT NULL DEFAULT 0,
+    result_run_id INTEGER,
+    result_artifact TEXT,
+    error_code TEXT,
+    error_message TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    lease_owner TEXT,
+    lease_until REAL,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL,
+    started_at REAL,
+    finished_at REAL,
+    FOREIGN KEY(result_run_id) REFERENCES test_runs(id)
+);
+"""
+
+CREATE_JOB_EVENTS = """
+CREATE TABLE IF NOT EXISTS job_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id TEXT NOT NULL,
+    from_status TEXT,
+    to_status TEXT NOT NULL,
+    event TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    detail_json TEXT,
+    created_at REAL NOT NULL,
+    FOREIGN KEY(job_id) REFERENCES control_jobs(job_id)
+);
+"""
+
+CREATE_CONTROL_PRESETS = """
+CREATE TABLE IF NOT EXISTS control_presets (
+    preset_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    endpoint_id TEXT NOT NULL,
+    test_type TEXT NOT NULL,
+    parameters_json TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+"""
+
 # ============================================
 # Index定义
 # ============================================
@@ -358,6 +411,9 @@ CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_app_cases_model ON application_cases(model_name);",
     "CREATE INDEX IF NOT EXISTS idx_app_cases_external ON application_cases(external_level);",
     "CREATE INDEX IF NOT EXISTS idx_app_cases_machine ON application_cases(machine_id);",
+    "CREATE INDEX IF NOT EXISTS idx_control_jobs_queue ON control_jobs(status, created_at);",
+    "CREATE INDEX IF NOT EXISTS idx_control_jobs_lease ON control_jobs(status, lease_until);",
+    "CREATE INDEX IF NOT EXISTS idx_job_events_job ON job_events(job_id, id);",
 ]
 
 
@@ -371,6 +427,9 @@ def get_schema_sql() -> str:
         CREATE_REPORTS,
         CREATE_DB_META,
         CREATE_APPLICATION_CASES,
+        CREATE_CONTROL_JOBS,
+        CREATE_JOB_EVENTS,
+        CREATE_CONTROL_PRESETS,
     ]
     return "\n".join(tables + CREATE_INDEXES)
 
@@ -393,6 +452,9 @@ def create_tables(conn) -> None:
         CREATE_REPORTS,
         CREATE_DB_META,
         CREATE_APPLICATION_CASES,
+        CREATE_CONTROL_JOBS,
+        CREATE_JOB_EVENTS,
+        CREATE_CONTROL_PRESETS,
     ]:
         cursor.execute(sql)
 

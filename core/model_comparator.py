@@ -61,7 +61,7 @@ class ModelConfig:
 class SampleComparison:
     """单 samplesComparison Results"""
 
-    sample_id: int
+    sample_id: str
     question: str = ""
     expected_answer: str = ""
 
@@ -244,10 +244,6 @@ def _interpret_mcnemar(b01: int, b10: int, p_value: float) -> str:
         return f"Model B 显著优于Model A (p={p_value:.4f})"
 
 
-
-
-
-
 # ============================================
 # 对比器
 # ============================================
@@ -284,7 +280,6 @@ class ModelComparator:
         self.models[model_id] = config
         self._log(f"AddModel: {config.label} ({model_id})")
 
-
     async def run_comparison(
         self,
         datasets: list[str],
@@ -306,6 +301,11 @@ class ModelComparator:
         """
         if len(self.models) < 2:
             raise ValueError("对比need至少 2  models")
+        if not datasets:
+            raise ValueError("Select at least one benchmark dataset for comparison")
+
+        self.comparison_result = None
+        self.results = {}
 
         self._log(f"开始对比评估: {len(self.models)}  models, {len(datasets)} Dataset")
 
@@ -351,6 +351,7 @@ class ModelComparator:
 
             except Exception as e:
                 self._log(f"Model {model_id} 评估失败: {e}")
+                raise RuntimeError(f"Model {model_id} evaluation failed: {e}") from e
 
         # GenerateComparative Analysis
         self.comparison_result = self._analyze_comparison(datasets)
@@ -359,7 +360,6 @@ class ModelComparator:
         self._save_comparison()
 
         return self.comparison_result
-
 
     def _analyze_comparison(self, datasets: list[str]) -> ComparisonResult:
         """分析Comparison Results"""
@@ -386,8 +386,35 @@ class ModelComparator:
             if model_id in self.results and dataset in self.results[model_id]:
                 model_results[model_id] = self.results[model_id][dataset]
 
-        if len(model_results) < 2:
-            return None
+        if len(model_results) != len(self.models):
+            raise ValueError(f"Dataset '{dataset}' is missing results for one or more models")
+
+        fingerprints = set()
+        expected_ids: set[str] | None = None
+        for model_id, result in model_results.items():
+            provenance = (result.config or {}).get("dataset_provenance", {})
+            if provenance.get("source") != "configured_dataset":
+                raise ValueError(
+                    f"Dataset '{dataset}' for {model_id} lacks verified benchmark provenance"
+                )
+            sample_hash = provenance.get("sample_sha256")
+            few_shot_hash = provenance.get("few_shot_sha256")
+            if not sample_hash or not few_shot_hash:
+                raise ValueError(f"Dataset '{dataset}' for {model_id} has no sample fingerprint")
+            fingerprints.add((sample_hash, few_shot_hash, provenance.get("selection_seed")))
+            if result.total_samples <= 0 or result.total_samples != provenance.get("sample_count"):
+                raise ValueError(f"Dataset '{dataset}' for {model_id} has an invalid sample count")
+            ids = [str(detail.sample_id) for detail in result.details]
+            if len(ids) != result.total_samples or len(set(ids)) != len(ids):
+                raise ValueError(
+                    f"Dataset '{dataset}' for {model_id} has incomplete sample details"
+                )
+            if expected_ids is None:
+                expected_ids = set(ids)
+            elif set(ids) != expected_ids:
+                raise ValueError(f"Dataset '{dataset}' has different sample IDs across models")
+        if len(fingerprints) != 1:
+            raise ValueError(f"Dataset '{dataset}' uses different sample sets across models")
 
         # CreateComparison Results
         comparison = DatasetComparison(dataset_name=dataset)
@@ -408,7 +435,7 @@ class ModelComparator:
             for model_id, result in model_results.items():
                 if hasattr(result, "details"):
                     for detail in result.details:
-                        sid = detail.sample_id
+                        sid = str(detail.sample_id)
                         if sid not in sample_map:
                             sample_map[sid] = {}
                         sample_map[sid][model_id] = detail
@@ -422,7 +449,7 @@ class ModelComparator:
                 if model_details:
                     first_detail = list(model_details.values())[0]
                     sample_comp.question = first_detail.prompt[:200] if first_detail.prompt else ""
-                    sample_comp.expected_answer = first_detail.expected
+                    sample_comp.expected_answer = first_detail.correct_answer
 
                 all_correct = True
                 all_wrong = True
@@ -431,7 +458,7 @@ class ModelComparator:
                     if model_id in model_details:
                         detail = model_details[model_id]
                         is_correct = detail.is_correct
-                        sample_comp.predictions[model_id] = detail.predicted
+                        sample_comp.predictions[model_id] = detail.predicted_answer
                         sample_comp.correctness[model_id] = is_correct
                         correctness_lists[model_id].append(is_correct)
 
@@ -512,13 +539,9 @@ class ModelComparator:
         self._log(f"Comparison ResultsSaved: {filepath}")
 
 
-
-
 # ============================================
 # 便捷函数
 # ============================================
-
-
 
 
 def load_comparison(filepath: str) -> ComparisonResult:

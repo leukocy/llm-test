@@ -64,14 +64,8 @@ def _run_poller(url, samples_text, duration=0.25, interval=0.05):
 
 
 def test_default_metrics_url_strips_path():
-    assert (
-        default_metrics_url("http://localhost:8000/v1")
-        == "http://localhost:8000/metrics"
-    )
-    assert (
-        default_metrics_url("https://gpu-host:443/openai/v1")
-        == "https://gpu-host:443/metrics"
-    )
+    assert default_metrics_url("http://localhost:8000/v1") == "http://localhost:8000/metrics"
+    assert default_metrics_url("https://gpu-host:443/openai/v1") == "https://gpu-host:443/metrics"
     assert default_metrics_url("localhost:8000") == "http://localhost:8000/metrics"
     assert default_metrics_url(None) is None
     assert default_metrics_url("") is None
@@ -126,7 +120,10 @@ def test_poller_falls_back_to_blocks_for_old_vllm():
     )
     summary = _run_poller("http://h/metrics", old_metrics)
     assert summary["cache_config"]["kv_cache_size_tokens"] is None
+    # 旧版回退：kv_capacity_tokens 仍是 per-rank 粗算值（报告展示用），
+    # 同时单独暴露 kv_capacity_per_rank 供调用方区分全局 vs per-rank。
     assert summary["cache_config"]["kv_capacity_tokens"] == 16000
+    assert summary["cache_config"]["kv_capacity_per_rank"] == 16000
 
 
 def test_poller_preemption_is_window_delta():

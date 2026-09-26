@@ -40,6 +40,13 @@ def test_csv_has_utf8_bom():
     assert out.startswith("﻿")
 
 
+def test_csv_export_keeps_formula_like_warehouse_text_literal():
+    out = export_template_csv("hmTest", [{"test_id": "=1+1"}])
+    row = list(csv.reader(io.StringIO(out.lstrip("﻿"))))[1]
+
+    assert row[0] == "'=1+1"
+
+
 def test_json_preserves_none():
     rows = [{"case_id": "c1", "quality_score": None, "citation_score": 0.9}]
     out = export_template_json("maTest", rows)

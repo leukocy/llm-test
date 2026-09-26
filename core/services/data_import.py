@@ -5,6 +5,7 @@ Data import服务
 """
 
 import csv
+import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -12,7 +13,7 @@ from typing import Any, Callable, cast
 
 from core.database.connection import Database, db
 from core.models.test_result import TestResult
-from core.models.test_run import TestRun, TestRunStatus
+from core.models.test_run import TestRun
 from core.repositories.test_result import TestResultRepository
 from core.repositories.test_run import TestRunRepository
 
@@ -78,6 +79,10 @@ class DataImportService:
             if not rows:
                 return 0, ["文件is空ornohas效Data"]
 
+            versions = {self._row_metric_contract(row)[0] for row in rows}
+            if len(versions) != 1:
+                return 0, ["CSV contains mixed metric contract versions"]
+
             # CreateTest运行
             run = TestRun.create(
                 test_type=test_type or "unknown",
@@ -85,9 +90,10 @@ class DataImportService:
                 provider=provider,
             )
             run.csv_path = str(path)
+            run.config = {"metric_contract_version": versions.pop()}
             run.total_requests = len(rows)
-            run.status = TestRunStatus.COMPLETED.value
-
+            # 保持 create 的 RUNNING 状态: 末尾由 run_repo.complete 走合法
+            # 生命周期转换; 预置 COMPLETED 会被状态机拒绝(非法转换)
             run_id = cast(int, self.run_repo.insert(run))
 
             # ImportResult
@@ -164,9 +170,21 @@ class DataImportService:
 
         return success_count, total_imported, all_errors
 
-    def _row_to_result(
-        self, row: dict[str, Any], run_id: int, index: int
-    ) -> TestResult:
+    @staticmethod
+    def _row_metric_contract(row: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+        raw_extra = row.get("extra_metrics")
+        extra = json.loads(raw_extra) if raw_extra else {}
+        if not isinstance(extra, dict):
+            raise ValueError("extra_metrics must be a JSON object")
+        explicit = str(row.get("metric_contract_version") or "").strip()
+        embedded = str(extra.get("metric_contract_version") or "").strip()
+        if explicit and embedded and explicit != embedded:
+            raise ValueError("conflicting metric contract versions in CSV row")
+        version = explicit or embedded or "legacy-unversioned"
+        extra["metric_contract_version"] = version
+        return version, extra
+
+    def _row_to_result(self, row: dict[str, Any], run_id: int, index: int) -> TestResult:
         """will CSV 行Convertis TestResult"""
 
         def parse_float(value):
@@ -184,6 +202,8 @@ class DataImportService:
                 return int(float(value))
             except (TypeError, ValueError):
                 return None
+
+        _, extra_metrics = self._row_metric_contract(row)
 
         return TestResult(
             run_id=run_id,
@@ -218,12 +238,9 @@ class DataImportService:
             cache_hit_source=row.get("cache_hit_source"),
             start_time=parse_float(row.get("start_time")),
             end_time=parse_float(row.get("end_time")),
-            error=(
-                row.get("error")
-                if row.get("error") and row.get("error") != "None"
-                else None
-            ),
+            error=(row.get("error") if row.get("error") and row.get("error") != "None" else None),
             created_at=datetime.now(),
+            extra_metrics=extra_metrics,
         )
 
     def _extract_model_id(self, filename: str) -> str:

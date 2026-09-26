@@ -4,6 +4,7 @@ DatabaseConnect管理模块
 提供Thread安全 SQLite Connection Pooland常用操作封装。
 """
 
+import os
 import re
 import sqlite3
 import threading
@@ -165,7 +166,6 @@ class Database:
             conn.commit()
             return cast(int, cursor.rowcount)
 
-
     def fetch_one(self, sql: str, params: tuple = ()) -> dict[str, Any] | None:
         """
         Query单条记录
@@ -294,8 +294,6 @@ class Database:
         sql = "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
         return self.fetch_one(sql, (table_name,)) is not None
 
-
-
     def get_database_size(self) -> int:
         """GetDatabase文件大小（字节）"""
         if self.db_path.exists():
@@ -315,4 +313,4 @@ class Database:
 
 
 # 全局Database实例
-db = Database()
+db = Database(os.getenv("LLM_TEST_DB_PATH", "data/benchmark.db"))

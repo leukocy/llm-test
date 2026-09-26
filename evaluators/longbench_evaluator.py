@@ -13,9 +13,11 @@ import os
 import random
 from typing import Any
 
+from . import register_evaluator
 from .base_evaluator import BaseEvaluator, normalize_text
 
 
+@register_evaluator("longbench")
 class LongBenchEvaluator(BaseEvaluator):
     """
     LongBench DatasetEvaluator
@@ -127,7 +129,7 @@ class LongBenchEvaluator(BaseEvaluator):
                             print(f"Load {filepath} 失败: {e}")
 
         if not samples:
-            samples = self._create_sample_data()
+            samples = self._fallback_to_demo_samples(self._create_sample_data)
 
         samples = self._normalize_samples(samples)
         random.shuffle(samples)

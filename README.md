@@ -1,22 +1,41 @@
 # LLM Benchmark Platform
 
 > A comprehensive LLM performance & quality evaluation platform
-> **Tests**: 653+ unit tests | **Strategies**: 8 performance benchmarks | **Evaluators**: 17 quality datasets
+> Automated regression tests cover performance, quality, security, and reporting.
 
 ---
 
 ## Features
 
-- **8 Performance Benchmarks**: Concurrency, Prefill, Long Context, Matrix, Stability, and more
-- **17 Quality Evaluators**: MMLU, GSM8K, MATH500, HumanEval, GPQA, etc.
+- **Performance Benchmarks**: Concurrency, Prefill, Long Context, Matrix,
+  Stability, and more
+- **Quality Evaluators**: MMLU, GSM8K, MATH500, HumanEval, GPQA, etc.
 - **Real-time Dashboard**: Live progress, throughput charts, and system insights
 - **Reports**: Expert performance insights, grading, and interactive visual analysis
 - **CSV Export**: Auto-saved results with configurable column ordering
-- **10+ Providers**: DeepSeek, ZhiPu, MiniMax, OpenRouter, SiliconFlow, Gemini, and more
+- **Providers**: DeepSeek, ZhiPu, MiniMax, OpenRouter, SiliconFlow, Gemini,
+  and more
 
 ---
 
 ## Quick Start
+
+### New control plane (recommended for single-tenant intranets)
+
+The new React/TypeScript console uses a FastAPI control API and a separate,
+durable worker. It includes saved test plans, a searchable measurement warehouse,
+quality sample diagnosis, and printable/downloadable reports. Copy
+`config/endpoints.platform.example.json` to
+`config/endpoints.platform.json` and `.env.platform.example` to `.env.platform`,
+then set the endpoint, API key and a random control token of at least 32 characters.
+
+```bash
+docker compose --env-file .env.platform -f compose.platform.yml up -d --build
+# Open http://127.0.0.1:8000
+```
+
+See [platform setup, architecture and reporting rules](docs/PLATFORM_V3.md).
+The legacy Streamlit entry point remains available below.
 
 ### Prerequisites
 
@@ -46,8 +65,14 @@ pip install -e ".[dev]"
 ### Run
 
 ```bash
-streamlit run app.py
-# → http://localhost:8501
+# API + 前端(前端构建产物由 API 在 / 直接托管)
+cd frontend && npm ci && npm run build
+export LLM_TEST_API_TOKEN=<32+ 字符令牌> LLM_TEST_ENDPOINTS_FILE=config/endpoints.json
+uvicorn server.main:app --port 8000
+# → http://localhost:8000
+
+# 独立 worker(执行任务)
+python -m server.worker
 ```
 
 ---
@@ -58,6 +83,7 @@ The platform uses benchmark datasets for **quality evaluation** and **prompt-suf
 pools** (the builder-class tests draw questions from these pools).
 
 ### Self-contained (shipped)
+
 - **AIME** (2024/2025/2026) — 90 math problems, pre-measured and bucketed in
   `aime_stable_pools.json` by stable decode-fill window. The **Math** prompt-suffix
   type and **Custom Text → Test Pool Problems** work immediately after clone. [OK]
@@ -67,6 +93,12 @@ pools** (the builder-class tests draw questions from these pools).
 These are **optional** — the platform runs without them, but the Science / Code /
 Longform prompt-suffix types will have empty pools:
 
+Quality benchmarks require their selected dataset. If it is missing, the run stops
+instead of scoring built-in examples. Demonstration examples require
+`LLM_TEST_ALLOW_EMBEDDED_SAMPLES=1` and are labeled in result files and reports.
+
+<!-- markdownlint-disable MD013 -->
+
 | Dataset | Type | Source |
 |---------|------|--------|
 | **GPQA Diamond** | Science | [Idavidrein/gpqa](https://huggingface.co/datasets/Idavidrein/gpqa) (gated) |
@@ -74,6 +106,8 @@ Longform prompt-suffix types will have empty pools:
 | **MBPP** | Code | [google-research-datasets/mbpp](https://huggingface.co/datasets/google-research-datasets/mbpp) |
 | **LongBench** | Longform | [THUDM/LongBench](https://huggingface.co/datasets/THUDM/LongBench) |
 | **SWE-Bench Lite** | Code | [princeton-nlp/SWE-bench_Lite](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Lite) |
+
+<!-- markdownlint-enable MD013 -->
 
 To download:
 
@@ -99,8 +133,10 @@ python scripts/download_datasets.py --status
 
 ## Project Structure
 
-```
-├── app.py               # Streamlit entry point
+```text
+├── frontend/             # React + TypeScript console
+├── server/               # FastAPI control API and separate worker
+├── app.py                # Legacy Streamlit entry point
 ├── config/              # Configuration & session state
 ├── core/                # Core engine
 │   ├── benchmark_runner.py  # Main test orchestrator
@@ -109,14 +145,14 @@ python scripts/download_datasets.py --status
 │   ├── results/         # Result history service
 │   └── ...
 ├── evaluators/          # 17 quality dataset evaluators (auto-discovered)
-├── ui/                  # Streamlit UI components
+├── ui/                   # Legacy Streamlit UI components
 │   ├── sidebar.py       # Sidebar configuration
 │   ├── test_panels.py   # Test execution panels
 │   ├── charts.py        # Visualization
 │   └── ...
 ├── utils/               # Utilities (logging, presets, tokenizers)
-├── scripts/             # Development & debugging scripts
-└── tests/               # Test suites (653 tests)
+├── scripts/              # Project development scripts
+└── tests/                # Regression, security and integration tests
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full architecture diagram.
@@ -150,7 +186,8 @@ OpenAI Compatible (Custom URL) - DeepSeek - Moonshot (Kimi) - MiMo - Gemini -
 ZhiPu (GLM) - Volcengine - Alibaba Bailian - SiliconFlow -
 OpenRouter - MiniMax
 
-Any OpenAI-compatible endpoint is supported via the "Custom (OpenAI Compatible)" provider option.
+OpenAI-compatible endpoints are supported through the
+"Custom (OpenAI Compatible)" provider option.
 
 ---
 
@@ -174,10 +211,13 @@ python -m pytest tests/ -v --cov=core --cov=evaluators --cov=utils
 | Document | Description |
 |----------|-------------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Architecture overview |
+| [docs/ARCHITECTURE_MODERNIZATION.md](docs/ARCHITECTURE_MODERNIZATION.md) | Industrial architecture upgrade plan and delivery gates |
 | [CLAUDE.md](CLAUDE.md) | Development guide for AI assistants |
 | [docs/API.md](docs/API.md) | API reference (FastAPI backend) |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Development workflow |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security guidelines |
+| [docs/METRICS_CONTRACT.md](docs/METRICS_CONTRACT.md) | Versioned performance metric definitions |
+| [docs/INDUSTRIAL_READINESS.md](docs/INDUSTRIAL_READINESS.md) | Single-tenant readiness gates and rollout plan |
 
 ---
 

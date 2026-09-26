@@ -67,7 +67,102 @@ from core.system_info import capture_system_info, get_library_versions
 # ──────────────────────────────────────────────────────────────────────────
 # prompt 词库(中英混合,保证 tokenizer 不会过度聚合,长上下文填充稳定)
 # ──────────────────────────────────────────────────────────────────────────
-_WORD_POOL = ["system", "network", "kernel", "memory", "buffer", "cache", "latency", "throughput", "token", "context", "vector", "matrix", "tensor", "attention", "expert", "router", "sparse", "dense", "quantization", "inference", "prefill", "decode", "batch", "concurrency", "latency", "bandwidth", "gigabyte", "flops", "utilization", "queue", "schedule", "shard", "tensor", "parallel", "pipeline", "datacenter", "consistency", "byzantine", "erasure", "replication", "consensus", "checkpoint", "gradient", "optimizer", "attention", "fusion", "墨子", "兼爱", "非攻", "逻辑", "三段论", "诸子", "先秦", "因果", "分布式", "一致性", "容错", "存储", "缓存", "调度", "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet", "kilo", "lima", "mike", "november", "oscar", "papa", "quebec", "romeo", "sierra", "tango", "uniform", "victor", "whiskey", "xray", "yankee", "request", "response", "timeout", "retry", "backoff", "idempotent", "stream", "fragment", "aggregate"]
+_WORD_POOL = [
+    "system",
+    "network",
+    "kernel",
+    "memory",
+    "buffer",
+    "cache",
+    "latency",
+    "throughput",
+    "token",
+    "context",
+    "vector",
+    "matrix",
+    "tensor",
+    "attention",
+    "expert",
+    "router",
+    "sparse",
+    "dense",
+    "quantization",
+    "inference",
+    "prefill",
+    "decode",
+    "batch",
+    "concurrency",
+    "latency",
+    "bandwidth",
+    "gigabyte",
+    "flops",
+    "utilization",
+    "queue",
+    "schedule",
+    "shard",
+    "tensor",
+    "parallel",
+    "pipeline",
+    "datacenter",
+    "consistency",
+    "byzantine",
+    "erasure",
+    "replication",
+    "consensus",
+    "checkpoint",
+    "gradient",
+    "optimizer",
+    "attention",
+    "fusion",
+    "墨子",
+    "兼爱",
+    "非攻",
+    "逻辑",
+    "三段论",
+    "诸子",
+    "先秦",
+    "因果",
+    "分布式",
+    "一致性",
+    "容错",
+    "存储",
+    "缓存",
+    "调度",
+    "alpha",
+    "bravo",
+    "charlie",
+    "delta",
+    "echo",
+    "foxtrot",
+    "golf",
+    "hotel",
+    "india",
+    "juliet",
+    "kilo",
+    "lima",
+    "mike",
+    "november",
+    "oscar",
+    "papa",
+    "quebec",
+    "romeo",
+    "sierra",
+    "tango",
+    "uniform",
+    "victor",
+    "whiskey",
+    "xray",
+    "yankee",
+    "request",
+    "response",
+    "timeout",
+    "retry",
+    "backoff",
+    "idempotent",
+    "stream",
+    "fragment",
+    "aggregate",
+]
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -186,8 +281,8 @@ def make_prompt_builder(tok):
     def _encode(text: str) -> list[int]:
         try:
             if hasattr(tok, "encode_plus"):
-                return tok.encode(text, add_special_tokens=False)
-            return tok.encode(text)
+                return list(tok.encode(text, add_special_tokens=False))
+            return list(tok.encode(text))
         except Exception:
             return []
 
@@ -250,12 +345,12 @@ def extract_cache_hit(usage_info: dict | None) -> int:
         return 0
     details = usage_info.get("prompt_tokens_details")
     if isinstance(details, dict) and details.get("cached_tokens"):
-        return details.get("cached_tokens")
+        return int(details["cached_tokens"])
     for key in ("cache_hit_tokens", "prompt_cache_hit_tokens", "disk_cache_hit_tokens"):
         if usage_info.get(key):
-            return usage_info[key]
+            return int(usage_info[key])
     if usage_info.get("cache_read_input_tokens"):
-        return usage_info.get("cache_read_input_tokens")
+        return int(usage_info["cache_read_input_tokens"])
     return 0
 
 
@@ -402,7 +497,9 @@ async def run_cell(
                 build_prompt(ctx, seed=ctx * 1_000_000 + r * 1000 + i + 1) for i in range(conc)
             ]
             # barrier 让所有请求在 HTTP 发出前对齐
-            barrier = asyncio.Barrier(conc) if conc > 1 else None
+            # asyncio.Barrier 仅 Python 3.11+ 可用;3.10 下回退为 None(与主 runner 同策略)
+            _barrier_cls = getattr(asyncio, "Barrier", None)
+            barrier = _barrier_cls(conc) if (_barrier_cls is not None and conc > 1) else None
             results = await asyncio.gather(
                 *[
                     one_req(
@@ -621,18 +718,18 @@ def _print_fingerprint_summary(cfg: dict[str, Any]) -> None:
         gpus = hw.get("gpus") or []
         cuda = hw.get("cuda") or {}
         print(
-            f"[hw] CPU={cpu.get('model_name','?')} {cpu.get('sockets')}s×{cpu.get('cores_per_socket')}c "
-            f"NUMA={cpu.get('numa_nodes')} | MEM={mem.get('total_gb','?')}GB {mem.get('type','')} "
-            f"{mem.get('speed_mt_s','')}MT/s ECC={mem.get('ecc','?')}",
+            f"[hw] CPU={cpu.get('model_name', '?')} {cpu.get('sockets')}s×{cpu.get('cores_per_socket')}c "
+            f"NUMA={cpu.get('numa_nodes')} | MEM={mem.get('total_gb', '?')}GB {mem.get('type', '')} "
+            f"{mem.get('speed_mt_s', '')}MT/s ECC={mem.get('ecc', '?')}",
             flush=True,
         )
         if gpus:
             g = gpus[0]
             print(
-                f"[hw] GPU={g.get('name','?')} ×{len(gpus)} {g.get('vram_gb','?')}GB "
-                f"{g.get('nominal_bandwidth_gbps','?')}GB/s PCIeGen{g.get('pcie_gen','?')}x{g.get('pcie_width','?')} "
-                f"| CUDA={cuda.get('cuda_version','?')} driver={cuda.get('driver','?')} "
-                f"| machine_id={hw.get('machine_id','?')}",
+                f"[hw] GPU={g.get('name', '?')} ×{len(gpus)} {g.get('vram_gb', '?')}GB "
+                f"{g.get('nominal_bandwidth_gbps', '?')}GB/s PCIeGen{g.get('pcie_gen', '?')}x{g.get('pcie_width', '?')} "
+                f"| CUDA={cuda.get('cuda_version', '?')} driver={cuda.get('driver', '?')} "
+                f"| machine_id={hw.get('machine_id', '?')}",
                 flush=True,
             )
     # 引擎
@@ -645,7 +742,7 @@ def _print_fingerprint_summary(cfg: dict[str, Any]) -> None:
         rt = ec.get("runtime") or {}
         print(
             f"[engine] {eng} image={img.split('/')[-1] if img else '?'} "
-            f"container={env.get('container','?')}",
+            f"container={env.get('container', '?')}",
             flush=True,
         )
         if par:
@@ -658,19 +755,19 @@ def _print_fingerprint_summary(cfg: dict[str, Any]) -> None:
     sc = env.get("serving_config") or {}
     if sc:
         print(
-            f"[serving] quant={sc.get('serving_quant','?')} kv={sc.get('kv_cache_dtype','?')} "
-            f"attn={sc.get('attention_backend','?')} moe={sc.get('moe_backend','?')} "
-            f"cuda={sc.get('cuda_version','?')} env_flags={len(sc.get('env_flags',{}))}",
+            f"[serving] quant={sc.get('serving_quant', '?')} kv={sc.get('kv_cache_dtype', '?')} "
+            f"attn={sc.get('attention_backend', '?')} moe={sc.get('moe_backend', '?')} "
+            f"cuda={sc.get('cuda_version', '?')} env_flags={len(sc.get('env_flags', {}))}",
             flush=True,
         )
     # 模型
     ms = env.get("model_spec") or {}
     if ms:
         print(
-            f"[model] {ms.get('name','?')} arch={ms.get('architecture','?')} "
-            f"layers={ms.get('num_layers','?')} experts={ms.get('num_experts','?')} "
-            f"attn={ms.get('attention_type','?')} dtype={ms.get('weight_dtype','?')} "
-            f"quant={ms.get('quant_method','?')} kv={ms.get('kv_dtype','?')}",
+            f"[model] {ms.get('name', '?')} arch={ms.get('architecture', '?')} "
+            f"layers={ms.get('num_layers', '?')} experts={ms.get('num_experts', '?')} "
+            f"attn={ms.get('attention_type', '?')} dtype={ms.get('weight_dtype', '?')} "
+            f"quant={ms.get('quant_method', '?')} kv={ms.get('kv_dtype', '?')}",
             flush=True,
         )
     # 用户显式覆盖

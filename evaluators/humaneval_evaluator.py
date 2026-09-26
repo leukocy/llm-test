@@ -11,10 +11,12 @@ import re
 import time
 from typing import Any
 
+from . import register_evaluator
 from .answer_parser import CodeAnswerParser
 from .base_evaluator import BaseEvaluator, SampleResult
 
 
+@register_evaluator("humaneval")
 class HumanEvalEvaluator(BaseEvaluator):
     """
     HumanEval Dataset Evaluator.
@@ -28,6 +30,8 @@ class HumanEvalEvaluator(BaseEvaluator):
         "entry_point": "has_close_elements"
     }
     """
+
+    requires_code_execution = True
 
     # Execution timeout (seconds)
     EXECUTION_TIMEOUT = 5
@@ -90,7 +94,7 @@ class HumanEvalEvaluator(BaseEvaluator):
                         print(f"Failed to load {filepath}: {e}")
 
         if not samples:
-            samples = self._create_sample_data()
+            samples = self._fallback_to_demo_samples(self._create_sample_data)
 
         if self.max_samples and len(samples) > self.max_samples:
             random.shuffle(samples)
@@ -241,11 +245,11 @@ class HumanEvalEvaluator(BaseEvaluator):
     def _execute_code(
         self, code: str, test_code: str, entry_point: str
     ) -> tuple[bool, str | None, str | None]:
-        """在隔离子进程中执行 LLM 生成代码(安全审查 #1: 禁止进程内裸 exec)。"""
+        """Run generated code through the isolated sandbox worker."""
         from core.safe_executor import run_untrusted_code
 
         full_code = code + "\n" + test_code
-        # HumanEval 标准超时 10s; 子进程隔离 + rlimit 内存上限
+        # Code and tests are sent to the container worker; the app never executes them.
         return run_untrusted_code(full_code, timeout_seconds=10.0)
 
     def get_sample_category(self, sample: dict[str, Any]) -> str:

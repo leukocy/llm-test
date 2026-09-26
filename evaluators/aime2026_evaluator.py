@@ -81,9 +81,7 @@ class AIME2026Evaluator(BaseEvaluator):
         try:
             from core.dataset_manager import get_dataset
 
-            samples = get_dataset(
-                self.dataset_name, split="test", max_samples=None, seed=self.seed
-            )
+            samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for AIME2026: {e}")
 
@@ -119,10 +117,10 @@ class AIME2026Evaluator(BaseEvaluator):
                     except Exception as e:
                         print(f"Load {filepath} failed: {e}")
 
-        # 3. If no local data, try creating from embedded sample data
+        # 3. Embedded examples are available only in explicit demonstration mode.
         if not samples:
+            samples = self._fallback_to_demo_samples(self._create_sample_data)
             print("[INFO] No local dataset found, using embedded sample data")
-            samples = self._create_sample_data()
 
         # Standardize sample format
         samples = self._normalize_samples(samples)
@@ -130,17 +128,13 @@ class AIME2026Evaluator(BaseEvaluator):
         # Filter by subset if specified
         if subset:
             subset_upper = subset.upper().replace("_", "-")
-            samples = [
-                s for s in samples if subset_upper in s.get("source", "").upper()
-            ]
+            samples = [s for s in samples if subset_upper in s.get("source", "").upper()]
 
         # Shuffle
         random.shuffle(samples)
 
         # Calculate total needed
-        total_needed = self.num_shots + (
-            self.max_samples if self.max_samples else len(samples)
-        )
+        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
@@ -239,9 +233,7 @@ class AIME2026Evaluator(BaseEvaluator):
             },
         ]
 
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """Format AIME sample as prompt"""
         problem = sample.get("problem", "")
         prompt_lines = [f"Problem: {problem}"]
@@ -415,7 +407,7 @@ class AIME2026Evaluator(BaseEvaluator):
 
     def get_sample_category(self, sample: dict[str, Any]) -> str:
         """Get sample category"""
-        return sample.get("source", "AIME-2026")
+        return str(sample.get("source", "AIME-2026"))
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
         """Get correct answer"""

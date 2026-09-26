@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.local
+
+# 根 .gitignore 的 *.html 是屏蔽导出的报告; SPA 构建入口必须入库
+!index.html
