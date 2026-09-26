@@ -82,6 +82,24 @@ class RestoreBody(StrictSpec):
     path: str = Field(min_length=1, max_length=500)
 
 
+class CompareQualityBody(StrictSpec):
+    job_id_a: str = Field(min_length=1, max_length=64)
+    job_id_b: str = Field(min_length=1, max_length=64)
+
+
+class ParseBody(StrictSpec):
+    response: str = Field(min_length=1, max_length=50000)
+    answer_type: Literal["number", "choice", "text", "boolean", "code", "math"] = "text"
+    expected_answer: str | None = Field(default=None, max_length=10000)
+
+
+class ReasoningBody(StrictSpec):
+    question: str = Field(min_length=1, max_length=20000)
+    reasoning: str = Field(default="", max_length=100000)
+    final_answer: str = Field(default="", max_length=20000)
+    correct_answer: str = Field(default="", max_length=20000)
+
+
 class BatchItem(StrictSpec):
     test_type: Literal[
         "concurrency",
@@ -479,6 +497,101 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         cases = data_manager.list_application_cases(limit=2000)
         sheet = build_capability_sheet(cases, group_by=dims, min_external_level=min_level)
         return {"items": sheet, "markdown": build_capability_markdown(sheet)}
+
+    # ------------------------------------------------------------------
+    # A/B 对比与高级评估（离线分析）
+    # ------------------------------------------------------------------
+
+    @app.post("/api/v1/compare", dependencies=[auth])
+    def compare_quality_jobs(body: CompareQualityBody):
+        """两个已完成质量作业的 McNemar 显著性对比（按 sample_id 对齐逐样本）。"""
+        if body.job_id_a == body.job_id_b:
+            raise HTTPException(422, "两个作业不能相同")
+        job_a = job_or_404(body.job_id_a)
+        job_b = job_or_404(body.job_id_b)
+        payload_a = quality_payload(job_a)
+        payload_b = quality_payload(job_b)
+
+        from core.model_comparator import mcnemar_test
+
+        names_a = set(payload_a["datasets"])
+        names_b = set(payload_b["datasets"])
+        common = sorted(names_a & names_b)
+        if not common:
+            raise HTTPException(422, "两个作业没有共同数据集，无法对比")
+
+        datasets: dict[str, Any] = {}
+        for name in common:
+            da = payload_a["datasets"][name]
+            db_ = payload_b["datasets"][name]
+            by_id_a = {
+                d.get("sample_id"): bool(d.get("is_correct"))
+                for d in da.get("details", [])
+                if d.get("sample_id") is not None
+            }
+            by_id_b = {
+                d.get("sample_id"): bool(d.get("is_correct"))
+                for d in db_.get("details", [])
+                if d.get("sample_id") is not None
+            }
+            shared = sorted(set(by_id_a) & set(by_id_b))
+            if not shared:
+                continue
+            test = mcnemar_test([by_id_a[s] for s in shared], [by_id_b[s] for s in shared])
+            datasets[name] = {
+                "samples": len(shared),
+                "accuracy_a": da.get("accuracy"),
+                "accuracy_b": db_.get("accuracy"),
+                **test,
+            }
+        if not datasets:
+            raise HTTPException(422, "共同数据集的样本无法按 sample_id 对齐")
+
+        return {
+            "job_a": {
+                "job_id": job_a["job_id"],
+                "model_id": job_a["model_id"],
+                "endpoint_id": job_a["endpoint_id"],
+            },
+            "job_b": {
+                "job_id": job_b["job_id"],
+                "model_id": job_b["model_id"],
+                "endpoint_id": job_b["endpoint_id"],
+            },
+            "datasets": datasets,
+            "skipped_datasets": sorted((names_a | names_b) - set(common)),
+        }
+
+    @app.post("/api/v1/advanced/parse", dependencies=[auth])
+    def advanced_parse(body: ParseBody):
+        """Smart Parser 演示：规则解析模型响应, 可选与参考答案判分。"""
+        from core.smart_answer_parser import AnswerType, SmartAnswerParser, compare_answers
+
+        answer_type = AnswerType(body.answer_type)
+        result = SmartAnswerParser().parse(body.response, answer_type, body.expected_answer)
+        out = dataclasses.asdict(result)
+        if body.expected_answer is not None:
+            is_correct, score = compare_answers(
+                result.extracted_answer or body.response,
+                body.expected_answer,
+                answer_type,
+            )
+            out["is_correct"] = is_correct
+            out["score"] = score
+        return out
+
+    @app.post("/api/v1/advanced/reasoning", dependencies=[auth])
+    def advanced_reasoning(body: ReasoningBody):
+        """推理过程质量评估（规则法: 连贯/完整/相关/正确/效率五维）。"""
+        from core.reasoning_evaluator import ReasoningQualityEvaluator
+
+        result = ReasoningQualityEvaluator().evaluate(
+            question=body.question,
+            reasoning=body.reasoning,
+            final_answer=body.final_answer,
+            correct_answer=body.correct_answer,
+        )
+        return dataclasses.asdict(result)
 
     # ------------------------------------------------------------------
     # 数据管理（导入 / 备份 / 健康）

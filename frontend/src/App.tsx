@@ -16,6 +16,8 @@ import { NewRun } from "./pages/NewRun";
 import { Detail } from "./pages/Detail";
 import { Warehouse } from "./pages/Warehouse";
 import { Batch } from "./pages/Batch";
+import { Compare } from "./pages/Compare";
+import { Advanced } from "./pages/Advanced";
 import { Environment } from "./pages/Environment";
 
 const TOKEN_KEY = "llm-test-token";
@@ -161,6 +163,18 @@ export default function App() {
             <span>▣</span> 批量测量
           </button>
           <button
+            className={navActive("/compare") ? "active" : ""}
+            onClick={nav("/compare")}
+          >
+            <span>◧</span> 模型对比
+          </button>
+          <button
+            className={navActive("/advanced") ? "active" : ""}
+            onClick={nav("/advanced")}
+          >
+            <span>◇</span> 高级评估
+          </button>
+          <button
             className={navActive("/warehouse") ? "active" : ""}
             onClick={nav("/warehouse")}
           >
@@ -272,6 +286,11 @@ export default function App() {
                 />
               }
             />
+            <Route
+              path="/compare"
+              element={<Compare jobs={jobs} token={token} />}
+            />
+            <Route path="/advanced" element={<Advanced token={token} />} />
             <Route path="/environment" element={<Environment token={token} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

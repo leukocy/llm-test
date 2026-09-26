@@ -511,3 +511,128 @@ def test_environment_and_datasets_endpoints(env):
     assert ds.status_code == 200
     payload = ds.json()
     assert "builtin" in payload and "custom" in payload
+
+
+# ---------- compare / advanced ----------
+
+
+def _make_quality_job(client, settings, sample_outcomes):
+    """造一个带质量报告 artifact 的作业; sample_outcomes: {sample_id: is_correct}"""
+    job = client.post(
+        "/api/v1/jobs",
+        json={
+            "endpoint_id": "lab",
+            "test_type": "quality",
+            "parameters": {"datasets": ["gsm8k"], "max_samples": len(sample_outcomes)},
+        },
+        headers=auth(),
+    ).json()
+    job_dir = settings.artifact_root / job["job_id"]
+    job_dir.mkdir(parents=True, exist_ok=True)
+    details = [
+        {
+            "sample_id": sid,
+            "question": "q",
+            "prompt": "p",
+            "correct_answer": "a",
+            "predicted_answer": "b",
+            "model_response": "r",
+            "is_correct": ok,
+        }
+        for sid, ok in sample_outcomes.items()
+    ]
+    correct = sum(1 for ok in sample_outcomes.values() if ok)
+    payload = {
+        "job_id": job["job_id"],
+        "model_id": "test-model",
+        "datasets": {
+            "gsm8k": {
+                "accuracy": correct / len(sample_outcomes),
+                "correct_samples": correct,
+                "total_samples": len(sample_outcomes),
+                "duration_seconds": 1.0,
+                "config": {},
+                "by_category": {},
+                "performance_stats": {},
+                "extended_metrics": {},
+                "details": details,
+            }
+        },
+    }
+    (job_dir / "report.json").write_text(json.dumps(payload), encoding="utf-8")
+    from core.database.connection import Database
+
+    Database().execute(
+        "UPDATE control_jobs SET result_artifact = ? WHERE job_id = ?",
+        (f"{job['job_id']}/report.json", job["job_id"]),
+    )
+    return job
+
+
+def test_compare_two_quality_jobs_mcnemar(env):
+    client, _, settings = env
+    job_a = _make_quality_job(client, settings, {"s1": True, "s2": True, "s3": False, "s4": True})
+    job_b = _make_quality_job(client, settings, {"s1": True, "s2": False, "s3": False, "s4": False})
+    r = client.post(
+        "/api/v1/compare",
+        json={"job_id_a": job_a["job_id"], "job_id_b": job_b["job_id"]},
+        headers=auth(),
+    )
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    entry = payload["datasets"]["gsm8k"]
+    assert entry["samples"] == 4
+    assert entry["b01_count"] == 2  # A 对 B 错: s2, s4
+    assert entry["b10_count"] == 0
+    assert "p_value" in entry and "interpretation" in entry
+
+    same = client.post(
+        "/api/v1/compare",
+        json={"job_id_a": job_a["job_id"], "job_id_b": job_a["job_id"]},
+        headers=auth(),
+    )
+    assert same.status_code == 422
+
+
+def test_advanced_parse_number_and_boolean(env):
+    client, _, _ = env
+    r = client.post(
+        "/api/v1/advanced/parse",
+        json={
+            "response": "计算过程略。最终答案是 42。",
+            "answer_type": "number",
+            "expected_answer": "42",
+        },
+        headers=auth(),
+    )
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload["extracted_answer"]
+    assert payload["is_correct"] is True
+
+    bad_type = client.post(
+        "/api/v1/advanced/parse",
+        json={"response": "x", "answer_type": "enum"},
+        headers=auth(),
+    )
+    assert bad_type.status_code == 422
+
+
+def test_advanced_reasoning_returns_five_dimensions(env):
+    client, _, _ = env
+    r = client.post(
+        "/api/v1/advanced/reasoning",
+        json={
+            "question": "小明有 3 个苹果, 又买了 5 个, 一共几个?",
+            "reasoning": "第一步: 原有 3 个。第二步: 又买 5 个。第三步: 3+5=8。结论: 共 8 个。",
+            "final_answer": "8",
+            "correct_answer": "8",
+        },
+        headers=auth(),
+    )
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    score = payload["quality_score"]
+    for dim in ("coherence", "completeness", "relevance", "correctness", "efficiency"):
+        assert dim in score, f"缺维度 {dim}"
+    assert payload["final_answer_correct"] is True
