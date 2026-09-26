@@ -763,6 +763,7 @@ class BenchmarkRunner:
         self.dashboard = dashboard
 
         self.results_list: list[dict[str, Any]] = []
+        self._persisted_result_ids: set[int] = set()
         self.all_outputs: list[dict[str, Any]] = []  # Store all outputs for review
         self.last_output = None
         self._last_rendered_output = None
@@ -807,9 +808,9 @@ class BenchmarkRunner:
         self._last_resource_monitor: dict | None = None  # 最近一次测试的监控汇总 dict
         self._last_run_id = None  # 最近一次测试的 DB run id（供 UI 写回归因）
         self.external_test_id = external_test_id
-        self._last_bandwidth: dict[str, Any] = (
-            {}
-        )  # 最近一次测试的等效带宽结果（供 UI 归因/偏差分析）
+        self._last_bandwidth: dict[
+            str, Any
+        ] = {}  # 最近一次测试的等效带宽结果（供 UI 归因/偏差分析）
         self._engine_poller: Any = None  # EngineMetricsPoller 实例（运行中）
         self._last_engine_metrics: dict | None = None  # 最近一次测试的引擎运行时汇总 dict
         # 自适应测试：测试前一次性探测的 KV 预算（tokens）。None=未探测/不跳过，全跑。
@@ -990,7 +991,11 @@ class BenchmarkRunner:
 
         try:
             db = self._get_db_manager()
-            db.save_result(self._db_run, result)
+            saved = db.save_result(self._db_run, result)
+            if saved.id is not None:
+                self._persisted_result_ids.add(id(result))
+            else:
+                logger.warning("SaveResult到Database未返回持久记录 ID")
         except Exception as e:
             logger.warning(f"SaveResult到Database失败: {e}")
 
@@ -1532,13 +1537,22 @@ class BenchmarkRunner:
 
         try:
             db = self._get_db_manager()
-            # 只Save还没hasSaveResult（viaCheckDatabaseinResult数量）
-            existing_count = db.results.count("run_id = ?", (self._db_run.id,))
-            new_results = self.results_list[existing_count:]
+            # A failed individual insert need not be the last result. Count-based slicing
+            # could insert a later row twice and silently omit the failed observation.
+            new_results = [
+                result
+                for result in self.results_list
+                if id(result) not in self._persisted_result_ids
+            ]
 
             if new_results:
-                db.save_results_batch(self._db_run, new_results)
-                logger.info(f"批量Save {len(new_results)} 条Result到Database")
+                saved_count = db.save_results_batch(self._db_run, new_results)
+                if saved_count != len(new_results):
+                    raise RuntimeError(
+                        f"Batch persistence saved {saved_count} of {len(new_results)} observations"
+                    )
+                self._persisted_result_ids.update(id(result) for result in new_results)
+                logger.info(f"批量Save {saved_count} 条Result到Database")
         except Exception as e:
             logger.warning(f"批量SaveResult失败: {e}")
 
@@ -3139,9 +3153,9 @@ class BenchmarkRunner:
             signal = self._check_control_signal()
             if signal:
                 # Save进度
-                pending_prompts: list[str] = (
-                    []
-                )  # ConcurrencyTest prompt is动态Generate，no法精确Restore
+                pending_prompts: list[
+                    str
+                ] = []  # ConcurrencyTest prompt is动态Generate，no法精确Restore
                 status = "PAUSED" if signal == "pause" else "CANCELLED"
                 # 使用已完成的请求数作为 current_index，而不是 session_counter
                 completed_count = len(self.results_list)

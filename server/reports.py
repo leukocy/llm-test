@@ -9,6 +9,7 @@ from typing import Any
 def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
     overall = summary["overall"]
     metric = overall["metrics"]
+    integrity = summary["integrity"]
 
     def fmt(value: Any, digits: int = 3) -> str:
         return "—" if value is None else f"{value:,.{digits}f}"
@@ -16,15 +17,28 @@ def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
     def cell(value: Any) -> str:
         return escape(str(value))
 
+    def rate(value: float | None) -> str:
+        return "—" if value is None else f"{value * 100:.1f}%"
+
     rows = "".join(
         f"<tr><th scope='row'>{cell(group['label'])}</th>"
-        f"<td>{group['requests']}</td><td>{fmt(group['success_rate'] * 100 if group['success_rate'] is not None else None, 1)}%</td>"
+        f"<td>{group['requests']}</td><td>{rate(group['success_rate'])}</td>"
         f"<td>{fmt(group['metrics']['ttft']['median'])}</td>"
         f"<td>{fmt(group['metrics']['ttft']['p95'])}</td>"
         f"<td>{fmt(group['metrics']['tps']['median'])}</td></tr>"
         for group in summary["groups"]
     )
     notes = "".join(f"<li>{cell(note)}</li>" for note in summary["notes"])
+    integrity_reasons = "".join(f"<li>{cell(reason)}</li>" for reason in integrity["reasons"])
+    integrity_label = (
+        "单次运行完整性核验通过" if integrity["verified"] else "仅供诊断 · 未通过完整性核验"
+    )
+    expected = integrity["expected_requests"]
+    integrity_detail = (
+        f"数据库已记录 {integrity['recorded_requests']} / 计划 {expected} 次请求"
+        if expected is not None
+        else f"数据库已记录 {integrity['recorded_requests']} 次请求；计划请求数未知"
+    )
     return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LLM Test 报告 · {cell(job["job_id"])}</title>
@@ -38,6 +52,11 @@ h1 {{ font-size:34px; letter-spacing:-.04em; margin:8px 0; }}
 .grid {{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin:32px 0; }}
 .card {{ padding:22px; border:1px solid #dce5f2; border-radius:14px; background:#f9fbff; }}
 .card b {{ display:block; font-size:27px; margin-top:12px; }}
+.integrity {{ padding:18px 22px; border:1px solid; border-radius:12px; margin:26px 0; }}
+.integrity strong {{ display:block; font-size:17px; margin-bottom:4px; }}
+.integrity p {{ margin:0; }} .integrity ul {{ margin:10px 0 0; padding-left:22px; }}
+.integrity.ready {{ background:#edf8f5; border-color:#b7e3d6; color:#286a60; }}
+.integrity.limited {{ background:#fff8ea; border-color:#efd6a4; color:#845b16; }}
 table {{ border-collapse:collapse; width:100%; margin:24px 0; }}
 th,td {{ text-align:left; border-bottom:1px solid #dce5f2; padding:13px 10px; }}
 th {{ color:#536780; font-size:13px; }}
@@ -47,9 +66,12 @@ code {{ overflow-wrap:anywhere; }}
 <div class="eyebrow">LLM TEST / MEASUREMENT REPORT</div>
 <h1>{cell(job["model_id"])}</h1>
 <p class="muted">{cell(job["test_type"])} · {cell(job["status"])} · {cell(job["job_id"])}</p>
+<section class="integrity {"ready" if integrity["verified"] else "limited"}">
+<strong>{integrity_label}</strong><p>{cell(integrity_detail)}</p>
+{"<ul>" + integrity_reasons + "</ul>" if integrity_reasons else ""}</section>
 <div class="grid">
 <div class="card">请求数<b>{overall["requests"]}</b></div>
-<div class="card">成功率<b>{fmt(overall["success_rate"] * 100 if overall["success_rate"] is not None else None, 1)}%</b></div>
+<div class="card">成功率<b>{rate(overall["success_rate"])}</b></div>
 <div class="card">TTFT p50 · s<b>{fmt(metric["ttft"]["median"])}</b></div>
 <div class="card">TTFT p95 · s<b>{fmt(metric["ttft"]["p95"])}</b></div>
 </div>
