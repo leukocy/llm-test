@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import pandas as pd
 import streamlit as st
 
@@ -27,6 +29,8 @@ from core.warehouse import (
     build_hardware_inventory_rows,
     build_hm_test_rows,
     build_scaling_efficiency,
+    count_runs,
+    distinct_run_field_values,
     distinct_values,
     export_all_templates_zip,
     export_template_csv,
@@ -34,6 +38,18 @@ from core.warehouse import (
     interpret_efficiency,
     project_run,
     query_runs,
+)
+from ui.warehouse_charts import (
+    COMPARE_METRIC_GROUPS,
+    TREND_DIMS,
+    TREND_METRICS,
+    build_box_figure,
+    build_compare_bar_figure,
+    build_compare_table,
+    build_engine_timeline_figure,
+    build_histogram_figure,
+    build_trend_figure,
+    collect_distribution_values,
 )
 
 # 历史表展示的仓库列（顺序即展示顺序）
@@ -65,14 +81,16 @@ def render_warehouse_browser() -> None:
     )
 
     db = db_manager
+    flt = _build_filter(db)
     try:
-        runs = query_runs(db, _build_filter(db))
+        runs = query_runs(db, flt)
+        total = count_runs(db, flt)
     except Exception as e:
         # A corrupted DB / legacy row shape must not white-screen the page
         st.error(f"数据仓库查询失败：{e}")
         return
 
-    _render_kpis(runs)
+    _render_kpis(runs, total)
     st.markdown("---")
 
     if not runs:
@@ -81,26 +99,32 @@ def render_warehouse_browser() -> None:
 
     (
         tab_history,
+        tab_trend,
         tab_matrix,
         tab_scaling,
         tab_inventory,
         tab_cases,
         tab_capability,
         tab_export,
+        tab_admin,
     ) = st.tabs(
         [
             "运行历史",
+            "趋势对比",
             "透视矩阵",
             "扩展效率",
             "硬件盘点",
             "应用用例",
             "客户能力表",
             "模板导出",
+            "数据管理",
         ]
     )
 
     with tab_history:
-        _render_history(runs)
+        _render_history(runs, total)
+    with tab_trend:
+        _render_trend_and_compare(runs)
     with tab_matrix:
         _render_cross_matrix(runs)
     with tab_scaling:
@@ -115,6 +139,10 @@ def render_warehouse_browser() -> None:
         _render_capability_sheet()
     with tab_export:
         _render_export(runs)
+    with tab_admin:
+        from ui.warehouse_admin import render_warehouse_admin
+
+        render_warehouse_admin()
 
 
 # ---------------------------------------------------------------------------
@@ -126,30 +154,68 @@ def _build_filter(db) -> WarehouseFilter:
     st.sidebar.markdown("---")
     st.sidebar.subheader("仓库筛选")
 
-    def _opts(field: str, label: str) -> list:
-        vals = ["全部"] + distinct_values(db, field)
-        return vals
+    def _opts(field: str) -> list:
+        return ["全部"] + distinct_values(db, field)
 
-    machine = st.sidebar.selectbox("硬件 machine_id", _opts("machine_id", "硬件"), key="wh_machine")
-    model = st.sidebar.selectbox("模型", _opts("model_name", "模型"), key="wh_model")
-    engine = st.sidebar.selectbox("引擎", _opts("engine", "引擎"), key="wh_engine")
+    machine = st.sidebar.selectbox("硬件 machine_id", _opts("machine_id"), key="wh_machine")
+    model = st.sidebar.selectbox("模型", _opts("model_name"), key="wh_model")
+    engine = st.sidebar.selectbox("引擎", _opts("engine"), key="wh_engine")
     level = st.sidebar.selectbox(
         "可对外等级",
         ["全部", "internal", "review", "publishable"],
         key="wh_level",
     )
-    status = st.sidebar.selectbox("状态", _opts("status", "状态"), key="wh_status")
-    tester = st.sidebar.selectbox("测试员", _opts("tester", "测试员"), key="wh_tester")
+    status = st.sidebar.selectbox("状态", _opts("status"), key="wh_status")
+    tester = st.sidebar.selectbox("测试员", _opts("tester"), key="wh_tester")
+    test_type = st.sidebar.selectbox(
+        "测试类型",
+        ["全部"] + distinct_run_field_values(db, "test_type"),
+        key="wh_test_type",
+    )
     cfg_hash = st.sidebar.selectbox(
         "config_hash（同配置）",
-        _opts("config_hash", "配置"),
+        _opts("config_hash"),
         key="wh_cfg_hash",
         help="CASE 02：同配置才能承诺。按配置指纹过滤同模型/引擎/并行/量化的一组测试。",
     )
+    cmp_group = st.sidebar.selectbox(
+        "对比组",
+        ["全部"] + distinct_run_field_values(db, "comparison_group"),
+        key="wh_cmp_group",
+    )
+    date_range = st.sidebar.date_input(
+        "日期范围",
+        value=[],
+        key="wh_date_range",
+        help="按测试创建日期过滤（留空 = 不限；选一个日期 = 从该日起）",
+    )
     search = st.sidebar.text_input("模糊搜索", placeholder="备注 / 模型 / 测试员…", key="wh_search")
+
+    with st.sidebar.expander("更多选项"):
+        include_superseded = st.checkbox(
+            "显示被复测取代的旧版",
+            value=False,
+            key="wh_include_superseded",
+            help="默认复测链只留最新一版；勾选后连被取代的旧记录一并显示。",
+        )
+        limit = st.selectbox(
+            "候选上限",
+            [200, 500, 1000, 2000, 5000],
+            index=1,
+            key="wh_limit",
+            help="从最近 N 条记录中过滤。调大可看更老的数据，调小加载更快。",
+        )
 
     def _pick(v):
         return None if v in (None, "全部", "") else v
+
+    # date_input(value=[]) 返回 0~2 个 date 的序列：1 个 = 仅起始日，2 个 = 完整区间
+    date_from = date_to = None
+    if isinstance(date_range, (tuple, list)):
+        if len(date_range) >= 1:
+            date_from = datetime.combine(date_range[0], datetime.min.time())
+        if len(date_range) == 2:
+            date_to = datetime.combine(date_range[1], datetime.max.time())
 
     return WarehouseFilter(
         machine_id=_pick(machine),
@@ -157,9 +223,15 @@ def _build_filter(db) -> WarehouseFilter:
         engine=_pick(engine),
         external_level=_pick(level),
         status_detail=_pick(status),
+        test_type=_pick(test_type),
         tester=_pick(tester),
+        comparison_group=_pick(cmp_group),
         config_hash=_pick(cfg_hash),
+        date_from=date_from,
+        date_to=date_to,
         search=_pick(search),
+        include_superseded=include_superseded,
+        limit=limit,
     )
 
 
@@ -168,13 +240,17 @@ def _build_filter(db) -> WarehouseFilter:
 # ---------------------------------------------------------------------------
 
 
-def _render_kpis(runs) -> None:
+def _render_kpis(runs, total: int) -> None:
     machines = {project_run(r)["machine_id"] for r in runs if project_run(r)["machine_id"]}
     models = {r.model_id for r in runs if r.model_id}
     publishable = sum(1 for r in runs if (r.external_level or "internal") == "publishable")
     completed = sum(1 for r in runs if r.status == "completed")
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("记录数", len(runs))
+    c1.metric(
+        "记录数",
+        f"{len(runs)} / {total}",
+        help="分子 = 当前候选上限内显示的记录；分母 = 筛选条件命中的全部记录。",
+    )
     c2.metric("硬件数", len(machines))
     c3.metric("模型数", len(models))
     c4.metric("已完成", completed)
@@ -186,14 +262,42 @@ def _render_kpis(runs) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _render_history(runs) -> None:
+def _render_history(runs, total: int) -> None:
     st.subheader("运行历史（仓库列）")
-    rows = [project_run(r) for r in runs]
-    df = pd.DataFrame(rows)[_HISTORY_COLUMNS].rename(columns=_COLUMN_LABELS)
-    st.dataframe(df, use_container_width=True, hide_index=True)
-    st.caption(f"共 {len(rows)} 条；复测链默认只留最新一版。")
 
-    # 明细抽屉：选一条看八维全集
+    # 列可见性：顺序以 _HISTORY_COLUMNS 为准，选择持久在 session_state
+    picked = st.multiselect(
+        "展示列",
+        _HISTORY_COLUMNS,
+        default=st.session_state.get("wh_hist_cols") or _HISTORY_COLUMNS,
+        key="wh_hist_cols",
+        format_func=lambda k: _COLUMN_LABELS.get(k, k),
+    )
+    visible = [c for c in _HISTORY_COLUMNS if c in picked] or _HISTORY_COLUMNS
+
+    rows = [project_run(r) for r in runs]
+    df = pd.DataFrame(rows)[visible].rename(columns=_COLUMN_LABELS)
+
+    # 行多选（streamlit ≥1.35）：勾选后启用下方批量操作
+    event = st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        selection_mode="multi-row",
+        on_select="rerun",
+        key="wh_hist_table",
+    )
+    sel = []
+    if event:
+        selection = getattr(event, "selection", None)  # stubs 未收录该属性, 运行时为官方 API
+        if selection:
+            sel = sorted(selection.rows)
+    st.caption(f"显示 {len(rows)} / 共 {total} 条；复测链默认只留最新一版。勾选用批量操作。")
+
+    if sel:
+        _render_bulk_actions([runs[i] for i in sel if i < len(runs)])
+
+    # 明细抽屉：选一条看全集（概览 / 请求明细 / 分布图 / 引擎指标 / 复核编辑）
     st.markdown("#### 查看单条全集")
     options = [
         f"{i}: {project_run(r)['date']} · {r.model_id} · {project_run(r)['machine_id'] or '—'}"
@@ -206,94 +310,419 @@ def _render_history(runs) -> None:
         _render_detail_drawer(runs[idx])
 
 
-def _render_detail_drawer(run) -> None:
-    row = project_run(run)
-    with st.expander(
-        "八维全集（machine_id/指纹 → 资源 → 模型规格 → 服务配置 → 性能 → 引擎运行时 → 归因 → 可对外）",
-        expanded=True,
+# ---------------------------------------------------------------------------
+# 批量操作
+# ---------------------------------------------------------------------------
+
+
+def _render_bulk_actions(selected_runs) -> None:
+    """历史页勾选后的批量操作条：设置等级 / 追加标签 / 删除。"""
+    ids = [r.id for r in selected_runs if r.id is not None]
+    if not ids:
+        return
+    st.markdown(f"#### 批量操作（已选 {len(ids)} 条）")
+    ac1, ac2, ac3 = st.columns(3)
+
+    with ac1:
+        level = st.selectbox(
+            "设置外发等级",
+            ["", "internal", "review", "publishable"],
+            key="wh_bulk_level",
+        )
+        if st.button("应用等级", key="wh_bulk_level_btn", disabled=not level):
+            ok = sum(
+                1
+                for rid in ids
+                if db_manager.update_publish_metadata(rid, {"external_level": level})
+            )
+            st.success(f"已把 {ok} 条设为 {level}")
+            st.rerun()
+
+    with ac2:
+        tag = st.text_input("追加标签", key="wh_bulk_tag", placeholder="如 baseline")
+        if st.button("追加标签", key="wh_bulk_tag_btn", disabled=not tag.strip()):
+            ok = 0
+            for r in selected_runs:
+                if r.id is None:
+                    continue
+                merged = f"{r.tags},{tag.strip()}" if r.tags else tag.strip()
+                ok += 1 if db_manager.update_publish_metadata(r.id, {"tags": merged}) else 0
+            st.success(f"已给 {ok} 条追加标签 {tag.strip()!r}")
+            st.rerun()
+
+    with ac3:
+        _render_bulk_delete(ids)
+
+
+def _render_bulk_delete(ids: list[int]) -> None:
+    """删除所选：勾选确认 + 大批量（>10）需输入 DELETE。"""
+    n = len(ids)
+    confirm = st.checkbox(f"确认删除 {n} 条（不可恢复）", key="wh_bulk_del_confirm")
+    phrase_ok = True
+    if n > 10:
+        phrase = st.text_input("输入 DELETE 确认", key="wh_bulk_del_phrase")
+        phrase_ok = phrase.strip() == "DELETE"
+    if st.button(
+        "删除所选",
+        key="wh_bulk_del_btn",
+        disabled=not (confirm and phrase_ok),
+        type="primary",
     ):
-        # 分组展示，避免一长串
-        groups = [
-            ("标识", ["test_id", "date", "tester", "machine_id", "external_level"]),
-            (
-                "模型 / 服务",
-                [
-                    "model_name",
-                    "model_version",
-                    "model_type",
-                    "total_params",
-                    "active_params",
-                    "quantization",
-                    "dtype",
-                    "max_context",
-                    "engine",
-                    "engine_version",
-                    "parallel_strategy",
-                    "engine_params",
-                ],
-            ),
-            (
-                "性能",
-                [
-                    "concurrency",
-                    "decode_tps",
-                    "prefill_tps",
-                    "ttft_s",
-                    "p50_latency_s",
-                    "p95_latency_s",
-                    "p99_latency_s",
-                    "effective_bandwidth_gbps",
-                    "bandwidth_utilization_pct",
-                ],
-            ),
-            (
-                "资源峰值",
-                [
-                    "gpu_vram_peak_gb",
-                    "system_memory_peak_gb",
-                    "gpu_util_pct",
-                    "cpu_util_pct",
-                    "power_w",
-                    "temp_c",
-                ],
-            ),
-            (
-                "硬件指纹",
-                [
-                    "cpu_model",
-                    "cpu_sockets",
-                    "memory_type",
-                    "memory_capacity_gb",
-                    "gpu_model",
-                    "gpu_count",
-                    "gpu_vram_gb",
-                    "gpu_bandwidth_gbps",
-                    "cuda_or_rocm",
-                    "driver",
-                ],
-            ),
-            (
-                "归因 / 下一步",
-                [
-                    "status",
-                    "bottleneck",
-                    "error_type",
-                    "error_detail",
-                    "next_action",
-                    "supersedes_test_id",
-                    "log_path",
-                ],
-            ),
-        ]
-        cols = st.columns(len(groups))
-        for col, (title, keys) in zip(cols, groups, strict=False):
-            with col:
-                st.markdown(f"**{title}**")
-                for k in keys:
-                    v = row.get(k)
-                    display = "—" if v in (None, "", []) else v
-                    st.caption(f"{_COLUMN_LABELS.get(k, k)}")
-                    st.write(display)
+        result = db_manager.delete_runs(ids)
+        if result["failed"]:
+            st.error(f"删除完成：成功 {len(result['deleted'])} 条，失败 {result['failed']}")
+        else:
+            st.success(f"已删除 {len(result['deleted'])} 条")
+        st.session_state.pop("wh_hist_table", None)  # 清空选择态
+        st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# 单条全集（详情抽屉 + 子标签）
+# ---------------------------------------------------------------------------
+
+
+def _render_detail_drawer(run) -> None:
+    with st.expander(f"运行全集 · {run.test_id}", expanded=True):
+        tab_overview, tab_results, tab_dist, tab_engine, tab_review = st.tabs(
+            ["概览", "请求明细", "分布图", "引擎指标", "复核与编辑"]
+        )
+        with tab_overview:
+            _render_detail_overview(project_run(run))
+        with tab_results:
+            _render_run_results_table(run)
+        with tab_dist:
+            _render_run_distributions(run)
+        with tab_engine:
+            _render_run_engine_metrics(run)
+        with tab_review:
+            _render_metadata_editor(run)
+            st.markdown("---")
+            _render_gate_review(run)
+
+
+def _render_detail_overview(row: dict) -> None:
+    """八维全集分组展示（原 detail drawer 的扁平字段区）。"""
+    groups = [
+        ("标识", ["test_id", "date", "tester", "machine_id", "external_level"]),
+        (
+            "模型 / 服务",
+            [
+                "model_name",
+                "model_version",
+                "model_type",
+                "total_params",
+                "active_params",
+                "quantization",
+                "dtype",
+                "max_context",
+                "engine",
+                "engine_version",
+                "parallel_strategy",
+                "engine_params",
+            ],
+        ),
+        (
+            "性能",
+            [
+                "concurrency",
+                "decode_tps",
+                "prefill_tps",
+                "ttft_s",
+                "p50_latency_s",
+                "p95_latency_s",
+                "p99_latency_s",
+                "effective_bandwidth_gbps",
+                "bandwidth_utilization_pct",
+            ],
+        ),
+        (
+            "资源峰值",
+            [
+                "gpu_vram_peak_gb",
+                "system_memory_peak_gb",
+                "gpu_util_pct",
+                "cpu_util_pct",
+                "power_w",
+                "temp_c",
+            ],
+        ),
+        (
+            "硬件指纹",
+            [
+                "cpu_model",
+                "cpu_sockets",
+                "memory_type",
+                "memory_capacity_gb",
+                "gpu_model",
+                "gpu_count",
+                "gpu_vram_gb",
+                "gpu_bandwidth_gbps",
+                "cuda_or_rocm",
+                "driver",
+            ],
+        ),
+        (
+            "归因 / 下一步",
+            [
+                "status",
+                "bottleneck",
+                "error_type",
+                "error_detail",
+                "next_action",
+                "supersedes_test_id",
+                "log_path",
+            ],
+        ),
+    ]
+    cols = st.columns(len(groups))
+    for col, (title, keys) in zip(cols, groups, strict=False):
+        with col:
+            st.markdown(f"**{title}**")
+            for k in keys:
+                v = row.get(k)
+                display = "—" if v in (None, "", []) else v
+                st.caption(f"{_COLUMN_LABELS.get(k, k)}")
+                st.write(display)
+
+
+def _render_run_results_table(run) -> None:
+    """请求明细：test_results 逐请求表。"""
+    if run.id is None:
+        st.info("该记录无数据库 id。")
+        return
+    results = db_manager.results.find_by_run_id(run.id, limit=5000)
+    if not results:
+        st.info("无请求级数据（该运行可能只存了汇总行，或早于请求级入库）。")
+        return
+
+    only_errors = st.checkbox("只看错误请求", key=f"wh_res_err_{run.id}")
+    rows = [
+        {
+            "session": res.session_id,
+            "并发": res.concurrency_level,
+            "轮次": res.round,
+            "TTFT(s)": res.ttft,
+            "TPS": res.tps,
+            "TPOT(s)": res.tpot,
+            "prefill速度": res.prefill_speed,
+            "输入tok": res.prefill_tokens,
+            "输出tok": res.decode_tokens,
+            "缓存命中": res.cache_hit_tokens,
+            "总时长(s)": res.total_time,
+            "错误": res.error,
+        }
+        for res in results
+    ]
+    df = pd.DataFrame(rows)
+    if only_errors:
+        df = df[df["错误"].notna() & (df["错误"] != "")]
+    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.caption(f"共 {len(results)} 条请求记录")
+
+
+def _render_run_distributions(run) -> None:
+    """分布图：用请求级真实数据画 TTFT/TPS/TPOT 直方图 + 按并发分组箱线图。"""
+    if run.id is None:
+        st.info("该记录无数据库 id。")
+        return
+    results = [r for r in db_manager.results.find_by_run_id(run.id, limit=5000) if not r.error]
+    if not results:
+        st.info("无成功请求数据，无法绘制分布。")
+        return
+
+    specs = [
+        ("ttft", "TTFT 分布", "TTFT (s)"),
+        ("tps", "TPS 分布", "TPS (tok/s)"),
+        ("tpot", "TPOT 分布", "TPOT (s)"),
+    ]
+    for field, hist_title, x_title in specs:
+        groups = collect_distribution_values(results, field)
+        all_values = [v for vals in groups.values() for v in vals]
+        c1, c2 = st.columns(2)
+        with c1:
+            fig = build_histogram_figure(all_values, hist_title, x_title)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True, key=f"wh_hist_{field}_{run.id}")
+        with c2:
+            fig = build_box_figure(groups, f"{hist_title}（按并发）", x_title)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True, key=f"wh_box_{field}_{run.id}")
+
+
+def _render_run_engine_metrics(run) -> None:
+    """引擎指标：engine_metrics 汇总 + 时间线（KV 占用 / 运行 / 等待队列）。"""
+    summary = run.engine_metrics or {}
+    if not summary or not summary.get("sample_count"):
+        st.info("无引擎指标（该运行未轮询 /metrics，或早于引擎采集能力）。")
+        return
+
+    # 汇总行：引擎族 / KV 容量 / 抢占 / 采样数
+    cc = summary.get("cache_config") or {}
+    cols = st.columns(4)
+    cols[0].metric("引擎", summary.get("engine_family") or "—")
+    kv_cap = cc.get("kv_capacity_tokens")
+    cols[1].metric("KV 容量", f"{kv_cap:,}" if kv_cap else "—")
+    preempt = summary.get("preemption_total")
+    cols[2].metric("窗口抢占", preempt if preempt is not None else "—")
+    cols[3].metric("采样点数", summary.get("sample_count", 0))
+
+    fig = build_engine_timeline_figure(summary.get("timeline") or [])
+    if fig:
+        st.plotly_chart(fig, use_container_width=True, key=f"wh_engine_tl_{run.id}")
+    else:
+        st.info("引擎指标无可用时间线。")
+
+
+# ---------------------------------------------------------------------------
+# 复核与编辑（元数据写回 + 发布门禁复评）
+# ---------------------------------------------------------------------------
+
+_EXTERNAL_LEVELS = ["internal", "review", "publishable"]
+
+
+def _render_metadata_editor(run) -> None:
+    """编辑可对外元数据（写回 update_publish_metadata；置空文本即清空字段）。"""
+    st.markdown("##### 编辑元数据")
+    with st.form(key=f"wh_edit_form_{run.id}"):
+        c1, c2, c3 = st.columns(3)
+        level_idx = (
+            _EXTERNAL_LEVELS.index(run.external_level)
+            if run.external_level in _EXTERNAL_LEVELS
+            else 0
+        )
+        level = c1.selectbox("可对外等级", _EXTERNAL_LEVELS, index=level_idx)
+        tester = c2.text_input("测试员", value=run.tester or "")
+        cmp_group = c3.text_input("对比组", value=run.comparison_group or "")
+        bottleneck = c1.text_input("瓶颈归因", value=run.bottleneck or "")
+        status_detail = c2.text_input("状态明细", value=run.status_detail or "")
+        next_action = c3.text_input("下一步", value=run.next_action or "")
+        tags = st.text_input("标签（逗号分隔）", value=run.tags or "")
+        notes = st.text_area("备注", value=run.notes or "", height=80)
+        submitted = st.form_submit_button("保存")
+
+    if submitted:
+        fields = {
+            "external_level": level,
+            "tester": tester,
+            "comparison_group": cmp_group,
+            "bottleneck": bottleneck,
+            "status_detail": status_detail,
+            "next_action": next_action,
+            "tags": tags,
+            "notes": notes,
+        }
+        if db_manager.update_publish_metadata(run.id, fields):
+            st.success("已保存")
+            st.rerun()
+        else:
+            st.warning("未保存（无有效字段或更新失败）")
+
+
+def _render_gate_review(run) -> None:
+    """对存量运行重跑发布门禁（纯评估不写库；便于复核后手动改等级）。"""
+    st.markdown("##### 发布门禁复评")
+    st.caption("按当前记录重新评估四项门禁，不写库；通过后可到上方表单调整可对外等级。")
+    if not st.button("重新评估门禁", key=f"wh_gate_{run.id}"):
+        return
+    try:
+        from core.publish_gate import gate_from_run
+
+        result = gate_from_run(run.to_dict())
+    except Exception as e:  # noqa: BLE001  老记录字段缺失不应炸掉页面
+        st.error(f"门禁评估失败：{e}")
+        return
+
+    if result.passed:
+        st.success(f"门禁通过（{result.level}）")
+    else:
+        st.warning(f"门禁未通过（当前评定：{result.level}）")
+    _GATE_LABELS = {
+        "config_complete": "闸 1 · 配置齐全",
+        "reproducible": "闸 2 · 可复现",
+        "metrics_trustworthy": "闸 3 · 指标可信",
+        "external_reviewed": "闸 4 · 人工复核",
+    }
+    for name, ok in result.gates.items():
+        verdict = "通过" if ok else "未过"
+        st.write(f"[{verdict}] {_GATE_LABELS.get(name, name)}")
+    for reason in result.reasons:
+        st.caption(f"· {reason}")
+
+
+# ---------------------------------------------------------------------------
+# 趋势与对比
+# ---------------------------------------------------------------------------
+
+
+def _render_trend_and_compare(runs) -> None:
+    """趋势图（指标×日期×维度） + 运行对比（指标×运行）。"""
+    st.subheader("趋势分析")
+    st.caption("按日期看指标变化 —— 回归与改善都写在曲线上。数据来自当前筛选结果。")
+
+    rows = [project_run(r) for r in runs]
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        metric = st.selectbox(
+            "指标",
+            list(TREND_METRICS),
+            format_func=lambda k: TREND_METRICS[k],
+            key="wh_trend_metric",
+        )
+    with c2:
+        group_dim = st.selectbox(
+            "分组维度",
+            list(TREND_DIMS),
+            format_func=lambda k: TREND_DIMS[k],
+            key="wh_trend_dim",
+        )
+    with c3:
+        publishable_only = st.checkbox(
+            "仅可发布",
+            value=False,
+            key="wh_trend_pub",
+            help="只保留 external_level = publishable 的记录",
+        )
+
+    trend_rows = (
+        [r for r in rows if (r.get("external_level") or "internal") == "publishable"]
+        if publishable_only
+        else rows
+    )
+    fig = build_trend_figure(trend_rows, metric, group_dim)
+    if fig.data:
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("当前筛选下该指标无可绘数据（缺日期或指标值）。")
+
+    # ---- 运行对比 ----
+    st.markdown("---")
+    st.subheader("运行对比")
+    options = [
+        f"{i}: {r.get('date')} · {r.get('model_name')} · {r.get('machine_id') or '—'}"
+        for i, r in enumerate(rows)
+    ]
+    picked = st.multiselect(
+        "选择 2~8 条运行做对比",
+        options,
+        max_selections=8,
+        key="wh_compare_pick",
+        placeholder="从当前筛选结果中挑选…",
+    )
+    idxs = [int(p.split(":", 1)[0]) for p in picked]
+    if len(idxs) < 2:
+        st.info("至少选择 2 条运行。")
+        return
+
+    selected = [rows[i] for i in idxs]
+    table = build_compare_table(selected)
+    df = pd.DataFrame(table).T
+    st.dataframe(df, use_container_width=True)
+
+    for group_name in COMPARE_METRIC_GROUPS:
+        fig = build_compare_bar_figure(selected, group_name)
+        if fig:
+            st.plotly_chart(fig, use_container_width=True, key=f"wh_cmp_bar_{group_name}")
 
 
 # ---------------------------------------------------------------------------

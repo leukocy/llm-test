@@ -275,6 +275,37 @@ class DatabaseManager:
             return False
         return self._run_repo.update_by(data, "id = ?", (run_id,)) > 0
 
+    def get_run_count(self) -> int:
+        """test_runs 总行数（供"显示 N / 共 M"与查询上限）。"""
+        return self._db.count("test_runs")
+
+    def delete_runs(self, run_ids: list[int]) -> dict[str, Any]:
+        """删除测试运行（级联，逐条独立事务，单条失败不影响其余）。
+
+        清理顺序：先显式删除 api_logs / reports 里 run_id 的关联行（二者 FK 是
+        SET NULL，不删会留孤儿行），再删 test_runs 主行——test_results 与
+        execution_logs 由 FK CASCADE 一并清除。
+
+        Returns:
+            {"deleted": [run_id...], "failed": {run_id: 原因}}
+        """
+        deleted: list[int] = []
+        failed: dict[int, str] = {}
+        for run_id in run_ids:
+            try:
+                with self._db.get_connection() as conn:
+                    conn.execute("DELETE FROM api_logs WHERE run_id = ?", (run_id,))
+                    conn.execute("DELETE FROM reports WHERE run_id = ?", (run_id,))
+                    cur = conn.execute("DELETE FROM test_runs WHERE id = ?", (run_id,))
+                    conn.commit()
+                if cur.rowcount:
+                    deleted.append(run_id)
+                else:
+                    failed[run_id] = "记录不存在"
+            except Exception as e:  # noqa: BLE001  逐条收集失败, 不中断批量
+                failed[run_id] = str(e)
+        return {"deleted": deleted, "failed": failed}
+
     def update_run_progress(self, run: TestRun, completed: int, total: int, failed: int = 0):
         """UpdateTest进度"""
         run.update_progress(completed, total)
