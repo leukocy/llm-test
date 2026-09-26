@@ -206,6 +206,18 @@ export function Detail({
     }
   }
 
+  async function downloadWarmup() {
+    try {
+      await downloadFile(
+        token,
+        `/api/v1/jobs/${job.job_id}/warmup.csv`,
+        `llm-test-${shortId(job.job_id)}-warmup.csv`,
+      );
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : "预热记录下载失败");
+    }
+  }
+
   const overall = summary?.overall;
   return (
     <div className="page-grid">
@@ -249,6 +261,14 @@ export function Detail({
               导出 CSV ↓
             </button>
           )}
+          {summary?.measurement_protocol?.warmup_requests ? (
+            <button
+              className="button subtle"
+              onClick={() => void downloadWarmup()}
+            >
+              预热记录 ↓
+            </button>
+          ) : null}
           {(summary || quality) && (
             <button
               className="button primary"
@@ -311,6 +331,37 @@ export function Detail({
               </ul>
             )}
           </div>
+          {summary.measurement_protocol && (
+            <section className="surface protocol-surface">
+              <div className="section-head">
+                <div>
+                  <span className="eyebrow">MEASUREMENT PROTOCOL</span>
+                  <h2>测量方法与样本计划</h2>
+                </div>
+                <span className="minor-tag">
+                  {summary.measurement_protocol.protocol_version}
+                </span>
+              </div>
+              <p>
+                {summary.measurement_protocol.workload_model ===
+                "closed_loop_fixed_concurrency"
+                  ? "闭环固定并发负载"
+                  : "顺序固定输入长度负载"}
+                ：正式 {summary.measurement_protocol.measured_requests}{" "}
+                次，预热已记录{" "}
+                {summary.measurement_protocol.warmup_recorded ?? "—"} /{" "}
+                {summary.measurement_protocol.warmup_requests}{" "}
+                次。预热不进入统计。
+              </p>
+              {summary.data_quality.warnings.length > 0 && (
+                <ul className="protocol-warnings">
+                  {summary.data_quality.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
           <div className="metric-grid">
             <MetricCard
               label="总请求"
@@ -362,9 +413,10 @@ export function Detail({
                 <thead>
                   <tr>
                     <th>{summary.group_axis}</th>
-                    <th>请求</th>
+                    <th>正式 / 计划</th>
                     <th>失败</th>
                     <th>成功率</th>
+                    <th>输入 token 中位数 / 目标</th>
                     <th>TTFT p50</th>
                     <th>TTFT p95</th>
                     <th>TTFT p99</th>
@@ -377,9 +429,15 @@ export function Detail({
                       <td>
                         <strong>{slice.label}</strong>
                       </td>
-                      <td>{slice.requests}</td>
+                      <td>
+                        {slice.requests} / {slice.planned_requests ?? "—"}
+                      </td>
                       <td>{slice.failures}</td>
                       <td>{formatPercent(slice.success_rate)}</td>
+                      <td>
+                        {formatNumber(slice.input_tokens?.median, 1)} /{" "}
+                        {slice.input_tokens?.target || "—"}
+                      </td>
                       <td>{formatNumber(slice.metrics.ttft.median, 3)} s</td>
                       <td>{formatNumber(slice.metrics.ttft.p95, 3)} s</td>
                       <td>{formatNumber(slice.metrics.ttft.p99, 3)} s</td>
@@ -408,6 +466,8 @@ export function Detail({
                     <th>TPS</th>
                     <th>总时长</th>
                     <th>输入 / 输出 token</th>
+                    <th>Token 来源</th>
+                    <th>提示词指纹</th>
                     <th>结果</th>
                   </tr>
                 </thead>
@@ -421,6 +481,12 @@ export function Detail({
                       <td>{formatNumber(row.total_time, 2)} s</td>
                       <td>
                         {row.prefill_tokens ?? "—"} / {row.decode_tokens ?? "—"}
+                      </td>
+                      <td>{row.token_source || "—"}</td>
+                      <td title={row.prompt_sha256 || undefined}>
+                        {row.prompt_sha256
+                          ? row.prompt_sha256.slice(0, 12)
+                          : "—"}
                       </td>
                       <td>
                         {row.error ? (

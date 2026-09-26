@@ -26,6 +26,7 @@ export const scenarios: {
       rounds_per_level: 3,
       max_tokens: 512,
       input_tokens_target: 1024,
+      warmup_rounds_per_level: 1,
     },
   },
   {
@@ -36,6 +37,7 @@ export const scenarios: {
       token_levels: [512, 2048, 8192],
       requests_per_level: 5,
       max_tokens: 256,
+      warmup_requests_per_level: 1,
     },
   },
   {
@@ -71,7 +73,7 @@ export const scenarios: {
       context_lengths: [512, 2048],
       rounds: 2,
       max_tokens: 512,
-      enable_warmup: false,
+      enable_warmup: true,
     },
   },
   {
@@ -204,10 +206,12 @@ export const compareGroups = ["性能", "资源峰值"];
 export const fieldLabels: Record<string, string> = {
   selected_concurrencies: "并发档位（逗号分隔）",
   rounds_per_level: "每档轮数",
+  warmup_rounds_per_level: "每档预热轮数（不计入正式样本）",
   max_tokens: "最大输出 tokens",
   input_tokens_target: "输入 tokens 目标（0 = 不加压）",
   token_levels: "输入长度档位",
   requests_per_level: "每档请求数",
+  warmup_requests_per_level: "每档预热请求数（不计入正式样本）",
   segment_levels: "分段长度档位",
   requests_per_segment: "每段请求数",
   cumulative_mode: "累积模式（前缀复用）",
@@ -217,7 +221,7 @@ export const fieldLabels: Record<string, string> = {
   context_lengths: "上下文长度档位",
   concurrencies: "并发档位",
   rounds: "轮数",
-  enable_warmup: "启用预热",
+  enable_warmup: "每个矩阵条件预热一轮",
   duration_seconds: "持续时长（秒）",
   base_prompt: "基础提示词",
   suffix_instruction: "附加指令",

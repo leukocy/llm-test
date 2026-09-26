@@ -110,6 +110,29 @@ export type Slice = {
   success_rate: number | null;
   success_rate_ci95: number[] | null;
   metrics: Record<string, Metric>;
+  planned_requests?: number | null;
+  input_tokens?: {
+    target: number | null;
+    count: number;
+    median: number | null;
+    target_deviation_pct: number | null;
+  };
+};
+export type MeasurementPlan = {
+  protocol_version: string | null;
+  workload_model: string;
+  measured_requests: number;
+  warmup_requests: number;
+  warmup_recorded?: number;
+  warmup_failures?: number;
+  total_requests: number;
+  cells: {
+    label: string;
+    measured_requests: number;
+    warmup_requests: number;
+    input_tokens_target?: number;
+  }[];
+  warnings: string[];
 };
 export type Summary = {
   metric_contract_version: string;
@@ -123,6 +146,8 @@ export type Summary = {
   overall: Slice;
   group_axis: string;
   groups: Slice[];
+  measurement_protocol: MeasurementPlan | null;
+  data_quality: { warnings: string[] };
   provenance: { token_sources: string[]; token_methods: string[] };
   notes: string[];
 };
@@ -135,6 +160,8 @@ export type RequestResult = {
   total_time: number | null;
   prefill_tokens: number | null;
   decode_tokens: number | null;
+  token_source: string | null;
+  prompt_sha256: string | null;
   error: string | null;
 };
 export type JobEvent = {
@@ -204,7 +231,16 @@ export async function api<T>(
     let detail = `请求失败（${response.status}）`;
     try {
       const body = await response.json();
-      detail = typeof body.detail === "string" ? body.detail : detail;
+      if (typeof body.detail === "string") detail = body.detail;
+      else if (Array.isArray(body.detail)) {
+        detail = body.detail
+          .slice(0, 3)
+          .map(
+            (item: { loc?: string[]; msg?: string }) =>
+              `${item.loc?.slice(1).join(".") || "参数"}: ${item.msg || "校验失败"}`,
+          )
+          .join("；");
+      }
     } catch {
       /* keep status */
     }

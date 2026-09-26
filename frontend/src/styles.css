@@ -763,6 +763,59 @@ textarea:focus {
   line-height: 1.8;
   margin: 0;
 }
+.new-aside .measurement-plan {
+  background: #f5f8fd;
+  border: 1px solid #dce7f4;
+}
+.plan-model {
+  color: #536b82;
+  font-size: 12px;
+  margin: 0 0 14px;
+}
+.plan-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 16px;
+}
+.plan-totals div {
+  background: #fff;
+  border: 1px solid #e3eaf3;
+  border-radius: 10px;
+  padding: 11px 8px;
+}
+.plan-totals strong,
+.plan-totals span {
+  display: block;
+}
+.plan-totals strong {
+  font-size: 20px;
+  color: #263f58;
+}
+.plan-totals span {
+  font-size: 10px;
+  color: #718397;
+}
+.plan-cells {
+  max-height: 230px;
+  overflow-y: auto;
+  border-top: 1px solid #dce7f4;
+}
+.plan-cells div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #e6edf5;
+  font-size: 12px;
+}
+.plan-cells strong {
+  white-space: nowrap;
+}
+.new-aside .plan-warnings {
+  margin-top: 13px;
+  color: #845b16;
+}
 .detail-head {
   margin-bottom: 4px;
 }
@@ -948,6 +1001,21 @@ textarea:focus {
   background: #fff8ea;
   border-color: #efd6a4;
   color: #845b16;
+}
+.protocol-surface p {
+  color: #536b82;
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 0;
+}
+.protocol-warnings {
+  color: #845b16;
+  background: #fff8ea;
+  border-radius: 10px;
+  padding: 14px 16px 14px 34px;
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
 }
 .methodology strong {
   color: #286a60;

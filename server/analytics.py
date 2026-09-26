@@ -9,6 +9,7 @@ import math
 import sqlite3
 import statistics
 from collections import defaultdict
+from pathlib import Path
 from typing import Any
 
 from core.benchmark.metrics import METRIC_CONTRACT_VERSION
@@ -51,6 +52,17 @@ def _contract_version(raw: str | None, source: str) -> str:
     if not isinstance(version, str) or not version.strip():
         raise MetricContractConflict(f"Invalid metric contract version in {source}")
     return version.strip()
+
+
+def _prompt_sha256(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    value = payload.get("prompt_sha256") if isinstance(payload, dict) else None
+    return value if isinstance(value, str) and len(value) == 64 else None
 
 
 def _run_contract_version(config_json: str | None, rows: list[dict[str, Any]]) -> str:
@@ -115,7 +127,13 @@ def _describe(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def run_summary(db_path: str, run_id: int, *, job: dict[str, Any] | None = None) -> dict[str, Any]:
+def run_summary(
+    db_path: str,
+    run_id: int,
+    *,
+    job: dict[str, Any] | None = None,
+    warmup_path: Path | None = None,
+) -> dict[str, Any]:
     conn = sqlite3.connect(db_path, timeout=30)
     conn.row_factory = sqlite3.Row
     try:
@@ -142,6 +160,10 @@ def run_summary(db_path: str, run_id: int, *, job: dict[str, Any] | None = None)
     finally:
         conn.close()
     version = _run_contract_version(run["config_json"], rows)
+    config = json.loads(run["config_json"] or "{}")
+    protocol = config.get("measurement_protocol") if isinstance(config, dict) else None
+    if not isinstance(protocol, dict):
+        protocol = None
     expected = int(job["progress_total"]) if job and job["progress_total"] > 0 else None
     integrity_reasons = []
     if job is None:
@@ -161,6 +183,24 @@ def run_summary(db_path: str, run_id: int, *, job: dict[str, Any] | None = None)
         integrity_reasons.append("没有逐请求观测值。")
     if version != METRIC_CONTRACT_VERSION:
         integrity_reasons.append(f"指标口径 {version} 尚未通过当前版本验收。")
+    if protocol is not None:
+        if protocol.get("measured_requests") != len(rows):
+            integrity_reasons.append("固定工作负载的正式请求数与逐请求记录不一致。")
+        if protocol.get("warmup_recorded") != protocol.get("warmup_requests"):
+            integrity_reasons.append("预热请求未全部记录，预热状态不可核验。")
+        if protocol.get("warmup_failures", 0):
+            integrity_reasons.append("预热请求出现失败。")
+        if protocol.get("warmup_requests", 0) and warmup_path is not None:
+            try:
+                with warmup_path.open(newline="", encoding="utf-8") as handle:
+                    reader = csv.DictReader(handle)
+                    if not reader.fieldnames or "condition" not in reader.fieldnames:
+                        raise ValueError("Invalid warmup header")
+                    artifact_count = sum(1 for _ in reader)
+            except (OSError, ValueError, csv.Error):
+                artifact_count = None
+            if artifact_count != protocol.get("warmup_recorded"):
+                integrity_reasons.append("预热观测文件缺失或记录数与运行配置不一致。")
     fields = GROUP_FIELDS.get(run["test_type"], ("concurrency_level",))
     groups: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -174,15 +214,58 @@ def run_summary(db_path: str, run_id: int, *, job: dict[str, Any] | None = None)
             parts.append(f"{text} {suffix}" if value is not None else text)
         return " / ".join(parts)
 
-    sliced = [
-        {"label": group_label(key), **_describe(group)}
-        for key, group in sorted(
-            groups.items(),
-            key=lambda pair: tuple(
-                (item is None, item if item is not None else 0) for item in pair[0]
-            ),
+    planned_by_label = {
+        cell["label"]: cell
+        for cell in (protocol or {}).get("cells", [])
+        if isinstance(cell, dict) and isinstance(cell.get("label"), str)
+    }
+    quality_warnings: list[str] = []
+    sliced = []
+    for key, group in sorted(
+        groups.items(),
+        key=lambda pair: tuple((item is None, item if item is not None else 0) for item in pair[0]),
+    ):
+        label = group_label(key)
+        planned = planned_by_label.get(label)
+        target = planned.get("input_tokens_target") if planned else None
+        actual_tokens = [
+            float(row["prefill_tokens"])
+            for row in group
+            if not row["error"] and row["prefill_tokens"] is not None and row["prefill_tokens"] > 0
+        ]
+        token_median = percentile(actual_tokens, 0.5)
+        drift_pct = (
+            (token_median - target) / target * 100
+            if token_median is not None and isinstance(target, int) and target > 0
+            else None
         )
-    ]
+        slice_data = {
+            "label": label,
+            **_describe(group),
+            "planned_requests": planned.get("measured_requests") if planned else None,
+            "input_tokens": {
+                "target": target,
+                "count": len(actual_tokens),
+                "median": token_median,
+                "target_deviation_pct": drift_pct,
+            },
+        }
+        sliced.append(slice_data)
+        if planned and len(group) != planned["measured_requests"]:
+            integrity_reasons.append(
+                f"{label} 计划 {planned['measured_requests']} 次，实际 {len(group)} 次。"
+            )
+        if drift_pct is not None and abs(drift_pct) > 10:
+            quality_warnings.append(f"{label} 的实际输入 token 中位数偏离目标 {drift_pct:+.1f}%。")
+        if len(group) < 20:
+            quality_warnings.append(f"{label} 仅 {len(group)} 个样本，尾部分位数分辨率有限。")
+    for label, planned in planned_by_label.items():
+        if not any(group["label"] == label for group in sliced):
+            integrity_reasons.append(f"{label} 计划 {planned['measured_requests']} 次，实际 0 次。")
+    token_sources = sorted({row["token_source"] for row in rows if row["token_source"]})
+    token_methods = sorted({row["token_calc_method"] for row in rows if row["token_calc_method"]})
+    if len(token_sources) > 1 or len(token_methods) > 1:
+        quality_warnings.append("本次运行混用了不同的 token 来源或算法；比较前需核对口径。")
     return {
         "metric_contract_version": version,
         "integrity": {
@@ -199,13 +282,13 @@ def run_summary(db_path: str, run_id: int, *, job: dict[str, Any] | None = None)
         "overall": _describe(rows),
         "group_axis": " × ".join(GROUP_AXIS.get(field, field) for field in fields),
         "groups": sliced,
+        "measurement_protocol": protocol,
+        "data_quality": {"warnings": quality_warnings},
         "provenance": {
             "config_json": run["config_json"],
             "system_info_json": run["system_info_json"],
-            "token_sources": sorted({row["token_source"] for row in rows if row["token_source"]}),
-            "token_methods": sorted(
-                {row["token_calc_method"] for row in rows if row["token_calc_method"]}
-            ),
+            "token_sources": token_sources,
+            "token_methods": token_methods,
         },
         "notes": [
             "延迟和吞吐统计只使用成功且数值有限、大于零的请求；零表示未采集。",
@@ -231,7 +314,7 @@ def run_results(
             """SELECT id, session_id, request_index, round, concurrency_level,
                       input_tokens_target, context_length_target, ttft, tpot, tps,
                       total_time, prefill_tokens, decode_tokens, token_source,
-                      token_calc_method, cache_hit_source, error, error_type
+                      token_calc_method, cache_hit_source, error, error_type, extra_metrics
                FROM test_results WHERE run_id = ? AND id > ?
                ORDER BY id LIMIT ? OFFSET ?""",
             (run_id, since_id, limit, offset),
@@ -240,7 +323,13 @@ def run_results(
         conn.close()
     return {
         "total": count,
-        "items": [dict(row) for row in rows],
+        "items": [
+            {
+                **{key: value for key, value in dict(row).items() if key != "extra_metrics"},
+                "prompt_sha256": _prompt_sha256(row["extra_metrics"]),
+            }
+            for row in rows
+        ],
         "limit": limit,
         "offset": offset,
         "since_id": since_id,
@@ -265,6 +354,7 @@ def run_results_csv(db_path: str, run_id: int) -> str:
         "token_calc_method",
         "error_type",
         "metric_contract_version",
+        "prompt_sha256",
     )
     buffer = io.StringIO()
     writer = csv.writer(buffer)
@@ -272,7 +362,9 @@ def run_results_csv(db_path: str, run_id: int) -> str:
     conn = sqlite3.connect(db_path, timeout=30)
     conn.row_factory = sqlite3.Row
     try:
-        stored_columns = tuple(field for field in columns if field != "metric_contract_version")
+        stored_columns = tuple(
+            field for field in columns if field not in {"metric_contract_version", "prompt_sha256"}
+        )
         rows = conn.execute(
             f"SELECT {', '.join(stored_columns)}, extra_metrics, error "
             "FROM test_results WHERE run_id = ? ORDER BY id",
@@ -281,11 +373,13 @@ def run_results_csv(db_path: str, run_id: int) -> str:
         for row in rows:
             values = []
             for field in columns:
-                value = (
-                    _contract_version(row["extra_metrics"], f"request {row['id']}")
-                    if field == "metric_contract_version"
-                    else row[field]
-                )
+                value: Any
+                if field == "metric_contract_version":
+                    value = _contract_version(row["extra_metrics"], f"request {row['id']}")
+                elif field == "prompt_sha256":
+                    value = _prompt_sha256(row["extra_metrics"])
+                else:
+                    value = row[field]
                 if isinstance(value, str) and value.startswith(
                     ("=", "+", "-", "@", "\t", "\r", "\n")
                 ):

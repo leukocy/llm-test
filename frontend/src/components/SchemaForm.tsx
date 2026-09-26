@@ -156,7 +156,7 @@ export function SchemaForm({
     <div className="schema-form">
       {defs.map((def) => {
         const id = `${idPrefix}-${def.name}`;
-        const label = def.schema.title || fieldLabels[def.name] || def.name;
+        const label = fieldLabels[def.name] || def.schema.title || def.name;
         const v = value[def.name];
         return (
           <label key={def.name} className="schema-field" htmlFor={id}>
