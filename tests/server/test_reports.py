@@ -1,117 +1,62 @@
-import pytest
+"""The report API reads persisted observations and redacts raw prompt content."""
+
+import sqlite3
+from pathlib import Path
+
 from fastapi.testclient import TestClient
-from server.app import app
-from server.state import active_runs
 
-client = TestClient(app)
+from core.run_lifecycle import RunStatus
+from server.api import create_app
+from server.settings import Endpoint, Settings
+from server.store import JobStore
 
 
-@pytest.fixture
-def sample_run_data():
-    run_id = "test_run_123"
-    results = [
-        {
-            "session_id": 1,
-            "concurrency": 1,
-            "ttft": 0.1,
-            "tps": 50.0,
-            "tpot": 0.02,
-            "error": None,
-            "start_time": 100,
-            "end_time": 101,
-            "prefill_tokens": 10,
-            "decode_tokens": 50,
+def test_report_survives_job_completion_and_excludes_prompt(tmp_path: Path):
+    db_path = tmp_path / "runs.db"
+    store = JobStore(db_path)
+    job = store.submit(
+        test_type="prefill",
+        endpoint_id="lab",
+        model_id="test-model",
+        parameters={"token_levels": [512], "requests_per_level": 1, "max_tokens": 10},
+    )
+    job_id = job["job_id"]
+    store.claim("test-worker")
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO test_runs(test_id,test_type,model_id) VALUES (?, 'prefill', 'test-model')",
+            (job_id,),
+        )
+        conn.execute(
+            """INSERT INTO test_results(run_id,concurrency_level,input_tokens_target,ttft,tps,error,prompt_text,token_source)
+               VALUES (1,1,512,0.21,42,NULL,'confidential prompt','=SUM(1,2)')"""
+        )
+    assert store.sync_result_run(job_id, "test-worker") == 1
+    store.finish(job_id, "test-worker", outcome=RunStatus.COMPLETED)
+    token = "b" * 40
+    settings = Settings(
+        api_token=token,
+        db_path=db_path,
+        artifact_root=tmp_path / "artifacts",
+        endpoints={
+            "lab": Endpoint(
+                "lab", "Lab", "OpenAI", "http://127.0.0.1:9010/v1", "test-model", "LAB_KEY"
+            )
         },
-        {
-            "session_id": 2,
-            "concurrency": 1,
-            "ttft": 0.12,
-            "tps": 48.0,
-            "tpot": 0.021,
-            "error": None,
-            "start_time": 100,
-            "end_time": 101,
-            "prefill_tokens": 10,
-            "decode_tokens": 50,
-        },
-        {
-            "session_id": 3,
-            "concurrency": 2,
-            "ttft": 0.2,
-            "tps": 45.0,
-            "tpot": 0.022,
-            "error": None,
-            "start_time": 101,
-            "end_time": 102,
-            "prefill_tokens": 10,
-            "decode_tokens": 50,
-        },
-        {
-            "session_id": 4,
-            "concurrency": 2,
-            "ttft": 0.22,
-            "tps": 43.0,
-            "tpot": 0.023,
-            "error": None,
-            "start_time": 101,
-            "end_time": 102,
-            "prefill_tokens": 10,
-            "decode_tokens": 50,
-        },
-    ]
-    config = {
-        "test_type": "concurrency",
-        "base": {"model_id": "gpt-4", "provider": "openai"},
-        "params": {"concurrencies": [1, 2]},
-    }
-
-    active_runs[run_id] = {
-        "status": "completed",
-        "results": results,
-        "config": config,
-        "event_bus": None,
-    }
-    yield run_id
-    # Cleanup
-    if run_id in active_runs:
-        del active_runs[run_id]
-
-
-def test_get_summary(sample_run_data):
-    run_id = sample_run_data
-    response = client.get(f"/api/reports/{run_id}/summary")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["total_requests"] == 4
-    assert data["successful_requests"] == 4
-    assert data["duration_seconds"] == 2.0  # 102 - 100
-    assert data["avg_ttft"] == pytest.approx(0.16)
-
-
-def test_get_analysis(sample_run_data):
-    run_id = sample_run_data
-    response = client.get(f"/api/reports/{run_id}/analysis")
-    assert response.status_code == 200
-    data = response.json()
-
-    # Verify ReportData structure
-    assert data["test_type"] == "concurrency"
-    assert len(data["sections"]) >= 1
-    section = data["sections"][0]
-
-    # Check charts
-    assert len(section["charts"]) > 0
-    chart = section["charts"][0]
-    assert chart["type"] == "line"
-    assert len(chart["series"]) > 0
-
-    # Check stats
-    assert len(section["stats"]) > 0
-    stat_labels = [s["label"] for s in section["stats"]]
-    assert "Duration" in stat_labels
-    assert "TTFT @ C1" in stat_labels
-
-
-def test_get_summary_not_found():
-    response = client.get("/api/reports/nonexistent/summary")
-    assert response.status_code == 404
+    )
+    client = TestClient(create_app(settings, store))
+    headers = {"Authorization": f"Bearer {token}"}
+    summary = client.get(f"/api/v1/jobs/{job_id}/summary", headers=headers)
+    assert summary.status_code == 200
+    assert summary.json()["overall"]["metrics"]["ttft"]["median"] == 0.21
+    html = client.get(f"/api/v1/jobs/{job_id}/report?format=html", headers=headers)
+    assert html.status_code == 200
+    assert "test-model" in html.text
+    assert "confidential prompt" not in html.text
+    results = client.get(f"/api/v1/jobs/{job_id}/results", headers=headers)
+    assert "confidential prompt" not in results.text
+    assert summary.json()["group_axis"] == "输入长度"
+    csv_export = client.get(f"/api/v1/jobs/{job_id}/export.csv", headers=headers)
+    assert csv_export.status_code == 200
+    assert "confidential prompt" not in csv_export.text
+    assert "'=SUM(1,2)" in csv_export.text

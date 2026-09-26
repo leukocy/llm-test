@@ -692,6 +692,8 @@ class BenchmarkRunner:
         render_log=None,
         temperature=None,
         custom_params=None,
+        external_test_id: str | None = None,
+        enable_live_log_server: bool = True,
     ):
         self.placeholder, self.progress_bar, self.status_text = (
             placeholder,
@@ -748,10 +750,11 @@ class BenchmarkRunner:
         # core 不再依赖 streamlit.runtime.scriptrunner（模式 F2 解耦）。
 
         # Start WebSocket Server (Singleton, safe to call multiple times)
-        try:
-            log_server.start()
-        except Exception as e:
-            logger.warning(f"Failed to start WebSocket server: {e}")
+        if enable_live_log_server:
+            try:
+                log_server.start()
+            except Exception as e:
+                logger.warning(f"Failed to start WebSocket server: {e}")
 
         # Use provider factory to create provider instance
         self.provider = get_provider(provider, api_base_url, api_key, model_id)
@@ -803,6 +806,7 @@ class BenchmarkRunner:
         self._last_system_info: dict[str, Any] = {}  # 最近一次 _start_db_run 采集的合并指纹
         self._last_resource_monitor: dict | None = None  # 最近一次测试的监控汇总 dict
         self._last_run_id = None  # 最近一次测试的 DB run id（供 UI 写回归因）
+        self.external_test_id = external_test_id
         self._last_bandwidth: dict[str, Any] = (
             {}
         )  # 最近一次测试的等效带宽结果（供 UI 归因/偏差分析）
@@ -835,6 +839,19 @@ class BenchmarkRunner:
     def set_ui_state(self, bridge) -> None:
         """UI 层注入状态桥（session_state 实现）。"""
         self.ui_state = bridge
+
+    def _mark_control_state(self, signal: str) -> None:
+        """Notify the optional UI bridge after a persisted pause or cancellation."""
+        callback = getattr(self.ui_state, "mark_control_state", None)
+        if callable(callback):
+            callback(signal)
+            return
+        self.ui_state.set("test_running", False)
+        self.ui_state.set("test_paused", signal == "pause")
+        self.ui_state.set("test_status", "Paused" if signal == "pause" else "Cancelled")
+        self.ui_state.set("pause_requested", False)
+        if signal != "pause":
+            self.ui_state.set("stop_requested", False)
 
     @staticmethod
     def _normalize_template_tokens(template_tokens):
@@ -947,6 +964,7 @@ class BenchmarkRunner:
                 ),
                 config=full_config,
                 system_info=merged_sys_info,
+                test_id=self.external_test_id,
             )
             self._test_type_for_db = test_type
             self._last_system_info = merged_sys_info
@@ -2992,8 +3010,6 @@ class BenchmarkRunner:
         max_tokens,
         input_tokens_target=0,
     ):
-        from config.session_state import set_test_cancelled, set_test_paused
-
         self.total_requests = sum(c * rounds_per_level for c in selected_concurrencies)
         self._test_start_time = time.time()  # 记录Test started时间
         self._current_max_tokens = max_tokens  # Save Config用于Restore
@@ -3094,10 +3110,10 @@ class BenchmarkRunner:
                     status,
                 )
                 if signal == "pause":
-                    set_test_paused()
+                    self._mark_control_state("pause")
                     self._show("warning", "TestPaused，进度Saved")
                 else:
-                    set_test_cancelled()
+                    self._mark_control_state("stop")
                     self._show("warning", "Test已停止，进度Saved")
                 return pd.DataFrame(self.results_list)
 
@@ -3120,10 +3136,10 @@ class BenchmarkRunner:
                         status,
                     )
                     if signal == "pause":
-                        set_test_paused()
+                        self._mark_control_state("pause")
                         self._show("warning", "TestPaused，进度Saved")
                     else:
-                        set_test_cancelled()
+                        self._mark_control_state("stop")
                         self._show("warning", "Test已停止，进度Saved")
                     return pd.DataFrame(self.results_list)
 
@@ -3207,8 +3223,6 @@ class BenchmarkRunner:
         return pd.DataFrame(self.results_list)
 
     async def run_prefill_test(self, token_levels, requests_per_level, max_tokens):
-        from config.session_state import set_test_cancelled, set_test_paused
-
         self.total_requests = len(token_levels) * requests_per_level
         self._test_start_time = time.time()
         self._current_max_tokens = max_tokens
@@ -3260,10 +3274,10 @@ class BenchmarkRunner:
                     status,
                 )
                 if signal == "pause":
-                    set_test_paused()
+                    self._mark_control_state("pause")
                     self._show("warning", "TestPaused，进度Saved")
                 else:
-                    set_test_cancelled()
+                    self._mark_control_state("stop")
                     self._show("warning", "Test已停止，进度Saved")
                 return pd.DataFrame(self.results_list)
 

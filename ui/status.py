@@ -18,7 +18,7 @@ class PerformanceInsight(str):
     """Markdown-compatible insight that carries presentation-neutral severity."""
 
     severity: InsightSeverity
-    title: str
+    title: str  # type: ignore[assignment]  # Structured metadata shadows str.title().
     detail: str
 
     def __new__(

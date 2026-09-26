@@ -149,7 +149,7 @@ def generate_performance_insights(df, test_type, model_id=""):
         formatted), and ``severities`` is a parallel list of canonical
         severity strings ("positive"/"neutral"/"warning"/"critical").
     """
-    insights = []
+    insights: list[PerformanceInsight] = []
 
     # Common check
     if df is None or df.empty:
@@ -224,7 +224,7 @@ def _success_rate_fraction(series):
 
 def _analyze_concurrency(df, model_id):
     """Analyze concurrency test results with comprehensive multi-dimensional assessment."""
-    insights = []
+    insights: list[PerformanceInsight] = []
 
     if "concurrency" not in df.columns:
         return insights
@@ -532,7 +532,7 @@ def _analyze_concurrency(df, model_id):
 
 def _analyze_prefill(df, model_id):
     """Analyze prefill scaling and compute density."""
-    insights = []
+    insights: list[PerformanceInsight] = []
 
     target_col = "input_tokens_target"
     speed_col = _get_col(df, "Max_Prefill_Speed")
@@ -660,7 +660,7 @@ def _analyze_prefill(df, model_id):
 
 def _analyze_long_context(df, model_id):
     """Analyze long context retention and decoding stability."""
-    insights = []
+    insights: list[PerformanceInsight] = []
 
     target_col = "context_length_target"
     if target_col not in df.columns:
@@ -823,7 +823,7 @@ def _analyze_long_context(df, model_id):
 
 def _analyze_matrix(df, model_id):
     """Analyze multi-dimensional configuration sweet spots."""
-    insights = []
+    insights: list[PerformanceInsight] = []
 
     tp_col = _get_col(df, "Max_System_Output_Throughput")
     if not tp_col:
@@ -914,7 +914,7 @@ def _analyze_matrix(df, model_id):
 
 def _analyze_segmented(df, model_id):
     """Analyze prefix caching effectiveness."""
-    insights = []
+    insights: list[PerformanceInsight] = []
 
     target_col = "context_length_target"
     if target_col not in df.columns:

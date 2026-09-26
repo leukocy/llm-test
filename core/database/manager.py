@@ -5,6 +5,7 @@ Database管理器
 """
 
 import logging
+import os
 from typing import Any, cast
 
 from core.database.backup import DatabaseBackup
@@ -120,6 +121,7 @@ class DatabaseManager:
         provider: str | None = None,
         config: dict | None = None,
         system_info: dict | None = None,
+        test_id: str | None = None,
     ) -> TestRun:
         """
         开始新Test运行
@@ -138,6 +140,7 @@ class DatabaseManager:
             test_type=test_type,
             model_id=model_id,
             provider=provider,
+            **({"test_id": test_id} if test_id else {}),
         )
         if config:
             run.config = config
@@ -176,9 +179,7 @@ class DatabaseManager:
         Returns:
             Insert记录数
         """
-        results = [
-            TestResult.from_api_result(cast(int, run.id), d) for d in results_data
-        ]
+        results = [TestResult.from_api_result(cast(int, run.id), d) for d in results_data]
         return self._result_repo.insert_batch(results)
 
     def complete_test_run(
@@ -274,9 +275,7 @@ class DatabaseManager:
             return False
         return self._run_repo.update_by(data, "id = ?", (run_id,)) > 0
 
-    def update_run_progress(
-        self, run: TestRun, completed: int, total: int, failed: int = 0
-    ):
+    def update_run_progress(self, run: TestRun, completed: int, total: int, failed: int = 0):
         """UpdateTest进度"""
         run.update_progress(completed, total)
         self._run_repo.update_progress(cast(int, run.id), completed, total, failed)
@@ -284,7 +283,6 @@ class DatabaseManager:
     # ============================================
     # 便捷方法：Log
     # ============================================
-
 
     def log_execution(
         self,
@@ -309,7 +307,6 @@ class DatabaseManager:
     # 便捷方法：报告
     # ============================================
 
-
     # ============================================
     # 便捷方法：Query
     # ============================================
@@ -317,8 +314,6 @@ class DatabaseManager:
     def get_recent_runs(self, limit: int = 20) -> list[TestRun]:
         """Get最近Test运行"""
         return self._run_repo.find_recent(limit)
-
-
 
     def search_runs(self, query: str, limit: int = 50) -> list[TestRun]:
         """搜索Test运行"""
@@ -362,7 +357,6 @@ class DatabaseManager:
             limit=limit,
         )
 
-
     def delete_application_case(self, case_id: str) -> bool:
         """按 case_id 删除。"""
         return self._case_repo.delete_by("case_id = ?", (case_id,)) > 0
@@ -403,9 +397,7 @@ class DatabaseManager:
     # 便捷方法：ImportExport
     # ============================================
 
-    def import_csv(
-        self, csv_path: str, model_id: str | None = None, test_type: str | None = None
-    ):
+    def import_csv(self, csv_path: str, model_id: str | None = None, test_type: str | None = None):
         """Import CSV 文件"""
         return self._import_service.import_csv_file(csv_path, model_id, test_type)
 
@@ -441,11 +433,10 @@ class DatabaseManager:
     # Cleanup
     # ============================================
 
-
     def close(self):
         """CloseDatabaseConnect"""
         self._db.close()
 
 
 # 全局实例
-db_manager = DatabaseManager()
+db_manager = DatabaseManager(os.getenv("LLM_TEST_DB_PATH", "data/benchmark.db"))

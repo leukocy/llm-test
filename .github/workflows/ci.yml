@@ -34,12 +34,15 @@ jobs:
       - name: Run Ruff linter
         run: ruff check . --output-format=github
 
+      - name: Verify platform compose
+        run: docker compose -f compose.platform.yml config -q
+
       - name: Run type checking with mypy
         run: mypy core/ evaluators/ --ignore-missing-imports
         continue-on-error: true
 
       - name: Run Bandit security linter
-        run: bandit -c pyproject.toml -r core evaluators ui utils -f json -o bandit-report.json
+        run: bandit -c pyproject.toml -r core evaluators ui utils server -f json -o bandit-report.json
         continue-on-error: true
 
       - name: Upload Bandit report
@@ -51,6 +54,33 @@ jobs:
   # ============================================
   # 安全测试
   # ============================================
+  frontend:
+    name: React Console Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run format:check
+      - run: npm run build
+
+  platform-image:
+    name: Platform Image Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f Dockerfile.platform -t llm-test-platform:ci .
+      - run: docker run --rm llm-test-platform:ci python -c "import server.api, server.worker"
+
   security-tests:
     name: Security Tests
     runs-on: ubuntu-latest
@@ -74,6 +104,7 @@ jobs:
       - name: Run security tests
         run: |
           pytest tests/test_security.py -v --tb=short
+          pytest tests/server/ -q --tb=short
 
       - name: Verify deployment manifests and worker image
         run: |
@@ -298,13 +329,15 @@ jobs:
   status-check:
     name: Status Check
     runs-on: ubuntu-latest
-    needs: [lint, security-tests, unit-tests, import-check, dependency-check]
+    needs: [lint, frontend, platform-image, security-tests, unit-tests, import-check, dependency-check]
     if: always()
 
     steps:
       - name: Check all jobs status
         run: |
           if [ "${{ needs.lint.result }}" != "success" ] || \
+             [ "${{ needs.frontend.result }}" != "success" ] || \
+             [ "${{ needs.platform-image.result }}" != "success" ] || \
              [ "${{ needs.security-tests.result }}" != "success" ] || \
              [ "${{ needs.unit-tests.result }}" != "success" ] || \
              [ "${{ needs.import-check.result }}" != "success" ] || \

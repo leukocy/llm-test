@@ -20,6 +20,21 @@
 
 ## Quick Start
 
+### New control plane (recommended for single-tenant intranets)
+
+The new React/TypeScript console uses a FastAPI control API and a separate,
+durable worker. Copy `config/endpoints.platform.example.json` to
+`config/endpoints.platform.json` and `.env.platform.example` to `.env.platform`,
+then set the endpoint, API key and a random control token of at least 32 characters.
+
+```bash
+docker compose --env-file .env.platform -f compose.platform.yml up -d --build
+# Open http://127.0.0.1:8000
+```
+
+See [platform setup, architecture and reporting rules](docs/PLATFORM_V3.md).
+The legacy Streamlit entry point remains available below.
+
 ### Prerequisites
 
 - Python 3.10+
@@ -111,7 +126,9 @@ python scripts/download_datasets.py --status
 ## Project Structure
 
 ```text
-├── app.py               # Streamlit entry point
+├── frontend/             # React + TypeScript console
+├── server/               # FastAPI control API and separate worker
+├── app.py                # Legacy Streamlit entry point
 ├── config/              # Configuration & session state
 ├── core/                # Core engine
 │   ├── benchmark_runner.py  # Main test orchestrator
@@ -120,14 +137,14 @@ python scripts/download_datasets.py --status
 │   ├── results/         # Result history service
 │   └── ...
 ├── evaluators/          # 17 quality dataset evaluators (auto-discovered)
-├── ui/                  # Streamlit UI components
+├── ui/                   # Legacy Streamlit UI components
 │   ├── sidebar.py       # Sidebar configuration
 │   ├── test_panels.py   # Test execution panels
 │   ├── charts.py        # Visualization
 │   └── ...
 ├── utils/               # Utilities (logging, presets, tokenizers)
-├── scripts/             # Development & debugging scripts
-└── tests/               # Test suites (653 tests)
+├── scripts/              # Project development scripts
+└── tests/                # Regression, security and integration tests
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full architecture diagram.

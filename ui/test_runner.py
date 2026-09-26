@@ -118,6 +118,14 @@ class SessionStateBridge:
     def set(self, key: str, value) -> None:
         self._ss[key] = value
 
+    def mark_control_state(self, signal: str) -> None:
+        from config.session_state import set_test_cancelled, set_test_paused
+
+        if signal == "pause":
+            set_test_paused()
+        else:
+            set_test_cancelled()
+
 
 class TestExecutor:
     """Test executor class"""

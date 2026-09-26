@@ -8,6 +8,9 @@ __pycache__
 .venv
 venv
 node_modules
+frontend/dist/
+.env.platform
+config/endpoints.platform.json
 data/
 tokenizers/
 datasets/
