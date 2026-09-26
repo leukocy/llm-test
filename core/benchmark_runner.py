@@ -1318,16 +1318,31 @@ class BenchmarkRunner:
         """测试前一次性探测 KV 缓存容量，写入 self._kv_budget（自适应跳过超预算 cell 用）。
 
         优先级：
+          0. warehouse_context['disable_kv_skip'] 显式禁用 → 跑全部 cell，不探测不跳过
           1. warehouse_context['kv_budget'] 手动覆盖（UI 侧边栏 / 测试配置）
-          2. 引擎 /metrics 的 cache_config（优先 group-aware kv_cache_size_tokens，
-             旧版回退 block_size×num_gpu_blocks）
-          3. /v1/models 的 max_model_len——保守上界
-          4. 都拿不到 → _kv_budget=None，不跳过任何 cell（全跑，与原行为一致）
+          2. 引擎 /metrics 的 kv_cache_size_tokens（group-aware 全局容量，已聚合 TP）
+          3. 引擎启动日志的 "GPU KV cache size: N tokens"（全局值，复用
+             _parse_engine_log_kv；需 UI 填写 log_path）
+          4. /v1/models 的 max_model_len——模型上下文上限，作 KV 预算上界（保守，
+             实际 KV 池可能更小，但引擎不在跑 / /metrics 不可达时是唯一来源）
+          5. /metrics 只有 per-rank 的 num_gpu_blocks×block_size（旧版 vLLM）→
+             不可靠（TP>1 下低估全局容量），【不跳过】任何 cell（宁全跑不误杀）
+          6. 都拿不到 → _kv_budget=None，不跳过任何 cell（全跑，与原行为一致）
 
         永不抛异常（探测失败回退到全跑，比中断测试更可取）。
         """
-        # 1. 手动覆盖
+        # 0. 显式禁用：用户勾选"禁用 KV 预算跳过"→ 跑全部 cell，不探测不跳过
         er = self.warehouse_context.get("engine_runtime") or {}
+        if er.get("disable_kv_skip"):
+            self._kv_budget = None
+            self._kv_budget_source = None
+            self._show(
+                "info",
+                "自适应: 已禁用 KV 预算跳过，跑全部 cell（含超预算的，可能触发引擎 OOM/抢占）",
+            )
+            return
+
+        # 1. 手动覆盖
         manual = er.get("kv_budget")
         if manual and int(manual) > 0:
             self._kv_budget = int(manual)
@@ -1335,15 +1350,43 @@ class BenchmarkRunner:
             self._show("info", f"自适应: KV 预算 {self._kv_budget:,} tokens（手动指定）")
             return
 
-        # 2/3. 自动探测（/metrics 优先，/v1/models 兜底）
+        # 2-5. 自动探测（多源，保守优先）
         try:
             from core.engine_metrics import get_cached_kv_capacity
 
             r = get_cached_kv_capacity(self.api_base_url)
-            self._kv_budget = r.get("kv_capacity_tokens")
-            self._kv_budget_source = r.get("source")
         except Exception as e:  # noqa: BLE001
             logger.warning(f"KV 预算探测失败（不跳过，全跑）: {e}")
+            r = {}
+
+        source = r.get("source")
+        capacity = r.get("kv_capacity_tokens")
+        per_rank = r.get("per_rank_capacity")
+
+        # 2. /metrics 全局容量（kv_cache_size_tokens）→ 可信，直接用作 budget
+        if source == "metrics" and capacity:
+            self._kv_budget = int(capacity)
+            self._kv_budget_source = "metrics"
+        # 3. /metrics 没给全局值 → 回退启动日志的全局 KV 容量
+        elif (log_kv := self._parse_engine_log_kv()) is not None:
+            self._kv_budget = int(log_kv)
+            self._kv_budget_source = "engine_log"
+        # 4. /v1/models 的 max_model_len（保守上界）
+        elif source == "models" and capacity:
+            self._kv_budget = int(capacity)
+            self._kv_budget_source = "models"
+        # 5. /metrics 只有 per-rank 值 → 不可靠，不跳过（保守不误杀）
+        elif source == "metrics_per_rank":
+            self._kv_budget = None
+            self._kv_budget_source = None
+            self._show(
+                "warning",
+                f"自适应: /metrics 仅探测到 per-rank KV 容量 {per_rank:,} tokens"
+                f"（旧版 vLLM，未聚合 TP，不可靠），不跳过任何 cell（全跑）",
+            )
+            return
+        # 6. 都拿不到
+        else:
             self._kv_budget = None
             self._kv_budget_source = None
 
