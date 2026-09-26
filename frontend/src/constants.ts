@@ -7,6 +7,7 @@ export type JobType =
   | "matrix"
   | "stability"
   | "custom_text"
+  | "dataset"
   | "quality";
 
 export const scenarios: {
@@ -94,6 +95,17 @@ export const scenarios: {
       suffix_instruction: "",
       max_tokens: 256,
       avoid_cache: true,
+    },
+  },
+  {
+    id: "dataset",
+    label: "数据集压测",
+    description: "对一组提示词逐行发起请求并测量性能",
+    parameters: {
+      rows: [{ prompt: "请用一句话介绍向量数据库。" }],
+      concurrency: 4,
+      max_tokens: 256,
+      rounds: 1,
     },
   },
   {

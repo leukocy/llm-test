@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ui.warehouse_charts import (
+from core.warehouse.charts import (
     build_box_figure,
     build_compare_table,
     build_engine_timeline_figure,

@@ -28,6 +28,41 @@ class HeadlessOutput:
         return None
 
 
+class _LogTee:
+    """runner render_log 回调：把 BenchmarkLogger 的增量条目追加到 logs.jsonl。
+
+    BenchmarkLogger.entries 有容量上限(500), 全量重放式回调只写未见过的后缀,
+    落盘文件才是完整轨迹——GET /api/v1/jobs/{id}/logs 据此读取。
+    """
+
+    def __init__(self, path) -> None:
+        self._path = path
+        self._seen = 0
+
+    def __call__(self, logger) -> None:
+        entries = getattr(logger, "entries", None) or []
+        fresh = entries[self._seen :]
+        if not fresh:
+            return
+        try:
+            with self._path.open("a", encoding="utf-8") as handle:
+                for entry in fresh:
+                    handle.write(
+                        json.dumps(
+                            {
+                                "timestamp": getattr(entry, "timestamp", None),
+                                "level": str(getattr(entry, "level", "INFO")),
+                                "message": str(getattr(entry, "message", "")),
+                            },
+                            ensure_ascii=False,
+                        )
+                        + "\n"
+                    )
+        except OSError:
+            return
+        self._seen = len(entries)
+
+
 @dataclass
 class RunOutput:
     result_run_id: int | None = None
@@ -89,6 +124,7 @@ async def execute_job(
     from core.benchmark_runner import BenchmarkRunner
 
     output = HeadlessOutput()
+    log_tee = _LogTee(job_dir / "logs.jsonl")
     runner = BenchmarkRunner(
         placeholder=output,
         progress_bar=output,
@@ -102,6 +138,7 @@ async def execute_job(
         provider=endpoint.provider,
         external_test_id=job_id,
         enable_live_log_server=False,
+        render_log=log_tee,
         hf_tokenizer_model_id=run_config.get("hf_tokenizer_model_id"),
         latency_offset=run_config.get("latency_offset", 0.0),
         thinking_enabled=run_config.get("thinking_enabled"),
@@ -123,10 +160,36 @@ async def execute_job(
         "custom_text": runner.run_custom_text_test,
     }
     try:
-        await methods[job["test_type"]](**params)
+        if job["test_type"] == "dataset":
+            # 行源: 内联 rows 或 dataset_loader 已存数据集; 预算按加载后实数复核
+            if params.get("rows"):
+                dataset_rows = params["rows"]
+            else:
+                from core.dataset_loader import DatasetLoader
+
+                frame = DatasetLoader().load_dataset(params["dataset"])
+                if frame is None:
+                    raise RuntimeError(f"数据集不存在或无法读取: {params['dataset']}")
+                dataset_rows = frame.to_dict("records")
+            rounds = params.get("rounds", 1)
+            if len(dataset_rows) * rounds > 1000:
+                raise RuntimeError(
+                    f"数据集任务超出 1000 请求预算（{len(dataset_rows)} 行 × {rounds} 轮）"
+                )
+            await runner.run_dataset_test(
+                dataset_rows,
+                params["concurrency"],
+                params["max_tokens"],
+                rounds=rounds,
+                dataset_filename=params.get("dataset") or "inline_rows",
+            )
+        else:
+            await methods[job["test_type"]](**params)
     finally:
         if runner._db_run is not None:
             runner._complete_db_run(success=False)
+        # 兜底冲刷: 最后一次 throttled render_log 可能漏掉尾部条目
+        log_tee(runner.logger)
     if runner.last_run_id is None:
         raise RuntimeError("Measurement was not persisted")
     recorded = len(runner.results_list)

@@ -36,8 +36,12 @@ export function Detail({
   const [events, setEvents] = useState<JobEvent[]>([]);
   const [results, setResults] = useState<RequestResult[]>([]);
   const [error, setError] = useState("");
+  const [logs, setLogs] = useState<LogLine[]>([]);
   const resultsRef = useRef<RequestResult[]>([]);
+  const logsRef = useRef<LogLine[]>([]);
   resultsRef.current = results;
+
+  type LogLine = { id: number; timestamp: number | null; level: string; message: string };
   useEffect(() => {
     let alive = true;
     setSummary(null);
@@ -105,6 +109,45 @@ export function Detail({
       window.clearInterval(timer);
     };
   }, [job.job_id, job.result_run_id, job.status, token]);
+
+  // 执行日志：行号游标增量轮询（活动任务每 2 秒, 完成的任务拉一次全量）
+  useEffect(() => {
+    let alive = true;
+    setLogs([]);
+    logsRef.current = [];
+    const completed = !activeStates.has(job.status);
+
+    async function fetchLogs(since: number) {
+      if (!alive) return;
+      try {
+        const data = await api<{ items: LogLine[] }>(
+          token,
+          `/api/v1/jobs/${job.job_id}/logs?since_id=${since}&limit=500`,
+        );
+        if (!alive || !data.items.length) return;
+        setLogs((prev) => {
+          const seen = new Set(prev.map((line) => line.id));
+          const fresh = data.items.filter((line) => !seen.has(line.id));
+          return fresh.length ? [...prev, ...fresh] : prev;
+        });
+        logsRef.current = [...logsRef.current, ...data.items];
+      } catch {
+        /* 日志不可达不阻断页面 */
+      }
+    }
+
+    void fetchLogs(0);
+    if (completed) {
+      return () => {
+        alive = false;
+      };
+    }
+    const timer = window.setInterval(() => void fetchLogs(logsRef.current.length), 2000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [job.job_id, job.status, token]);
 
   async function download(format: "json" | "html" | "csv") {
     try {
@@ -406,6 +449,25 @@ export function Detail({
                 : "检查任务事件或 worker 日志了解原因。"
             }
           />
+        </section>
+      )}
+      {logs.length > 0 && (
+        <section className="surface">
+          <div className="section-head">
+            <div>
+              <span className="eyebrow">EXECUTION LOG</span>
+              <h2>执行日志</h2>
+            </div>
+            <span className="minor-tag">{logs.length} 条</span>
+          </div>
+          <div className="log-console" role="log" aria-label="执行日志">
+            {logs.map((line) => (
+              <div className={`log-line log-${line.level.toLowerCase()}`} key={line.id}>
+                <span className="log-level">{line.level}</span>
+                <span className="log-message">{line.message}</span>
+              </div>
+            ))}
+          </div>
         </section>
       )}
       <section className="surface">

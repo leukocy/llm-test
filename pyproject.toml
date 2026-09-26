@@ -21,7 +21,6 @@ classifiers = [
   "Topic :: Software Development :: Testing"
 ]
 dependencies = [
-  "streamlit>=1.50.0,<2",
   "pandas>=2.0.0,<3",
   "numpy>=2.0.0,<3",
   "plotly>=6.0.0,<7",
@@ -162,11 +161,12 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 ignore_missing_imports = true
 module = [
-  "streamlit.*",
   "plotly.*",
   "transformers.*",
   "torch.*",
-  "modelscope.*"
+  "modelscope.*",
+  "datasets",
+  "datasets.*"
 ]
 
 # pytest configuration
@@ -271,7 +271,7 @@ select = [
 unfixable = []
 
 [tool.ruff.lint.isort]
-known-first-party = ["config", "core", "ui", "utils", "evaluators"]
+known-first-party = ["config", "core", "server", "utils", "evaluators"]
 
 [tool.ruff.lint.per-file-ignores]
 "app_old.py" = ["ALL"]

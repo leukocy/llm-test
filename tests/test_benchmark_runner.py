@@ -285,10 +285,6 @@ class TestBenchmarkRunnerSystemInfo:
 
     def test_get_system_info_engine_name_empty_without_override(self, runner):
         """Test引擎名称来自 provider"""
-        import streamlit as st
-
-        st.session_state.custom_sys_info = {}
-
         info = runner.get_system_info()
         # Engine refers to the inference backend, so provider names are not a fallback.
         assert info["engine_name"] == ""
@@ -762,10 +758,6 @@ class TestBenchmarkRunnerResume:
     @pytest.mark.asyncio
     async def test_non_resume_runs_all_batches(self, runner, tmp_path):
         """非resume模式下从头运行所有批次"""
-        import streamlit as st
-
-        st.session_state.is_resuming = False
-
         runner._start_db_run = MagicMock()
         runner._batch_save_results_to_db = MagicMock()
         runner._complete_db_run = MagicMock()
@@ -827,12 +819,6 @@ class TestBenchmarkRunnerResume:
     @pytest.mark.asyncio
     async def test_pause_save_progress_uses_completed_count(self, runner, tmp_path):
         """pause时 _save_progress 使用 completed_requests 而非 session_counter"""
-        import streamlit as st
-
-        st.session_state.is_resuming = False
-        st.session_state.stop_requested = False
-        st.session_state.pause_requested = False
-
         runner._start_db_run = MagicMock()
         runner._batch_save_results_to_db = MagicMock()
         runner._complete_db_run = MagicMock()
@@ -864,10 +850,11 @@ class TestBenchmarkRunnerResume:
         runner._check_control_signal = mock_check_signal
 
         try:
-            with patch("config.session_state.set_test_paused", MagicMock()):
-                df = await runner.run_concurrency_test(
-                    [2], rounds_per_level=3, max_tokens=10, input_tokens_target=20
-                )
+            # runner 的控制面写经由 ui_state 桥(NullStateBridge 内存 dict)吸收,
+            # 不再需要 patch 已删除的 config.session_state.set_test_paused
+            df = await runner.run_concurrency_test(
+                [2], rounds_per_level=3, max_tokens=10, input_tokens_target=20
+            )
         finally:
             runner._check_control_signal = original_check
 

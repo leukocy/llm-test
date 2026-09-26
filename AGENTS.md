@@ -6,7 +6,7 @@ This file provides guidance to AI coding agents when working with code in this r
 
 ## Project Overview
 
-LLM Benchmark Platform - a performance and quality evaluation platform. The primary single-tenant interface is React/TypeScript in `frontend/`, backed by the FastAPI control API and independent worker in `server/`. `app.py` is the legacy Streamlit interface. Python 3.10+, install with `pip install -e ".[dev]"`.
+LLM Benchmark Platform - a performance and quality evaluation platform. The single-tenant interface is React/TypeScript in `frontend/`, backed by the FastAPI control API and independent worker in `server/` (the Streamlit interface was retired in 2026-09). Python 3.10+, install with `pip install -e ".[dev]"`.
 
 ## Commands
 
@@ -19,8 +19,8 @@ python -m uvicorn server.main:app --reload
 python -m server.worker
 cd frontend && npm ci && npm run dev
 
-# Run the legacy UI
-streamlit run app.py
+# Frontend production build (served by the API at /)
+cd frontend && npm ci && npm run build
 
 # Run all tests
 python -m pytest tests/ -v
@@ -38,14 +38,14 @@ ruff check .
 ruff format .
 
 # Type check
-mypy core/ evaluators/ utils/
+mypy core/ server/ evaluators/ utils/
 ```
 
 ## Architecture
 
 ### Entry Point & UI Layer
 
-`frontend/src/App.tsx` → React shell, with reusable components in `frontend/src/components.tsx` and screens in `frontend/src/pages/`. `server/main.py` → FastAPI app, with versioned routes in `server/api.py`. `server/worker.py` claims persisted jobs and calls the existing measurement engine through `server/runner_adapter.py`. `server/store.py` owns the SQLite WAL queue, event log and saved test plans; `server/specs.py` validates bounded run specifications. `server/analytics.py` calculates report statistics from persisted observations. `server/warehouse.py` provides bounded reads, matrix/inventory views and exports over legacy measurements; `server/quality_export.py` exports quality failures safely. `app.py`, `ui/` and `config/session_state.py` remain as the legacy Streamlit path.
+`frontend/src/App.tsx` → React shell, with reusable components in `frontend/src/components.tsx` and screens in `frontend/src/pages/`. `server/main.py` → FastAPI app, with versioned routes in `server/api.py`. `server/worker.py` claims persisted jobs and calls the existing measurement engine through `server/runner_adapter.py`. `server/store.py` owns the SQLite WAL queue, event log and saved test plans; `server/specs.py` validates bounded run specifications. `server/analytics.py` calculates report statistics from persisted observations. `server/warehouse.py` provides bounded reads, matrix/inventory views and exports over legacy measurements; `server/figures.py` renders plotly figure JSON for the SPA; `server/quality_export.py` exports quality failures safely. The Streamlit path (`app.py`, `ui/`, `config/session_state.py`) was removed; shared chart builders live in `core/warehouse/charts.py`.
 
 ### Provider System
 
@@ -114,5 +114,5 @@ Evaluators in `evaluators/` are auto-discovered via `@register_evaluator` decora
 ## Code Style
 
 - Ruff config in `pyproject.toml`: line length 100, double quotes, isort enabled
-- First-party packages: `config`, `core`, `ui`, `utils`, `evaluators`
+- First-party packages: `config`, `core`, `server`, `utils`, `evaluators`
 - pytest markers: `slow`, `integration`, `security`

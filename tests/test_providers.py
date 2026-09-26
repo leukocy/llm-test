@@ -19,9 +19,9 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 import requests
-import streamlit as st
 
 import core.providers.openai as openai_provider
+from core import cancel_state
 from core.providers.base import LLMProvider, get_request_timeout_seconds
 from core.providers.factory import get_provider
 from core.providers.gemini import GeminiProvider
@@ -33,11 +33,11 @@ from core.providers.openai import OpenAIProvider
 def reset_stop_flag():
     """Reset stop flag before each test to ensure clean state"""
     openai_provider.set_stop_requested(False)
-    st.session_state["stop_requested"] = False
+    cancel_state.reset_all()
     yield
     # Reset after test as well
     openai_provider.set_stop_requested(False)
-    st.session_state["stop_requested"] = False
+    cancel_state.reset_all()
 
 
 # ============================================================================
@@ -1124,7 +1124,7 @@ class TestGeminiProvider:
         )
 
         # Set stop flag AFTER the autouse fixture has reset it
-        st.session_state["stop_requested"] = True
+        openai_provider.set_stop_requested(True)
 
         # The cancellation is checked during streaming
         # We need to mock the streaming to check the flag
@@ -1142,7 +1142,7 @@ class TestGeminiProvider:
             async def __anext__(self):
                 if not self.checked:
                     self.checked = True
-                    if st.session_state.get("stop_requested", False):
+                    if openai_provider.is_stop_requested():
                         raise asyncio.CancelledError("Test stopped by user.")
                     # If not stopped, would yield data here
                 raise StopAsyncIteration

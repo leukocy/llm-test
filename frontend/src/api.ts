@@ -81,6 +81,7 @@ export type Job = {
   test_type: string;
   endpoint_id: string;
   model_id: string;
+  parent_job_id: string | null;
   parameters: Record<string, unknown>;
   progress_completed: number;
   progress_total: number;

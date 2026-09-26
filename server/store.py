@@ -239,12 +239,25 @@ class JobStore:
         return job
 
     def list(
-        self, *, status: RunStatus | None = None, limit: int = 50, offset: int = 0
+        self,
+        *,
+        status: RunStatus | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        parent_job_id: str | None = None,
     ) -> tuple[JobList, int]:
         if not 1 <= limit <= 200 or offset < 0:
             raise ValueError("Invalid pagination")
-        where = "WHERE status = ?" if status else ""
-        params: tuple[Any, ...] = (status.value,) if status else ()
+        clauses: list[str] = []
+        params_list: list[Any] = []
+        if status:
+            clauses.append("status = ?")
+            params_list.append(status.value)
+        if parent_job_id:
+            clauses.append("parent_job_id = ?")
+            params_list.append(parent_job_id)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params = tuple(params_list)
         with self._connection() as conn:
             count = int(
                 conn.execute(f"SELECT COUNT(*) FROM control_jobs {where}", params).fetchone()[0]

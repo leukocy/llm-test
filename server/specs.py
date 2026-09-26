@@ -122,6 +122,28 @@ class CustomTextSpec(StrictSpec):
         return self
 
 
+class DatasetPerfSpec(StrictSpec):
+    """数据集性能测试：内联行或 dataset_loader 已存数据集（二选一）。"""
+
+    dataset: str | None = Field(default=None, max_length=120)
+    rows: list[dict[str, str]] | None = Field(default=None, max_length=1000)
+    concurrency: int = Field(ge=1, le=128)
+    max_tokens: int = Field(ge=1, le=8192)
+    rounds: int = Field(default=1, ge=1, le=20)
+
+    @model_validator(mode="after")
+    def one_source(self) -> DatasetPerfSpec:
+        if bool(self.dataset) == bool(self.rows):
+            raise ValueError("dataset 与 rows 必须且只能提供一个")
+        if self.rows:
+            for i, row in enumerate(self.rows):
+                if not (row.get("prompt") or "").strip():
+                    raise ValueError(f"第 {i + 1} 行缺少非空 prompt")
+            if len(self.rows) * self.rounds > 1000:
+                raise ValueError("A job may issue at most 1000 requests")
+        return self
+
+
 class QualitySpec(StrictSpec):
     datasets: list[str] = Field(min_length=1, max_length=8)
     max_samples: int = Field(ge=1, le=1000)
@@ -156,6 +178,7 @@ SPEC_MODELS: dict[str, type[StrictSpec]] = {
     "matrix": MatrixSpec,
     "stability": StabilitySpec,
     "custom_text": CustomTextSpec,
+    "dataset": DatasetPerfSpec,
     "quality": QualitySpec,
 }
 
@@ -192,6 +215,7 @@ class JobSubmission(StrictSpec):
         "matrix",
         "stability",
         "custom_text",
+        "dataset",
         "quality",
     ]
     parameters: dict
@@ -238,6 +262,8 @@ def expected_requests(test_type: str, parameters: dict) -> int:
         )
     if test_type == "quality":
         return int(len(parameters["datasets"]) * parameters["max_samples"])
+    if test_type == "dataset" and parameters.get("rows"):
+        return int(len(parameters["rows"]) * parameters.get("rounds", 1))
     return 0
 
 

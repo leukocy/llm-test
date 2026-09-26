@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ui.warehouse_charts import (
+from core.warehouse.charts import (
     COMPARE_METRIC_GROUPS,
     build_box_figure,
     build_compare_bar_figure,
@@ -39,7 +39,7 @@ def trend_figure(
     db_manager, selection, metric: str, group_dim: str, publishable_only: bool
 ) -> dict:
     """趋势图：指标 × 日期 × 分组维度。"""
-    from ui.warehouse_charts import TREND_DIMS, TREND_METRICS
+    from core.warehouse.charts import TREND_DIMS, TREND_METRICS
 
     if metric not in TREND_METRICS or group_dim not in TREND_DIMS:
         raise ValueError(f"未知指标或维度: {metric} / {group_dim}")
@@ -67,7 +67,7 @@ def compare_figures(db_manager, test_ids: list[str]) -> dict:
     table: dict[str, dict[str, Any]] = {}
     figures: dict[str, Any] = {}
     if rows:
-        from ui.warehouse_charts import build_compare_table
+        from core.warehouse.charts import build_compare_table
 
         table = build_compare_table(rows)
         for group_name in COMPARE_METRIC_GROUPS:

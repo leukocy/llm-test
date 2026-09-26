@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal, cast
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from core.run_lifecycle import InvalidRunTransition, RunStatus
 from server.analytics import run_results, run_results_csv, run_summary
@@ -23,6 +23,7 @@ from server.settings import Settings
 from server.specs import (
     JobSubmission,
     PresetSubmission,
+    RunConfig,
     StrictSpec,
     expected_requests,
     spec_catalog,
@@ -81,6 +82,35 @@ class RestoreBody(StrictSpec):
     path: str = Field(min_length=1, max_length=500)
 
 
+class BatchItem(StrictSpec):
+    test_type: Literal[
+        "concurrency",
+        "prefill",
+        "segmented_prefill",
+        "long_context",
+        "matrix",
+        "stability",
+        "custom_text",
+        "dataset",
+        "quality",
+    ]
+    parameters: dict[str, Any]
+    run_config: RunConfig | None = None
+
+    @model_validator(mode="after")
+    def validate_parameters(self) -> BatchItem:
+        from server.specs import SPEC_MODELS, TypeAdapter
+
+        parsed = TypeAdapter(SPEC_MODELS[self.test_type]).validate_python(self.parameters)
+        self.parameters = parsed.model_dump()
+        return self
+
+
+class BatchSubmission(StrictSpec):
+    endpoint_id: str = Field(min_length=1, max_length=64)
+    items: list[BatchItem] = Field(min_length=1, max_length=10)
+
+
 def create_app(settings: Settings | None = None, store: JobStore | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     store = store or JobStore(settings.db_path)
@@ -136,10 +166,33 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
 
     @app.get("/api/v1/specs", dependencies=[auth])
     def specs():
-        """8 个测试类型的展示名 + JSON Schema + 运行配置旋钮 schema（驱动前端表单）。"""
+        """9 个测试类型的展示名 + JSON Schema + 运行配置旋钮 schema（驱动前端表单）。"""
         from server.specs import RunConfig
 
         return {"items": spec_catalog(), "run_config_schema": RunConfig.model_json_schema()}
+
+    @app.get("/api/v1/environment", dependencies=[auth])
+    def environment():
+        """执行环境快照（硬件指纹 / 系统 / 版本，env_overview 的 API 版）。"""
+        from core.system_info import get_cached_system_info
+
+        return get_cached_system_info(wait=False) or {}
+
+    @app.get("/api/v1/datasets", dependencies=[auth])
+    def datasets():
+        """可用数据集目录：质量评估注册表 + dataset_loader 自定义集。"""
+        from core.dataset_loader import DatasetLoader
+        from core.dataset_manager import list_available_datasets
+
+        try:
+            builtin = list_available_datasets()
+        except Exception:  # noqa: BLE001  注册表读取失败不阻断自定义集
+            builtin = []
+        try:
+            custom = DatasetLoader().list_datasets()
+        except Exception:  # noqa: BLE001
+            custom = []
+        return {"builtin": builtin, "custom": custom}
 
     @app.get("/api/v1/presets", dependencies=[auth])
     def presets():
@@ -560,11 +613,89 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
     @app.get("/api/v1/jobs", dependencies=[auth])
     def list_jobs(
         status: RunStatus | None = None,
+        parent_job_id: Annotated[str | None, Query(max_length=64)] = None,
         limit: Annotated[int, Query(ge=1, le=200)] = 50,
         offset: Annotated[int, Query(ge=0)] = 0,
     ):
-        items, total = store.list(status=status, limit=limit, offset=offset)
+        items, total = store.list(
+            status=status, limit=limit, offset=offset, parent_job_id=parent_job_id
+        )
         return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+    @app.post("/api/v1/jobs/batch", dependencies=[auth], status_code=201)
+    def submit_batch(
+        body: BatchSubmission,
+        idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+    ):
+        """批量提交：同一批次 uuid 写入各子任务 parent_job_id（无父行）。
+
+        子任务共享批次幂等键前缀（{key}:{i}），重放返回原任务;
+        单作业 worker 天然串行执行, 与 Streamlit 批量语义一致。
+        """
+        if body.endpoint_id not in settings.endpoints:
+            raise HTTPException(422, "Unknown endpoint ID")
+        if idempotency_key is not None and not _KEY.fullmatch(idempotency_key):
+            raise HTTPException(422, "Invalid idempotency key")
+        endpoint = settings.endpoints[body.endpoint_id]
+        try:
+            endpoint.api_key()
+        except RuntimeError as exc:
+            raise HTTPException(503, "Endpoint credential unavailable") from exc
+
+        import uuid as _uuid
+
+        batch_id = idempotency_key or _uuid.uuid4().hex[:16]
+        jobs = []
+        try:
+            for index, item in enumerate(body.items):
+                parameters = dict(item.parameters)
+                if item.run_config:
+                    parameters["_run_config"] = item.run_config.model_dump(exclude_none=True)
+                jobs.append(
+                    store.submit(
+                        test_type=item.test_type,
+                        endpoint_id=endpoint.id,
+                        model_id=endpoint.model_id,
+                        parameters=parameters,
+                        progress_total=expected_requests(item.test_type, item.parameters),
+                        idempotency_key=f"{batch_id}:{index}",
+                        parent_job_id=batch_id,
+                    )
+                )
+        except IdempotencyConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {"batch_id": batch_id, "items": jobs}
+
+    @app.get("/api/v1/jobs/{job_id}/logs", dependencies=[auth])
+    def job_logs(
+        job_id: str,
+        since_id: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+    ):
+        """作业执行日志（worker 落盘的 logs.jsonl，按行号游标增量读取）。"""
+        job_or_404(job_id)
+        path = settings.artifact_root / job_id / "logs.jsonl"
+        items: list[dict[str, Any]] = []
+        if path.is_file():
+            try:
+                with path.open(encoding="utf-8") as handle:
+                    for line_no, line in enumerate(handle, start=1):
+                        if line_no <= since_id:
+                            continue
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            entry = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        entry["id"] = line_no
+                        items.append(entry)
+                        if len(items) >= limit:
+                            break
+            except OSError:
+                pass
+        return {"items": items, "since_id": since_id}
 
     def job_or_404(job_id: str) -> dict:
         try:

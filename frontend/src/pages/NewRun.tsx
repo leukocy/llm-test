@@ -320,7 +320,9 @@ export function NewRun({
               </button>
             </div>
           </div>
-          {mode === "form" && specSchema ? (
+          {mode === "form" && type === "dataset" ? (
+            <DatasetParams value={params} onChange={setParams} />
+          ) : mode === "form" && specSchema ? (
             <SchemaForm
               schema={specSchema}
               value={params}
@@ -400,6 +402,118 @@ export function NewRun({
             任务创建成功后可在「运行记录」里查看实时状态与报告。
           </div>
         </aside>
+      </div>
+    </div>
+  );
+}
+
+/** dataset 场景专用参数面板: 行源二选一(内联 JSON rows / 已存数据集名) + 标量参数。 */
+function DatasetParams({
+  value,
+  onChange,
+}: {
+  value: Record<string, unknown>;
+  onChange: (next: Record<string, unknown>) => void;
+}) {
+  const source = value.dataset ? "stored" : "inline";
+  const rowsText = JSON.stringify(value.rows ?? [{ prompt: "" }], null, 2);
+  const [rawRows, setRawRows] = useState(rowsText);
+  const [rowsError, setRowsError] = useState("");
+  useEffect(() => setRawRows(JSON.stringify(value.rows ?? [{ prompt: "" }], null, 2)), [value.rows]);
+
+  function setScalar(key: string, v: unknown) {
+    onChange({ ...value, [key]: v });
+  }
+
+  function commitRows(text: string) {
+    setRawRows(text);
+    try {
+      const parsed = JSON.parse(text) as { prompt?: string }[];
+      if (!Array.isArray(parsed) || !parsed.length) throw new Error("bad");
+      setRowsError("");
+      onChange({ ...value, dataset: undefined, rows: parsed });
+    } catch {
+      setRowsError('rows 必须是 JSON 数组，如 [{"prompt": "问题"}]');
+    }
+  }
+
+  return (
+    <div className="dataset-params">
+      <div className="mode-toggle" role="tablist" aria-label="数据集来源">
+        <button
+          role="tab"
+          aria-selected={source === "inline"}
+          className={source === "inline" ? "active" : ""}
+          onClick={() => onChange({ ...value, dataset: undefined, rows: value.rows ?? [] })}
+        >
+          内联行
+        </button>
+        <button
+          role="tab"
+          aria-selected={source === "stored"}
+          className={source === "stored" ? "active" : ""}
+          onClick={() => onChange({ ...value, rows: undefined, dataset: "" })}
+        >
+          已存数据集
+        </button>
+      </div>
+      {source === "inline" ? (
+        <label className="schema-field">
+          <span className="input-label">
+            rows（JSON 数组，每行一个 prompt）<em className="required-mark">*</em>
+          </span>
+          <textarea
+            className="json-editor"
+            spellCheck={false}
+            value={rawRows}
+            onChange={(event) => commitRows(event.target.value)}
+            aria-label="数据集 rows JSON"
+          />
+          {rowsError && <small className="form-error">{rowsError}</small>}
+        </label>
+      ) : (
+        <label className="schema-field">
+          <span className="input-label">
+            已存数据集文件名（datasets/ 目录下）<em className="required-mark">*</em>
+          </span>
+          <input
+            value={String(value.dataset ?? "")}
+            placeholder="如 my_prompts.json"
+            onChange={(event) => setScalar("dataset", event.target.value)}
+          />
+        </label>
+      )}
+      <div className="schema-form">
+        <label className="schema-field">
+          <span className="input-label">并发数</span>
+          <input
+            type="number"
+            min={1}
+            max={128}
+            value={Number(value.concurrency ?? 4)}
+            onChange={(event) => setScalar("concurrency", Number(event.target.value))}
+          />
+        </label>
+        <label className="schema-field">
+          <span className="input-label">最大输出 tokens</span>
+          <input
+            type="number"
+            min={1}
+            max={8192}
+            value={Number(value.max_tokens ?? 256)}
+            onChange={(event) => setScalar("max_tokens", Number(event.target.value))}
+          />
+        </label>
+        <label className="schema-field">
+          <span className="input-label">轮数</span>
+          <input
+            type="number"
+            min={1}
+            max={20}
+            value={Number(value.rounds ?? 1)}
+            onChange={(event) => setScalar("rounds", Number(event.target.value))}
+          />
+        </label>
       </div>
     </div>
   );

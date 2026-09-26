@@ -6,6 +6,7 @@ import {
   useLocation,
   useNavigate,
   useParams,
+  useSearchParams,
 } from "react-router-dom";
 import { api, ApiError, type Endpoint, type Job } from "./api";
 import { activeStates, type JobType } from "./constants";
@@ -14,6 +15,8 @@ import { Login } from "./pages/Login";
 import { NewRun } from "./pages/NewRun";
 import { Detail } from "./pages/Detail";
 import { Warehouse } from "./pages/Warehouse";
+import { Batch } from "./pages/Batch";
+import { Environment } from "./pages/Environment";
 
 const TOKEN_KEY = "llm-test-token";
 
@@ -152,10 +155,22 @@ export default function App() {
             <span>＋</span> 创建测量
           </button>
           <button
+            className={navActive("/batch") ? "active" : ""}
+            onClick={nav("/batch")}
+          >
+            <span>▣</span> 批量测量
+          </button>
+          <button
             className={navActive("/warehouse") ? "active" : ""}
             onClick={nav("/warehouse")}
           >
             <span>▦</span> 数据仓库
+          </button>
+          <button
+            className={navActive("/environment") ? "active" : ""}
+            onClick={nav("/environment")}
+          >
+            <span>▨</span> 环境信息
           </button>
         </nav>
         <div className="sidebar-bottom">
@@ -238,6 +253,16 @@ export default function App() {
               }
             />
             <Route
+              path="/batch"
+              element={
+                <Batch
+                  endpoints={endpoints}
+                  token={token}
+                  onSubmitted={(batchId) => navigate(`/runs?batch=${batchId}`)}
+                />
+              }
+            />
+            <Route
               path="/warehouse/*"
               element={
                 <Warehouse
@@ -247,6 +272,7 @@ export default function App() {
                 />
               }
             />
+            <Route path="/environment" element={<Environment token={token} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
@@ -374,14 +400,18 @@ function RunsList({
   onOpenNew: () => void;
 }) {
   const [filter, setFilter] = useState("");
+  const [searchParams] = useSearchParams();
+  const batchId = searchParams.get("batch") || "";
   const visible = useMemo(
     () =>
-      jobs.filter((job) =>
-        `${job.model_id} ${job.test_type} ${job.job_id} ${job.status}`
-          .toLowerCase()
-          .includes(filter.toLowerCase()),
+      jobs.filter(
+        (job) =>
+          (!batchId || job.parent_job_id === batchId) &&
+          `${job.model_id} ${job.test_type} ${job.job_id} ${job.status}`
+            .toLowerCase()
+            .includes(filter.toLowerCase()),
       ),
-    [jobs, filter],
+    [jobs, filter, batchId],
   );
   return (
     <div className="page-grid">
@@ -389,7 +419,10 @@ function RunsList({
         <div>
           <span className="eyebrow">RUN ARCHIVE</span>
           <h1>运行记录</h1>
-          <p>查看任务状态、逐请求样本和可导出报告。</p>
+          <p>
+            查看任务状态、逐请求样本和可导出报告。
+            {batchId && `（正在按批次 ${batchId} 过滤）`}
+          </p>
         </div>
         <button className="button primary" onClick={onOpenNew}>
           ＋ 创建测量

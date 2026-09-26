@@ -65,8 +65,14 @@ pip install -e ".[dev]"
 ### Run
 
 ```bash
-streamlit run app.py
-# → http://localhost:8501
+# API + 前端(前端构建产物由 API 在 / 直接托管)
+cd frontend && npm ci && npm run build
+export LLM_TEST_API_TOKEN=<32+ 字符令牌> LLM_TEST_ENDPOINTS_FILE=config/endpoints.json
+uvicorn server.main:app --port 8000
+# → http://localhost:8000
+
+# 独立 worker(执行任务)
+python -m server.worker
 ```
 
 ---

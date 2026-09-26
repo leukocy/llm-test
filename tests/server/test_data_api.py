@@ -111,13 +111,14 @@ def _seed_run(manager, test_id: str, *, tester="alice", level="internal", machin
 # ---------- specs / run_config / since_id ----------
 
 
-def test_specs_endpoint_lists_eight_types_with_schemas(env):
+def test_specs_endpoint_lists_nine_types_with_schemas(env):
     client, _, _ = env
     r = client.get("/api/v1/specs", headers=auth())
-    assert r.status_code == 401 if False else r.status_code == 200
+    assert r.status_code == 200
     items = r.json()["items"]
-    assert len(items) == 8
+    assert len(items) == 9
     assert items["concurrency"]["schema"]["type"] == "object"
+    assert "dataset" in items
     assert "run_config_schema" in r.json()
 
 
@@ -365,3 +366,148 @@ def test_new_routes_require_auth(env):
     assert client.get("/api/v1/warehouse/figures/trend").status_code == 401
     assert client.post("/api/v1/warehouse/runs/delete", json={"test_ids": ["x"]}).status_code == 401
     assert client.get("/api/v1/admin/db/health").status_code == 401
+
+
+# ---------- dataset spec / batch / logs / environment ----------
+
+
+def test_dataset_spec_requires_exactly_one_source(env):
+    client, _, _ = env
+    base = {"concurrency": 2, "max_tokens": 8}
+    both = {**base, "dataset": "x.json", "rows": [{"prompt": "q1"}]}
+    neither = dict(base)
+    for params, want in ((both, 422), (neither, 422)):
+        r = client.post(
+            "/api/v1/jobs",
+            json={"endpoint_id": "lab", "test_type": "dataset", "parameters": params},
+            headers=auth(),
+        )
+        assert r.status_code == want, (params, r.text)
+    ok = client.post(
+        "/api/v1/jobs",
+        json={
+            "endpoint_id": "lab",
+            "test_type": "dataset",
+            "parameters": {**base, "rows": [{"prompt": "q1"}, {"prompt": "q2"}]},
+        },
+        headers=auth(),
+    )
+    assert ok.status_code == 201, ok.text
+    job = ok.json()
+    assert job["test_type"] == "dataset"
+    assert job["progress_total"] == 2
+
+
+def test_batch_submission_creates_children_with_parent_link(env):
+    client, _, _ = env
+    body = {
+        "endpoint_id": "lab",
+        "items": [
+            {
+                "test_type": "concurrency",
+                "parameters": {
+                    "selected_concurrencies": [1],
+                    "rounds_per_level": 1,
+                    "max_tokens": 8,
+                },
+            },
+            {
+                "test_type": "prefill",
+                "parameters": {"token_levels": [8], "requests_per_level": 1, "max_tokens": 8},
+            },
+        ],
+    }
+    r = client.post(
+        "/api/v1/jobs/batch",
+        json=body,
+        headers={**auth(), "Idempotency-Key": "campaign-x"},
+    )
+    assert r.status_code == 201, r.text
+    payload = r.json()
+    assert payload["batch_id"] == "campaign-x"
+    assert len(payload["items"]) == 2
+    assert all(j["parent_job_id"] == "campaign-x" for j in payload["items"])
+
+    # 重放同键: 返回原任务不重复创建
+    again = client.post(
+        "/api/v1/jobs/batch",
+        json=body,
+        headers={**auth(), "Idempotency-Key": "campaign-x"},
+    )
+    assert [j["job_id"] for j in again.json()["items"]] == [j["job_id"] for j in payload["items"]]
+
+    # parent_job_id 过滤
+    listed = client.get("/api/v1/jobs?parent_job_id=campaign-x", headers=auth())
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 2
+
+
+def test_batch_rejects_bad_item_and_unknown_endpoint(env):
+    client, _, _ = env
+    bad_item = client.post(
+        "/api/v1/jobs/batch",
+        json={
+            "endpoint_id": "lab",
+            "items": [{"test_type": "concurrency", "parameters": {"wrong": 1}}],
+        },
+        headers=auth(),
+    )
+    assert bad_item.status_code == 422
+    bad_endpoint = client.post(
+        "/api/v1/jobs/batch",
+        json={
+            "endpoint_id": "ghost",
+            "items": [
+                {
+                    "test_type": "concurrency",
+                    "parameters": {
+                        "selected_concurrencies": [1],
+                        "rounds_per_level": 1,
+                        "max_tokens": 8,
+                    },
+                }
+            ],
+        },
+        headers=auth(),
+    )
+    assert bad_endpoint.status_code == 422
+
+
+def test_job_logs_cursor_reads_jsonl(env):
+    client, _, settings = env
+    job = client.post(
+        "/api/v1/jobs",
+        json={
+            "endpoint_id": "lab",
+            "test_type": "concurrency",
+            "parameters": {"selected_concurrencies": [1], "rounds_per_level": 1, "max_tokens": 8},
+        },
+        headers=auth(),
+    ).json()
+    job_dir = settings.artifact_root / job["job_id"]
+    job_dir.mkdir(parents=True, exist_ok=True)
+    (job_dir / "logs.jsonl").write_text(
+        '{"timestamp": 1.0, "level": "INFO", "message": "第一条"}\n'
+        '{"timestamp": 2.0, "level": "WARNING", "message": "第二条"}\n',
+        encoding="utf-8",
+    )
+    r = client.get(f"/api/v1/jobs/{job['job_id']}/logs", headers=auth())
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert [i["message"] for i in items] == ["第一条", "第二条"]
+    assert items[1]["id"] == 2
+
+    incremental = client.get(f"/api/v1/jobs/{job['job_id']}/logs?since_id=1", headers=auth())
+    assert [i["message"] for i in incremental.json()["items"]] == ["第二条"]
+
+
+def test_environment_and_datasets_endpoints(env):
+    client, _, _ = env
+    env_r = client.get("/api/v1/environment", headers=auth())
+    assert env_r.status_code == 200
+    assert isinstance(env_r.json(), dict)
+
+    ds = client.get("/api/v1/datasets", headers=auth())
+    assert ds.status_code == 200
+    payload = ds.json()
+    assert "builtin" in payload and "custom" in payload

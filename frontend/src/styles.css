@@ -1808,3 +1808,85 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- Phase 3: 批量 / 环境 / 执行日志 ---- */
+.batch-item {
+  border: 1px solid #e2e8eb;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: #fafcfd;
+}
+.batch-item-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.batch-item-head select {
+  flex: 1;
+}
+.batch-item-editor {
+  min-height: 120px;
+}
+.env-kv {
+  display: grid;
+  grid-template-columns: minmax(160px, 240px) 1fr;
+  gap: 4px 16px;
+  margin: 0;
+}
+.env-kv dt {
+  color: #51626f;
+  font-size: 12px;
+}
+.env-kv dd {
+  margin: 0;
+  font-size: 13px;
+  word-break: break-all;
+}
+.env-kv-nested {
+  grid-template-columns: minmax(120px, 200px) 1fr;
+}
+.env-nested {
+  display: grid;
+  gap: 8px;
+}
+.env-card {
+  border: 1px solid #e8eef0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #fff;
+}
+.log-console {
+  max-height: 420px;
+  overflow: auto;
+  background: #10181d;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.log-line {
+  display: flex;
+  gap: 10px;
+  color: #c8d4da;
+}
+.log-level {
+  flex: 0 0 64px;
+  color: #7d93a0;
+}
+.log-warning .log-level {
+  color: #d9a13b;
+}
+.log-error .log-level,
+.log-critical .log-level {
+  color: #d96a5f;
+}
+.log-message {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.dataset-params .mode-toggle {
+  margin-bottom: 12px;
+}

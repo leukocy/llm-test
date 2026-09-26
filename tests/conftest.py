@@ -25,7 +25,6 @@ sys.path.insert(0, str(project_root))
 
 
 # === 全局 Mock Streamlit ===
-# mustinImport任何use streamlit 模块之前Set
 class DictLikeSessionState:
     """模拟 Streamlit  session_state"""
 
@@ -51,38 +50,6 @@ class DictLikeSessionState:
 
     def get(self, key, default=None):
         return self._data.get(key, default)
-
-
-# Mock streamlit 模块and其子模块
-def setup_streamlit_mock():
-    """Set streamlit 全局 mock"""
-
-    # 主 streamlit 模块
-    st_mock = MagicMock()
-    st_mock.session_state = DictLikeSessionState()
-
-    # streamlit.runtime.scriptrunner
-    runtime_mock = MagicMock()
-    runtime_mock.scriptrunner.get_script_run_ctx = MagicMock(return_value=None)
-    runtime_mock.scriptrunner.add_script_run_ctx = MagicMock()
-    runtime_mock.scriptrunner.ScriptRunContext = MagicMock()
-
-    # streamlit.runtime.exists
-    runtime_mock.exists = MagicMock(return_value=False)
-
-    # 组装模块结构
-    st_mock.runtime = runtime_mock
-
-    # Register到 sys.modules
-    sys.modules["streamlit"] = st_mock
-    sys.modules["streamlit.runtime"] = runtime_mock
-    sys.modules["streamlit.runtime.scriptrunner"] = runtime_mock.scriptrunner
-
-    return st_mock
-
-
-# inImport时Set mock
-_streamlit_mock = setup_streamlit_mock()
 
 
 @pytest.fixture
