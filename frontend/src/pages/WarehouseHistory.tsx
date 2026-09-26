@@ -15,7 +15,10 @@ type GateResult = {
 type RunFigures = {
   found: boolean;
   result_count: number;
-  distributions: Record<string, { histogram: Figure | null; box: Figure | null }>;
+  distributions: Record<
+    string,
+    { histogram: Figure | null; box: Figure | null }
+  >;
   engine: {
     figure: Figure | null;
     summary: Record<string, unknown>;
@@ -300,7 +303,10 @@ export function WarehouseHistory({
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.test_id} className={selected.has(row.test_id) ? "row-selected" : ""}>
+                <tr
+                  key={row.test_id}
+                  className={selected.has(row.test_id) ? "row-selected" : ""}
+                >
                   <td>
                     <input
                       type="checkbox"
@@ -395,7 +401,10 @@ export function WarehouseHistory({
                   </div>
                   <div className="form-footer">
                     <span />
-                    <button className="button primary" onClick={() => void saveMetadata()}>
+                    <button
+                      className="button primary"
+                      onClick={() => void saveMetadata()}
+                    >
                       保存元数据
                     </button>
                   </div>
@@ -405,14 +414,19 @@ export function WarehouseHistory({
                   <p className="field-help">
                     按当前记录重新评估四项门禁，不写库；通过后可在左侧调整等级。
                   </p>
-                  <button className="button subtle" onClick={() => void reviewGate()}>
+                  <button
+                    className="button subtle"
+                    onClick={() => void reviewGate()}
+                  >
                     重新评估门禁
                   </button>
                   {gate && (
                     <div className="gate-result">
                       <p>
                         {gate.passed ? (
-                          <strong className="text-good">门禁通过（{gate.level}）</strong>
+                          <strong className="text-good">
+                            门禁通过（{gate.level}）
+                          </strong>
                         ) : (
                           <strong className="text-danger">
                             门禁未通过（{gate.level}）
@@ -421,7 +435,10 @@ export function WarehouseHistory({
                       </p>
                       <ul>
                         {Object.entries(gate.gates).map(([name, ok]) => (
-                          <li key={name} className={ok ? "text-good" : "text-danger"}>
+                          <li
+                            key={name}
+                            className={ok ? "text-good" : "text-danger"}
+                          >
                             [{ok ? "通过" : "未过"}] {GATE_LABELS[name] || name}
                           </li>
                         ))}

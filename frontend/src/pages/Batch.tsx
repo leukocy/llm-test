@@ -15,19 +15,27 @@ export function Batch({
 }) {
   const [endpoint, setEndpoint] = useState(endpoints[0]?.id || "");
   const [items, setItems] = useState<Item[]>([
-    { test_type: "concurrency", raw: JSON.stringify(scenarios[0].parameters, null, 2) },
+    {
+      test_type: "concurrency",
+      raw: JSON.stringify(scenarios[0].parameters, null, 2),
+    },
   ]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   function updateItem(index: number, patch: Partial<Item>) {
-    setItems((current) => current.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+    setItems((current) =>
+      current.map((item, i) => (i === index ? { ...item, ...patch } : item)),
+    );
   }
 
   function addItem() {
     setItems((current) => [
       ...current,
-      { test_type: "concurrency", raw: JSON.stringify(scenarios[0].parameters, null, 2) },
+      {
+        test_type: "concurrency",
+        raw: JSON.stringify(scenarios[0].parameters, null, 2),
+      },
     ]);
   }
 
@@ -102,7 +110,11 @@ export function Batch({
             <span className="section-index">02</span>
             <h2>子任务（{items.length} / 10）</h2>
           </div>
-          <button className="button subtle" onClick={addItem} disabled={items.length >= 10}>
+          <button
+            className="button subtle"
+            onClick={addItem}
+            disabled={items.length >= 10}
+          >
             ＋ 添加子任务
           </button>
         </div>
@@ -132,7 +144,10 @@ export function Batch({
                 ))}
               </select>
               {items.length > 1 && (
-                <button className="text-button danger" onClick={() => removeItem(index)}>
+                <button
+                  className="text-button danger"
+                  onClick={() => removeItem(index)}
+                >
                   移除
                 </button>
               )}
@@ -142,7 +157,9 @@ export function Batch({
               spellCheck={false}
               aria-label={`子任务 ${index + 1} 参数`}
               value={item.raw}
-              onChange={(event) => updateItem(index, { raw: event.target.value })}
+              onChange={(event) =>
+                updateItem(index, { raw: event.target.value })
+              }
             />
           </div>
         ))}

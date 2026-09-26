@@ -23,14 +23,23 @@ type FieldDef = {
   name: string;
   schema: JsonSchema;
   required: boolean;
-  kind: "integer" | "number" | "boolean" | "string" | "int-list" | "string-list" | "enum" | "unknown";
+  kind:
+    | "integer"
+    | "number"
+    | "boolean"
+    | "string"
+    | "int-list"
+    | "string-list"
+    | "enum"
+    | "unknown";
 };
 
 function resolveNullable(schema: JsonSchema): JsonSchema {
   // pydantic 的可选字段常表达为 anyOf: [<T>, {type: "null"}]
   if (schema.anyOf) {
     const nonNull = schema.anyOf.find((item) => item.type !== "null");
-    if (nonNull) return { ...nonNull, default: schema.default ?? nonNull.default };
+    if (nonNull)
+      return { ...nonNull, default: schema.default ?? nonNull.default };
   }
   return schema;
 }
@@ -44,7 +53,9 @@ function fieldKind(schema: JsonSchema): FieldDef["kind"] {
   if (s.type === "string") return "string";
   if (s.type === "array") {
     const itemType = resolveNullable(s.items || {}).type;
-    return itemType === "integer" || itemType === "number" ? "int-list" : "string-list";
+    return itemType === "integer" || itemType === "number"
+      ? "int-list"
+      : "string-list";
   }
   return "unknown";
 }
@@ -72,7 +83,10 @@ function ListField({
   const display = Array.isArray(value) ? value.join(", ") : "";
   const [text, setText] = useState(display);
   const [invalid, setInvalid] = useState(false);
-  useEffect(() => setText(Array.isArray(value) ? value.join(", ") : ""), [value]);
+  useEffect(
+    () => setText(Array.isArray(value) ? value.join(", ") : ""),
+    [value],
+  );
 
   function commit(raw: string) {
     setText(raw);

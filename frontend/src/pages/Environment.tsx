@@ -4,7 +4,9 @@ import { Empty } from "../components";
 
 /** 环境快照的嵌套 JSON 按小节展开渲染（顶级键一节）。 */
 export function Environment({ token }: { token: string }) {
-  const [snapshot, setSnapshot] = useState<Record<string, unknown> | null>(null);
+  const [snapshot, setSnapshot] = useState<Record<string, unknown> | null>(
+    null,
+  );
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -57,7 +59,9 @@ export function Environment({ token }: { token: string }) {
         <div>
           <span className="eyebrow">EXECUTION ENVIRONMENT</span>
           <h1>环境信息</h1>
-          <p>API 服务所在机器的硬件指纹、系统与版本快照（测量发生的真实环境）。</p>
+          <p>
+            API 服务所在机器的硬件指纹、系统与版本快照（测量发生的真实环境）。
+          </p>
         </div>
       </div>
       {error && (
@@ -80,7 +84,10 @@ export function Environment({ token }: { token: string }) {
           ))
         ) : (
           <section className="surface">
-            <Empty title="环境快照为空" text="system_info 缓存尚未填充，稍后刷新。" />
+            <Empty
+              title="环境快照为空"
+              text="system_info 缓存尚未填充，稍后刷新。"
+            />
           </section>
         )
       ) : (

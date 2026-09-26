@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Endpoint, type Preset } from "../api";
 import { scenarios, type JobType } from "../constants";
-import { SchemaForm, schemaDefaults, type JsonSchema } from "../components/SchemaForm";
+import {
+  SchemaForm,
+  schemaDefaults,
+  type JsonSchema,
+} from "../components/SchemaForm";
 
 type SpecCatalog = {
   items: Record<string, { label: string; schema: JsonSchema }>;
@@ -298,7 +302,11 @@ export function NewRun({
               <span className="section-index">03</span>
               <h2>运行参数</h2>
             </div>
-            <div className="mode-toggle" role="tablist" aria-label="参数编辑方式">
+            <div
+              className="mode-toggle"
+              role="tablist"
+              aria-label="参数编辑方式"
+            >
               <button
                 role="tab"
                 aria-selected={mode === "form"}
@@ -421,7 +429,10 @@ function DatasetParams({
   const rowsText = JSON.stringify(value.rows ?? [{ prompt: "" }], null, 2);
   const [rawRows, setRawRows] = useState(rowsText);
   const [rowsError, setRowsError] = useState("");
-  useEffect(() => setRawRows(JSON.stringify(value.rows ?? [{ prompt: "" }], null, 2)), [value.rows]);
+  useEffect(
+    () => setRawRows(JSON.stringify(value.rows ?? [{ prompt: "" }], null, 2)),
+    [value.rows],
+  );
 
   function setScalar(key: string, v: unknown) {
     onChange({ ...value, [key]: v });
@@ -446,7 +457,9 @@ function DatasetParams({
           role="tab"
           aria-selected={source === "inline"}
           className={source === "inline" ? "active" : ""}
-          onClick={() => onChange({ ...value, dataset: undefined, rows: value.rows ?? [] })}
+          onClick={() =>
+            onChange({ ...value, dataset: undefined, rows: value.rows ?? [] })
+          }
         >
           内联行
         </button>
@@ -462,7 +475,8 @@ function DatasetParams({
       {source === "inline" ? (
         <label className="schema-field">
           <span className="input-label">
-            rows（JSON 数组，每行一个 prompt）<em className="required-mark">*</em>
+            rows（JSON 数组，每行一个 prompt）
+            <em className="required-mark">*</em>
           </span>
           <textarea
             className="json-editor"
@@ -476,7 +490,8 @@ function DatasetParams({
       ) : (
         <label className="schema-field">
           <span className="input-label">
-            已存数据集文件名（datasets/ 目录下）<em className="required-mark">*</em>
+            已存数据集文件名（datasets/ 目录下）
+            <em className="required-mark">*</em>
           </span>
           <input
             value={String(value.dataset ?? "")}
@@ -493,7 +508,9 @@ function DatasetParams({
             min={1}
             max={128}
             value={Number(value.concurrency ?? 4)}
-            onChange={(event) => setScalar("concurrency", Number(event.target.value))}
+            onChange={(event) =>
+              setScalar("concurrency", Number(event.target.value))
+            }
           />
         </label>
         <label className="schema-field">
@@ -503,7 +520,9 @@ function DatasetParams({
             min={1}
             max={8192}
             value={Number(value.max_tokens ?? 256)}
-            onChange={(event) => setScalar("max_tokens", Number(event.target.value))}
+            onChange={(event) =>
+              setScalar("max_tokens", Number(event.target.value))
+            }
           />
         </label>
         <label className="schema-field">
@@ -513,7 +532,9 @@ function DatasetParams({
             min={1}
             max={20}
             value={Number(value.rounds ?? 1)}
-            onChange={(event) => setScalar("rounds", Number(event.target.value))}
+            onChange={(event) =>
+              setScalar("rounds", Number(event.target.value))
+            }
           />
         </label>
       </div>
@@ -543,13 +564,21 @@ function RobustnessParams({
   onChange: (next: Record<string, unknown>) => void;
 }) {
   const [rawSamples, setRawSamples] = useState(() =>
-    JSON.stringify(value.samples ?? [{ question: "", correct_answer: "" }], null, 2),
+    JSON.stringify(
+      value.samples ?? [{ question: "", correct_answer: "" }],
+      null,
+      2,
+    ),
   );
   const [samplesError, setSamplesError] = useState("");
   useEffect(
     () =>
       setRawSamples(
-        JSON.stringify(value.samples ?? [{ question: "", correct_answer: "" }], null, 2),
+        JSON.stringify(
+          value.samples ?? [{ question: "", correct_answer: "" }],
+          null,
+          2,
+        ),
       ),
     [value.samples],
   );
@@ -559,13 +588,19 @@ function RobustnessParams({
   function commitSamples(text: string) {
     setRawSamples(text);
     try {
-      const parsed = JSON.parse(text) as { question?: string; correct_answer?: string }[];
+      const parsed = JSON.parse(text) as {
+        question?: string;
+        correct_answer?: string;
+      }[];
       if (!Array.isArray(parsed) || !parsed.length) throw new Error("bad");
-      if (parsed.some((row) => !(row.question || "").trim())) throw new Error("bad");
+      if (parsed.some((row) => !(row.question || "").trim()))
+        throw new Error("bad");
       setSamplesError("");
       onChange({ ...value, samples: parsed });
     } catch {
-      setSamplesError('samples 必须是 JSON 数组，如 [{"question": "…", "correct_answer": "…"}]');
+      setSamplesError(
+        'samples 必须是 JSON 数组，如 [{"question": "…", "correct_answer": "…"}]',
+      );
     }
   }
 
@@ -580,7 +615,8 @@ function RobustnessParams({
     <div className="dataset-params">
       <label className="schema-field case-form-wide">
         <span className="input-label">
-          samples（JSON 数组，含 question 与 correct_answer）<em className="required-mark">*</em>
+          samples（JSON 数组，含 question 与 correct_answer）
+          <em className="required-mark">*</em>
         </span>
         <textarea
           className="json-editor"
@@ -613,7 +649,9 @@ function RobustnessParams({
           min={1}
           max={8192}
           value={Number(value.max_tokens ?? 256)}
-          onChange={(event) => onChange({ ...value, max_tokens: Number(event.target.value) })}
+          onChange={(event) =>
+            onChange({ ...value, max_tokens: Number(event.target.value) })
+          }
         />
       </label>
     </div>

@@ -25,7 +25,10 @@ type ComparePayload = {
 
 export function Compare({ jobs, token }: { jobs: Job[]; token: string }) {
   const candidates = useMemo(
-    () => jobs.filter((job) => job.test_type === "quality" && job.status === "completed"),
+    () =>
+      jobs.filter(
+        (job) => job.test_type === "quality" && job.status === "completed",
+      ),
     [jobs],
   );
   const [idA, setIdA] = useState("");
@@ -100,7 +103,11 @@ export function Compare({ jobs, token }: { jobs: Job[]; token: string }) {
             </select>
           </label>
           <div className="compare-actions">
-            <p>{candidates.length ? `可对比作业 ${candidates.length} 个` : "暂无已完成的质量作业"}</p>
+            <p>
+              {candidates.length
+                ? `可对比作业 ${candidates.length} 个`
+                : "暂无已完成的质量作业"}
+            </p>
             <button
               className="button primary"
               disabled={!idA || !idB || idA === idB || busy}

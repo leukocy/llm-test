@@ -131,7 +131,12 @@ export function WarehouseExport({
   );
 }
 
-type Backup = { path: string; name: string; size_mb: number; created_at: string };
+type Backup = {
+  path: string;
+  name: string;
+  size_mb: number;
+  created_at: string;
+};
 type DbHealth = {
   size_bytes: number;
   schema_version: string;
@@ -150,7 +155,9 @@ export function WarehouseAdmin({ token }: { token: string }) {
   function load() {
     api<DbHealth>(token, "/api/v1/admin/db/health")
       .then(setHealth)
-      .catch((exc) => setError(exc instanceof Error ? exc.message : "健康读取失败"));
+      .catch((exc) =>
+        setError(exc instanceof Error ? exc.message : "健康读取失败"),
+      );
     api<{ items: Backup[] }>(token, "/api/v1/admin/backups")
       .then((data) => setBackups(data.items))
       .catch(() => setBackups([]));
@@ -169,7 +176,8 @@ export function WarehouseAdmin({ token }: { token: string }) {
         body,
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.detail || `失败（${response.status}）`);
+      if (!response.ok)
+        throw new Error(payload.detail || `失败（${response.status}）`);
       setMsg(
         path.includes("hw-snapshot")
           ? `快照导入：成功 ${payload.imported}，跳过 ${payload.skipped}，失败 ${payload.failed}`
@@ -184,9 +192,13 @@ export function WarehouseAdmin({ token }: { token: string }) {
   async function createBackup() {
     setMsg("");
     try {
-      const result = await api<{ path: string }>(token, "/api/v1/admin/backups", {
-        method: "POST",
-      });
+      const result = await api<{ path: string }>(
+        token,
+        "/api/v1/admin/backups",
+        {
+          method: "POST",
+        },
+      );
       setMsg(`备份已创建：${result.path}`);
       load();
     } catch (exc) {
@@ -242,7 +254,9 @@ export function WarehouseAdmin({ token }: { token: string }) {
                 .then(async (response) => {
                   const payload = await response.json();
                   if (!response.ok)
-                    throw new Error(payload.detail || `失败（${response.status}）`);
+                    throw new Error(
+                      payload.detail || `失败（${response.status}）`,
+                    );
                   setMsg(`CSV 导入：${payload.imported} 条`);
                   load();
                 })
@@ -262,7 +276,10 @@ export function WarehouseAdmin({ token }: { token: string }) {
             multiple
             aria-label="上传硬件快照"
             onChange={(event) => {
-              void upload("/api/v1/admin/import/hw-snapshot", event.target.files);
+              void upload(
+                "/api/v1/admin/import/hw-snapshot",
+                event.target.files,
+              );
               event.target.value = "";
             }}
           />
@@ -304,7 +321,9 @@ export function WarehouseAdmin({ token }: { token: string }) {
                         <input
                           type="checkbox"
                           checked={restoreConfirm}
-                          onChange={(event) => setRestoreConfirm(event.target.checked)}
+                          onChange={(event) =>
+                            setRestoreConfirm(event.target.checked)
+                          }
                         />
                         确认整库覆盖
                         <button

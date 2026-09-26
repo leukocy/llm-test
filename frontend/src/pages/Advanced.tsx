@@ -40,7 +40,9 @@ export function Advanced({ token }: { token: string }) {
         <div>
           <span className="eyebrow">ADVANCED EVALUATION</span>
           <h1>高级评估</h1>
-          <p>离线分析工具：答案解析演示与推理过程质量评估（规则法，不消耗模型调用）。</p>
+          <p>
+            离线分析工具：答案解析演示与推理过程质量评估（规则法，不消耗模型调用）。
+          </p>
         </div>
       </div>
       <ParserDemo token={token} />
@@ -61,14 +63,18 @@ function ParserDemo({ token }: { token: string }) {
     setBusy(true);
     setError("");
     try {
-      const payload = await api<ParseResultView>(token, "/api/v1/advanced/parse", {
-        method: "POST",
-        body: JSON.stringify({
-          response,
-          answer_type: answerType,
-          ...(expected ? { expected_answer: expected } : {}),
-        }),
-      });
+      const payload = await api<ParseResultView>(
+        token,
+        "/api/v1/advanced/parse",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            response,
+            answer_type: answerType,
+            ...(expected ? { expected_answer: expected } : {}),
+          }),
+        },
+      );
       setResult(payload);
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "解析失败");
@@ -137,7 +143,8 @@ function ParserDemo({ token }: { token: string }) {
       {result && (
         <div className="gate-result">
           <p>
-            提取答案：<strong>{result.extracted_answer || "（未提取到）"}</strong>
+            提取答案：
+            <strong>{result.extracted_answer || "（未提取到）"}</strong>
           </p>
           <p>
             置信度 {formatNumber(result.confidence, 2)} · 方法 {result.method}
@@ -146,7 +153,9 @@ function ParserDemo({ token }: { token: string }) {
           {result.is_correct !== undefined && (
             <p className={result.is_correct ? "text-good" : "text-danger"}>
               判分：{result.is_correct ? "正确" : "错误"}
-              {result.score !== undefined ? `（${formatNumber(result.score, 2)}）` : ""}
+              {result.score !== undefined
+                ? `（${formatNumber(result.score, 2)}）`
+                : ""}
             </p>
           )}
           {result.error && <p className="text-danger">{result.error}</p>}
@@ -219,7 +228,10 @@ function ReasoningDemo({ token }: { token: string }) {
         </label>
         <label className="schema-field">
           <span className="input-label">模型最终答案</span>
-          <input value={finalAnswer} onChange={(event) => setFinalAnswer(event.target.value)} />
+          <input
+            value={finalAnswer}
+            onChange={(event) => setFinalAnswer(event.target.value)}
+          />
         </label>
         <label className="schema-field">
           <span className="input-label">参考答案</span>
@@ -231,7 +243,11 @@ function ReasoningDemo({ token }: { token: string }) {
       </div>
       <div className="form-footer">
         <span />
-        <button className="button primary" disabled={!question.trim() || busy} onClick={() => void run()}>
+        <button
+          className="button primary"
+          disabled={!question.trim() || busy}
+          onClick={() => void run()}
+        >
           {busy ? "评估中…" : "评估 →"}
         </button>
       </div>
@@ -252,7 +268,11 @@ function ReasoningDemo({ token }: { token: string }) {
             ))}
             <div className="metric-card">
               <div className="metric-label">最终答案</div>
-              <strong className={result.final_answer_correct ? "text-good" : "text-danger"}>
+              <strong
+                className={
+                  result.final_answer_correct ? "text-good" : "text-danger"
+                }
+              >
                 {result.final_answer_correct ? "正确" : "错误"}
               </strong>
               <div className="metric-note">

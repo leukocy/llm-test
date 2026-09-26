@@ -58,7 +58,9 @@ export function WarehouseCases({ token }: { token: string }) {
         setCases(data.items);
         setError("");
       })
-      .catch((exc) => setError(exc instanceof Error ? exc.message : "用例读取失败"));
+      .catch((exc) =>
+        setError(exc instanceof Error ? exc.message : "用例读取失败"),
+      );
   }
   useEffect(load, [token, scenario, modelName, level]);
 
@@ -75,10 +77,12 @@ export function WarehouseCases({ token }: { token: string }) {
         throw new Error("场景与模型名为必填");
       const body: Record<string, unknown> = {
         ...form,
-        quality_score: form.quality_score === "" ? null : Number(form.quality_score),
+        quality_score:
+          form.quality_score === "" ? null : Number(form.quality_score),
       };
       delete body.quality_score;
-      if (form.quality_score !== "") body.quality_score = Number(form.quality_score);
+      if (form.quality_score !== "")
+        body.quality_score = Number(form.quality_score);
       await api(token, "/api/v1/cases", {
         method: "POST",
         body: JSON.stringify(body),
@@ -171,7 +175,9 @@ export function WarehouseCases({ token }: { token: string }) {
                   <td>{item.model_name}</td>
                   <td>{item.machine_id || "—"}</td>
                   <td>{formatNumber(item.quality_score, 1)}</td>
-                  <td>{item.success === null ? "—" : item.success ? "是" : "否"}</td>
+                  <td>
+                    {item.success === null ? "—" : item.success ? "是" : "否"}
+                  </td>
                   <td>{item.external_level}</td>
                   <td>{item.source}</td>
                   <td>
@@ -220,7 +226,10 @@ export function WarehouseCases({ token }: { token: string }) {
           </label>
           <label className="schema-field">
             <span className="input-label">客户类型</span>
-            <input value={form.customer_type} onChange={setField("customer_type")} />
+            <input
+              value={form.customer_type}
+              onChange={setField("customer_type")}
+            />
           </label>
           <label className="schema-field">
             <span className="input-label">质量分（0-100）</span>
@@ -232,7 +241,10 @@ export function WarehouseCases({ token }: { token: string }) {
           </label>
           <label className="schema-field">
             <span className="input-label">对外等级</span>
-            <select value={form.external_level} onChange={setField("external_level")}>
+            <select
+              value={form.external_level}
+              onChange={setField("external_level")}
+            >
               <option value="internal">internal</option>
               <option value="review">review</option>
               <option value="publishable">publishable</option>
@@ -240,15 +252,24 @@ export function WarehouseCases({ token }: { token: string }) {
           </label>
           <label className="schema-field">
             <span className="input-label">失败原因</span>
-            <input value={form.failure_reason} onChange={setField("failure_reason")} />
+            <input
+              value={form.failure_reason}
+              onChange={setField("failure_reason")}
+            />
           </label>
           <label className="schema-field">
             <span className="input-label">下一步</span>
-            <input value={form.next_action} onChange={setField("next_action")} />
+            <input
+              value={form.next_action}
+              onChange={setField("next_action")}
+            />
           </label>
           <label className="schema-field case-form-wide">
             <span className="input-label">销售摘要</span>
-            <input value={form.sales_summary} onChange={setField("sales_summary")} />
+            <input
+              value={form.sales_summary}
+              onChange={setField("sales_summary")}
+            />
           </label>
         </div>
         <div className="form-footer">

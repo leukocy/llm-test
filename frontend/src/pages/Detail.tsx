@@ -42,7 +42,12 @@ export function Detail({
   const logsRef = useRef<LogLine[]>([]);
   resultsRef.current = results;
 
-  type LogLine = { id: number; timestamp: number | null; level: string; message: string };
+  type LogLine = {
+    id: number;
+    timestamp: number | null;
+    level: string;
+    message: string;
+  };
   type RobustnessReport = {
     job_id: string;
     model_id: string;
@@ -95,7 +100,10 @@ export function Detail({
         })
         .catch(() => {});
     } else if (job.result_artifact) {
-      api<QualityReport | RobustnessReport>(token, `/api/v1/jobs/${job.job_id}/report`)
+      api<QualityReport | RobustnessReport>(
+        token,
+        `/api/v1/jobs/${job.job_id}/report`,
+      )
         .then((data) => {
           if (!alive) return;
           if ((data as RobustnessReport).robustness) {
@@ -172,7 +180,10 @@ export function Detail({
         alive = false;
       };
     }
-    const timer = window.setInterval(() => void fetchLogs(logsRef.current.length), 2000);
+    const timer = window.setInterval(
+      () => void fetchLogs(logsRef.current.length),
+      2000,
+    );
     return () => {
       alive = false;
       window.clearInterval(timer);
@@ -516,7 +527,8 @@ export function Detail({
               note="扰动后答案一致比例"
             />
           </div>
-          {Object.keys(robustness.robustness.sensitivity_by_type).length > 0 && (
+          {Object.keys(robustness.robustness.sensitivity_by_type).length >
+            0 && (
             <div className="table-scroll">
               <table className="data-table stats-table">
                 <thead>
@@ -532,7 +544,9 @@ export function Detail({
                       <tr key={name}>
                         <td>
                           <strong>{name}</strong>
-                          {name === robustness.robustness.most_sensitive_perturbation && (
+                          {name ===
+                            robustness.robustness
+                              .most_sensitive_perturbation && (
                             <small className="text-danger"> · 最敏感</small>
                           )}
                         </td>
@@ -557,7 +571,11 @@ export function Detail({
                 {robustness.robustness.results.map((row) => (
                   <tr key={row.sample_id}>
                     <td>#{row.sample_id}</td>
-                    <td className={row.original_correct ? "text-good" : "text-danger"}>
+                    <td
+                      className={
+                        row.original_correct ? "text-good" : "text-danger"
+                      }
+                    >
                       {row.original_correct ? "正确" : "错误"}
                     </td>
                     <td>{formatPercent(row.robustness_score)}</td>
@@ -590,7 +608,10 @@ export function Detail({
           </div>
           <div className="log-console" role="log" aria-label="执行日志">
             {logs.map((line) => (
-              <div className={`log-line log-${line.level.toLowerCase()}`} key={line.id}>
+              <div
+                className={`log-line log-${line.level.toLowerCase()}`}
+                key={line.id}
+              >
                 <span className="log-level">{line.level}</span>
                 <span className="log-message">{line.message}</span>
               </div>

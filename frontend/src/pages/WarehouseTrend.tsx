@@ -3,7 +3,12 @@ import { api } from "../api";
 import { Empty } from "../components";
 import { PlotlyFigure } from "../components/PlotlyFigure";
 import type { Figure } from "plotly.js-dist-min";
-import { compareGroups, formatNumber, trendDims, trendMetrics } from "../constants";
+import {
+  compareGroups,
+  formatNumber,
+  trendDims,
+  trendMetrics,
+} from "../constants";
 
 type TrendPayload = { figure: Figure; count: number };
 type ComparePayload = {
@@ -159,9 +164,7 @@ export function WarehouseTrend({
           ))}
         </select>
         <div className="compare-actions">
-          <p>
-            已选 {picked.length} / 8 条（2 条起）。按住 Ctrl/Cmd 多选。
-          </p>
+          <p>已选 {picked.length} / 8 条（2 条起）。按住 Ctrl/Cmd 多选。</p>
           <button
             className="button primary"
             disabled={picked.length < 2 || compareBusy}
@@ -183,11 +186,11 @@ export function WarehouseTrend({
               <thead>
                 <tr>
                   <th>指标</th>
-                  {Object.keys(compare.table[Object.keys(compare.table)[0]] || {}).map(
-                    (label) => (
-                      <th key={label}>{label}</th>
-                    ),
-                  )}
+                  {Object.keys(
+                    compare.table[Object.keys(compare.table)[0]] || {},
+                  ).map((label) => (
+                    <th key={label}>{label}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -198,7 +201,9 @@ export function WarehouseTrend({
                     </td>
                     {Object.entries(byRun).map(([label, value]) => (
                       <td key={label}>
-                        {typeof value === "number" ? formatNumber(value, 2) : "—"}
+                        {typeof value === "number"
+                          ? formatNumber(value, 2)
+                          : "—"}
                       </td>
                     ))}
                   </tr>

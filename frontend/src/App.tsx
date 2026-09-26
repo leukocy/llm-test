@@ -253,7 +253,9 @@ export default function App() {
             />
             <Route
               path="/runs/:jobId"
-              element={<DetailRoute jobs={jobs} token={token} onCancel={cancel} />}
+              element={
+                <DetailRoute jobs={jobs} token={token} onCancel={cancel} />
+              }
             />
             <Route
               path="/new"
@@ -291,7 +293,10 @@ export default function App() {
               element={<Compare jobs={jobs} token={token} />}
             />
             <Route path="/advanced" element={<Advanced token={token} />} />
-            <Route path="/environment" element={<Environment token={token} />} />
+            <Route
+              path="/environment"
+              element={<Environment token={token} />}
+            />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
@@ -357,10 +362,27 @@ function Overview({
         </button>
       </div>
       <div className="metric-grid">
-        <MetricCard label="全部任务" value={String(total)} note="持久化运行记录" accent />
-        <MetricCard label="运行中" value={String(active)} note="包含排队与取消中" />
-        <MetricCard label="已完成" value={String(completed)} note="可查看统计报告" />
-        <MetricCard label="失败任务" value={String(failed)} note="需检查事件和日志" />
+        <MetricCard
+          label="全部任务"
+          value={String(total)}
+          note="持久化运行记录"
+          accent
+        />
+        <MetricCard
+          label="运行中"
+          value={String(active)}
+          note="包含排队与取消中"
+        />
+        <MetricCard
+          label="已完成"
+          value={String(completed)}
+          note="可查看统计报告"
+        />
+        <MetricCard
+          label="失败任务"
+          value={String(failed)}
+          note="需检查事件和日志"
+        />
       </div>
       <div className="overview-grid">
         <section className="surface recent">
@@ -373,7 +395,11 @@ function Overview({
               查看全部 →
             </button>
           </div>
-          <JobTable jobs={jobs} compact onSelect={(job) => onOpenJob(job.job_id)} />
+          <JobTable
+            jobs={jobs}
+            compact
+            onSelect={(job) => onOpenJob(job.job_id)}
+          />
         </section>
         <aside className="overview-aside">
           <div className="aside-card dark">
