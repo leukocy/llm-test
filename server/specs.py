@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
 
+from core.measurement_protocol import measurement_plan as _measurement_plan
+
 
 class StrictSpec(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -16,6 +18,7 @@ class ConcurrencySpec(StrictSpec):
     rounds_per_level: int = Field(ge=1, le=20)
     max_tokens: int = Field(ge=1, le=8192)
     input_tokens_target: int = Field(default=0, ge=0, le=131072)
+    warmup_rounds_per_level: int = Field(default=0, ge=0, le=3)
 
     @field_validator("selected_concurrencies")
     @classmethod
@@ -26,7 +29,11 @@ class ConcurrencySpec(StrictSpec):
 
     @model_validator(mode="after")
     def request_budget(self) -> ConcurrencySpec:
-        if sum(self.selected_concurrencies) * self.rounds_per_level > 1000:
+        if (
+            sum(self.selected_concurrencies)
+            * (self.rounds_per_level + self.warmup_rounds_per_level)
+            > 1000
+        ):
             raise ValueError("A job may issue at most 1000 requests")
         return self
 
@@ -35,13 +42,23 @@ class PrefillSpec(StrictSpec):
     token_levels: list[int] = Field(min_length=1, max_length=12)
     requests_per_level: int = Field(ge=1, le=50)
     max_tokens: int = Field(ge=1, le=8192)
+    warmup_requests_per_level: int = Field(default=0, ge=0, le=5)
 
     @field_validator("token_levels")
     @classmethod
     def tokens(cls, value: list[int]) -> list[int]:
-        if any(level < 1 or level > 131072 for level in value):
-            raise ValueError("Token levels must be between 1 and 131072")
+        if any(level < 1 or level > 131072 for level in value) or len(set(value)) != len(value):
+            raise ValueError("Token levels must be unique and between 1 and 131072")
         return value
+
+    @model_validator(mode="after")
+    def request_budget(self) -> PrefillSpec:
+        if (
+            len(self.token_levels) * (self.requests_per_level + self.warmup_requests_per_level)
+            > 1000
+        ):
+            raise ValueError("A job may issue at most 1000 requests")
+        return self
 
 
 class SegmentedPrefillSpec(StrictSpec):
@@ -89,11 +106,20 @@ class MatrixSpec(StrictSpec):
 
     @model_validator(mode="after")
     def request_budget(self) -> MatrixSpec:
-        if any(c < 1 or c > 128 for c in self.concurrencies):
-            raise ValueError("Concurrency must be between 1 and 128")
-        if any(length < 1 or length > 131072 for length in self.context_lengths):
-            raise ValueError("Context length must be between 1 and 131072")
-        if sum(self.concurrencies) * len(self.context_lengths) * self.rounds > 1000:
+        if any(c < 1 or c > 128 for c in self.concurrencies) or len(set(self.concurrencies)) != len(
+            self.concurrencies
+        ):
+            raise ValueError("Concurrency levels must be unique and between 1 and 128")
+        if any(length < 1 or length > 131072 for length in self.context_lengths) or len(
+            set(self.context_lengths)
+        ) != len(self.context_lengths):
+            raise ValueError("Context lengths must be unique and between 1 and 131072")
+        if (
+            sum(self.concurrencies)
+            * len(self.context_lengths)
+            * (self.rounds + int(self.enable_warmup))
+            > 1000
+        ):
             raise ValueError("A job may issue at most 1000 requests")
         return self
 
@@ -296,6 +322,12 @@ def expected_requests(test_type: str, parameters: dict) -> int:
         n_types = len(parameters.get("perturbation_types") or [0] * 5)
         return int(len(parameters["samples"]) * (1 + n_types))
     return 0
+
+
+def measurement_plan(test_type: str, parameters: dict) -> dict[str, Any]:
+    return _measurement_plan(
+        test_type, parameters, fallback_requests=expected_requests(test_type, parameters)
+    )
 
 
 def spec_catalog() -> dict[str, dict[str, Any]]:

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from server.settings import Settings
-from server.specs import JobSubmission
+from server.specs import JobSubmission, measurement_plan
 
 
 def test_settings_fail_closed_without_token(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -78,4 +78,41 @@ def test_run_spec_rejects_unbounded_and_unknown_parameters():
                 "max_tokens": 10,
                 "api_key": "leak",  # pragma: allowlist secret
             },
+        )
+
+
+def test_measurement_plan_counts_warmup_separately_and_enforces_total_budget():
+    body = JobSubmission(
+        endpoint_id="lab",
+        test_type="concurrency",
+        parameters={
+            "selected_concurrencies": [1, 4],
+            "rounds_per_level": 3,
+            "warmup_rounds_per_level": 1,
+            "max_tokens": 32,
+        },
+    )
+    plan = measurement_plan(body.test_type, body.parameters)
+    assert plan["measured_requests"] == 15
+    assert plan["warmup_requests"] == 5
+    assert [cell["measured_requests"] for cell in plan["cells"]] == [3, 12]
+
+    with pytest.raises(ValueError, match="1000 requests"):
+        JobSubmission(
+            endpoint_id="lab",
+            test_type="matrix",
+            parameters={
+                "concurrencies": [50],
+                "context_lengths": [512],
+                "rounds": 20,
+                "max_tokens": 32,
+                "enable_warmup": True,
+            },
+        )
+
+    with pytest.raises(ValueError, match="unique"):
+        JobSubmission(
+            endpoint_id="lab",
+            test_type="prefill",
+            parameters={"token_levels": [512, 512], "requests_per_level": 3, "max_tokens": 32},
         )

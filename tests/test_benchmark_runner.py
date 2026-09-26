@@ -1,10 +1,17 @@
 import csv
+import hashlib
+import json
+import sqlite3
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from core.benchmark.metrics import METRIC_CONTRACT_VERSION
 from core.benchmark_runner import BenchmarkRunner
+from core.database.connection import Database
+from core.database.manager import DatabaseManager
+from core.measurement_protocol import measurement_plan
 
 
 class TestBenchmarkRunner:
@@ -49,6 +56,102 @@ class TestBenchmarkRunner:
 
         assert ttft == pytest.approx(expected_ttft)
         assert tps == pytest.approx(expected_tps)
+
+    @pytest.mark.asyncio
+    async def test_warmup_is_collected_separately_from_measured_requests(self, runner, tmp_path):
+        runner.csv_file = str(tmp_path / "requests.csv")
+        runner._start_db_run = MagicMock()
+        runner._batch_save_results_to_db = MagicMock()
+        runner._complete_db_run = MagicMock()
+        runner.update_ui = MagicMock()
+        runner.should_skip_cell = MagicMock(return_value=(False, ""))
+        runner._get_tokenizer = MagicMock(return_value=object())
+        runner._calibrate_prompt_with_source = MagicMock(return_value=("prompt", "generated"))
+        runner._run_concurrency_batch = AsyncMock(
+            side_effect=[
+                [
+                    {"session_id": -2, "error": None, "prefill_tokens": 16},
+                    {"session_id": -1, "error": None, "prefill_tokens": 16},
+                ],
+                [
+                    {"session_id": 0, "error": None, "prefill_tokens": 16},
+                    {"session_id": 1, "error": None, "prefill_tokens": 16},
+                ],
+            ]
+        )
+
+        await runner.run_concurrency_test(
+            [2], rounds_per_level=1, max_tokens=8, warmup_rounds_per_level=1
+        )
+
+        assert len(runner.results_list) == 2
+        assert runner.total_requests == 2
+        with Path(tmp_path / "warmup.csv").open(encoding="utf-8") as handle:
+            assert len(list(csv.DictReader(handle))) == 2
+        with Path(tmp_path / "requests.csv").open(encoding="utf-8") as handle:
+            assert len(list(csv.DictReader(handle))) == 2
+        assert runner._warmup_recorded == 2
+
+    @pytest.mark.asyncio
+    async def test_matrix_warmup_runs_before_measured_cell(self, runner, tmp_path):
+        runner.csv_file = str(tmp_path / "matrix.csv")
+        runner._start_db_run = MagicMock()
+        runner._batch_save_results_to_db = MagicMock()
+        runner._complete_db_run = MagicMock()
+        runner.should_skip_cell = MagicMock(return_value=(False, ""))
+        runner._get_tokenizer = MagicMock(return_value=object())
+        runner._calibrate_prompt_with_source = MagicMock(return_value=("prompt", "generated"))
+        events = []
+
+        async def warmup(*args):
+            events.append("warmup")
+
+        async def measure(*args):
+            events.append("measured")
+            return [{"session_id": 0, "error": None, "ttft": 0.1, "prefill_tokens": 32}]
+
+        runner._run_warmup_batch = AsyncMock(side_effect=warmup)
+        runner._run_continuous_batch = AsyncMock(side_effect=measure)
+        with patch("core.resource_monitor.ResourceMonitor"):
+            await runner.run_throughput_matrix_test([1], [32], 1, 8, enable_warmup=True)
+
+        assert events == ["warmup", "measured"]
+        assert len(runner.results_list) == 1
+
+    def test_warmup_counts_persist_in_run_protocol(self, runner, tmp_path, monkeypatch):
+        monkeypatch.setattr(DatabaseManager, "_instance", None)
+        monkeypatch.setattr(Database, "_instance", None)
+        path = tmp_path / "results.db"
+        manager = DatabaseManager(str(path))
+        plan = measurement_plan(
+            "prefill",
+            {
+                "token_levels": [100],
+                "requests_per_level": 1,
+                "warmup_requests_per_level": 1,
+            },
+        )
+        runner._db_run = manager.start_test_run(
+            "prefill", "test-model", config={"measurement_protocol": plan}
+        )
+        run_id = runner._db_run.id
+        runner._warmup_recorded = 1
+        runner._get_db_manager = MagicMock(return_value=manager)
+        runner._safe_stop_monitor = MagicMock(return_value=None)
+        runner._safe_stop_engine_poller = MagicMock(return_value=None)
+        runner._finalize_system_info = MagicMock()
+        runner._build_warehouse_extra_fields = MagicMock(return_value={})
+
+        runner._complete_db_run(success=True)
+
+        with sqlite3.connect(path) as conn:
+            config = json.loads(
+                conn.execute(
+                    "SELECT config_json FROM test_runs WHERE id = ?", (run_id,)
+                ).fetchone()[0]
+            )
+        assert config["measurement_protocol"]["warmup_recorded"] == 1
+        assert config["measurement_protocol"]["warmup_failures"] == 0
 
     def test_calculate_metrics_single_token(self, runner):
         start_time = 100.0
@@ -109,6 +212,7 @@ class TestBenchmarkRunner:
         assert result["tps"] == pytest.approx(2 / 0.8)
         assert result["tpot"] == pytest.approx(0.8 / 2)
         assert result["metric_contract_version"] == METRIC_CONTRACT_VERSION
+        assert result["token_source"] == "API"
 
     @pytest.mark.asyncio
     async def test_segmented_prefill_keeps_decode_interval_contract(self, runner):
@@ -140,13 +244,19 @@ class TestBenchmarkRunner:
         columns = ["tps", "metric_contract_version"]
         with open(runner.csv_file, "w", newline="", encoding="utf-8") as handle:
             csv.writer(handle).writerow(columns)
-        result = {"tps": 2.5, "extra_metrics": {"cell_resource_peaks": {"gpu": 1}}}
+        result = {
+            "tps": 2.5,
+            "prompt_text": "sample prompt",
+            "extra_metrics": {"cell_resource_peaks": {"gpu": 1}},
+        }
 
         runner._append_metric_csv(result, columns)
+        assert len(result["extra_metrics"]["prompt_sha256"]) == 64
 
         assert result["extra_metrics"] == {
             "cell_resource_peaks": {"gpu": 1},
             "metric_contract_version": METRIC_CONTRACT_VERSION,
+            "prompt_sha256": hashlib.sha256(b"sample prompt").hexdigest(),
         }
         with open(runner.csv_file, newline="", encoding="utf-8") as handle:
             rows = list(csv.DictReader(handle))

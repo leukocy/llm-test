@@ -26,6 +26,7 @@ from server.specs import (
     RunConfig,
     StrictSpec,
     expected_requests,
+    measurement_plan,
     spec_catalog,
 )
 from server.store import IdempotencyConflict, JobNotFound, JobStore, PresetConflict, PresetNotFound
@@ -693,6 +694,13 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             raise HTTPException(500, "恢复失败")
         return {"restored": True, "restart_required": True}
 
+    @app.post("/api/v1/jobs/plan", dependencies=[auth])
+    def preview_measurement(body: JobSubmission):
+        """Validate a workload and show its per-condition sample and warmup budget."""
+        if body.endpoint_id not in settings.endpoints:
+            raise HTTPException(422, "Unknown endpoint ID")
+        return measurement_plan(body.test_type, body.parameters)
+
     @app.post("/api/v1/jobs", dependencies=[auth], status_code=201)
     def submit(
         body: JobSubmission,
@@ -817,9 +825,23 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         except JobNotFound as exc:
             raise HTTPException(404, "Job not found") from exc
 
+    @app.get("/api/v1/jobs/{job_id}/warmup.csv", dependencies=[auth])
+    def warmup_csv(job_id: str):
+        """Download warmup observations, which are excluded from result statistics."""
+        job_or_404(job_id)
+        path = settings.artifact_root / job_id / "warmup.csv"
+        if not path.is_file():
+            raise HTTPException(404, "Warmup observations not available")
+        return FileResponse(path, media_type="text/csv", filename=f"{job_id}-warmup.csv")
+
     def performance_summary(job: dict) -> dict:
         try:
-            return run_summary(str(settings.db_path), job["result_run_id"], job=job)
+            return run_summary(
+                str(settings.db_path),
+                job["result_run_id"],
+                job=job,
+                warmup_path=settings.artifact_root / job["job_id"] / "warmup.csv",
+            )
         except MetricContractConflict as exc:
             raise HTTPException(409, str(exc)) from exc
 

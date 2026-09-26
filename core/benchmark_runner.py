@@ -1,7 +1,11 @@
 import asyncio
+import csv
+import hashlib
+import json
 import random
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -16,6 +20,7 @@ from core.benchmark.metrics import (
 )
 from core.cancel_state import is_stop_requested
 from core.error_messages import get_error_info
+from core.measurement_protocol import measurement_plan
 from core.providers.factory import get_provider
 from core.tokenizer_utils import get_cached_tokenizer
 from utils.get_logger import get_logger
@@ -663,6 +668,21 @@ def _get_random_suffix_prompt(
 logger = get_logger(__name__)
 
 
+class _BatchBarrier:
+    """One-shot request release gate with the same behavior on Python 3.10+."""
+
+    def __init__(self, parties: int) -> None:
+        self._parties = parties
+        self._arrived = 0
+        self._ready = asyncio.Event()
+
+    async def wait(self) -> None:
+        self._arrived += 1
+        if self._arrived == self._parties:
+            self._ready.set()
+        await asyncio.wait_for(self._ready.wait(), timeout=60)
+
+
 class BenchmarkRunner:
     def __init__(
         self,
@@ -763,6 +783,8 @@ class BenchmarkRunner:
         self.dashboard = dashboard
 
         self.results_list: list[dict[str, Any]] = []
+        self._warmup_recorded = 0
+        self._warmup_failures = 0
         self._persisted_result_ids: set[int] = set()
         self.all_outputs: list[dict[str, Any]] = []  # Store all outputs for review
         self.last_output = None
@@ -795,7 +817,7 @@ class BenchmarkRunner:
         ]
 
         # Cache for transformers tokenizer
-        self._transformers_tokenizer = None
+        self._transformers_tokenizer: Any = None
 
         # Database integration
         self._db_run: Any = None  # Current TestRun in database
@@ -951,6 +973,15 @@ class BenchmarkRunner:
                 "thinking_enabled": self.thinking_enabled,
                 "thinking_budget": self.thinking_budget,
                 "reasoning_effort": self.reasoning_effort,
+                "temperature": self.temperature,
+                "skip_first_token_for_tps": self.skip_first_token_for_tps,
+                "custom_params_sha256": (
+                    hashlib.sha256(
+                        json.dumps(self.custom_params, sort_keys=True, default=str).encode("utf-8")
+                    ).hexdigest()
+                    if self.custom_params
+                    else None
+                ),
                 "random_seed": self.random_seed,
             }
             if config:
@@ -1031,6 +1062,11 @@ class BenchmarkRunner:
         try:
             db = self._get_db_manager()
             self._finalize_system_info()
+            protocol = self._db_run.config.get("measurement_protocol")
+            if isinstance(protocol, dict):
+                protocol["warmup_recorded"] = self._warmup_recorded
+                protocol["warmup_failures"] = self._warmup_failures
+                db.runs.update(self._db_run)
             # 组装八维仓库字段并随完成写入
             extra_fields = self._build_warehouse_extra_fields(monitor_summary, engine_summary)
             db.complete_test_run(
@@ -1511,7 +1547,98 @@ class BenchmarkRunner:
             extra_metrics = {}
             result["extra_metrics"] = extra_metrics
         extra_metrics["metric_contract_version"] = METRIC_CONTRACT_VERSION
+        if isinstance(result.get("prompt_text"), str):
+            extra_metrics["prompt_sha256"] = hashlib.sha256(
+                result["prompt_text"].encode("utf-8")
+            ).hexdigest()
         append_to_csv(result, csv_columns, self.csv_file)
+
+    def _begin_measurement_protocol(self, test_type: str, config: dict) -> None:
+        """Snapshot the planned workload and keep warmup outside measured rows."""
+        self._warmup_recorded = 0
+        self._warmup_failures = 0
+        config["measurement_protocol"] = measurement_plan(test_type, config)
+        if config["measurement_protocol"]["warmup_requests"]:
+            path = Path(self.csv_file).with_name("warmup.csv")
+            with path.open("w", newline="", encoding="utf-8") as handle:
+                csv.writer(handle).writerow(
+                    (
+                        "condition",
+                        "session_id",
+                        "concurrency",
+                        "input_tokens_target",
+                        "ttft",
+                        "tps",
+                        "total_time",
+                        "prefill_tokens",
+                        "decode_tokens",
+                        "token_source",
+                        "token_calc_method",
+                        "error_type",
+                    )
+                )
+
+    def _record_warmup(
+        self, result: dict | None, *, condition: str, concurrency: int, input_tokens_target: int
+    ) -> None:
+        """Persist a minimal warmup observation without prompt or response content."""
+        result = result or {"error": "missing_result"}
+        self._warmup_recorded += 1
+        failed = bool(result.get("error"))
+        self._warmup_failures += int(failed)
+        path = Path(self.csv_file).with_name("warmup.csv")
+        with path.open("a", newline="", encoding="utf-8") as handle:
+            csv.writer(handle).writerow(
+                (
+                    condition,
+                    result.get("session_id"),
+                    concurrency,
+                    input_tokens_target,
+                    result.get("ttft"),
+                    result.get("tps"),
+                    result.get("total_time"),
+                    result.get("prefill_tokens"),
+                    result.get("decode_tokens"),
+                    result.get("token_source"),
+                    result.get("token_calc_method"),
+                    result.get("error_type") or ("request_failed" if failed else ""),
+                )
+            )
+
+    async def _run_warmup_batch(
+        self, concurrency: int, input_tokens_target: int, max_tokens: int, condition: str
+    ) -> None:
+        target = self._prompt_generation_target(input_tokens_target)
+        tokenizer = self._get_tokenizer()
+        loop = asyncio.get_running_loop()
+        prompts = await asyncio.gather(
+            *(
+                loop.run_in_executor(
+                    None, self._calibrate_prompt_with_source, target, "", tokenizer
+                )
+                for _ in range(concurrency)
+            )
+        )
+        results = await self._run_concurrency_batch(
+            None,
+            [prompt for prompt, _ in prompts],
+            max_tokens,
+            concurrency,
+            -(self._warmup_recorded + concurrency),
+        )
+        if len(results) != concurrency:
+            raise RuntimeError(
+                f"Warmup returned {len(results)} of {concurrency} results for {condition}"
+            )
+        for result in results:
+            self._record_warmup(
+                result,
+                condition=condition,
+                concurrency=concurrency,
+                input_tokens_target=input_tokens_target,
+            )
+        if any(result is None or result.get("error") for result in results):
+            raise RuntimeError(f"Warmup failed for {condition}; measured samples were not started")
 
     def _add_result(self, result: dict, csv_columns: list):
         """
@@ -2539,6 +2666,13 @@ class BenchmarkRunner:
             "created_at": created_at,  # absolute
             "cache_hit_tokens": cache_hit_tokens,
             "token_calc_method": token_calc_method,
+            "token_source": (
+                "API"
+                if token_calc_method.startswith("API")
+                else "Local tokenizer"
+                if token_calc_method != "未知"
+                else "Unknown"
+            ),
             "first_token_time": first_token_time,
             "prompt_text": prompt,
             "output_text": full_response_content,
@@ -2739,11 +2873,8 @@ class BenchmarkRunner:
             )
             own_shared_client = True
 
-        # 创建同步屏障，让所有并发请求完成准备工作后近乎同时发送 HTTP 请求
-        # asyncio.Barrier 仅在 Python 3.11+ 可用；3.10 下回退为 None（不使用屏障）
-        barrier = getattr(asyncio, "Barrier", None)
-        if barrier is not None:
-            barrier = barrier(concurrency)
+        # Release requests together on every supported Python version.
+        barrier = _BatchBarrier(concurrency)
 
         try:
             tasks = [
@@ -3066,6 +3197,7 @@ class BenchmarkRunner:
         rounds_per_level,
         max_tokens,
         input_tokens_target=0,
+        warmup_rounds_per_level=0,
     ):
         self.total_requests = sum(c * rounds_per_level for c in selected_concurrencies)
         self._test_start_time = time.time()  # 记录Test started时间
@@ -3103,7 +3235,9 @@ class BenchmarkRunner:
             "rounds_per_level": rounds_per_level,
             "max_tokens": max_tokens,
             "input_tokens_target": input_tokens_target,
+            "warmup_rounds_per_level": warmup_rounds_per_level,
         }
+        self._begin_measurement_protocol("concurrency", config)
         self._start_db_run("concurrency", config)
 
         # Checkis否isRestore模式
@@ -3177,9 +3311,34 @@ class BenchmarkRunner:
             self._current_concurrency = concurrency
             self.status_text.info(f"currently以 {concurrency} ConcurrencyRun Test...")
 
+            # Same input target and concurrency as measurement; observations stay in warmup.csv.
+            # A resumed level has already passed its warmup and must not repeat it.
+            level_start = sum(
+                c * rounds_per_level
+                for c in selected_concurrencies[: selected_concurrencies.index(concurrency)]
+            )
+            if start_session_counter <= level_start:
+                cell_ctx = input_tokens_target if input_tokens_target > 0 else base_target_tokens
+                skip_warmup, _ = self.should_skip_cell(concurrency, cell_ctx, max_tokens)
+                warmup_signal = None
+                if not skip_warmup:
+                    for _ in range(warmup_rounds_per_level):
+                        warmup_signal = self._check_control_signal()
+                        if warmup_signal:
+                            break
+                        await self._run_warmup_batch(
+                            concurrency,
+                            cell_ctx,
+                            max_tokens,
+                            f"{concurrency} 并发",
+                        )
+            else:
+                warmup_signal = None
+
             for r in range(rounds_per_level):
                 # Check控制信号
-                signal = self._check_control_signal()
+                signal = warmup_signal or self._check_control_signal()
+                warmup_signal = None
                 if signal:
                     pending_prompts = []
                     status = "PAUSED" if signal == "pause" else "CANCELLED"
@@ -3279,7 +3438,9 @@ class BenchmarkRunner:
 
         return pd.DataFrame(self.results_list)
 
-    async def run_prefill_test(self, token_levels, requests_per_level, max_tokens):
+    async def run_prefill_test(
+        self, token_levels, requests_per_level, max_tokens, warmup_requests_per_level=0
+    ):
         self.total_requests = len(token_levels) * requests_per_level
         self._test_start_time = time.time()
         self._current_max_tokens = max_tokens
@@ -3313,32 +3474,46 @@ class BenchmarkRunner:
             "token_levels": token_levels,
             "requests_per_level": requests_per_level,
             "max_tokens": max_tokens,
+            "warmup_requests_per_level": warmup_requests_per_level,
         }
+        self._begin_measurement_protocol("prefill", config)
         self._start_db_run("prefill", config)
+
+        def stop_for_control(signal: str) -> pd.DataFrame:
+            self._save_progress(
+                "prefill",
+                self.completed_requests,
+                self.total_requests,
+                [],
+                "PAUSED" if signal == "pause" else "CANCELLED",
+            )
+            if signal == "pause":
+                self._mark_control_state("pause")
+                self._show("warning", "TestPaused，进度Saved")
+            else:
+                self._mark_control_state("stop")
+                self._show("warning", "Test已停止，进度Saved")
+            return pd.DataFrame(self.results_list)
 
         # No client needed - requests library creates connections per-request
         for tokens_target in token_levels:
             # Check控制信号
             signal = self._check_control_signal()
             if signal:
-                pending_prompts: list[str] = []
-                status = "PAUSED" if signal == "pause" else "CANCELLED"
-                self._save_progress(
-                    "prefill",
-                    self.completed_requests,
-                    self.total_requests,
-                    pending_prompts,
-                    status,
-                )
-                if signal == "pause":
-                    self._mark_control_state("pause")
-                    self._show("warning", "TestPaused，进度Saved")
-                else:
-                    self._mark_control_state("stop")
-                    self._show("warning", "Test已停止，进度Saved")
-                return pd.DataFrame(self.results_list)
+                return stop_for_control(signal)
 
             self.status_text.info(f"currently准备 {tokens_target} (目标) Token Tip...")
+
+            for _ in range(warmup_requests_per_level):
+                signal = self._check_control_signal()
+                if signal:
+                    break
+                await self._run_warmup_batch(
+                    1, tokens_target, max_tokens, f"{tokens_target} tokens"
+                )
+            signal = signal or self._check_control_signal()
+            if signal:
+                return stop_for_control(signal)
 
             # Adjust multiplier based on tokenizer
             # Adjust multiplier based on tokenizer
@@ -4172,6 +4347,7 @@ class BenchmarkRunner:
             "max_tokens": max_tokens,
             "enable_warmup": enable_warmup,
         }
+        self._begin_measurement_protocol("matrix", config)
         self._start_db_run("throughput_matrix", config)
 
         session_counter = 0
@@ -4229,6 +4405,14 @@ class BenchmarkRunner:
                 pregen_pairs = await asyncio.gather(*prompt_tasks)
                 pregen_prompts = [p for p, _ in pregen_pairs]
                 pregen_sources = [s for _, s in pregen_pairs]
+
+                if enable_warmup:
+                    await self._run_warmup_batch(
+                        concurrency,
+                        length_target,
+                        max_tokens,
+                        f"{concurrency} 并发 / {length_target} tokens",
+                    )
 
                 # Per-cell 资源监控:每个 (并发×上下文) cell 独立采样,峰值得以按 cell 归因。
                 # 失败不影响测试（与 _start_resource_monitor 同防御）。

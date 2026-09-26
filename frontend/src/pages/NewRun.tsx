@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type Endpoint, type Preset } from "../api";
+import { api, type Endpoint, type MeasurementPlan, type Preset } from "../api";
 import { scenarios, type JobType } from "../constants";
 import {
   SchemaForm,
@@ -45,6 +45,8 @@ export function NewRun({
   const [presetName, setPresetName] = useState("");
   const [presetError, setPresetError] = useState("");
   const [presetBusy, setPresetBusy] = useState(false);
+  const [plan, setPlan] = useState<MeasurementPlan | null>(null);
+  const [planError, setPlanError] = useState("");
   const specSchema = specs?.items[type]?.schema;
 
   useEffect(() => {
@@ -69,13 +71,6 @@ export function NewRun({
     };
   }, [token]);
 
-  // 切换类型：表单值重置为该类型推荐起点（schema 默认值 × 内置预设）
-  useEffect(() => {
-    const base = scenarios.find((item) => item.id === type)!.parameters;
-    setParams(base);
-    setRaw(JSON.stringify(base, null, 2));
-  }, [type]);
-
   useEffect(() => {
     if (specs && !Object.keys(runConfig).length && specs.run_config_schema) {
       setRunConfig(schemaDefaults(specs.run_config_schema));
@@ -87,6 +82,58 @@ export function NewRun({
     () => (specs ? schemaDefaults(specs.run_config_schema) : {}),
     [specs],
   );
+
+  // Use the same server validation and workload calculator as actual submission.
+  useEffect(() => {
+    let active = true;
+    setPlan(null);
+    setPlanError("");
+    if (!endpoint) return;
+    const timer = window.setTimeout(() => {
+      let parameters: Record<string, unknown>;
+      try {
+        const parsed = mode === "json" ? JSON.parse(raw) : params;
+        if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+          throw new Error("参数必须是 JSON 对象");
+        }
+        parameters = parsed as Record<string, unknown>;
+      } catch (exc) {
+        if (active)
+          setPlanError(exc instanceof Error ? exc.message : "JSON 格式错误");
+        return;
+      }
+      const runConfigDiff = Object.fromEntries(
+        Object.entries(runConfig).filter(
+          ([key, value]) =>
+            value !== undefined && value !== "" && value !== knobDefaults[key],
+        ),
+      );
+      api<MeasurementPlan>(token, "/api/v1/jobs/plan", {
+        method: "POST",
+        body: JSON.stringify({
+          endpoint_id: endpoint,
+          test_type: type,
+          parameters,
+          ...(Object.keys(runConfigDiff).length
+            ? { run_config: runConfigDiff }
+            : {}),
+        }),
+      })
+        .then((value) => {
+          if (active) setPlan(value);
+        })
+        .catch((exc) => {
+          if (active)
+            setPlanError(
+              exc instanceof Error ? exc.message : "无法核对工作负载",
+            );
+        });
+    }, 300);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [endpoint, type, params, raw, mode, runConfig, knobDefaults, token]);
 
   function currentParameters(): Record<string, unknown> {
     if (mode === "json") {
@@ -265,6 +312,8 @@ export function NewRun({
                 className={`scenario ${type === item.id ? "selected" : ""}`}
                 onClick={() => {
                   setType(item.id);
+                  setParams(item.parameters);
+                  setRaw(JSON.stringify(item.parameters, null, 2));
                   setPresetId("");
                   setError("");
                 }}
@@ -373,7 +422,7 @@ export function NewRun({
             <span>提交后由独立 worker 执行；页面关闭不影响任务。</span>
             <button
               className="button primary"
-              disabled={busy || !endpoint}
+              disabled={busy || !endpoint || !plan || Boolean(planError)}
               onClick={async () => {
                 setError("");
                 try {
@@ -398,6 +447,67 @@ export function NewRun({
           )}
         </section>
         <aside className="new-aside">
+          <div className="aside-card measurement-plan" role="status">
+            <span className="eyebrow">WORKLOAD PLAN</span>
+            <h3>提交前核对</h3>
+            {planError ? (
+              <p className="form-error">{planError}</p>
+            ) : plan ? (
+              <>
+                <p className="plan-model">
+                  {plan.workload_model === "closed_loop_fixed_concurrency"
+                    ? "闭环固定并发"
+                    : plan.workload_model === "sequential_fixed_input_targets"
+                      ? "顺序固定输入长度"
+                      : "按测试类型定义的负载"}
+                  {plan.protocol_version ? ` · ${plan.protocol_version}` : ""}
+                </p>
+                <div className="plan-totals">
+                  <div>
+                    <strong>
+                      {!plan.protocol_version && plan.measured_requests === 0
+                        ? "动态"
+                        : plan.measured_requests}
+                    </strong>
+                    <span>正式请求</span>
+                  </div>
+                  <div>
+                    <strong>{plan.warmup_requests}</strong>
+                    <span>预热请求</span>
+                  </div>
+                  <div>
+                    <strong>
+                      {!plan.protocol_version && plan.total_requests === 0
+                        ? "动态"
+                        : plan.total_requests}
+                    </strong>
+                    <span>总请求预算</span>
+                  </div>
+                </div>
+                {plan.cells.length > 0 && (
+                  <div className="plan-cells">
+                    {plan.cells.map((cell) => (
+                      <div key={cell.label}>
+                        <span>{cell.label}</span>
+                        <strong>
+                          {cell.measured_requests} + {cell.warmup_requests}
+                        </strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {plan.warnings.length > 0 && (
+                  <ul className="plan-warnings">
+                    {plan.warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            ) : (
+              <p>正在校验参数和请求预算…</p>
+            )}
+          </div>
           <div className="aside-card">
             <span className="eyebrow">MEASUREMENT NOTES</span>
             <h3>结果可信，从输入开始</h3>

@@ -169,3 +169,41 @@ def test_api_auth_validation_and_report_boundary(client: TestClient):
         == 422
     )
     assert client.get("/health/ready").status_code == 200
+
+
+def test_plan_preview_validates_and_does_not_enqueue(client: TestClient):
+    headers = {"Authorization": f"Bearer {TOKEN}"}
+    response = client.post(
+        "/api/v1/jobs/plan",
+        json={
+            "endpoint_id": "lab",
+            "test_type": "prefill",
+            "parameters": {
+                "token_levels": [512, 2048],
+                "requests_per_level": 3,
+                "warmup_requests_per_level": 1,
+                "max_tokens": 64,
+            },
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["measured_requests"] == 6
+    assert response.json()["warmup_requests"] == 2
+    assert client.get("/api/v1/jobs", headers=headers).json()["total"] == 0
+
+
+def test_warmup_export_requires_auth_and_job_scope(client: TestClient, store: JobStore):
+    headers = {"Authorization": f"Bearer {TOKEN}"}
+    job = client.post(
+        "/api/v1/jobs",
+        json={"endpoint_id": "lab", "test_type": "concurrency", "parameters": PARAMS},
+        headers=headers,
+    ).json()
+    folder = store.path.parent / "artifacts" / job["job_id"]
+    folder.mkdir(parents=True)
+    (folder / "warmup.csv").write_text("condition,ttft\n1 并发,0.1\n", encoding="utf-8")
+    path = f"/api/v1/jobs/{job['job_id']}/warmup.csv"
+    assert client.get(path).status_code == 401
+    assert client.get(path, headers=headers).text.startswith("condition,ttft")
+    assert client.get("/api/v1/jobs/missing/warmup.csv", headers=headers).status_code == 404

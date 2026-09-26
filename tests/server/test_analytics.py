@@ -8,7 +8,8 @@ import pytest
 
 from core.benchmark.metrics import METRIC_CONTRACT_VERSION
 from core.database.schema import create_tables
-from server.analytics import MetricContractConflict, run_results_csv, run_summary
+from core.measurement_protocol import measurement_plan
+from server.analytics import MetricContractConflict, run_results, run_results_csv, run_summary
 from server.reports import render_html, render_quality_html
 
 
@@ -99,6 +100,106 @@ def test_summary_rejects_mixed_metric_contracts(tmp_path: Path):
         )
     with pytest.raises(MetricContractConflict, match="mixed"):
         run_summary(str(path), 1)
+
+
+def test_protocol_checks_each_condition_and_reports_input_token_drift(tmp_path: Path):
+    path = tmp_path / "results.db"
+    plan = measurement_plan(
+        "concurrency",
+        {
+            "selected_concurrencies": [1, 2],
+            "rounds_per_level": 1,
+            "warmup_rounds_per_level": 0,
+            "input_tokens_target": 100,
+        },
+    )
+    plan.update(warmup_recorded=0, warmup_failures=0)
+    provenance = json.dumps({"metric_contract_version": METRIC_CONTRACT_VERSION})
+    with sqlite3.connect(path) as conn:
+        create_tables(conn)
+        conn.execute(
+            """INSERT INTO test_runs(test_id,test_type,status,model_id,config_json)
+               VALUES ('j','concurrency','completed','m',?)""",
+            (
+                json.dumps(
+                    {
+                        "metric_contract_version": METRIC_CONTRACT_VERSION,
+                        "measurement_protocol": plan,
+                    }
+                ),
+            ),
+        )
+        conn.executemany(
+            """INSERT INTO test_results(run_id,concurrency_level,prefill_tokens,ttft,extra_metrics)
+               VALUES (1,1,50,0.2,?)""",
+            [(provenance,), (provenance,), (provenance,)],
+        )
+    job = {"job_id": "j", "result_run_id": 1, "status": "completed", "progress_total": 3}
+    data = run_summary(str(path), 1, job=job)
+    assert data["integrity"]["verified"] is False
+    assert any("2 并发" in reason for reason in data["integrity"]["reasons"])
+    assert data["groups"][0]["input_tokens"]["target_deviation_pct"] == -50
+    assert any("偏离目标" in warning for warning in data["data_quality"]["warnings"])
+
+
+def test_request_api_exposes_prompt_fingerprint_without_prompt_text(tmp_path: Path):
+    path = tmp_path / "results.db"
+    fingerprint = "a" * 64
+    with sqlite3.connect(path) as conn:
+        create_tables(conn)
+        conn.execute(
+            "INSERT INTO test_runs(test_id,test_type,model_id) VALUES ('j','concurrency','m')"
+        )
+        conn.execute(
+            """INSERT INTO test_results(run_id,prompt_text,extra_metrics)
+               VALUES (1,'private prompt',?)""",
+            (
+                json.dumps(
+                    {
+                        "prompt_sha256": fingerprint,
+                        "metric_contract_version": METRIC_CONTRACT_VERSION,
+                    }
+                ),
+            ),
+        )
+    item = run_results(str(path), 1, limit=10, offset=0)["items"][0]
+    assert item["prompt_sha256"] == fingerprint
+    assert "prompt_text" not in item
+    assert fingerprint in run_results_csv(str(path), 1)
+
+
+def test_warmup_artifact_is_part_of_integrity_check(tmp_path: Path):
+    path = tmp_path / "results.db"
+    warmup = tmp_path / "warmup.csv"
+    plan = measurement_plan(
+        "prefill",
+        {"token_levels": [100], "requests_per_level": 1, "warmup_requests_per_level": 1},
+    )
+    plan.update(warmup_recorded=1, warmup_failures=0)
+    provenance = json.dumps({"metric_contract_version": METRIC_CONTRACT_VERSION})
+    with sqlite3.connect(path) as conn:
+        create_tables(conn)
+        conn.execute(
+            """INSERT INTO test_runs(test_id,test_type,status,model_id,config_json)
+               VALUES ('j','prefill','completed','m',?)""",
+            (
+                json.dumps(
+                    {
+                        "metric_contract_version": METRIC_CONTRACT_VERSION,
+                        "measurement_protocol": plan,
+                    }
+                ),
+            ),
+        )
+        conn.execute(
+            """INSERT INTO test_results(run_id,input_tokens_target,ttft,extra_metrics)
+               VALUES (1,100,0.2,?)""",
+            (provenance,),
+        )
+    job = {"job_id": "j", "result_run_id": 1, "status": "completed", "progress_total": 1}
+    assert run_summary(str(path), 1, job=job, warmup_path=warmup)["integrity"]["verified"] is False
+    warmup.write_text("condition,ttft\n100 tokens,0.1\n", encoding="utf-8")
+    assert run_summary(str(path), 1, job=job, warmup_path=warmup)["integrity"]["verified"] is True
 
 
 def test_quality_report_escapes_dataset_and_displays_uncertainty():

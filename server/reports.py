@@ -10,6 +10,7 @@ def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
     overall = summary["overall"]
     metric = overall["metrics"]
     integrity = summary["integrity"]
+    protocol = summary.get("measurement_protocol")
 
     def fmt(value: Any, digits: int = 3) -> str:
         return "—" if value is None else f"{value:,.{digits}f}"
@@ -22,7 +23,9 @@ def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
 
     rows = "".join(
         f"<tr><th scope='row'>{cell(group['label'])}</th>"
-        f"<td>{group['requests']}</td><td>{rate(group['success_rate'])}</td>"
+        f"<td>{group['requests']} / {cell(group.get('planned_requests') or '—')}</td>"
+        f"<td>{rate(group['success_rate'])}</td>"
+        f"<td>{fmt(group.get('input_tokens', {}).get('median'), 1)}</td>"
         f"<td>{fmt(group['metrics']['ttft']['median'])}</td>"
         f"<td>{fmt(group['metrics']['ttft']['p95'])}</td>"
         f"<td>{fmt(group['metrics']['tps']['median'])}</td></tr>"
@@ -30,6 +33,18 @@ def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
     )
     notes = "".join(f"<li>{cell(note)}</li>" for note in summary["notes"])
     integrity_reasons = "".join(f"<li>{cell(reason)}</li>" for reason in integrity["reasons"])
+    quality_warnings = "".join(
+        f"<li>{cell(reason)}</li>" for reason in summary.get("data_quality", {}).get("warnings", [])
+    )
+    protocol_html = (
+        f"<h2>测量协议</h2><p>版本：{cell(protocol.get('protocol_version'))}；"
+        f"负载模型：{cell(protocol.get('workload_model'))}；"
+        f"正式请求：{cell(protocol.get('measured_requests'))}；"
+        f"预热：{cell(protocol.get('warmup_recorded'))} / "
+        f"{cell(protocol.get('warmup_requests'))} 次。</p>"
+        if protocol
+        else "<h2>测量协议</h2><p>历史运行未记录固定工作负载协议。</p>"
+    )
     integrity_label = (
         "单次运行完整性核验通过" if integrity["verified"] else "仅供诊断 · 未通过完整性核验"
     )
@@ -76,7 +91,9 @@ code {{ overflow-wrap:anywhere; }}
 <div class="card">TTFT p95 · s<b>{fmt(metric["ttft"]["p95"])}</b></div>
 </div>
 <h2>条件切片</h2><table><thead><tr><th>{cell(summary["group_axis"])}</th><th>请求数</th><th>成功率</th>
-<th>TTFT p50 · s</th><th>TTFT p95 · s</th><th>TPS p50</th></tr></thead><tbody>{rows}</tbody></table>
+<th>输入 token 中位数</th><th>TTFT p50 · s</th><th>TTFT p95 · s</th><th>TPS p50</th></tr></thead><tbody>{rows}</tbody></table>
+{protocol_html}
+{"<h2>数据质量提示</h2><ul>" + quality_warnings + "</ul>" if quality_warnings else ""}
 <h2>方法与限制</h2><ul>{notes}</ul>
 <p>成功率区间：{cell(overall["success_rate_ci95"])}；指标契约：{cell(summary["metric_contract_version"])}。</p>
 <h2>可追溯信息</h2><p>Run ID: <code>{cell(summary["run"]["test_id"])}</code></p>
