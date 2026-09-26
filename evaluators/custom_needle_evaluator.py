@@ -15,9 +15,11 @@ import json
 import os
 from typing import Any
 
+from . import register_evaluator
 from .base_evaluator import BaseEvaluator, SampleResult
 
 
+@register_evaluator("custom_needle")
 class CustomNeedleEvaluator(BaseEvaluator):
     """
     Custom Needle-in-a-Haystack Evaluator
@@ -134,9 +136,7 @@ class CustomNeedleEvaluator(BaseEvaluator):
         self.samples = samples
         return samples
 
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """FormatTest prompt"""
         context = sample.get("context", "")
         question = sample.get("question", "")
@@ -296,8 +296,3 @@ class NeedleTestRunner:
         evaluator = self.evaluator
         assert evaluator is not None
         return evaluator
-
-
-
-
-

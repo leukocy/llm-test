@@ -21,9 +21,11 @@ import os
 import random
 from typing import Any
 
+from . import register_evaluator
 from .base_evaluator import BaseEvaluator
 
 
+@register_evaluator("arena_hard")
 class ArenaHardEvaluator(BaseEvaluator):
     """
     Arena-Hard Evaluator
@@ -104,9 +106,7 @@ Then provide a brief explanation of your rating."""
         try:
             from core.dataset_manager import get_dataset
 
-            samples = get_dataset(
-                self.dataset_name, split="test", max_samples=None, seed=self.seed
-            )
+            samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for Arena Hard: {e}")
 
@@ -146,9 +146,7 @@ Then provide a brief explanation of your rating."""
 
         # 按类别Filter
         if subset:
-            samples = [
-                s for s in samples if s.get("category", "").lower() == subset.lower()
-            ]
+            samples = [s for s in samples if s.get("category", "").lower() == subset.lower()]
 
         random.shuffle(samples)
 
@@ -245,9 +243,7 @@ Then provide a brief explanation of your rating."""
             },
         ]
 
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """Format样本is Prompt"""
         question = sample.get("question", "")
         return str(question)
@@ -269,8 +265,6 @@ Then provide a brief explanation of your rating."""
         """
         # ifhas响应内容，就算has效
         return bool(predicted and len(predicted.strip()) > 20)
-
-
 
     def get_sample_category(self, sample: dict[str, Any]) -> str:
         """Get样本类别"""

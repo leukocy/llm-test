@@ -13,9 +13,11 @@ import os
 import random
 from typing import Any
 
+from . import register_evaluator
 from .base_evaluator import BaseEvaluator, normalize_text
 
 
+@register_evaluator("longbench")
 class LongBenchEvaluator(BaseEvaluator):
     """
     LongBench DatasetEvaluator

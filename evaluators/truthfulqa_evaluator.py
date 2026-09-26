@@ -11,9 +11,11 @@ import os
 import random
 from typing import Any
 
+from . import register_evaluator
 from .base_evaluator import BaseEvaluator, extract_choice_answer
 
 
+@register_evaluator("truthfulqa")
 class TruthfulQAEvaluator(BaseEvaluator):
     """
     TruthfulQA DatasetEvaluator
@@ -105,9 +107,7 @@ class TruthfulQAEvaluator(BaseEvaluator):
         try:
             from core.dataset_manager import get_dataset
 
-            samples = get_dataset(
-                self.dataset_name, split="test", max_samples=None, seed=self.seed
-            )
+            samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for TruthfulQA: {e}")
 
@@ -153,17 +153,13 @@ class TruthfulQAEvaluator(BaseEvaluator):
 
         # 按类别Filter（if指定）
         if subset and subset in self.CATEGORIES:
-            samples = [
-                s for s in samples if s.get("category", "").lower() == subset.lower()
-            ]
+            samples = [s for s in samples if s.get("category", "").lower() == subset.lower()]
 
         # 随机打乱
         random.shuffle(samples)
 
         # Calculate总需Sample count
-        total_needed = self.num_shots + (
-            self.max_samples if self.max_samples else len(samples)
-        )
+        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
@@ -223,9 +219,7 @@ class TruthfulQAEvaluator(BaseEvaluator):
                 if len(choices) > 4:
                     # 保留Correct answer，加onotherOptions
                     correct_choice = choices[answer]
-                    other_choices = [c for i, c in enumerate(choices) if i != answer][
-                        :3
-                    ]
+                    other_choices = [c for i, c in enumerate(choices) if i != answer][:3]
                     choices = [correct_choice] + other_choices
                     answer = 0
 
@@ -370,9 +364,7 @@ class TruthfulQAEvaluator(BaseEvaluator):
                     "content": self.format_prompt(ex, include_answer=False),
                 }
             )
-            messages.append(
-                {"role": "assistant", "content": self.get_correct_answer(ex)}
-            )
+            messages.append({"role": "assistant", "content": self.get_correct_answer(ex)})
 
         messages.append(
             {
@@ -382,9 +374,7 @@ class TruthfulQAEvaluator(BaseEvaluator):
         )
         return messages
 
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """Format TruthfulQA 样本is Prompt"""
         question = sample.get("question", "")
         choices = sample.get("choices", [])

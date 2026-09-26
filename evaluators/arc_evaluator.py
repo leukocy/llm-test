@@ -7,9 +7,11 @@ Contains primary school science questions (Easy and Challenge sets).
 import random
 from typing import Any
 
+from . import register_evaluator
 from .base_evaluator import BaseEvaluator, extract_choice_answer
 
 
+@register_evaluator("arc")
 class ARCEvaluator(BaseEvaluator):
     """
     ARC Dataset Evaluator.
@@ -66,9 +68,7 @@ class ARCEvaluator(BaseEvaluator):
                     "content": self.format_prompt(ex, include_answer=False),
                 }
             )
-            messages.append(
-                {"role": "assistant", "content": self.get_correct_answer(ex)}
-            )
+            messages.append({"role": "assistant", "content": self.get_correct_answer(ex)})
 
         messages.append(
             {
@@ -78,9 +78,7 @@ class ARCEvaluator(BaseEvaluator):
         )
         return messages
 
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         question = sample.get("question", "")
         choices_data = sample.get("choices", {})
         labels = choices_data.get("label", [])

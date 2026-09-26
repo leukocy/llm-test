@@ -17,10 +17,12 @@ import random
 import re
 from typing import Any
 
+from . import register_evaluator
 from .answer_parser import MathAnswerParser
 from .base_evaluator import BaseEvaluator
 
 
+@register_evaluator("aime2025")
 class AIME2025Evaluator(BaseEvaluator):
     """
     AIME 2025 DatasetEvaluator
@@ -80,9 +82,7 @@ class AIME2025Evaluator(BaseEvaluator):
         try:
             from core.dataset_manager import get_dataset
 
-            samples = get_dataset(
-                self.dataset_name, split="test", max_samples=None, seed=self.seed
-            )
+            samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for AIME: {e}")
 
@@ -125,17 +125,13 @@ class AIME2025Evaluator(BaseEvaluator):
         # 按子集Filter
         if subset:
             subset_upper = subset.upper().replace("_", "-")
-            samples = [
-                s for s in samples if subset_upper in s.get("source", "").upper()
-            ]
+            samples = [s for s in samples if subset_upper in s.get("source", "").upper()]
 
         # 随机打乱
         random.shuffle(samples)
 
         # Calculate总需Sample count = TestQuestion + few-shot 示例 (AIME 通常 0-shot)
-        total_needed = self.num_shots + (
-            self.max_samples if self.max_samples else len(samples)
-        )
+        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
@@ -246,9 +242,7 @@ class AIME2025Evaluator(BaseEvaluator):
             },
         ]
 
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """
         Format AIME 样本is Prompt
 

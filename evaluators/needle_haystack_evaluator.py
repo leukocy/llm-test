@@ -12,9 +12,11 @@ import os
 import random
 from typing import Any
 
+from . import register_evaluator
 from .base_evaluator import BaseEvaluator, normalize_text
 
 
+@register_evaluator("needle_haystack")
 class NeedleHaystackEvaluator(BaseEvaluator):
     """
     Needle-in-a-Haystack TestEvaluator
@@ -121,9 +123,7 @@ subway system that connects San Francisco to other cities in the Bay Area.
 
         return samples
 
-    def _create_single_test(
-        self, context_length: int, needle_depth: float
-    ) -> dict[str, Any]:
+    def _create_single_test(self, context_length: int, needle_depth: float) -> dict[str, Any]:
         """Create单Test case"""
         needle = self.DEFAULT_NEEDLE
         question = "What is the best thing to do in San Francisco?"
@@ -172,9 +172,7 @@ subway system that connects San Francisco to other cities in the Bay Area.
 
         return full_text
 
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """FormatTest样本"""
         context = sample.get("context", "")
         question = sample.get("question", "")

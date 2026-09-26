@@ -22,9 +22,11 @@ import random
 import re
 from typing import Any
 
+from . import register_evaluator
 from .base_evaluator import BaseEvaluator, extract_choice_answer
 
 
+@register_evaluator("global_piqa")
 class GlobalPIQAEvaluator(BaseEvaluator):
     """
     Global PIQA Evaluator
@@ -74,9 +76,7 @@ class GlobalPIQAEvaluator(BaseEvaluator):
         try:
             from core.dataset_manager import get_dataset
 
-            samples = get_dataset(
-                self.dataset_name, split="test", max_samples=None, seed=self.seed
-            )
+            samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for Global PIQA: {e}")
 
@@ -116,16 +116,12 @@ class GlobalPIQAEvaluator(BaseEvaluator):
 
         # 按语言Filter
         if subset:
-            samples = [
-                s for s in samples if s.get("language", "").lower() == subset.lower()
-            ]
+            samples = [s for s in samples if s.get("language", "").lower() == subset.lower()]
 
         random.shuffle(samples)
 
         # Calculate总需Sample count
-        total_needed = self.num_shots + (
-            self.max_samples if self.max_samples else len(samples)
-        )
+        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
@@ -257,9 +253,7 @@ class GlobalPIQAEvaluator(BaseEvaluator):
             },
         ]
 
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """Format样本is Prompt"""
         goal = sample.get("goal", "")
         sol1 = sample.get("sol1", "")
@@ -318,9 +312,7 @@ Answer:"""
             return answer
 
         # 查找 "answer is A/B" 模式
-        match = re.search(
-            r"(?:answer|choice|solution)[:\s]*([AB])", response, re.IGNORECASE
-        )
+        match = re.search(r"(?:answer|choice|solution)[:\s]*([AB])", response, re.IGNORECASE)
         if match:
             return match.group(1).upper()
 

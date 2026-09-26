@@ -34,9 +34,7 @@ def test_skip_onboarding_updates_state_without_interrupting_render(monkeypatch):
         return False
 
     def rerun():
-        raise AssertionError(
-            "Skip onboarding must not interrupt the current render cycle"
-        )
+        raise AssertionError("Skip onboarding must not interrupt the current render cycle")
 
     monkeypatch.setattr(onboarding.st, "container", lambda *args, **kwargs: _Context())
     monkeypatch.setattr(
@@ -50,6 +48,6 @@ def test_skip_onboarding_updates_state_without_interrupting_render(monkeypatch):
     monkeypatch.setattr(onboarding.st, "button", button)
     monkeypatch.setattr(onboarding.st, "rerun", rerun)
 
-    onboarding.render_onboarding_modal()
+    onboarding.render_onboarding_guide()
 
     assert state.show_onboarding is False

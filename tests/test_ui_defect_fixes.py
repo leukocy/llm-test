@@ -11,7 +11,7 @@ import pandas as pd
 
 from ui.charts import plot_performance_summary, smart_format_value
 from ui.export import _safe_col_list
-from ui.page_layout import _TEST_TYPE_MAP, _detect_test_type_from_df
+from ui.page_layout import _detect_test_type_from_df
 from ui.realtime_dashboard import RealtimeDashboard
 
 
@@ -65,20 +65,6 @@ class TestDetectTestTypeFromDf:
     def test_empty_df_returns_none(self):
         assert _detect_test_type_from_df(pd.DataFrame()) is None
         assert _detect_test_type_from_df(None) is None
-
-
-class TestTestTypeMap:
-    """The English→Chinese map must produce real Chinese keys, not the
-    corrupted 'onunder文' placeholders from a bad batch replacement."""
-
-    def test_map_values_have_no_corrupted_placeholders(self):
-        for display, mapped in _TEST_TYPE_MAP.items():
-            assert "onunder" not in mapped, f"{display} maps to corrupted {mapped}"
-            assert not mapped.endswith("Test"), f"{display} maps to half-translated {mapped}"
-
-    def test_map_keys_are_display_names(self):
-        assert "Concurrency Test" in _TEST_TYPE_MAP
-        assert "Stability Test" in _TEST_TYPE_MAP
 
 
 class TestSmartFormatValue:

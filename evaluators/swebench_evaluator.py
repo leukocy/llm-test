@@ -12,9 +12,11 @@ import random
 import re
 from typing import Any
 
+from . import register_evaluator
 from .base_evaluator import BaseEvaluator
 
 
+@register_evaluator("swebench_lite")
 class SWEBenchLiteEvaluator(BaseEvaluator):
     """
     SWE-Bench Lite DatasetEvaluator
@@ -63,9 +65,7 @@ class SWEBenchLiteEvaluator(BaseEvaluator):
         try:
             from core.dataset_manager import get_dataset
 
-            samples = get_dataset(
-                self.dataset_name, split="test", max_samples=None, seed=self.seed
-            )
+            samples = get_dataset(self.dataset_name, split="test", max_samples=None, seed=self.seed)
         except Exception as e:
             print(f"[WARNING] DatasetManager failed for SWE-Bench: {e}")
 
@@ -103,9 +103,7 @@ class SWEBenchLiteEvaluator(BaseEvaluator):
         samples = self._normalize_samples(samples)
         random.shuffle(samples)
 
-        total_needed = self.num_shots + (
-            self.max_samples if self.max_samples else len(samples)
-        )
+        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
         if len(samples) > total_needed:
             samples = samples[:total_needed]
 
@@ -210,9 +208,7 @@ def build_message(parts):
             },
         ]
 
-    def format_prompt(
-        self, sample: dict[str, Any], include_answer: bool = False
-    ) -> str:
+    def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """Format SWE-Bench 样本"""
         problem = sample.get("problem_statement", "")
         hints = sample.get("hints", "")
@@ -271,10 +267,7 @@ def build_message(parts):
 
         # 简单Check：is否包含 diff 格式
         has_diff_format = (
-            "---" in predicted
-            or "+++" in predicted
-            or "+" in predicted
-            or "-" in predicted
+            "---" in predicted or "+++" in predicted or "+" in predicted or "-" in predicted
         )
 
         # Checkis否has代码修改
