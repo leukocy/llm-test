@@ -37,15 +37,40 @@ export function Detail({
   const [results, setResults] = useState<RequestResult[]>([]);
   const [error, setError] = useState("");
   const [logs, setLogs] = useState<LogLine[]>([]);
+  const [robustness, setRobustness] = useState<RobustnessReport | null>(null);
   const resultsRef = useRef<RequestResult[]>([]);
   const logsRef = useRef<LogLine[]>([]);
   resultsRef.current = results;
 
   type LogLine = { id: number; timestamp: number | null; level: string; message: string };
+  type RobustnessReport = {
+    job_id: string;
+    model_id: string;
+    robustness: {
+      total_samples: number;
+      perturbations_per_sample: number;
+      original_accuracy: number;
+      perturbed_accuracy: number;
+      accuracy_drop: number;
+      overall_robustness: number;
+      overall_consistency: number;
+      sensitivity_by_type: Record<string, number>;
+      most_sensitive_perturbation: string;
+      results: {
+        sample_id: string;
+        original_correct: boolean;
+        robustness_score: number;
+        consistency_score: number;
+        perturbed_results: { type?: string; correct?: boolean }[];
+      }[];
+      recommendations: string[];
+    };
+  };
   useEffect(() => {
     let alive = true;
     setSummary(null);
     setQuality(null);
+    setRobustness(null);
     setResults([]);
     setEvents([]);
     api<{ items: JobEvent[] }>(token, `/api/v1/jobs/${job.job_id}/events`)
@@ -70,9 +95,14 @@ export function Detail({
         })
         .catch(() => {});
     } else if (job.result_artifact) {
-      api<QualityReport>(token, `/api/v1/jobs/${job.job_id}/report`)
+      api<QualityReport | RobustnessReport>(token, `/api/v1/jobs/${job.job_id}/report`)
         .then((data) => {
-          if (alive) setQuality(data);
+          if (!alive) return;
+          if ((data as RobustnessReport).robustness) {
+            setRobustness(data as RobustnessReport);
+          } else {
+            setQuality(data as QualityReport);
+          }
         })
         .catch((exc) => {
           if (alive) setError(exc.message);
@@ -449,6 +479,104 @@ export function Detail({
                 : "检查任务事件或 worker 日志了解原因。"
             }
           />
+        </section>
+      )}
+      {robustness && (
+        <section className="surface">
+          <div className="section-head">
+            <div>
+              <span className="eyebrow">ROBUSTNESS EVALUATION</span>
+              <h2>鲁棒性评估</h2>
+            </div>
+            <span className="minor-tag">
+              {robustness.robustness.total_samples} 样本 ×{" "}
+              {robustness.robustness.perturbations_per_sample} 扰动
+            </span>
+          </div>
+          <div className="metric-grid">
+            <MetricCard
+              label="原始准确率"
+              value={formatPercent(robustness.robustness.original_accuracy)}
+              note="未扰动"
+              accent
+            />
+            <MetricCard
+              label="扰动后准确率"
+              value={formatPercent(robustness.robustness.perturbed_accuracy)}
+              note={`落差 ${formatPercent(robustness.robustness.accuracy_drop)}`}
+            />
+            <MetricCard
+              label="鲁棒性"
+              value={formatPercent(robustness.robustness.overall_robustness)}
+              note="扰动后保持正确比例"
+            />
+            <MetricCard
+              label="一致性"
+              value={formatPercent(robustness.robustness.overall_consistency)}
+              note="扰动后答案一致比例"
+            />
+          </div>
+          {Object.keys(robustness.robustness.sensitivity_by_type).length > 0 && (
+            <div className="table-scroll">
+              <table className="data-table stats-table">
+                <thead>
+                  <tr>
+                    <th>扰动类型</th>
+                    <th>保持率（越低越敏感）</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(robustness.robustness.sensitivity_by_type)
+                    .sort((a, b) => a[1] - b[1])
+                    .map(([name, value]) => (
+                      <tr key={name}>
+                        <td>
+                          <strong>{name}</strong>
+                          {name === robustness.robustness.most_sensitive_perturbation && (
+                            <small className="text-danger"> · 最敏感</small>
+                          )}
+                        </td>
+                        <td>{formatPercent(value)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="table-scroll">
+            <table className="data-table stats-table">
+              <thead>
+                <tr>
+                  <th>样本</th>
+                  <th>原始正确</th>
+                  <th>鲁棒性</th>
+                  <th>一致性</th>
+                </tr>
+              </thead>
+              <tbody>
+                {robustness.robustness.results.map((row) => (
+                  <tr key={row.sample_id}>
+                    <td>#{row.sample_id}</td>
+                    <td className={row.original_correct ? "text-good" : "text-danger"}>
+                      {row.original_correct ? "正确" : "错误"}
+                    </td>
+                    <td>{formatPercent(row.robustness_score)}</td>
+                    <td>{formatPercent(row.consistency_score)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {robustness.robustness.recommendations.length > 0 && (
+            <div className="gate-result">
+              <strong>改进建议</strong>
+              <ul>
+                {robustness.robustness.recommendations.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
       )}
       {logs.length > 0 && (

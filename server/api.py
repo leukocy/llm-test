@@ -111,6 +111,7 @@ class BatchItem(StrictSpec):
         "custom_text",
         "dataset",
         "quality",
+        "robustness",
     ]
     parameters: dict[str, Any]
     run_config: RunConfig | None = None
@@ -884,24 +885,72 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             raise HTTPException(409, "No report is available for this job")
         if format not in {"json", "html"}:
             raise HTTPException(422, "Format must be json or html")
-        payload = quality_payload(job)
-        if format == "html":
-            return HTMLResponse(render_quality_html(job, payload))
-        return JSONResponse(payload)
+        payload = artifact_payload(job)
+        if isinstance(payload.get("datasets"), dict):
+            if format == "html":
+                return HTMLResponse(render_quality_html(job, payload))
+            return JSONResponse(payload)
+        if isinstance(payload.get("robustness"), dict):
+            if format == "html":
+                return HTMLResponse(_render_robustness_html(job, payload))
+            return JSONResponse(payload)
+        raise HTTPException(422, "Report artifact is invalid")
 
-    def quality_payload(job: dict[str, Any]) -> dict[str, Any]:
+    def _render_robustness_html(job: dict[str, Any], payload: dict[str, Any]) -> str:
+        """鲁棒性报告的极简 HTML（分数卡片 + 扰动类型敏感性 + 逐样本表）。"""
+        import html as _html
+
+        rob = payload["robustness"]
+        esc = _html.escape
+        rows = "".join(
+            f"<tr><td>{esc(name)}</td><td>{value:.2f}</td></tr>"
+            for name, value in (rob.get("sensitivity_by_type") or {}).items()
+        )
+        sample_rows = "".join(
+            "<tr>"
+            f"<td>{esc(str(r.get('sample_id', '')))}</td>"
+            f"<td>{'✓' if r.get('original_correct') else '✗'}</td>"
+            f"<td>{r.get('robustness_score', 0):.2f}</td>"
+            f"<td>{r.get('consistency_score', 0):.2f}</td>"
+            "</tr>"
+            for r in (rob.get("results") or [])
+        )
+        return f"""<!doctype html><html lang="zh"><head><meta charset="utf-8">
+<title>Robustness · {esc(job["job_id"][:12])}</title>
+<style>body{{font-family:system-ui;margin:32px;color:#1c2b33}}table{{border-collapse:collapse;margin:12px 0}}td,th{{border:1px solid #d7e0e5;padding:6px 14px;font-size:13px}}.card{{display:inline-block;border:1px solid #d7e0e5;border-radius:10px;padding:12px 20px;margin-right:12px}}.card strong{{font-size:22px}}</style>
+</head><body>
+<h1>鲁棒性报告 · {esc(job["model_id"])}</h1>
+<p>作业 <code>{esc(job["job_id"])}</code> · {rob.get("total_samples", 0)} 样本 × {rob.get("perturbations_per_sample", 0)} 扰动</p>
+<div class="card">原始准确率<br><strong>{rob.get("original_accuracy", 0):.1%}</strong></div>
+<div class="card">扰动后准确率<br><strong>{rob.get("perturbed_accuracy", 0):.1%}</strong></div>
+<div class="card">准确率落差<br><strong>{rob.get("accuracy_drop", 0):.1%}</strong></div>
+<div class="card">鲁棒性<br><strong>{rob.get("overall_robustness", 0):.1%}</strong></div>
+<div class="card">一致性<br><strong>{rob.get("overall_consistency", 0):.1%}</strong></div>
+<h2>按扰动类型敏感性（越低越敏感）</h2>
+<table><tr><th>扰动类型</th><th>保持率</th></tr>{rows}</table>
+<h2>逐样本</h2>
+<table><tr><th>样本</th><th>原始正确</th><th>鲁棒性</th><th>一致性</th></tr>{sample_rows}</table>
+</body></html>"""
+
+    def artifact_payload(job: dict[str, Any]) -> dict[str, Any]:
         if job["result_run_id"] is not None or not job["result_artifact"]:
-            raise HTTPException(409, "No quality report is available for this job")
+            raise HTTPException(409, "No report is available for this job")
         artifact = (settings.artifact_root / job["result_artifact"]).resolve()
         if not artifact.is_relative_to(settings.artifact_root.resolve()) or not artifact.is_file():
             raise HTTPException(404, "Report artifact missing")
         try:
             payload: object = json.loads(artifact.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
-            raise HTTPException(422, "Quality report is invalid") from exc
-        if not isinstance(payload, dict) or not isinstance(payload.get("datasets"), dict):
-            raise HTTPException(422, "Quality report is invalid")
+            raise HTTPException(422, "Report artifact is invalid") from exc
+        if not isinstance(payload, dict):
+            raise HTTPException(422, "Report artifact is invalid")
         return cast(dict[str, Any], payload)
+
+    def quality_payload(job: dict[str, Any]) -> dict[str, Any]:
+        payload = artifact_payload(job)
+        if not isinstance(payload.get("datasets"), dict):
+            raise HTTPException(422, "Quality report is invalid")
+        return payload
 
     @app.get("/api/v1/jobs/{job_id}/report/errors.csv", dependencies=[auth])
     def quality_errors(job_id: str):

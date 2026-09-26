@@ -111,14 +111,15 @@ def _seed_run(manager, test_id: str, *, tester="alice", level="internal", machin
 # ---------- specs / run_config / since_id ----------
 
 
-def test_specs_endpoint_lists_nine_types_with_schemas(env):
+def test_specs_endpoint_lists_ten_types_with_schemas(env):
     client, _, _ = env
     r = client.get("/api/v1/specs", headers=auth())
     assert r.status_code == 200
     items = r.json()["items"]
-    assert len(items) == 9
+    assert len(items) == 10
     assert items["concurrency"]["schema"]["type"] == "object"
     assert "dataset" in items
+    assert "robustness" in items
     assert "run_config_schema" in r.json()
 
 
@@ -636,3 +637,105 @@ def test_advanced_reasoning_returns_five_dimensions(env):
     for dim in ("coherence", "completeness", "relevance", "correctness", "efficiency"):
         assert dim in score, f"缺维度 {dim}"
     assert payload["final_answer_correct"] is True
+
+
+# ---------- robustness ----------
+
+
+def test_robustness_spec_validation_and_submission(env):
+    client, _, _ = env
+    # 未知扰动类型 → 422
+    bad = client.post(
+        "/api/v1/jobs",
+        json={
+            "endpoint_id": "lab",
+            "test_type": "robustness",
+            "parameters": {
+                "samples": [{"question": "1+1=?", "correct_answer": "2"}],
+                "perturbation_types": ["nonsense"],
+            },
+        },
+        headers=auth(),
+    )
+    assert bad.status_code == 422, bad.text
+
+    ok = client.post(
+        "/api/v1/jobs",
+        json={
+            "endpoint_id": "lab",
+            "test_type": "robustness",
+            "parameters": {
+                "samples": [
+                    {"question": "1+1=?", "correct_answer": "2"},
+                    {"question": "首都 of France?", "correct_answer": "Paris"},
+                ],
+                "perturbation_types": ["typo", "case"],
+                "max_tokens": 64,
+            },
+        },
+        headers=auth(),
+    )
+    assert ok.status_code == 201, ok.text
+    job = ok.json()
+    assert job["test_type"] == "robustness"
+    assert job["progress_total"] == 2 * (1 + 2)
+
+
+def test_robustness_report_route_serves_artifact(env):
+    client, _, settings = env
+    job = client.post(
+        "/api/v1/jobs",
+        json={
+            "endpoint_id": "lab",
+            "test_type": "robustness",
+            "parameters": {"samples": [{"question": "q", "correct_answer": "a"}]},
+        },
+        headers=auth(),
+    ).json()
+    job_dir = settings.artifact_root / job["job_id"]
+    job_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "job_id": job["job_id"],
+        "model_id": "test-model",
+        "robustness": {
+            "model_id": "test-model",
+            "total_samples": 1,
+            "perturbations_per_sample": 5,
+            "original_accuracy": 1.0,
+            "perturbed_accuracy": 0.8,
+            "accuracy_drop": 0.2,
+            "overall_robustness": 0.8,
+            "overall_consistency": 0.9,
+            "sensitivity_by_type": {"typo": 0.8},
+            "most_sensitive_perturbation": "typo",
+            "results": [
+                {
+                    "sample_id": "0",
+                    "original_question": "q",
+                    "correct_answer": "a",
+                    "original_answer": "a",
+                    "original_correct": True,
+                    "perturbed_results": [],
+                    "robustness_score": 0.8,
+                    "consistency_score": 0.9,
+                    "sensitivity_by_type": {},
+                }
+            ],
+            "recommendations": [],
+        },
+    }
+    (job_dir / "report.json").write_text(json.dumps(payload), encoding="utf-8")
+    from core.database.connection import Database
+
+    Database().execute(
+        "UPDATE control_jobs SET result_artifact = ? WHERE job_id = ?",
+        (f"{job['job_id']}/report.json", job["job_id"]),
+    )
+
+    r = client.get(f"/api/v1/jobs/{job['job_id']}/report", headers=auth())
+    assert r.status_code == 200, r.text
+    assert r.json()["robustness"]["overall_robustness"] == 0.8
+
+    html_r = client.get(f"/api/v1/jobs/{job['job_id']}/report?format=html", headers=auth())
+    assert html_r.status_code == 200
+    assert "鲁棒性报告" in html_r.text

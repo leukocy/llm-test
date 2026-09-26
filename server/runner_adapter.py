@@ -83,6 +83,60 @@ async def execute_job(
     params = dict(job["parameters"])
     run_config = params.pop("_run_config", {}) or {}
 
+    if job["test_type"] == "robustness":
+        import dataclasses
+
+        from core.providers.factory import get_provider
+        from core.robustness_tester import PerturbationType, RobustnessTester
+
+        types = (
+            [PerturbationType(t) for t in params["perturbation_types"]]
+            if params.get("perturbation_types")
+            else None
+        )
+        provider = get_provider(
+            endpoint.provider, endpoint.api_base_url, endpoint.api_key(), endpoint.model_id
+        )
+
+        async def get_response(prompt: str) -> str:
+            result = await provider.get_completion(
+                client=None,
+                session_id=-1,
+                prompt=prompt,
+                max_tokens=params.get("max_tokens", 256),
+            )
+            if result.get("error"):
+                raise RuntimeError(str(result["error"]))
+            return str(result.get("full_response_content") or "")
+
+        def robustness_progress(completed: int, total: int) -> None:
+            store.update_progress(job_id, worker_id, completed=completed, total=total)
+
+        tester = RobustnessTester(perturbation_types=types)
+        report = await tester.test_batch(
+            params["samples"], get_response, progress_callback=robustness_progress
+        )
+        report.model_id = endpoint.model_id
+        artifact = job_dir / "report.json"
+        artifact.write_text(
+            json.dumps(
+                {
+                    "job_id": job_id,
+                    "model_id": endpoint.model_id,
+                    "robustness": dataclasses.asdict(report),
+                },
+                ensure_ascii=False,
+                allow_nan=False,
+            ),
+            encoding="utf-8",
+        )
+        total_requests = sum(1 + len(r.perturbed_results) for r in report.results)
+        return RunOutput(
+            result_artifact=f"{job_id}/report.json",
+            completed=total_requests,
+            total=total_requests,
+        )
+
     if job["test_type"] == "quality":
         from core.quality_evaluator import QualityEvaluator, QualityTestConfig
 

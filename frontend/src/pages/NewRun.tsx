@@ -322,6 +322,8 @@ export function NewRun({
           </div>
           {mode === "form" && type === "dataset" ? (
             <DatasetParams value={params} onChange={setParams} />
+          ) : mode === "form" && type === "robustness" ? (
+            <RobustnessParams value={params} onChange={setParams} />
           ) : mode === "form" && specSchema ? (
             <SchemaForm
               schema={specSchema}
@@ -515,6 +517,105 @@ function DatasetParams({
           />
         </label>
       </div>
+    </div>
+  );
+}
+
+/** robustness 场景专用面板: samples JSON 编辑 + 扰动类型多选 + max_tokens。 */
+const PERTURBATION_OPTIONS: [string, string][] = [
+  ["synonym", "同义词替换"],
+  ["typo", "拼写错误"],
+  ["reorder", "词序调整"],
+  ["case", "大小写变化"],
+  ["punctuation", "标点变化"],
+  ["whitespace", "空白符变化"],
+  ["number_format", "数字格式"],
+  ["paraphrase", "同义改写"],
+  ["context_add", "添加无关上下文"],
+  ["rephrase", "问题重述"],
+];
+
+function RobustnessParams({
+  value,
+  onChange,
+}: {
+  value: Record<string, unknown>;
+  onChange: (next: Record<string, unknown>) => void;
+}) {
+  const [rawSamples, setRawSamples] = useState(() =>
+    JSON.stringify(value.samples ?? [{ question: "", correct_answer: "" }], null, 2),
+  );
+  const [samplesError, setSamplesError] = useState("");
+  useEffect(
+    () =>
+      setRawSamples(
+        JSON.stringify(value.samples ?? [{ question: "", correct_answer: "" }], null, 2),
+      ),
+    [value.samples],
+  );
+
+  const pickedTypes = (value.perturbation_types as string[] | undefined) ?? [];
+
+  function commitSamples(text: string) {
+    setRawSamples(text);
+    try {
+      const parsed = JSON.parse(text) as { question?: string; correct_answer?: string }[];
+      if (!Array.isArray(parsed) || !parsed.length) throw new Error("bad");
+      if (parsed.some((row) => !(row.question || "").trim())) throw new Error("bad");
+      setSamplesError("");
+      onChange({ ...value, samples: parsed });
+    } catch {
+      setSamplesError('samples 必须是 JSON 数组，如 [{"question": "…", "correct_answer": "…"}]');
+    }
+  }
+
+  function toggleType(id: string) {
+    const next = pickedTypes.includes(id)
+      ? pickedTypes.filter((item) => item !== id)
+      : [...pickedTypes, id];
+    onChange({ ...value, perturbation_types: next.length ? next : undefined });
+  }
+
+  return (
+    <div className="dataset-params">
+      <label className="schema-field case-form-wide">
+        <span className="input-label">
+          samples（JSON 数组，含 question 与 correct_answer）<em className="required-mark">*</em>
+        </span>
+        <textarea
+          className="json-editor"
+          spellCheck={false}
+          value={rawSamples}
+          onChange={(event) => commitSamples(event.target.value)}
+          aria-label="鲁棒性 samples JSON"
+        />
+        {samplesError && <small className="form-error">{samplesError}</small>}
+      </label>
+      <div className="schema-field case-form-wide">
+        <span className="input-label">扰动类型（不选 = 默认 5 类）</span>
+        <div className="perturbation-grid">
+          {PERTURBATION_OPTIONS.map(([id, label]) => (
+            <label className="checkbox-label" key={id}>
+              <input
+                type="checkbox"
+                checked={pickedTypes.includes(id)}
+                onChange={() => toggleType(id)}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      </div>
+      <label className="schema-field">
+        <span className="input-label">最大输出 tokens</span>
+        <input
+          type="number"
+          min={1}
+          max={8192}
+          value={Number(value.max_tokens ?? 256)}
+          onChange={(event) => onChange({ ...value, max_tokens: Number(event.target.value) })}
+        />
+      </label>
     </div>
   );
 }

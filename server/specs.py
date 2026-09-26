@@ -144,6 +144,32 @@ class DatasetPerfSpec(StrictSpec):
         return self
 
 
+class RobustnessSpec(StrictSpec):
+    """鲁棒性测试：样本经扰动后答案保持度（每样本 1 次原始 + N 次扰动请求）。"""
+
+    samples: list[dict[str, str]] = Field(min_length=1, max_length=50)
+    perturbation_types: list[str] | None = Field(default=None, max_length=10)
+    max_tokens: int = Field(default=256, ge=1, le=8192)
+
+    @model_validator(mode="after")
+    def validate_samples(self) -> RobustnessSpec:
+        for i, row in enumerate(self.samples):
+            if not (row.get("question") or "").strip():
+                raise ValueError(f"第 {i + 1} 个样本缺少非空 question")
+        n_types = 5
+        if self.perturbation_types:
+            from core.robustness_tester import PerturbationType
+
+            valid = {p.value for p in PerturbationType}
+            unknown = [t for t in self.perturbation_types if t not in valid]
+            if unknown:
+                raise ValueError(f"未知扰动类型: {unknown}; 可选: {sorted(valid)}")
+            n_types = len(self.perturbation_types)
+        if len(self.samples) * (1 + n_types) > 500:
+            raise ValueError("A job may issue at most 500 requests")
+        return self
+
+
 class QualitySpec(StrictSpec):
     datasets: list[str] = Field(min_length=1, max_length=8)
     max_samples: int = Field(ge=1, le=1000)
@@ -180,6 +206,7 @@ SPEC_MODELS: dict[str, type[StrictSpec]] = {
     "custom_text": CustomTextSpec,
     "dataset": DatasetPerfSpec,
     "quality": QualitySpec,
+    "robustness": RobustnessSpec,
 }
 
 
@@ -217,6 +244,7 @@ class JobSubmission(StrictSpec):
         "custom_text",
         "dataset",
         "quality",
+        "robustness",
     ]
     parameters: dict
     run_config: RunConfig | None = None
@@ -264,6 +292,9 @@ def expected_requests(test_type: str, parameters: dict) -> int:
         return int(len(parameters["datasets"]) * parameters["max_samples"])
     if test_type == "dataset" and parameters.get("rows"):
         return int(len(parameters["rows"]) * parameters.get("rounds", 1))
+    if test_type == "robustness":
+        n_types = len(parameters.get("perturbation_types") or [0] * 5)
+        return int(len(parameters["samples"]) * (1 + n_types))
     return 0
 
 

@@ -8,7 +8,8 @@ export type JobType =
   | "stability"
   | "custom_text"
   | "dataset"
-  | "quality";
+  | "quality"
+  | "robustness";
 
 export const scenarios: {
   id: JobType;
@@ -106,6 +107,16 @@ export const scenarios: {
       concurrency: 4,
       max_tokens: 256,
       rounds: 1,
+    },
+  },
+  {
+    id: "robustness",
+    label: "鲁棒性",
+    description: "样本经扰动后的答案保持度与一致性",
+    parameters: {
+      samples: [{ question: "1+1 等于几?", correct_answer: "2" }],
+      perturbation_types: ["typo", "case", "punctuation"],
+      max_tokens: 256,
     },
   },
   {
