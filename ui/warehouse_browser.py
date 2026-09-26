@@ -264,6 +264,7 @@ def _render_kpis(runs, total: int) -> None:
 
 def _render_history(runs, total: int) -> None:
     st.subheader("运行历史（仓库列）")
+    _show_flash()
 
     # 列可见性：顺序以 _HISTORY_COLUMNS 为准，选择持久在 session_state
     picked = st.multiselect(
@@ -315,6 +316,23 @@ def _render_history(runs, total: int) -> None:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# 操作反馈（闪存模式：消息入 session_state，rerun 后在历史页顶部稳定展示；
+# 直接 st.success 后接 st.rerun 会让反馈在渲染前被整页重跑抹掉）
+# ---------------------------------------------------------------------------
+
+
+def _flash(kind: str, text: str) -> None:
+    st.session_state["wh_flash"] = (kind, text)
+
+
+def _show_flash() -> None:
+    msg = st.session_state.pop("wh_flash", None)
+    if msg:
+        kind, text = msg
+        getattr(st, kind, st.info)(text)
+
+
 def _render_bulk_actions(selected_runs) -> None:
     """历史页勾选后的批量操作条：设置等级 / 追加标签 / 删除。"""
     ids = [r.id for r in selected_runs if r.id is not None]
@@ -335,7 +353,7 @@ def _render_bulk_actions(selected_runs) -> None:
                 for rid in ids
                 if db_manager.update_publish_metadata(rid, {"external_level": level})
             )
-            st.success(f"已把 {ok} 条设为 {level}")
+            _flash("success", f"已把 {ok} 条设为 {level}")
             st.rerun()
 
     with ac2:
@@ -347,7 +365,7 @@ def _render_bulk_actions(selected_runs) -> None:
                     continue
                 merged = f"{r.tags},{tag.strip()}" if r.tags else tag.strip()
                 ok += 1 if db_manager.update_publish_metadata(r.id, {"tags": merged}) else 0
-            st.success(f"已给 {ok} 条追加标签 {tag.strip()!r}")
+            _flash("success", f"已给 {ok} 条追加标签 {tag.strip()!r}")
             st.rerun()
 
     with ac3:
@@ -370,9 +388,9 @@ def _render_bulk_delete(ids: list[int]) -> None:
     ):
         result = db_manager.delete_runs(ids)
         if result["failed"]:
-            st.error(f"删除完成：成功 {len(result['deleted'])} 条，失败 {result['failed']}")
+            _flash("error", f"删除完成：成功 {len(result['deleted'])} 条，失败 {result['failed']}")
         else:
-            st.success(f"已删除 {len(result['deleted'])} 条")
+            _flash("success", f"已删除 {len(result['deleted'])} 条")
         st.session_state.pop("wh_hist_table", None)  # 清空选择态
         st.rerun()
 
@@ -613,7 +631,7 @@ def _render_metadata_editor(run) -> None:
             "notes": notes,
         }
         if db_manager.update_publish_metadata(run.id, fields):
-            st.success("已保存")
+            _flash("success", "元数据已保存")
             st.rerun()
         else:
             st.warning("未保存（无有效字段或更新失败）")
