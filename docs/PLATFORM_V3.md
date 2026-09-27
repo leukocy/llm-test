@@ -23,11 +23,12 @@ FastAPI 控制 API ── SQLite WAL（任务、状态、审计、逐请求结�
 
 - 并发阶梯、输入长度、分段 prefill、长上下文、吞吐矩阵、稳定性、自定义提示词。
 - 质量评估调用已有 evaluator 注册表；数据来源指纹和逐样本结果保留在质量报告中。
-- 提交参数使用严格版本化校验，默认每个有限规模任务最多 1000 次请求，稳定性测试最长一小时。业务端只能选择管理员配置的模型端点，不能提交任意 URL 或 API key。
+- 提交参数使用严格版本化校验，默认每个有限规模任务最多 1000 次请求，稳定性测试最长一小时。端点需先在认证后的“受测 API 设置”页面保存，再供任务选择；任务提交体不能携带任意 URL 或 API key。
 
 ### 已迁移的工作流
 
-- **测试方案**：创建、更新、删除并复用参数方案。方案保存在 `control_presets`，沿用任务提交的严格参数校验，只引用管理员配置的端点；方案不含密钥。
+- **测试方案**：创建、更新、删除并复用参数方案。方案保存在 `control_presets`，包含测试参数和生成设置，沿用任务提交的严格参数校验；方案不含密钥。
+- **受测 API 设置**：内置常用服务商地址模板，支持新增、编辑、删除与一次低输出连接检测。凭证经 Fernet 加密后存入 `control_endpoints`，列表和任务响应均不回传明文。待执行或运行中的任务引用端点时，禁止修改或删除该端点。
 - **数据仓库**：按模型、硬件、类型、状态、对外等级和文本检索历史记录；复测链默认展示最新版本。历史表可展开完整测量字段，矩阵支持最新值或最大观测值，另有硬件盘点与扩展效率。`hwInventory` 和 `hmTest` 模板可导出 CSV/JSON。
 - **质量诊断**：按数据集查看准确率与 Wilson 区间、类别表现、评分方式、失败归因、数据指纹和逐样本输入/响应。全部错误样本可导出带有电子表格公式防护的 CSV。
 
@@ -41,9 +42,9 @@ FastAPI 控制 API ── SQLite WAL（任务、状态、审计、逐请求结�
 
 ## 启动
 
-1. 从 `config/endpoints.platform.example.json` 复制为 `config/endpoints.platform.json`，填写受信模型地址、模型 ID 与存放 API key 的环境变量名。不要把 API key 写入 JSON。
-2. 从 `.env.platform.example` 复制为 `.env.platform`，设置长度至少 32 字符的随机 `LLM_TEST_API_TOKEN`，以及端点 API key。设置 `LLM_TEST_TRUSTED_API_HOSTS` 为精确主机名；私有网络端点需显式设置 `LLM_TEST_ALLOW_PRIVATE_ENDPOINTS=1`。
-3. 运行 `docker compose --env-file .env.platform -f compose.platform.yml up -d --build`。浏览器打开 `http://127.0.0.1:8000`，粘贴访问令牌。默认仅监听本机；内网访问应通过企业反向代理提供 TLS 与访问控制。
+1. 从 `config/endpoints.platform.example.json` 复制为 `config/endpoints.platform.json`。默认文件是空数组；如需由部署文件预设端点，可填写受信模型地址、模型 ID 与 API key 环境变量名，不要把密钥写入 JSON。
+2. 从 `.env.platform.example` 复制为 `.env.platform`，设置长度至少 32 字符的随机 `LLM_TEST_API_TOKEN`。建议同时设置独立的 `LLM_TEST_ENDPOINT_ENCRYPTION_KEY`（至少 32 字符），并在备份和恢复后保持不变；未设置时端点加密密钥由控制令牌派生，轮换令牌会使已保存的端点凭证无法解密。自定义主机需加入 `LLM_TEST_TRUSTED_API_HOSTS` 精确主机名；私有网络端点还需显式设置 `LLM_TEST_ALLOW_PRIVATE_ENDPOINTS=1`。
+3. 运行 `docker compose --env-file .env.platform -f compose.platform.yml up -d --build`。浏览器打开 `http://127.0.0.1:8000`，粘贴访问令牌，在“受测 API 设置”中保存地址、模型 ID 和 API key。默认仅监听本机；内网访问应通过企业反向代理提供 TLS 与访问控制。
 
 Compose 先运行一次 `migrate` 服务完成数据库迁移，再启动 API 与 worker，避免两个进程首次启动时同时修改 schema。
 
@@ -60,8 +61,8 @@ Compose 先运行一次 `migrate` 服务完成数据库迁移，再启动 API �
 - API 就绪检查：`GET /health/ready`；存活检查：`GET /health/live`。
 - 备份时同时保存 `platform-data` 和 `platform-results` 卷；SQLite 推荐在运行中使用 `sqlite3.Connection.backup()` 生成一致性快照。质量详细 JSON 与性能 CSV 位于结果卷。
 - 监控 worker 日志中的 `WORKER_LOST` 和 `EXECUTION_FAILED`；后者对客户端只显示通用信息，详细异常保留在受控日志。
-- 部署升级前备份数据库。schema 迁移至 1.7.0 是幂等的，新增 `control_presets`；旧 Streamlit 数据保持可读。
-- 令牌只保存在浏览器当前页面内存中，刷新页面需重新输入。API 响应标记 `no-store`。反向代理必须强制 HTTPS 并限制内网访问。
+- 部署升级前备份数据库。schema 迁移至 1.8.0 是幂等的，新增 `control_endpoints`，并为 `control_presets` 增加运行配置；旧测量数据保持可读。数据库备份应与端点加密密钥一起保管。
+- 控制令牌保存在浏览器当前标签页的 `sessionStorage`，关闭标签页后清除；API 响应标记 `no-store`。反向代理必须强制 HTTPS 并限制内网访问。
 - HumanEval/MBPP 等代码评估继续使用既有隔离 sandbox 服务；需要时按原项目文档单独启用，不能让 API 或普通 worker 获得 Docker socket。
 
 ## 当前边界

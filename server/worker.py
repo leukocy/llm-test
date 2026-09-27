@@ -12,6 +12,7 @@ import uuid
 
 from core.cancel_state import request_stop, reset_all
 from core.run_lifecycle import RunStatus
+from server.endpoints import EndpointRegistry
 from server.runner_adapter import execute_job
 from server.settings import Settings
 from server.store import JobStore, LeaseLost
@@ -45,7 +46,7 @@ async def run_claimed_job(job: dict, settings: Settings, store: JobStore, worker
     )
     monitor.start()
     try:
-        endpoint = settings.endpoints[job["endpoint_id"]]
+        endpoint = EndpointRegistry(settings, store).get(job["endpoint_id"])
         output = await execute_job(job, endpoint, settings, store, worker_id)
         current = store.get(job["job_id"])["status"]
         outcome = (

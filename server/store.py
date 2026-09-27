@@ -74,6 +74,7 @@ class JobStore:
             return None
         preset = dict(row)
         preset["parameters"] = json.loads(preset.pop("parameters_json"))
+        preset["run_config"] = json.loads(preset.pop("run_config_json") or "{}")
         return preset
 
     def list_presets(self, *, limit: int = 200) -> JobList:
@@ -102,12 +103,20 @@ class JobStore:
         endpoint_id: str,
         test_type: str,
         parameters: dict[str, Any],
+        run_config: dict[str, Any] | None = None,
         preset_id: str | None = None,
     ) -> dict[str, Any]:
         now = time.time()
         identifier = preset_id or str(uuid.uuid4())
         parameters_json = json.dumps(
             parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+        run_config_json = json.dumps(
+            run_config or {},
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
         )
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -123,15 +132,33 @@ class JobStore:
                 if preset_id:
                     conn.execute(
                         """UPDATE control_presets SET name = ?, endpoint_id = ?, test_type = ?,
-                           parameters_json = ?, updated_at = ? WHERE preset_id = ?""",
-                        (name, endpoint_id, test_type, parameters_json, now, identifier),
+                           parameters_json = ?, run_config_json = ?, updated_at = ? WHERE preset_id = ?""",
+                        (
+                            name,
+                            endpoint_id,
+                            test_type,
+                            parameters_json,
+                            run_config_json,
+                            now,
+                            identifier,
+                        ),
                     )
                 else:
                     conn.execute(
                         """INSERT INTO control_presets
-                           (preset_id, name, endpoint_id, test_type, parameters_json, created_at, updated_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                        (identifier, name, endpoint_id, test_type, parameters_json, now, now),
+                           (preset_id, name, endpoint_id, test_type, parameters_json,
+                            run_config_json, created_at, updated_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            identifier,
+                            name,
+                            endpoint_id,
+                            test_type,
+                            parameters_json,
+                            run_config_json,
+                            now,
+                            now,
+                        ),
                     )
             except sqlite3.IntegrityError as exc:
                 conn.rollback()

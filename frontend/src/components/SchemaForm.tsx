@@ -83,10 +83,10 @@ function ListField({
   const display = Array.isArray(value) ? value.join(", ") : "";
   const [text, setText] = useState(display);
   const [invalid, setInvalid] = useState(false);
-  useEffect(
-    () => setText(Array.isArray(value) ? value.join(", ") : ""),
-    [value],
-  );
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused) setText(Array.isArray(value) ? value.join(", ") : "");
+  }, [value, focused]);
 
   function commit(raw: string) {
     setText(raw);
@@ -103,6 +103,7 @@ function ListField({
       const nums = parts.map(Number);
       if (nums.some((n) => !Number.isFinite(n))) {
         setInvalid(true);
+        onChange([]);
         return;
       }
       setInvalid(false);
@@ -119,6 +120,8 @@ function ListField({
         className={invalid ? "input-invalid" : ""}
         value={text}
         placeholder="逗号分隔，如 1, 4, 8"
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         onChange={(event) => commit(event.target.value)}
         aria-label={def.name}
       />

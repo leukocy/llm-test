@@ -11,13 +11,19 @@ node_modules
 frontend/dist/
 .env.platform
 config/endpoints.platform.json
-data/
-tokenizers/
-datasets/
-cache/
-api_logs/
-presets/
-results/
+# Local runtime paths can be symlinks into llm-perf. Ignore the links as well as directories.
+data
+tokenizers
+tokenizers_bundle
+datasets
+cache
+api_logs
+presets
+results
+logs
+batch_tests
+test_presets
+test_progress
 htmlcov/
 coverage.xml
 .env
@@ -25,8 +31,8 @@ coverage.xml
 tests/
 docs/
 api_tests/
-raw_data/
-quality_results/
+raw_data
+quality_results
 .claude/
 bench_workspace/
 .zcode/

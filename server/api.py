@@ -2,24 +2,35 @@
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import hmac
 import json
 import re
+import time
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import Field, model_validator
 
+from core.providers.factory import get_provider
 from core.run_lifecycle import InvalidRunTransition, RunStatus
+from core.url_validator import SSRFError
 from server.analytics import MetricContractConflict, run_results, run_results_csv, run_summary
+from server.endpoints import (
+    EndpointConflict,
+    EndpointCredentialUnavailable,
+    EndpointNotFound,
+    EndpointRegistry,
+)
 from server.figures import compare_figures, run_detail_figures, trend_figure
 from server.quality_export import quality_errors_csv
 from server.reports import render_html, render_quality_html
-from server.settings import Settings
+from server.settings import Endpoint, Settings
 from server.specs import (
     JobSubmission,
     PresetSubmission,
@@ -131,9 +142,19 @@ class BatchSubmission(StrictSpec):
     items: list[BatchItem] = Field(min_length=1, max_length=10)
 
 
+class EndpointConfigBody(StrictSpec):
+    label: str = Field(min_length=1, max_length=80)
+    provider: Literal["OpenAI", "Gemini"] = "OpenAI"
+    api_base_url: str = Field(min_length=1, max_length=500)
+    model_id: str = Field(min_length=1, max_length=200)
+    tokenizer_option: str = Field(default="auto", min_length=1, max_length=120)
+    api_key: str | None = Field(default=None, max_length=4096)
+
+
 def create_app(settings: Settings | None = None, store: JobStore | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     store = store or JobStore(settings.db_path)
+    endpoint_registry = EndpointRegistry(settings, store)
     warehouse_reader = WarehouseReader(settings.db_path)
     # 数据管理/用例/图表路径复用 core 的 manager（生产进程内单例同路径；
     # 测试通过重置 Database/DatabaseManager 单例隔离）
@@ -141,6 +162,15 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
 
     data_manager = DatabaseManager(str(settings.db_path))
     app = FastAPI(title="LLM Test Control API", version="1.0.0", docs_url=None, redoc_url=None)
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_error(_request: Request, exc: RequestValidationError):
+        # FastAPI's default error includes submitted input, which may contain an API key.
+        detail = [
+            {name: error[name] for name in ("loc", "msg", "type") if name in error}
+            for error in exc.errors()
+        ]
+        return JSONResponse(status_code=422, content={"detail": detail})
 
     def authenticate(authorization: Annotated[str | None, Header()] = None) -> None:
         scheme, _, supplied = (authorization or "").partition(" ")
@@ -152,6 +182,14 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             )
 
     auth = Depends(authenticate)
+
+    def resolve_endpoint(endpoint_id: str) -> Endpoint:
+        try:
+            return endpoint_registry.get(endpoint_id)
+        except EndpointNotFound as exc:
+            raise HTTPException(422, "Unknown endpoint ID") from exc
+        except EndpointCredentialUnavailable as exc:
+            raise HTTPException(503, "Endpoint credential unavailable") from exc
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -182,7 +220,84 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
 
     @app.get("/api/v1/endpoints", dependencies=[auth])
     def endpoints():
-        return {"items": [endpoint.public() for endpoint in settings.endpoints.values()]}
+        return {"items": endpoint_registry.list_public()}
+
+    @app.post("/api/v1/endpoints", dependencies=[auth], status_code=201)
+    def create_endpoint(body: EndpointConfigBody):
+        try:
+            return endpoint_registry.save(**body.model_dump())
+        except (ValueError, SSRFError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.put("/api/v1/endpoints/{endpoint_id}", dependencies=[auth])
+    def update_endpoint(endpoint_id: str, body: EndpointConfigBody):
+        try:
+            return endpoint_registry.save(endpoint_id=endpoint_id, **body.model_dump())
+        except EndpointNotFound as exc:
+            raise HTTPException(404, "Endpoint not found") from exc
+        except EndpointConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except (ValueError, SSRFError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.delete("/api/v1/endpoints/{endpoint_id}", dependencies=[auth], status_code=204)
+    def delete_endpoint(endpoint_id: str):
+        try:
+            endpoint_registry.delete(endpoint_id)
+        except EndpointNotFound as exc:
+            raise HTTPException(404, "Endpoint not found") from exc
+        except EndpointConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return Response(status_code=204)
+
+    @app.post("/api/v1/endpoints/{endpoint_id}/probe", dependencies=[auth])
+    async def probe_endpoint(endpoint_id: str):
+        """Issue one bounded, low-output request without returning generated content."""
+        endpoint = resolve_endpoint(endpoint_id)
+        try:
+            api_key = endpoint.api_key()
+        except RuntimeError as exc:
+            raise HTTPException(503, "Endpoint credential unavailable") from exc
+        try:
+            provider = get_provider(
+                endpoint.provider, endpoint.api_base_url, api_key, endpoint.model_id
+            )
+        except SSRFError as exc:
+            raise HTTPException(422, "Endpoint URL is no longer trusted") from exc
+        try:
+            start = time.monotonic()
+            result = await asyncio.wait_for(
+                provider.get_completion(
+                    client=None,
+                    session_id=-1,
+                    prompt="Reply with OK.",
+                    max_tokens=8,
+                    request_timeout=15,
+                ),
+                timeout=20,
+            )
+        except TimeoutError:
+            return {"ok": False, "message": "连接超时，请检查网络与 API 地址"}
+        except Exception:
+            return {"ok": False, "message": "连接失败，请检查网络与 API 地址"}
+        if result.get("error"):
+            error = str(result["error"])
+            status = re.search(r"HTTP\s+(\d{3})", error)
+            code = int(status.group(1)) if status else None
+            if code in {401, 403}:
+                message = "认证失败，请检查 API key"
+            elif code == 404:
+                message = "端点或模型不存在，请检查地址与模型 ID"
+            elif code == 429:
+                message = "API 已限流，请稍后重试"
+            else:
+                message = "API 未返回有效内容，请检查模型能力与地址"
+            return {"ok": False, "message": message, "status_code": code}
+        return {
+            "ok": True,
+            "message": "连接成功",
+            "latency_ms": round((time.monotonic() - start) * 1000),
+        }
 
     @app.get("/api/v1/specs", dependencies=[auth])
     def specs():
@@ -219,8 +334,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         return {"items": store.list_presets()}
 
     def validate_preset_endpoint(body: PresetSubmission) -> None:
-        if body.endpoint_id not in settings.endpoints:
-            raise HTTPException(422, "Unknown endpoint ID")
+        resolve_endpoint(body.endpoint_id)
 
     @app.post("/api/v1/presets", dependencies=[auth], status_code=201)
     def create_preset(body: PresetSubmission):
@@ -231,6 +345,9 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
                 endpoint_id=body.endpoint_id,
                 test_type=body.test_type,
                 parameters=body.parameters,
+                run_config=body.run_config.model_dump(exclude_none=True)
+                if body.run_config
+                else None,
             )
         except PresetConflict as exc:
             raise HTTPException(409, str(exc)) from exc
@@ -245,6 +362,9 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
                 endpoint_id=body.endpoint_id,
                 test_type=body.test_type,
                 parameters=body.parameters,
+                run_config=body.run_config.model_dump(exclude_none=True)
+                if body.run_config
+                else None,
             )
         except PresetNotFound as exc:
             raise HTTPException(404, "Preset not found") from exc
@@ -697,8 +817,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
     @app.post("/api/v1/jobs/plan", dependencies=[auth])
     def preview_measurement(body: JobSubmission):
         """Validate a workload and show its per-condition sample and warmup budget."""
-        if body.endpoint_id not in settings.endpoints:
-            raise HTTPException(422, "Unknown endpoint ID")
+        resolve_endpoint(body.endpoint_id)
         return measurement_plan(body.test_type, body.parameters)
 
     @app.post("/api/v1/jobs", dependencies=[auth], status_code=201)
@@ -706,11 +825,9 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         body: JobSubmission,
         idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
     ):
-        if body.endpoint_id not in settings.endpoints:
-            raise HTTPException(422, "Unknown endpoint ID")
+        endpoint = resolve_endpoint(body.endpoint_id)
         if idempotency_key is not None and not _KEY.fullmatch(idempotency_key):
             raise HTTPException(422, "Invalid idempotency key")
-        endpoint = settings.endpoints[body.endpoint_id]
         try:
             endpoint.api_key()
         except RuntimeError as exc:
@@ -754,11 +871,9 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         子任务共享批次幂等键前缀（{key}:{i}），重放返回原任务;
         单作业 worker 天然串行执行, 与 Streamlit 批量语义一致。
         """
-        if body.endpoint_id not in settings.endpoints:
-            raise HTTPException(422, "Unknown endpoint ID")
+        endpoint = resolve_endpoint(body.endpoint_id)
         if idempotency_key is not None and not _KEY.fullmatch(idempotency_key):
             raise HTTPException(422, "Invalid idempotency key")
-        endpoint = settings.endpoints[body.endpoint_id]
         try:
             endpoint.api_key()
         except RuntimeError as exc:

@@ -136,6 +136,109 @@ export const scenarios: {
     },
   },
 ];
+
+export type MeasurementProfile = "quick" | "standard" | "thorough" | "custom";
+
+export const profileOverrides: Record<
+  JobType,
+  { quick: Record<string, unknown>; thorough: Record<string, unknown> }
+> = {
+  concurrency: {
+    quick: {
+      selected_concurrencies: [1, 2],
+      rounds_per_level: 1,
+      max_tokens: 128,
+      input_tokens_target: 256,
+      warmup_rounds_per_level: 1,
+    },
+    thorough: {
+      selected_concurrencies: [1, 2, 4, 8, 16],
+      rounds_per_level: 5,
+      warmup_rounds_per_level: 1,
+    },
+  },
+  prefill: {
+    quick: {
+      token_levels: [512, 2048],
+      requests_per_level: 2,
+      max_tokens: 128,
+      warmup_requests_per_level: 0,
+    },
+    thorough: {
+      token_levels: [512, 2048, 8192, 16384],
+      requests_per_level: 10,
+      warmup_requests_per_level: 2,
+    },
+  },
+  segmented_prefill: {
+    quick: { segment_levels: [512], requests_per_segment: 1, total_rounds: 1 },
+    thorough: {
+      segment_levels: [512, 2048, 8192],
+      requests_per_segment: 5,
+      total_rounds: 3,
+    },
+  },
+  long_context: {
+    quick: { context_lengths: [4096], rounds_per_level: 1, max_tokens: 128 },
+    thorough: { context_lengths: [4096, 16384, 32768], rounds_per_level: 5 },
+  },
+  matrix: {
+    quick: {
+      concurrencies: [1, 4],
+      context_lengths: [512],
+      rounds: 1,
+      max_tokens: 128,
+      enable_warmup: false,
+    },
+    thorough: {
+      concurrencies: [1, 4, 8, 16],
+      context_lengths: [512, 2048, 8192],
+      rounds: 3,
+    },
+  },
+  stability: {
+    quick: { concurrency: 1, duration_seconds: 30, max_tokens: 128 },
+    thorough: { duration_seconds: 600 },
+  },
+  custom_text: {
+    quick: {
+      selected_concurrencies: [1],
+      rounds_per_level: 1,
+      max_tokens: 128,
+    },
+    thorough: { selected_concurrencies: [1, 4, 8], rounds_per_level: 5 },
+  },
+  dataset: {
+    quick: { concurrency: 1, rounds: 1, max_tokens: 128 },
+    thorough: { concurrency: 8, rounds: 3 },
+  },
+  quality: {
+    quick: { max_samples: 10, concurrency: 1 },
+    thorough: { max_samples: 100, concurrency: 8 },
+  },
+  robustness: {
+    quick: { perturbation_types: ["typo"], max_tokens: 128 },
+    thorough: {
+      perturbation_types: [
+        "typo",
+        "case",
+        "punctuation",
+        "whitespace",
+        "synonym",
+      ],
+    },
+  },
+};
+
+export function profileParameters(
+  type: JobType,
+  profile: Exclude<MeasurementProfile, "custom">,
+) {
+  const base = scenarios.find((item) => item.id === type)?.parameters || {};
+  return profile === "standard"
+    ? { ...base }
+    : { ...base, ...profileOverrides[type][profile] };
+}
 export const labels: Record<string, string> = Object.fromEntries(
   scenarios.map((item) => [item.id, item.label]),
 );

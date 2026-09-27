@@ -1782,6 +1782,185 @@ textarea:focus {
   background: #16323b;
   color: #fff;
 }
+
+.endpoint-select-head,
+.api-endpoint-heading,
+.api-endpoint-footer,
+.api-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.endpoint-select-head .input-label {
+  margin-bottom: 0;
+}
+.text-action {
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: #13836c;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.text-action:hover {
+  text-decoration: underline;
+}
+.profile-picker {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 18px 0 12px;
+  padding: 14px;
+  border: 1px solid #dce9e5;
+  border-radius: 10px;
+  background: #f7fbf9;
+}
+.profile-picker strong,
+.profile-picker small {
+  display: block;
+}
+.profile-picker strong,
+.common-knobs > strong {
+  color: #294552;
+  font-size: 13px;
+}
+.profile-picker small {
+  margin-top: 3px;
+  color: #718995;
+  font-size: 11px;
+}
+.profile-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.profile-actions button {
+  padding: 7px 10px;
+  border: 1px solid #d5e3df;
+  border-radius: 7px;
+  background: #fff;
+  color: #4e6870;
+  cursor: pointer;
+  font-size: 12px;
+}
+.profile-actions button.active {
+  border-color: #20a98a;
+  background: #e5f7f0;
+  color: #126e5c;
+  font-weight: 700;
+}
+.profile-note {
+  color: #8d6718;
+  font-size: 12px;
+  margin: -2px 0 15px;
+}
+.common-knobs {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e8eff0;
+}
+.api-settings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+  gap: 18px;
+  align-items: start;
+}
+.api-endpoint-list,
+.api-settings-form {
+  padding: 26px;
+}
+.api-endpoint-card {
+  border: 1px solid #dfe8ea;
+  border-radius: 11px;
+  padding: 17px;
+  background: #fff;
+  margin-top: 12px;
+}
+.api-endpoint-heading strong {
+  color: #24414b;
+  font-size: 15px;
+}
+.api-endpoint-card p {
+  color: #56707b;
+  font-size: 13px;
+  margin: 8px 0 4px;
+}
+.api-endpoint-url {
+  color: #84949c;
+  overflow-wrap: anywhere;
+}
+.api-endpoint-footer {
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-top: 15px;
+}
+.api-endpoint-footer > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.credential-ready,
+.credential-missing {
+  font-size: 11px;
+  font-weight: 700;
+}
+.credential-ready {
+  color: #168269;
+}
+.credential-missing {
+  color: #b65b43;
+}
+.api-endpoint-card .api-probe-result {
+  padding-top: 9px;
+  margin: 10px 0 0;
+  border-top: 1px solid #edf1f2;
+  color: #315460;
+}
+.api-settings-form label {
+  display: block;
+  color: #536a76;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 14px 0 6px;
+}
+.api-settings-form input,
+.api-settings-form select {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid #dce5e8;
+  border-radius: 8px;
+  background: #fff;
+  color: #233d4a;
+}
+.api-settings-form .knobs-section p,
+.api-secret-note {
+  color: #738995;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.api-settings-form .knobs-section p {
+  margin-bottom: 0;
+}
+.api-form-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+.form-success {
+  color: #147c62;
+  font-size: 12px;
+}
+@media (max-width: 1160px) {
+  .api-settings-layout {
+    grid-template-columns: 1fr;
+  }
+}
 .knobs-section {
   margin-top: 14px;
   border: 1px solid #e2e8eb;

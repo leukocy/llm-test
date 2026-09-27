@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from core.providers.factory import _validate_base_url
@@ -22,20 +22,49 @@ class Endpoint:
     model_id: str
     api_key_env: str
     tokenizer_option: str = "auto"
+    api_key_value: str | None = field(default=None, repr=False)
 
-    def public(self) -> dict[str, str]:
+    def public(self) -> dict[str, str | bool]:
         return {
             "id": self.id,
             "label": self.label,
             "provider": self.provider,
+            "api_base_url": self.api_base_url,
             "model_id": self.model_id,
+            "tokenizer_option": self.tokenizer_option,
+            "credential_configured": bool(os.getenv(self.api_key_env)),
+            "source": "file",
         }
 
     def api_key(self) -> str:
-        value = os.getenv(self.api_key_env, "")
+        value = (
+            self.api_key_value
+            if self.api_key_value is not None
+            else os.getenv(self.api_key_env, "")
+        )
         if not value:
             raise RuntimeError(f"Credential environment variable {self.api_key_env} is unset")
         return value
+
+
+def validate_endpoint(endpoint: Endpoint) -> None:
+    if not _IDENTIFIER.fullmatch(endpoint.id):
+        raise ValueError(f"Invalid endpoint ID: {endpoint.id}")
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", endpoint.api_key_env):
+        raise ValueError(f"Invalid credential environment variable: {endpoint.id}")
+    if not endpoint.label.strip() or len(endpoint.label) > 80:
+        raise ValueError(f"Invalid endpoint label: {endpoint.id}")
+    if (
+        not endpoint.model_id
+        or len(endpoint.model_id) > 200
+        or not re.fullmatch(r"[A-Za-z0-9._/@:+-]+", endpoint.model_id)
+        or endpoint.model_id.startswith("/")
+        or any(part in {"", ".", ".."} for part in endpoint.model_id.split("/"))
+    ):
+        raise ValueError(f"Invalid model ID: {endpoint.id}")
+    if not endpoint.api_base_url:
+        raise ValueError(f"Empty API URL: {endpoint.id}")
+    _validate_base_url(endpoint.api_base_url)
 
 
 @dataclass(frozen=True)
@@ -56,28 +85,16 @@ class Settings:
             data = json.loads(endpoint_file.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError(f"Cannot load endpoint configuration: {endpoint_file}") from exc
-        if not isinstance(data, list) or not data:
-            raise ValueError("Endpoint configuration must be a nonempty JSON array")
+        if not isinstance(data, list):
+            raise ValueError("Endpoint configuration must be a JSON array")
         endpoints: dict[str, Endpoint] = {}
         for item in data:
             if not isinstance(item, dict):
                 raise ValueError("Each endpoint must be a JSON object")
             endpoint = Endpoint(**item)
-            if not _IDENTIFIER.fullmatch(endpoint.id) or endpoint.id in endpoints:
+            if endpoint.id in endpoints:
                 raise ValueError(f"Invalid or duplicate endpoint ID: {endpoint.id}")
-            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", endpoint.api_key_env):
-                raise ValueError(f"Invalid credential environment variable: {endpoint.id}")
-            if (
-                not endpoint.model_id
-                or len(endpoint.model_id) > 200
-                or not re.fullmatch(r"[A-Za-z0-9._/@:+-]+", endpoint.model_id)
-                or endpoint.model_id.startswith("/")
-                or any(part in {"", ".", ".."} for part in endpoint.model_id.split("/"))
-            ):
-                raise ValueError(f"Invalid model ID: {endpoint.id}")
-            if not endpoint.api_base_url:
-                raise ValueError(f"Empty API URL: {endpoint.id}")
-            _validate_base_url(endpoint.api_base_url)
+            validate_endpoint(endpoint)
             endpoints[endpoint.id] = endpoint
         return cls(
             api_token=token,

@@ -34,6 +34,16 @@ def test_settings_fail_closed_without_token(tmp_path: Path, monkeypatch: pytest.
     assert Settings.from_env().endpoints["lab"].model_id == "org/model"
 
 
+def test_settings_allow_empty_file_for_ui_onboarding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    config = tmp_path / "endpoints.json"
+    config.write_text("[]", encoding="utf-8")
+    monkeypatch.setenv("LLM_TEST_ENDPOINTS_FILE", str(config))
+    monkeypatch.setenv("LLM_TEST_API_TOKEN", "a" * 40)
+    assert Settings.from_env().endpoints == {}
+
+
 def test_settings_reject_path_escape_in_model_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     config = tmp_path / "endpoints.json"
     config.write_text(

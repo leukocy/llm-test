@@ -8,7 +8,13 @@ import logging
 import sqlite3
 from typing import Any, Callable
 
-from .schema import CREATE_CONTROL_JOBS, CREATE_CONTROL_PRESETS, CREATE_JOB_EVENTS, SCHEMA_VERSION
+from .schema import (
+    CREATE_CONTROL_ENDPOINTS,
+    CREATE_CONTROL_JOBS,
+    CREATE_CONTROL_PRESETS,
+    CREATE_JOB_EVENTS,
+    SCHEMA_VERSION,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +164,10 @@ MIGRATIONS: dict[str, list[MigrationFunc]] = {
         _exec("CREATE INDEX IF NOT EXISTS idx_job_events_job ON job_events(job_id, id)"),
     ],
     "1.7.0": [_exec(CREATE_CONTROL_PRESETS)],
+    "1.8.0": [
+        _exec(CREATE_CONTROL_ENDPOINTS),
+        _add_column("control_presets", "run_config_json", "TEXT"),
+    ],
 }
 
 

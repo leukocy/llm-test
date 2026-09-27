@@ -22,12 +22,15 @@
 
 ### New control plane (recommended for single-tenant intranets)
 
-The new React/TypeScript console uses a FastAPI control API and a separate,
+The React/TypeScript console uses a FastAPI control API and a separate,
 durable worker. It includes saved test plans, a searchable measurement warehouse,
 quality sample diagnosis, and printable/downloadable reports. Copy
-`config/endpoints.platform.example.json` to
-`config/endpoints.platform.json` and `.env.platform.example` to `.env.platform`,
-then set the endpoint, API key and a random control token of at least 32 characters.
+`config/endpoints.platform.example.json` to `config/endpoints.platform.json`
+and `.env.platform.example` to `.env.platform`, then set a random control token
+of at least 32 characters. After login, open **受测 API 设置** to add the target
+URL, model ID and API key. Credentials are encrypted in the shared database;
+the UI never returns them. File-defined endpoints remain available for
+administrator-managed deployments.
 
 ```bash
 docker compose --env-file .env.platform -f compose.platform.yml up -d --build

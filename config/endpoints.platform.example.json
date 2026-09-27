@@ -1,11 +1,1 @@
-[
-  {
-    "id": "lab-model",
-    "label": "Lab model",
-    "provider": "OpenAI",
-    "api_base_url": "https://api.example.com/v1",
-    "model_id": "example-model",
-    "api_key_env": "",
-    "tokenizer_option": "auto"
-  }
-]
+[]
