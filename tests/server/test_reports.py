@@ -62,6 +62,10 @@ def test_report_survives_job_completion_and_excludes_prompt(tmp_path: Path):
     assert "test-model" in html.text
     assert "confidential prompt" not in html.text
     assert "完整性核验通过" in html.text
+    markdown = client.get(f"/api/v1/jobs/{job_id}/report?format=markdown", headers=headers)
+    assert markdown.status_code == 200
+    assert "完整性" in markdown.text and METRIC_CONTRACT_VERSION in markdown.text
+    assert "confidential prompt" not in markdown.text
     results = client.get(f"/api/v1/jobs/{job_id}/results", headers=headers)
     assert "confidential prompt" not in results.text
     assert summary.json()["group_axis"] == "输入长度"

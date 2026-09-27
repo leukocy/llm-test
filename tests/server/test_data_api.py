@@ -474,6 +474,73 @@ def test_batch_rejects_bad_item_and_unknown_endpoint(env):
     assert bad_endpoint.status_code == 422
 
 
+def test_batch_uses_per_item_endpoint_and_rejects_bad_later_target_atomically(env, monkeypatch):
+    client, _, settings = env
+    monkeypatch.setenv("SECOND_API_KEY", "placeholder")
+    settings.endpoints["second"] = Endpoint(
+        "second", "Second", "OpenAI", "http://127.0.0.1:9011/v1", "other-model", "SECOND_API_KEY"
+    )
+    body = {
+        "endpoint_id": "lab",
+        "items": [
+            {
+                "test_type": "concurrency",
+                "parameters": {
+                    "selected_concurrencies": [1],
+                    "rounds_per_level": 1,
+                    "max_tokens": 8,
+                },
+            },
+            {
+                "test_type": "prefill",
+                "endpoint_id": "second",
+                "parameters": {"token_levels": [8], "requests_per_level": 1, "max_tokens": 8},
+            },
+        ],
+    }
+    invalid = client.post(
+        "/api/v1/jobs/batch",
+        json={**body, "items": [body["items"][0], {**body["items"][1], "endpoint_id": "missing"}]},
+        headers=auth(),
+    )
+    assert invalid.status_code == 422
+    assert client.get("/api/v1/jobs", headers=auth()).json()["total"] == 0
+    submitted = client.post("/api/v1/jobs/batch", json=body, headers=auth())
+    assert submitted.status_code == 201, submitted.text
+    assert [(item["endpoint_id"], item["model_id"]) for item in submitted.json()["items"]] == [
+        ("lab", "test-model"),
+        ("second", "other-model"),
+    ]
+
+
+def test_batch_stop_cancels_queued_children_and_requests_running_child(env):
+    client, _, settings = env
+    body = {
+        "endpoint_id": "lab",
+        "items": [
+            {
+                "test_type": "concurrency",
+                "parameters": {
+                    "selected_concurrencies": [1],
+                    "rounds_per_level": 1,
+                    "max_tokens": 8,
+                },
+            },
+            {
+                "test_type": "prefill",
+                "parameters": {"token_levels": [8], "requests_per_level": 1, "max_tokens": 8},
+            },
+        ],
+    }
+    batch = client.post("/api/v1/jobs/batch", json=body, headers=auth()).json()
+    assert JobStore(settings.db_path).claim("test-worker") is not None
+    assert client.post(f"/api/v1/jobs/batch/{batch['batch_id']}/cancel").status_code == 401
+    stopped = client.post(f"/api/v1/jobs/batch/{batch['batch_id']}/cancel", headers=auth())
+    assert stopped.status_code == 200
+    assert {item["status"] for item in stopped.json()["items"]} == {"cancelling", "cancelled"}
+    assert client.post("/api/v1/jobs/batch/unknown/cancel", headers=auth()).status_code == 404
+
+
 def test_job_logs_cursor_reads_jsonl(env):
     client, _, settings = env
     job = client.post(
@@ -488,7 +555,7 @@ def test_job_logs_cursor_reads_jsonl(env):
     job_dir = settings.artifact_root / job["job_id"]
     job_dir.mkdir(parents=True, exist_ok=True)
     (job_dir / "logs.jsonl").write_text(
-        '{"timestamp": 1.0, "level": "INFO", "message": "第一条"}\n'
+        '{"timestamp": 1.0, "level": "INFO", "message": "第一条", "metrics": {"ttft": 0.1}}\n'
         '{"timestamp": 2.0, "level": "WARNING", "message": "第二条"}\n',
         encoding="utf-8",
     )
@@ -497,9 +564,24 @@ def test_job_logs_cursor_reads_jsonl(env):
     items = r.json()["items"]
     assert [i["message"] for i in items] == ["第一条", "第二条"]
     assert items[1]["id"] == 2
+    assert items[0]["metrics"] == {"ttft": 0.1}
 
     incremental = client.get(f"/api/v1/jobs/{job['job_id']}/logs?since_id=1", headers=auth())
     assert [i["message"] for i in incremental.json()["items"]] == ["第二条"]
+
+    for format in ("json", "txt", "csv"):
+        exported = client.get(
+            f"/api/v1/jobs/{job['job_id']}/logs/export?format={format}", headers=auth()
+        )
+        assert exported.status_code == 200
+        assert "第一条" in exported.text and "第二条" in exported.text
+    assert (
+        client.get(f"/api/v1/jobs/{job['job_id']}/logs/export", headers=auth()).json()[0]["id"] == 1
+    )
+    assert (
+        "metrics"
+        in client.get(f"/api/v1/jobs/{job['job_id']}/logs/export?format=csv", headers=auth()).text
+    )
 
 
 def test_environment_and_datasets_endpoints(env):
@@ -512,6 +594,32 @@ def test_environment_and_datasets_endpoints(env):
     assert ds.status_code == 200
     payload = ds.json()
     assert "builtin" in payload and "custom" in payload
+
+
+def test_tokenizer_tools_require_auth_and_report_count_method(env):
+    client, _, _ = env
+    assert client.get("/api/v1/tokenizers").status_code == 401
+    catalog = client.get("/api/v1/tokenizers?model_id=DeepSeek-V3.2", headers=auth())
+    assert catalog.status_code == 200
+    assert catalog.json()["matched_name"] == "DeepSeek-V3.2"
+    counted = client.post(
+        "/api/v1/tokenizers/count",
+        json={"text": "A汉", "mode": "characters"},
+        headers=auth(),
+    )
+    assert counted.json() == {
+        "count": 2,
+        "unit": "characters",
+        "method": "Unicode code points",
+    }
+    assert (
+        client.post(
+            "/api/v1/tokenizers/count",
+            json={"text": "A", "mode": "local", "name": "../../unsafe"},
+            headers=auth(),
+        ).status_code
+        == 422
+    )
 
 
 # ---------- compare / advanced ----------
@@ -739,3 +847,6 @@ def test_robustness_report_route_serves_artifact(env):
     html_r = client.get(f"/api/v1/jobs/{job['job_id']}/report?format=html", headers=auth())
     assert html_r.status_code == 200
     assert "鲁棒性报告" in html_r.text
+    md_r = client.get(f"/api/v1/jobs/{job['job_id']}/report?format=markdown", headers=auth())
+    assert md_r.status_code == 200
+    assert "鲁棒性报告" in md_r.text

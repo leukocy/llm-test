@@ -152,6 +152,33 @@ def test_probe_returns_only_connection_result(tmp_path: Path, monkeypatch):
     assert CONFIG["api_key"] not in response.text
 
 
+def test_model_discovery_route_requires_auth_and_hides_credential(tmp_path: Path, monkeypatch):
+    client, _, _ = _platform(tmp_path)
+    endpoint_id = client.post("/api/v1/endpoints", json=CONFIG, headers=HEADERS).json()["id"]
+
+    async def fake_discovery(endpoint):
+        assert endpoint.api_key() == CONFIG["api_key"]
+        return {"items": ["lab-a", "lab-b"], "truncated": False}
+
+    monkeypatch.setattr("server.api.discover_models", fake_discovery)
+    path = f"/api/v1/endpoints/{endpoint_id}/models"
+    assert client.get(path).status_code == 401
+    response = client.get(path, headers=HEADERS)
+    assert response.status_code == 200
+    assert response.json()["items"] == ["lab-a", "lab-b"]
+    assert CONFIG["api_key"] not in response.text
+
+    async def fake_reference(endpoint):
+        assert endpoint.api_key() == CONFIG["api_key"]
+        return {"reference_ms": 12, "method": "GET /models response headers"}
+
+    monkeypatch.setattr("server.api.measure_reference_latency", fake_reference)
+    reference = client.post(f"/api/v1/endpoints/{endpoint_id}/reference-latency", headers=HEADERS)
+    assert reference.status_code == 200
+    assert reference.json()["reference_ms"] == 12
+    assert CONFIG["api_key"] not in reference.text
+
+
 @pytest.mark.asyncio
 async def test_worker_reads_endpoint_added_after_settings_loaded(tmp_path: Path, monkeypatch):
     client, _, store = _platform(tmp_path)

@@ -12,7 +12,7 @@ LLM Benchmark Platform - a performance and quality evaluation platform. The sing
 
 ```bash
 # Run the new platform (see docs/PLATFORM_V3.md for configuration)
-docker compose --env-file .env.platform -f compose.platform.yml up -d --build
+docker compose -p llm-test-platform --env-file .env.platform -f compose.platform.yml up -d --build
 
 # Develop locally: run the API and worker separately
 python -m uvicorn server.main:app --reload

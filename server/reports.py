@@ -6,6 +6,126 @@ from html import escape
 from typing import Any
 
 
+def _md(value: Any) -> str:
+    return (
+        str(value if value is not None else "—")
+        .replace("\\", "\\\\")
+        .replace("|", "\\|")
+        .replace("\n", " ")
+    )
+
+
+def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
+    """Portable performance report with the same integrity and metric contract as HTML."""
+    overall = summary["overall"]
+    metrics = overall["metrics"]
+    integrity = summary["integrity"]
+    protocol = summary.get("measurement_protocol") or {}
+
+    def number(value: Any, digits: int = 3) -> str:
+        return "—" if value is None else f"{value:,.{digits}f}"
+
+    def rate(value: Any) -> str:
+        return "—" if value is None else f"{value * 100:.1f}%"
+
+    lines = [
+        f"# LLM Test 测量报告 · {_md(job['model_id'])}",
+        "",
+        f"- 作业 ID：`{_md(job['job_id'])}`",
+        f"- 测试类型：{_md(job['test_type'])}",
+        f"- 状态：{_md(job['status'])}",
+        f"- 指标契约：{_md(summary['metric_contract_version'])}",
+        "",
+        "## 完整性",
+        "",
+        f"**{'通过' if integrity['verified'] else '仅供诊断，未通过'}**。"
+        f"记录 {integrity['recorded_requests']} / "
+        f"{_md(integrity['expected_requests'])} 次计划请求。",
+    ]
+    lines.extend(f"- {_md(reason)}" for reason in integrity["reasons"])
+    lines.extend(
+        [
+            "",
+            "## 汇总",
+            "",
+            "| 请求 | 成功率 | TTFT p50 (s) | TTFT p95 (s) | TPS p50 (token/s) |",
+            "|---:|---:|---:|---:|---:|",
+            f"| {overall['requests']} | {rate(overall['success_rate'])} | "
+            f"{number(metrics['ttft']['median'])} | {number(metrics['ttft']['p95'])} | "
+            f"{number(metrics['tps']['median'], 1)} |",
+            "",
+            "## 条件切片",
+            "",
+            f"| {_md(summary['group_axis'])} | 正式 / 计划 | 失败 | 成功率 | 输入 token 中位数 | TTFT p50 (s) | TTFT p95 (s) | TPS p50 |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for group in summary["groups"]:
+        lines.append(
+            f"| {_md(group['label'])} | {group['requests']} / {_md(group.get('planned_requests'))} "
+            f"| {group['failures']} | {rate(group['success_rate'])} "
+            f"| {number((group.get('input_tokens') or {}).get('median'), 1)} "
+            f"| {number(group['metrics']['ttft']['median'])} "
+            f"| {number(group['metrics']['ttft']['p95'])} "
+            f"| {number(group['metrics']['tps']['median'], 1)} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## 测量方法与来源",
+            "",
+            f"- 协议版本：{_md(protocol.get('protocol_version'))}",
+            f"- 负载模型：{_md(protocol.get('workload_model'))}",
+            f"- 正式请求：{_md(protocol.get('measured_requests'))}；预热请求：{_md(protocol.get('warmup_requests'))}",
+            f"- Token 来源：{_md(', '.join(summary['provenance']['token_sources']))}",
+            f"- Token 算法：{_md(', '.join(summary['provenance']['token_methods']))}",
+        ]
+    )
+    lines.extend(f"- {_md(note)}" for note in summary["notes"])
+    lines.extend(
+        f"- 数据质量：{_md(note)}" for note in summary.get("data_quality", {}).get("warnings", [])
+    )
+    return "\n".join(lines) + "\n"
+
+
+def render_quality_markdown(job: dict[str, Any], report: dict[str, Any]) -> str:
+    lines = [
+        f"# LLM Test 质量报告 · {_md(job['model_id'])}",
+        "",
+        f"- 作业 ID：`{_md(job['job_id'])}`",
+        f"- 状态：{_md(job['status'])}",
+        "",
+        "| 数据集 | 正确 / 总数 | 准确率 | 样本 SHA-256 |",
+        "|---|---:|---:|---|",
+    ]
+    for name, result in report.get("datasets", {}).items():
+        provenance = (result.get("config") or {}).get("dataset_provenance") or {}
+        lines.append(
+            f"| {_md(name)} | {result.get('correct_samples', 0)} / "
+            f"{result.get('total_samples', 0)} | {float(result.get('accuracy') or 0) * 100:.1f}% "
+            f"| {_md(provenance.get('sample_sha256'))} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def render_robustness_markdown(job: dict[str, Any], report: dict[str, Any]) -> str:
+    robustness = report["robustness"]
+    lines = [
+        f"# LLM Test 鲁棒性报告 · {_md(job['model_id'])}",
+        "",
+        f"- 作业 ID：`{_md(job['job_id'])}`",
+        f"- 原始准确率：{float(robustness.get('original_accuracy') or 0) * 100:.1f}%",
+        f"- 扰动后准确率：{float(robustness.get('perturbed_accuracy') or 0) * 100:.1f}%",
+        f"- 总体鲁棒性：{float(robustness.get('overall_robustness') or 0):.3f}",
+        "",
+        "| 扰动类型 | 敏感性 |",
+        "|---|---:|",
+    ]
+    for name, score in (robustness.get("sensitivity_by_type") or {}).items():
+        lines.append(f"| {_md(name)} | {float(score):.3f} |")
+    return "\n".join(lines) + "\n"
+
+
 def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
     overall = summary["overall"]
     metric = overall["metrics"]

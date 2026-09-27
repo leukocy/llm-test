@@ -1746,6 +1746,9 @@ textarea:focus {
   flex-direction: column;
   gap: 4px;
 }
+.schema-field.wide {
+  grid-column: 1 / -1;
+}
 .schema-field.case-form-wide {
   grid-column: 1 / -1;
 }
@@ -1756,6 +1759,29 @@ textarea:focus {
 }
 .input-invalid {
   border-color: #c2433a !important;
+}
+.list-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.list-choices button {
+  border: 1px solid #d5e0e5;
+  border-radius: 6px;
+  background: #fff;
+  color: #526c78;
+  padding: 4px 7px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.list-choices button.active {
+  color: #165f69;
+  border-color: #89c5c6;
+  background: #e7f6f3;
+}
+.list-choices button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .checkbox-label {
   display: inline-flex;
@@ -2107,6 +2133,115 @@ textarea:focus {
 }
 .batch-item-editor {
   min-height: 120px;
+}
+.batch-config-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.batch-config-actions > input:first-child {
+  flex: 1;
+  min-width: 220px;
+}
+.batch-config-actions input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.batch-config-actions label.button {
+  cursor: pointer;
+}
+.batch-all-tests p,
+.batch-plan {
+  color: #526b77;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.batch-item .mode-toggle {
+  margin: 12px 0 4px;
+}
+.batch-item > select {
+  width: 100%;
+  margin: 6px 0;
+}
+.text-file-import,
+.tokenizer-tools {
+  border: 1px solid #e2e8eb;
+  border-radius: 10px;
+  padding: 14px;
+  margin: 14px 0;
+  background: #fafcfd;
+}
+.scenario-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+.scenario-shortcuts strong {
+  margin-right: 4px;
+  font-size: 12px;
+}
+.prefill-isolation {
+  margin: 12px 0;
+}
+.text-file-import small,
+.tokenizer-tools p {
+  display: block;
+  color: #5c7280;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 8px 0;
+}
+.tokenizer-tools select,
+.tokenizer-tools textarea {
+  width: 100%;
+  margin: 5px 0 10px;
+}
+.tokenizer-count-actions,
+.api-model-discovery,
+.log-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.tokenizer-count-actions select {
+  flex: 1;
+  min-width: 210px;
+}
+.api-model-discovery select {
+  flex: 1;
+  min-width: 180px;
+}
+.api-probe-result .text-action {
+  display: block;
+  margin-top: 6px;
+}
+.log-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.log-tools > input {
+  flex: 1;
+  min-width: 200px;
+}
+.log-level-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+}
+.log-level-filters label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .env-kv {
   display: grid;

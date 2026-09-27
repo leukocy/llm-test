@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import dataclasses
 import hmac
+import io
 import json
 import re
 import time
@@ -28,8 +30,15 @@ from server.endpoints import (
     EndpointRegistry,
 )
 from server.figures import compare_figures, run_detail_figures, trend_figure
+from server.model_discovery import ModelDiscoveryError, discover_models, measure_reference_latency
 from server.quality_export import quality_errors_csv
-from server.reports import render_html, render_quality_html
+from server.reports import (
+    render_html,
+    render_markdown,
+    render_quality_html,
+    render_quality_markdown,
+    render_robustness_markdown,
+)
 from server.settings import Endpoint, Settings
 from server.specs import (
     JobSubmission,
@@ -41,6 +50,7 @@ from server.specs import (
     spec_catalog,
 )
 from server.store import IdempotencyConflict, JobNotFound, JobStore, PresetConflict, PresetNotFound
+from server.tokenizer_tools import count_text, tokenizer_catalog
 from server.warehouse import (
     ExportScopeTooLarge,
     WarehouseReader,
@@ -127,6 +137,7 @@ class BatchItem(StrictSpec):
     ]
     parameters: dict[str, Any]
     run_config: RunConfig | None = None
+    endpoint_id: str | None = Field(default=None, min_length=1, max_length=64)
 
     @model_validator(mode="after")
     def validate_parameters(self) -> BatchItem:
@@ -149,6 +160,12 @@ class EndpointConfigBody(StrictSpec):
     model_id: str = Field(min_length=1, max_length=200)
     tokenizer_option: str = Field(default="auto", min_length=1, max_length=120)
     api_key: str | None = Field(default=None, max_length=4096)
+
+
+class TokenCountBody(StrictSpec):
+    text: str = Field(min_length=1, max_length=10000)
+    mode: Literal["local", "tiktoken", "characters"]
+    name: str | None = Field(default=None, max_length=120)
 
 
 def create_app(settings: Settings | None = None, store: JobStore | None = None) -> FastAPI:
@@ -299,12 +316,51 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             "latency_ms": round((time.monotonic() - start) * 1000),
         }
 
+    @app.get("/api/v1/endpoints/{endpoint_id}/models", dependencies=[auth])
+    async def endpoint_models(endpoint_id: str):
+        endpoint = resolve_endpoint(endpoint_id)
+        try:
+            return await discover_models(endpoint)
+        except SSRFError as exc:
+            raise HTTPException(422, "Endpoint URL is no longer trusted") from exc
+        except ModelDiscoveryError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(503, "Endpoint credential unavailable") from exc
+
+    @app.post("/api/v1/endpoints/{endpoint_id}/reference-latency", dependencies=[auth])
+    async def endpoint_reference_latency(endpoint_id: str):
+        endpoint = resolve_endpoint(endpoint_id)
+        try:
+            return await measure_reference_latency(endpoint)
+        except SSRFError as exc:
+            raise HTTPException(422, "Endpoint URL is no longer trusted") from exc
+        except ModelDiscoveryError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(503, "Endpoint credential unavailable") from exc
+
     @app.get("/api/v1/specs", dependencies=[auth])
     def specs():
         """9 个测试类型的展示名 + JSON Schema + 运行配置旋钮 schema（驱动前端表单）。"""
         from server.specs import RunConfig
 
         return {"items": spec_catalog(), "run_config_schema": RunConfig.model_json_schema()}
+
+    @app.get("/api/v1/tokenizers", dependencies=[auth])
+    def tokenizers(model_id: Annotated[str, Query(max_length=200)] = ""):
+        return tokenizer_catalog(model_id)
+
+    @app.post("/api/v1/tokenizers/count", dependencies=[auth])
+    async def tokenizer_count(body: TokenCountBody):
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(count_text, body.text, body.mode, body.name), timeout=10
+            )
+        except TimeoutError as exc:
+            raise HTTPException(504, "Tokenizer count timed out") from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
     @app.get("/api/v1/environment", dependencies=[auth])
     def environment():
@@ -871,20 +927,25 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         子任务共享批次幂等键前缀（{key}:{i}），重放返回原任务;
         单作业 worker 天然串行执行, 与 Streamlit 批量语义一致。
         """
-        endpoint = resolve_endpoint(body.endpoint_id)
-        if idempotency_key is not None and not _KEY.fullmatch(idempotency_key):
+        if idempotency_key is not None and (
+            not _KEY.fullmatch(idempotency_key) or len(idempotency_key) > 64
+        ):
             raise HTTPException(422, "Invalid idempotency key")
-        try:
-            endpoint.api_key()
-        except RuntimeError as exc:
-            raise HTTPException(503, "Endpoint credential unavailable") from exc
+        # Resolve every target before writing any child so a bad later item
+        # cannot leave a partially submitted batch behind.
+        targets = [resolve_endpoint(item.endpoint_id or body.endpoint_id) for item in body.items]
+        for endpoint in targets:
+            try:
+                endpoint.api_key()
+            except RuntimeError as exc:
+                raise HTTPException(503, "Endpoint credential unavailable") from exc
 
         import uuid as _uuid
 
         batch_id = idempotency_key or _uuid.uuid4().hex[:16]
         jobs = []
         try:
-            for index, item in enumerate(body.items):
+            for index, (item, endpoint) in enumerate(zip(body.items, targets, strict=True)):
                 parameters = dict(item.parameters)
                 if item.run_config:
                     parameters["_run_config"] = item.run_config.model_dump(exclude_none=True)
@@ -902,6 +963,24 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         except IdempotencyConflict as exc:
             raise HTTPException(409, str(exc)) from exc
         return {"batch_id": batch_id, "items": jobs}
+
+    @app.post("/api/v1/jobs/batch/{batch_id}/cancel", dependencies=[auth])
+    def cancel_batch(batch_id: str):
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", batch_id):
+            raise HTTPException(422, "Invalid batch ID")
+        items, _ = store.list(parent_job_id=batch_id, limit=200)
+        if not items:
+            raise HTTPException(404, "Batch not found")
+        cancelled = []
+        for item in items:
+            if item["status"] in {RunStatus.COMPLETED.value, RunStatus.FAILED.value}:
+                continue
+            try:
+                cancelled.append(store.request_cancel(item["job_id"], actor="api:batch"))
+            except InvalidRunTransition:
+                # A worker may have completed the child between listing and cancellation.
+                continue
+        return {"batch_id": batch_id, "requested": len(cancelled), "items": cancelled}
 
     @app.get("/api/v1/jobs/{job_id}/logs", dependencies=[auth])
     def job_logs(
@@ -926,6 +1005,9 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
                             entry = json.loads(line)
                         except json.JSONDecodeError:
                             continue
+                        if not isinstance(entry, dict):
+                            continue
+                        entry["level"] = str(entry.get("level", "INFO")).removeprefix("LogLevel.")
                         entry["id"] = line_no
                         items.append(entry)
                         if len(items) >= limit:
@@ -933,6 +1015,85 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             except OSError:
                 pass
         return {"items": items, "since_id": since_id}
+
+    @app.get("/api/v1/jobs/{job_id}/logs/export", dependencies=[auth])
+    def export_job_logs(job_id: str, format: Literal["json", "txt", "csv"] = "json"):
+        """Export the complete bounded job log, independent of the UI polling cursor."""
+        job_or_404(job_id)
+        path = settings.artifact_root / job_id / "logs.jsonl"
+        if not path.is_file():
+            raise HTTPException(404, "No execution log for this job")
+        if path.stat().st_size > 20 * 1024 * 1024:
+            raise HTTPException(413, "Log exceeds the 20 MiB export limit")
+        rows: list[dict[str, Any]] = []
+        bytes_read = 0
+        with path.open(encoding="utf-8") as handle:
+            for line_no, line in enumerate(handle, start=1):
+                bytes_read += len(line.encode("utf-8"))
+                if bytes_read > 20 * 1024 * 1024:
+                    raise HTTPException(413, "Log exceeds the 20 MiB export limit")
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(entry, dict):
+                    continue
+                entry["level"] = str(entry.get("level", "INFO")).removeprefix("LogLevel.")
+                entry["id"] = line_no
+                rows.append(entry)
+        if format == "json":
+            return Response(
+                json.dumps(rows, ensure_ascii=False, indent=2),
+                media_type="application/json; charset=utf-8",
+                headers={
+                    "Content-Disposition": f'attachment; filename="llm-test-{job_id}-logs.json"'
+                },
+            )
+        if format == "txt":
+            content = "\n".join(
+                f"{row.get('timestamp') or '—'} [{row['level']}] {row.get('message', '')}"
+                + (
+                    f" {json.dumps(row['metrics'], ensure_ascii=False)}"
+                    if row.get("metrics")
+                    else ""
+                )
+                for row in rows
+            )
+            return Response(
+                content + ("\n" if content else ""),
+                media_type="text/plain; charset=utf-8",
+                headers={
+                    "Content-Disposition": f'attachment; filename="llm-test-{job_id}-logs.txt"'
+                },
+            )
+        output = io.StringIO()
+        writer = csv.writer(output)
+        columns = (
+            "id",
+            "timestamp",
+            "level",
+            "session_id",
+            "test_type",
+            "message",
+            "metrics",
+            "error",
+        )
+        writer.writerow(columns)
+        for row in rows:
+            cells = [
+                json.dumps(row[key], ensure_ascii=False)
+                if key == "metrics" and row.get(key)
+                else str(row.get(key) or "")
+                for key in columns
+            ]
+            writer.writerow(
+                ["'" + cell if cell.startswith(("=", "+", "-", "@")) else cell for cell in cells]
+            )
+        return Response(
+            "\ufeff" + output.getvalue(),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="llm-test-{job_id}-logs.csv"'},
+        )
 
     def job_or_404(job_id: str) -> dict:
         try:
@@ -1025,21 +1186,39 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             data = performance_summary(job)
             if format == "html":
                 return HTMLResponse(render_html(job, data))
+            if format == "markdown":
+                return Response(
+                    render_markdown(job, data),
+                    media_type="text/markdown; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="llm-test-{job_id}.md"'},
+                )
             if format == "json":
                 return {"job": job, "summary": data}
-            raise HTTPException(422, "Format must be json or html")
+            raise HTTPException(422, "Format must be json, html or markdown")
         if not job["result_artifact"]:
             raise HTTPException(409, "No report is available for this job")
-        if format not in {"json", "html"}:
-            raise HTTPException(422, "Format must be json or html")
+        if format not in {"json", "html", "markdown"}:
+            raise HTTPException(422, "Format must be json, html or markdown")
         payload = artifact_payload(job)
         if isinstance(payload.get("datasets"), dict):
             if format == "html":
                 return HTMLResponse(render_quality_html(job, payload))
+            if format == "markdown":
+                return Response(
+                    render_quality_markdown(job, payload),
+                    media_type="text/markdown; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="llm-test-{job_id}.md"'},
+                )
             return JSONResponse(payload)
         if isinstance(payload.get("robustness"), dict):
             if format == "html":
                 return HTMLResponse(_render_robustness_html(job, payload))
+            if format == "markdown":
+                return Response(
+                    render_robustness_markdown(job, payload),
+                    media_type="text/markdown; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="llm-test-{job_id}.md"'},
+                )
             return JSONResponse(payload)
         raise HTTPException(422, "Report artifact is invalid")
 
