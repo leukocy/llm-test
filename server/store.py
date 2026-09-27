@@ -19,6 +19,10 @@ class IdempotencyConflict(ValueError):
     """An idempotency key was reused with different job content."""
 
 
+class BatchNotFound(LookupError):
+    """The requested batch does not exist."""
+
+
 class JobNotFound(LookupError):
     """The requested job does not exist."""
 
@@ -256,6 +260,132 @@ class JobStore:
             self._event(conn, job_id, RunStatus.CREATED.value, status, "enqueue", "api", now)
             conn.commit()
         return self.get(job_id)
+
+    def submit_batch(
+        self,
+        *,
+        batch_id: str,
+        name: str,
+        description: str,
+        default_endpoint_id: str,
+        request_hash: str,
+        requested_items: int,
+        items: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Create a named batch and every enabled child in one SQLite transaction.
+
+        The hash covers the validated request, including disabled items. Replaying an
+        idempotency key returns the original children; changing its meaning fails.
+        """
+        if not items or requested_items < len(items):
+            raise ValueError("A batch needs at least one enabled item")
+        now = time.time()
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            existing = conn.execute(
+                "SELECT request_hash FROM control_batches WHERE batch_id = ?", (batch_id,)
+            ).fetchone()
+            if existing is not None:
+                if existing["request_hash"] != request_hash:
+                    conn.rollback()
+                    raise IdempotencyConflict("Idempotency key is already used for another batch")
+                rows = conn.execute(
+                    "SELECT * FROM control_jobs WHERE parent_job_id = ? ORDER BY created_at, rowid",
+                    (batch_id,),
+                ).fetchall()
+                conn.commit()
+                return [self._as_job(row) for row in rows if row is not None]  # type: ignore[misc]
+            if conn.execute(
+                "SELECT 1 FROM control_jobs WHERE parent_job_id = ? LIMIT 1", (batch_id,)
+            ).fetchone():
+                conn.rollback()
+                raise IdempotencyConflict("Batch ID is already used by an older batch")
+            try:
+                conn.execute(
+                    """INSERT INTO control_batches
+                       (batch_id, name, description, default_endpoint_id, requested_items,
+                        submitted_items, request_hash, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        batch_id,
+                        name,
+                        description,
+                        default_endpoint_id,
+                        requested_items,
+                        len(items),
+                        request_hash,
+                        now,
+                    ),
+                )
+                status = advance_run(RunStatus.CREATED, RunEvent.ENQUEUE).value
+                for index, item in enumerate(items):
+                    job_id = str(uuid.uuid4())
+                    parameters_json = json.dumps(
+                        item["parameters"],
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        allow_nan=False,
+                    )
+                    conn.execute(
+                        """INSERT INTO control_jobs
+                           (job_id, parent_job_id, status, test_type, endpoint_id, model_id,
+                            parameters_json, progress_total, created_at, updated_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            job_id,
+                            batch_id,
+                            status,
+                            item["test_type"],
+                            item["endpoint_id"],
+                            item["model_id"],
+                            parameters_json,
+                            item["progress_total"],
+                            now + index * 0.000001,
+                            now,
+                        ),
+                    )
+                    self._event(
+                        conn, job_id, RunStatus.CREATED.value, status, "enqueue", "api", now
+                    )
+                rows = conn.execute(
+                    "SELECT * FROM control_jobs WHERE parent_job_id = ? ORDER BY created_at, rowid",
+                    (batch_id,),
+                ).fetchall()
+            except (sqlite3.IntegrityError, ValueError) as exc:
+                conn.rollback()
+                raise IdempotencyConflict("Batch could not be submitted") from exc
+            conn.commit()
+        return [self._as_job(row) for row in rows if row is not None]  # type: ignore[misc]
+
+    def get_batch(self, batch_id: str) -> dict[str, Any]:
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM control_batches WHERE batch_id = ?", (batch_id,)
+            ).fetchone()
+            if row is None:
+                raise BatchNotFound(batch_id)
+            counts = conn.execute(
+                """SELECT status, COUNT(*) AS count FROM control_jobs
+                   WHERE parent_job_id = ? GROUP BY status""",
+                (batch_id,),
+            ).fetchall()
+        result = dict(row)
+        result.pop("request_hash")
+        result["status_counts"] = {item["status"]: item["count"] for item in counts}
+        return result
+
+    def list_batches(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        if not 1 <= limit <= 100:
+            raise ValueError("Invalid batch limit")
+        with self._connection() as conn:
+            rows = conn.execute(
+                """SELECT batch_id, name, description, default_endpoint_id,
+                          requested_items, submitted_items, created_at
+                   FROM control_batches ORDER BY created_at DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def get(self, job_id: str) -> dict[str, Any]:
         with self._connection() as conn:

@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from server.api import create_app
 from server.settings import Endpoint, Settings
-from server.store import JobStore
+from server.store import BatchNotFound, JobStore
 
 TOKEN = "b" * 48
 
@@ -167,6 +167,39 @@ def test_results_since_id_returns_incremental_rows(env):
     incremental = r2.json()["items"]
     assert len(incremental) == 1
     assert incremental[0]["id"] > first_id
+
+
+def test_latest_output_requires_auth_and_limits_response_text(env):
+    client, manager, _ = env
+    run = _seed_run(manager, "seed-output-preview")
+    job = client.post(
+        "/api/v1/jobs",
+        json={
+            "endpoint_id": "lab",
+            "test_type": "concurrency",
+            "parameters": {"selected_concurrencies": [1], "rounds_per_level": 1, "max_tokens": 8},
+        },
+        headers=auth(),
+    ).json()
+    manager.db.execute(
+        "UPDATE control_jobs SET result_run_id = ? WHERE job_id = ?", (run.id, job["job_id"])
+    )
+    manager.db.execute(
+        "UPDATE test_results SET output_text = ? WHERE run_id = ? AND session_id = 2",
+        ("汉" * 4001, run.id),
+    )
+    path = f"/api/v1/jobs/{job['job_id']}/latest-output"
+    assert client.get(path).status_code == 401
+    preview = client.get(path, headers=auth())
+    assert preview.status_code == 200
+    assert preview.json()["output"] == "汉" * 4000
+    assert preview.json()["truncated"] is True
+    assert (
+        "output_text"
+        not in client.get(f"/api/v1/jobs/{job['job_id']}/results", headers=auth()).json()["items"][
+            0
+        ]
+    )
 
 
 # ---------- figures ----------
@@ -441,6 +474,97 @@ def test_batch_submission_creates_children_with_parent_link(env):
     listed = client.get("/api/v1/jobs?parent_job_id=campaign-x", headers=auth())
     assert listed.status_code == 200
     assert listed.json()["total"] == 2
+
+
+def test_batch_persists_metadata_skips_disabled_items_and_rejects_changed_replay(env):
+    client, _, settings = env
+    body = {
+        "name": "模型上线前验证",
+        "description": "相同端点，依次测并发与输入长度",
+        "endpoint_id": "lab",
+        "items": [
+            {
+                "test_type": "concurrency",
+                "parameters": {
+                    "selected_concurrencies": [1],
+                    "rounds_per_level": 1,
+                    "max_tokens": 8,
+                },
+            },
+            {"enabled": False, "test_type": "prefill", "parameters": {"unfinished": True}},
+            {
+                "test_type": "prefill",
+                "parameters": {"token_levels": [8], "requests_per_level": 1, "max_tokens": 8},
+            },
+        ],
+    }
+    headers = {**auth(), "Idempotency-Key": "named-batch"}
+    response = client.post("/api/v1/jobs/batch", json=body, headers=headers)
+    assert response.status_code == 201, response.text
+    jobs = response.json()["items"]
+    assert [item["test_type"] for item in jobs] == ["concurrency", "prefill"]
+    metadata = client.get("/api/v1/jobs/batch/named-batch", headers=auth())
+    assert metadata.status_code == 200
+    assert metadata.json()["name"] == body["name"]
+    assert metadata.json()["description"] == body["description"]
+    assert metadata.json()["requested_items"] == 3
+    assert metadata.json()["submitted_items"] == 2
+    assert metadata.json()["status_counts"] == {"queued": 2}
+    assert "request_hash" not in metadata.json()
+    assert client.get("/api/v1/jobs/batch/named-batch").status_code == 401
+    history = client.get("/api/v1/batches?limit=10", headers=auth())
+    assert history.status_code == 200
+    assert history.json()["items"][0]["batch_id"] == "named-batch"
+    assert history.json()["items"][0]["name"] == body["name"]
+    assert client.get("/api/v1/batches").status_code == 401
+
+    replay = client.post("/api/v1/jobs/batch", json=body, headers=headers)
+    assert replay.status_code == 201
+    assert [item["job_id"] for item in replay.json()["items"]] == [item["job_id"] for item in jobs]
+    changed = client.post(
+        "/api/v1/jobs/batch", json={**body, "name": "另一个批次"}, headers=headers
+    )
+    assert changed.status_code == 409
+    assert JobStore(settings.db_path).list(parent_job_id="named-batch")[1] == 2
+
+
+def test_batch_requires_an_enabled_item(env):
+    client, _, _ = env
+    response = client.post(
+        "/api/v1/jobs/batch",
+        json={
+            "endpoint_id": "lab",
+            "items": [{"enabled": False, "test_type": "prefill", "parameters": {}}],
+        },
+        headers=auth(),
+    )
+    assert response.status_code == 422
+
+
+def test_batch_submission_rolls_back_all_children_when_later_insert_fails(env):
+    _, _, settings = env
+    store = JobStore(settings.db_path)
+    valid = {
+        "test_type": "prefill",
+        "endpoint_id": "lab",
+        "model_id": "test-model",
+        "parameters": {"token_levels": [8], "requests_per_level": 1, "max_tokens": 8},
+        "progress_total": 1,
+    }
+    invalid = {**valid, "parameters": {"cannot_encode": {1, 2}}}
+    with pytest.raises(TypeError):
+        store.submit_batch(
+            batch_id="rollback-test",
+            name="Rollback",
+            description="",
+            default_endpoint_id="lab",
+            request_hash="hash",
+            requested_items=2,
+            items=[valid, invalid],
+        )
+    assert store.list(parent_job_id="rollback-test")[1] == 0
+    with pytest.raises(BatchNotFound):
+        store.get_batch("rollback-test")
 
 
 def test_batch_rejects_bad_item_and_unknown_endpoint(env):

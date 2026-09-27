@@ -336,6 +336,27 @@ def run_results(
     }
 
 
+def latest_output(db_path: str, run_id: int, *, max_chars: int = 4000) -> dict[str, Any]:
+    """Return a bounded preview of the latest recorded model response on demand."""
+    conn = sqlite3.connect(db_path, timeout=30)
+    try:
+        row = conn.execute(
+            """SELECT id, substr(output_text, 1, ?) AS output,
+                      length(output_text) > ? AS truncated
+               FROM test_results
+               WHERE run_id = ? AND output_text IS NOT NULL AND output_text != ''
+               ORDER BY id DESC LIMIT 1""",
+            (max_chars, max_chars, run_id),
+        ).fetchone()
+    finally:
+        conn.close()
+    return (
+        {"result_id": row[0], "output": row[1], "truncated": bool(row[2])}
+        if row
+        else {"result_id": None, "output": None, "truncated": False}
+    )
+
+
 def run_results_csv(db_path: str, run_id: int) -> str:
     """Export numeric observations without prompt or response text."""
     columns = (

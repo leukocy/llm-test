@@ -5,6 +5,7 @@ import { scenarios, type JobType } from "../constants";
 import { SchemaForm, type JsonSchema } from "../components/SchemaForm";
 
 type Item = {
+  enabled: boolean;
   test_type: JobType;
   endpoint_id: string;
   parameters: Record<string, unknown>;
@@ -21,6 +22,7 @@ function makeItem(
   const chosen =
     parameters || scenarios.find((item) => item.id === testType)!.parameters;
   return {
+    enabled: true,
     test_type: testType,
     endpoint_id: "",
     parameters: { ...chosen },
@@ -51,10 +53,16 @@ export function Batch({
   const [endpoint, setEndpoint] = useState(endpoints[0]?.id || "");
   const [items, setItems] = useState<Item[]>([makeItem("concurrency")]);
   const [schemas, setSchemas] = useState<Record<string, JsonSchema>>({});
-  const [plans, setPlans] = useState<PlanState[]>([]);
+  const planKey = JSON.stringify({ endpoint, items });
+  const [planState, setPlanState] = useState<{
+    key: string;
+    items: PlanState[];
+  }>({ key: "", items: [] });
+  const plans = planState.key === planKey ? planState.items : [];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [configName, setConfigName] = useState("");
+  const [description, setDescription] = useState("");
   const [configNotice, setConfigNotice] = useState("");
 
   useEffect(() => {
@@ -89,11 +97,12 @@ export function Batch({
 
   useEffect(() => {
     let alive = true;
-    setPlans([]);
+    setPlanState({ key: planKey, items: [] });
     if (!endpoint) return;
     const timer = window.setTimeout(() => {
       void Promise.all(
         items.map(async (item): Promise<PlanState> => {
+          if (!item.enabled) return {};
           try {
             const plan = await api<MeasurementPlan>(
               token,
@@ -115,14 +124,14 @@ export function Batch({
           }
         }),
       ).then((result) => {
-        if (alive) setPlans(result);
+        if (alive) setPlanState({ key: planKey, items: result });
       });
     }, 350);
     return () => {
       alive = false;
       window.clearTimeout(timer);
     };
-  }, [endpoint, items, token]);
+  }, [endpoint, items, planKey, token]);
 
   function updateItem(index: number, update: (item: Item) => Item) {
     setItems((current) =>
@@ -164,8 +173,10 @@ export function Batch({
         {
           schema_version: 1,
           name: configName.trim(),
+          description: description.trim(),
           endpoint_id: endpoint,
           items: items.map((item) => ({
+            enabled: item.enabled,
             test_type: item.test_type,
             endpoint_id: item.endpoint_id || undefined,
             parameters: parametersFor(item),
@@ -234,18 +245,27 @@ export function Batch({
         ) {
           throw new Error(`第 ${index + 1} 项端点不存在，请先添加受测 API`);
         }
+        if (row.enabled != null && typeof row.enabled !== "boolean") {
+          throw new Error(`第 ${index + 1} 项启用状态必须为布尔值`);
+        }
         return {
           ...makeItem(
             row.test_type as JobType,
             row.parameters as Record<string, unknown>,
           ),
           endpoint_id: String(row.endpoint_id || ""),
+          enabled: row.enabled !== false,
         };
       });
       setEndpoint(config.endpoint_id);
       setItems(imported);
       setConfigName(
         typeof config.name === "string" ? config.name.slice(0, 80) : "",
+      );
+      setDescription(
+        typeof config.description === "string"
+          ? config.description.slice(0, 500)
+          : "",
       );
       setConfigNotice("已导入配置；请核对每项工作负载计划后再提交。");
     } catch (exc) {
@@ -258,8 +278,17 @@ export function Batch({
     setBusy(true);
     try {
       const parsed = items.map((item, index) => {
+        if (!item.enabled) {
+          return {
+            enabled: false,
+            test_type: item.test_type,
+            parameters: item.parameters,
+            ...(item.endpoint_id ? { endpoint_id: item.endpoint_id } : {}),
+          };
+        }
         try {
           return {
+            enabled: true,
             test_type: item.test_type,
             parameters: parametersFor(item),
             ...(item.endpoint_id ? { endpoint_id: item.endpoint_id } : {}),
@@ -274,7 +303,12 @@ export function Batch({
         {
           method: "POST",
           headers: { "Idempotency-Key": crypto.randomUUID() },
-          body: JSON.stringify({ endpoint_id: endpoint, items: parsed }),
+          body: JSON.stringify({
+            name: configName.trim() || "批量测量",
+            description: description.trim(),
+            endpoint_id: endpoint,
+            items: parsed,
+          }),
         },
       );
       onSubmitted(result.batch_id);
@@ -285,8 +319,11 @@ export function Batch({
     }
   }
 
+  const enabledCount = items.filter((item) => item.enabled).length;
   const validPlans =
-    plans.length === items.length && plans.every((item) => item.plan);
+    enabledCount > 0 &&
+    plans.length === items.length &&
+    items.every((item, index) => !item.enabled || plans[index]?.plan);
   const totalRequests = plans.reduce(
     (sum, item) => sum + (item.plan?.total_requests || 0),
     0,
@@ -345,14 +382,14 @@ export function Batch({
       </section>
       <section className="surface batch-config-tools">
         <div className="section-head">
-          <h2>批量配置文件</h2>
+          <h2>批次信息与配置文件</h2>
         </div>
         <div className="batch-config-actions">
           <input
             aria-label="批量方案名称"
             value={configName}
             maxLength={80}
-            placeholder="方案名称（用于配置文件）"
+            placeholder="批次名称"
             onChange={(event) => setConfigName(event.target.value)}
           />
           <button className="button subtle" onClick={exportConfiguration}>
@@ -371,6 +408,13 @@ export function Batch({
             }}
           />
         </div>
+        <textarea
+          aria-label="批次说明"
+          value={description}
+          maxLength={500}
+          placeholder="测量目的、运行条件或备注（可选）"
+          onChange={(event) => setDescription(event.target.value)}
+        />
         {configNotice && (
           <p className="form-success" role="status">
             {configNotice}
@@ -397,6 +441,20 @@ export function Batch({
           <div className="batch-item" key={index}>
             <div className="batch-item-head">
               <strong>#{index + 1}</strong>
+              <label>
+                <input
+                  type="checkbox"
+                  aria-label={`启用子任务 ${index + 1}`}
+                  checked={item.enabled}
+                  onChange={(event) =>
+                    updateItem(index, (current) => ({
+                      ...current,
+                      enabled: event.target.checked,
+                    }))
+                  }
+                />
+                启用
+              </label>
               <select
                 aria-label={`子任务 ${index + 1} 类型`}
                 value={item.test_type}
@@ -404,6 +462,7 @@ export function Batch({
                   updateItem(index, (current) => ({
                     ...makeItem(event.target.value as JobType),
                     endpoint_id: current.endpoint_id,
+                    enabled: current.enabled,
                   }))
                 }
               >
@@ -509,12 +568,12 @@ export function Batch({
                 }
               />
             )}
-            {plans[index]?.error && (
+            {item.enabled && plans[index]?.error && (
               <p className="form-error" role="alert">
                 {plans[index].error}
               </p>
             )}
-            {plans[index]?.plan && (
+            {item.enabled && plans[index]?.plan && (
               <p className="batch-plan">
                 计划 {plans[index].plan!.measured_requests} 次正式请求 +{" "}
                 {plans[index].plan!.warmup_requests} 次预热
@@ -524,15 +583,15 @@ export function Batch({
         ))}
         <div className="form-footer">
           <span>
-            总计 {validPlans ? totalRequests : "校验中"}{" "}
-            次请求；按子任务顺序排队。
+            总计 {validPlans ? totalRequests : "校验中"} 次请求；已启用{" "}
+            {enabledCount} / {items.length} 项，按顺序排队。
           </span>
           <button
             className="button primary"
             disabled={busy || !endpoint || !validPlans}
             onClick={() => void submit()}
           >
-            {busy ? "提交中…" : `提交 ${items.length} 个子任务 →`}
+            {busy ? "提交中…" : `提交 ${enabledCount} 个子任务 →`}
           </button>
         </div>
         {error && (

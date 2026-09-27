@@ -9,6 +9,7 @@ import sqlite3
 from typing import Any, Callable
 
 from .schema import (
+    CREATE_CONTROL_BATCHES,
     CREATE_CONTROL_ENDPOINTS,
     CREATE_CONTROL_JOBS,
     CREATE_CONTROL_PRESETS,
@@ -168,6 +169,7 @@ MIGRATIONS: dict[str, list[MigrationFunc]] = {
         _exec(CREATE_CONTROL_ENDPOINTS),
         _add_column("control_presets", "run_config_json", "TEXT"),
     ],
+    "1.9.0": [_exec(CREATE_CONTROL_BATCHES)],
 }
 
 

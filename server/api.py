@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import dataclasses
+import hashlib
 import hmac
 import io
 import json
@@ -22,7 +23,13 @@ from pydantic import Field, model_validator
 from core.providers.factory import get_provider
 from core.run_lifecycle import InvalidRunTransition, RunStatus
 from core.url_validator import SSRFError
-from server.analytics import MetricContractConflict, run_results, run_results_csv, run_summary
+from server.analytics import (
+    MetricContractConflict,
+    latest_output,
+    run_results,
+    run_results_csv,
+    run_summary,
+)
 from server.endpoints import (
     EndpointConflict,
     EndpointCredentialUnavailable,
@@ -49,7 +56,14 @@ from server.specs import (
     measurement_plan,
     spec_catalog,
 )
-from server.store import IdempotencyConflict, JobNotFound, JobStore, PresetConflict, PresetNotFound
+from server.store import (
+    BatchNotFound,
+    IdempotencyConflict,
+    JobNotFound,
+    JobStore,
+    PresetConflict,
+    PresetNotFound,
+)
 from server.tokenizer_tools import count_text, tokenizer_catalog
 from server.warehouse import (
     ExportScopeTooLarge,
@@ -123,6 +137,7 @@ class ReasoningBody(StrictSpec):
 
 
 class BatchItem(StrictSpec):
+    enabled: bool = True
     test_type: Literal[
         "concurrency",
         "prefill",
@@ -141,6 +156,14 @@ class BatchItem(StrictSpec):
 
     @model_validator(mode="after")
     def validate_parameters(self) -> BatchItem:
+        if not self.enabled:
+            try:
+                encoded = json.dumps(self.parameters, allow_nan=False)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Disabled item parameters must be finite JSON") from exc
+            if len(encoded) > 100_000:
+                raise ValueError("Disabled item parameters are too large")
+            return self
         from server.specs import SPEC_MODELS, TypeAdapter
 
         parsed = TypeAdapter(SPEC_MODELS[self.test_type]).validate_python(self.parameters)
@@ -149,8 +172,20 @@ class BatchItem(StrictSpec):
 
 
 class BatchSubmission(StrictSpec):
+    name: str = Field(default="批量测量", min_length=1, max_length=80)
+    description: str = Field(default="", max_length=500)
     endpoint_id: str = Field(min_length=1, max_length=64)
     items: list[BatchItem] = Field(min_length=1, max_length=10)
+
+    @model_validator(mode="after")
+    def validate_enabled(self) -> BatchSubmission:
+        self.name = self.name.strip()
+        self.description = self.description.strip()
+        if not self.name:
+            raise ValueError("Batch name cannot be blank")
+        if not any(item.enabled for item in self.items):
+            raise ValueError("Enable at least one batch item")
+        return self
 
 
 class EndpointConfigBody(StrictSpec):
@@ -922,18 +957,15 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         body: BatchSubmission,
         idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
     ):
-        """批量提交：同一批次 uuid 写入各子任务 parent_job_id（无父行）。
-
-        子任务共享批次幂等键前缀（{key}:{i}），重放返回原任务;
-        单作业 worker 天然串行执行, 与 Streamlit 批量语义一致。
-        """
+        """Validate targets, then atomically submit enabled children and metadata."""
         if idempotency_key is not None and (
             not _KEY.fullmatch(idempotency_key) or len(idempotency_key) > 64
         ):
             raise HTTPException(422, "Invalid idempotency key")
         # Resolve every target before writing any child so a bad later item
         # cannot leave a partially submitted batch behind.
-        targets = [resolve_endpoint(item.endpoint_id or body.endpoint_id) for item in body.items]
+        enabled = [item for item in body.items if item.enabled]
+        targets = [resolve_endpoint(item.endpoint_id or body.endpoint_id) for item in enabled]
         for endpoint in targets:
             try:
                 endpoint.api_key()
@@ -943,26 +975,54 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         import uuid as _uuid
 
         batch_id = idempotency_key or _uuid.uuid4().hex[:16]
-        jobs = []
+        request_json = json.dumps(
+            body.model_dump(),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        request_hash = hashlib.sha256(request_json.encode("utf-8")).hexdigest()
+        prepared = []
+        for item, endpoint in zip(enabled, targets, strict=True):
+            parameters = dict(item.parameters)
+            if item.run_config:
+                parameters["_run_config"] = item.run_config.model_dump(exclude_none=True)
+            prepared.append(
+                {
+                    "test_type": item.test_type,
+                    "endpoint_id": endpoint.id,
+                    "model_id": endpoint.model_id,
+                    "parameters": parameters,
+                    "progress_total": expected_requests(item.test_type, item.parameters),
+                }
+            )
         try:
-            for index, (item, endpoint) in enumerate(zip(body.items, targets, strict=True)):
-                parameters = dict(item.parameters)
-                if item.run_config:
-                    parameters["_run_config"] = item.run_config.model_dump(exclude_none=True)
-                jobs.append(
-                    store.submit(
-                        test_type=item.test_type,
-                        endpoint_id=endpoint.id,
-                        model_id=endpoint.model_id,
-                        parameters=parameters,
-                        progress_total=expected_requests(item.test_type, item.parameters),
-                        idempotency_key=f"{batch_id}:{index}",
-                        parent_job_id=batch_id,
-                    )
-                )
+            jobs = store.submit_batch(
+                batch_id=batch_id,
+                name=body.name,
+                description=body.description,
+                default_endpoint_id=body.endpoint_id,
+                request_hash=request_hash,
+                requested_items=len(body.items),
+                items=prepared,
+            )
         except IdempotencyConflict as exc:
             raise HTTPException(409, str(exc)) from exc
         return {"batch_id": batch_id, "items": jobs}
+
+    @app.get("/api/v1/jobs/batch/{batch_id}", dependencies=[auth])
+    def get_batch(batch_id: str):
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", batch_id):
+            raise HTTPException(422, "Invalid batch ID")
+        try:
+            return store.get_batch(batch_id)
+        except BatchNotFound as exc:
+            raise HTTPException(404, "Batch not found") from exc
+
+    @app.get("/api/v1/batches", dependencies=[auth])
+    def list_batches(limit: Annotated[int, Query(ge=1, le=100)] = 50):
+        return {"items": store.list_batches(limit=limit)}
 
     @app.post("/api/v1/jobs/batch/{batch_id}/cancel", dependencies=[auth])
     def cancel_batch(batch_id: str):
@@ -1163,6 +1223,13 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             offset=offset,
             since_id=since_id,
         )
+
+    @app.get("/api/v1/jobs/{job_id}/latest-output", dependencies=[auth])
+    def latest_job_output(job_id: str):
+        job = job_or_404(job_id)
+        if job["result_run_id"] is None:
+            raise HTTPException(409, "No persisted performance run for this job")
+        return latest_output(str(settings.db_path), job["result_run_id"])
 
     @app.get("/api/v1/jobs/{job_id}/export.csv", dependencies=[auth])
     def export_csv(job_id: str):
