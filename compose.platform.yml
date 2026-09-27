@@ -28,6 +28,7 @@ services:
     - platform-logs:/app/api_logs
     - platform-datasets:/app/datasets
     - platform-progress:/app/test_progress
+    - ${LLM_TEST_TOKENIZERS_DIR:-./tokenizers}:/app/tokenizers:ro
     - ./config/endpoints.platform.json:/app/config/endpoints.platform.json:ro
     read_only: true
     tmpfs:

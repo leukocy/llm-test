@@ -22,7 +22,13 @@ const emptyForm: ApiForm = {
 
 const templates = [
   { label: "OpenAI", provider: "OpenAI", url: "https://api.openai.com/v1" },
+  {
+    label: "火山引擎",
+    provider: "OpenAI",
+    url: "https://ark.cn-beijing.volces.com/api/v3",
+  },
   { label: "DeepSeek", provider: "OpenAI", url: "https://api.deepseek.com/v1" },
+  { label: "MiMo", provider: "OpenAI", url: "https://api.xiaomimimo.com/v1" },
   {
     label: "智谱",
     provider: "OpenAI",
@@ -34,6 +40,7 @@ const templates = [
     url: "https://api.siliconflow.cn/v1",
   },
   { label: "Moonshot", provider: "OpenAI", url: "https://api.moonshot.cn/v1" },
+  { label: "MiniMax", provider: "OpenAI", url: "https://api.minimax.chat/v1" },
   {
     label: "OpenRouter",
     provider: "OpenAI",
@@ -50,6 +57,26 @@ const templates = [
     url: "https://generativelanguage.googleapis.com",
   },
 ] as const;
+
+const originalModels = [
+  "DeepSeek-V3.1",
+  "DeepSeek-V3.2",
+  "mimo-v2-flash",
+  "Qwen3.5-397B-A17B-FP8",
+  "Qwen3-Coder-480B-A35B",
+  "Qwen3-Next-80B-A3B",
+  "Kimi-K2.5",
+  "Qwen3-235B-A22B",
+  "MiniMax-M2.5",
+  "MiniMax-M2.1",
+  "GLM-5",
+  "gpt-oss-120b",
+  "deepseek-v3-1-terminus",
+  "deepseek-v3-2-251201",
+  "XiaomiMiMo/MiMo-V2-Flash",
+  "DeepSeek-V4-Flash",
+  "DeepSeek-V4-Pro",
+];
 
 export function ApiSettings({
   endpoints,
@@ -68,6 +95,12 @@ export function ApiSettings({
   const [notice, setNotice] = useState("");
   const [probe, setProbe] = useState<Record<string, string>>({});
   const [probingId, setProbingId] = useState("");
+  const [referenceLatency, setReferenceLatency] = useState<
+    Record<string, number>
+  >({});
+  const [measuringId, setMeasuringId] = useState("");
+  const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
+  const [discovering, setDiscovering] = useState(false);
 
   function change<K extends keyof ApiForm>(key: K, value: ApiForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -88,6 +121,7 @@ export function ApiSettings({
     });
     setError("");
     setNotice("");
+    setDiscoveredModels([]);
   }
 
   function reset() {
@@ -95,6 +129,7 @@ export function ApiSettings({
     setForm(emptyForm);
     setError("");
     setNotice("");
+    setDiscoveredModels([]);
   }
 
   async function save() {
@@ -152,6 +187,50 @@ export function ApiSettings({
       }));
     } finally {
       setProbingId("");
+    }
+  }
+
+  async function measureLatency(item: Endpoint) {
+    setMeasuringId(item.id);
+    try {
+      const result = await api<{ reference_ms: number; method: string }>(
+        token,
+        `/api/v1/endpoints/${encodeURIComponent(item.id)}/reference-latency`,
+        { method: "POST" },
+      );
+      setReferenceLatency((current) => ({
+        ...current,
+        [item.id]: result.reference_ms,
+      }));
+    } catch (exc) {
+      setProbe((current) => ({
+        ...current,
+        [item.id]: exc instanceof Error ? exc.message : "参考耗时测量失败",
+      }));
+    } finally {
+      setMeasuringId("");
+    }
+  }
+
+  async function refreshModels() {
+    if (!editingId) return;
+    setDiscovering(true);
+    setError("");
+    try {
+      const result = await api<{ items: string[]; truncated: boolean }>(
+        token,
+        `/api/v1/endpoints/${encodeURIComponent(editingId)}/models`,
+      );
+      setDiscoveredModels(result.items);
+      setNotice(
+        result.items.length
+          ? `已读取 ${result.items.length} 个模型${result.truncated ? "（仅第一页）" : ""}；选择后请保存修改。`
+          : "端点返回空模型列表，请手动填写模型 ID。",
+      );
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : "无法读取模型列表");
+    } finally {
+      setDiscovering(false);
     }
   }
 
@@ -248,6 +327,15 @@ export function ApiSettings({
                   >
                     {probingId === item.id ? "检测中…" : "测试连接"}
                   </button>
+                  <button
+                    className="button subtle"
+                    disabled={
+                      measuringId === item.id || !item.credential_configured
+                    }
+                    onClick={() => void measureLatency(item)}
+                  >
+                    {measuringId === item.id ? "测量中…" : "测参考网络耗时"}
+                  </button>
                   {item.source === "managed" && (
                     <>
                       <button
@@ -270,6 +358,22 @@ export function ApiSettings({
               {probe[item.id] && (
                 <p className="api-probe-result" role="status">
                   {probe[item.id]}
+                </p>
+              )}
+              {referenceLatency[item.id] != null && (
+                <p className="api-probe-result" role="status">
+                  参考耗时 {referenceLatency[item.id]} ms（平台到服务商 GET
+                  /models 响应首部，包含服务商处理时间）。
+                  <button
+                    className="text-action"
+                    onClick={() =>
+                      navigate(
+                        `/new?endpoint=${encodeURIComponent(item.id)}&latency_offset=${Math.min(5, referenceLatency[item.id] / 1000).toFixed(3)}`,
+                      )
+                    }
+                  >
+                    用作本次延迟偏移 →
+                  </button>
                 </p>
               )}
             </article>
@@ -340,12 +444,52 @@ export function ApiSettings({
             填写接口根路径，例如以 /v1 结尾；不要包含 /chat/completions。
           </p>
           <label htmlFor="api-model-id">模型 ID</label>
+          <select
+            aria-label="初版模型快选"
+            value=""
+            onChange={(event) => change("model_id", event.target.value)}
+          >
+            <option value="">从初版模型列表快选</option>
+            {originalModels.map((model) => (
+              <option key={model} value={model}>
+                {model}
+              </option>
+            ))}
+          </select>
+          {editingId && (
+            <div className="api-model-discovery">
+              <button
+                className="button subtle"
+                disabled={discovering || busy}
+                onClick={() => void refreshModels()}
+              >
+                {discovering ? "读取中…" : "刷新服务商模型列表"}
+              </button>
+              {discoveredModels.length > 0 && (
+                <select
+                  aria-label="服务商返回的模型"
+                  value=""
+                  onChange={(event) => change("model_id", event.target.value)}
+                >
+                  <option value="">选择服务商返回的模型</option>
+                  {discoveredModels.map((model) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
           <input
             id="api-model-id"
             value={form.model_id}
             placeholder="服务商提供的模型名称"
             onChange={(event) => change("model_id", event.target.value)}
           />
+          <p className="api-secret-note">
+            可直接输入覆盖；刷新列表使用已保存端点的凭证，新增端点需先保存。
+          </p>
           <label htmlFor="api-key">API key</label>
           <input
             id="api-key"

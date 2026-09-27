@@ -34,6 +34,14 @@ type FieldDef = {
     | "unknown";
 };
 
+const numericChoices: Record<string, number[]> = {
+  selected_concurrencies: [1, 2, 4, 8, 16, 32, 64, 128],
+  concurrencies: [1, 2, 4, 8, 16, 32, 64, 128],
+  token_levels: [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072],
+  context_lengths: [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072],
+  segment_levels: [512, 1024, 2048, 4096, 8192, 16384, 32768],
+};
+
 function resolveNullable(schema: JsonSchema): JsonSchema {
   // pydantic 的可选字段常表达为 anyOf: [<T>, {type: "null"}]
   if (schema.anyOf) {
@@ -84,6 +92,8 @@ function ListField({
   const [text, setText] = useState(display);
   const [invalid, setInvalid] = useState(false);
   const [focused, setFocused] = useState(false);
+  const choices = numeric ? numericChoices[def.name] || [] : [];
+  const selected = Array.isArray(value) ? value.map(Number) : [];
   useEffect(() => {
     if (!focused) setText(Array.isArray(value) ? value.join(", ") : "");
   }, [value, focused]);
@@ -126,6 +136,35 @@ function ListField({
         aria-label={def.name}
       />
       {invalid && <small className="form-error">存在非数字项，未生效</small>}
+      {choices.length > 0 && (
+        <div className="list-choices" aria-label={`${def.name} 常用值`}>
+          {choices.map((choice) => {
+            const active = selected.includes(choice);
+            return (
+              <button
+                key={choice}
+                type="button"
+                aria-pressed={active}
+                className={active ? "active" : ""}
+                disabled={
+                  !active &&
+                  selected.length >= (def.schema.maxItems || Infinity)
+                }
+                onClick={() => {
+                  const next = active
+                    ? selected.filter((item) => item !== choice)
+                    : [...selected, choice].sort((a, b) => a - b);
+                  setText(next.join(", "));
+                  setInvalid(false);
+                  onChange(next);
+                }}
+              >
+                {choice.toLocaleString()}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }
@@ -162,7 +201,11 @@ export function SchemaForm({
         const label = fieldLabels[def.name] || def.schema.title || def.name;
         const v = value[def.name];
         return (
-          <label key={def.name} className="schema-field" htmlFor={id}>
+          <label
+            key={def.name}
+            className={`schema-field ${def.name === "base_prompt" || def.name === "suffix_instruction" ? "wide" : ""}`}
+            htmlFor={id}
+          >
             <span className="input-label">
               {label}
               {def.required && <em className="required-mark">*</em>}
@@ -206,6 +249,15 @@ export function SchemaForm({
                 value={v}
                 numeric={def.kind === "int-list"}
                 onChange={(list) => setField(def.name, list)}
+              />
+            ) : def.name === "base_prompt" ||
+              def.name === "suffix_instruction" ? (
+              <textarea
+                id={id}
+                value={v === undefined || v === null ? "" : String(v)}
+                maxLength={def.schema.maxLength}
+                rows={def.name === "base_prompt" ? 8 : 3}
+                onChange={(event) => setField(def.name, event.target.value)}
               />
             ) : (
               <input

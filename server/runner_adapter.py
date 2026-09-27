@@ -31,7 +31,8 @@ class HeadlessOutput:
 class _LogTee:
     """runner render_log 回调：把 BenchmarkLogger 的增量条目追加到 logs.jsonl。
 
-    BenchmarkLogger.entries 有容量上限(500), 全量重放式回调只写未见过的后缀,
+    BenchmarkLogger.entries 有容量上限(500), 通过 stats.total 跟踪累计条数，
+    从窗口末尾取新增项，避免运行超过 500 条日志后停止落盘。
     落盘文件才是完整轨迹——GET /api/v1/jobs/{id}/logs 据此读取。
     """
 
@@ -41,26 +42,20 @@ class _LogTee:
 
     def __call__(self, logger) -> None:
         entries = getattr(logger, "entries", None) or []
-        fresh = entries[self._seen :]
+        total = int(getattr(logger, "stats", {}).get("total", len(entries)))
+        fresh_count = max(0, total - self._seen)
+        fresh = entries[-fresh_count:] if fresh_count else []
         if not fresh:
             return
         try:
             with self._path.open("a", encoding="utf-8") as handle:
                 for entry in fresh:
                     handle.write(
-                        json.dumps(
-                            {
-                                "timestamp": getattr(entry, "timestamp", None),
-                                "level": str(getattr(entry, "level", "INFO")),
-                                "message": str(getattr(entry, "message", "")),
-                            },
-                            ensure_ascii=False,
-                        )
-                        + "\n"
+                        json.dumps(entry.to_dict(), ensure_ascii=False, default=str) + "\n"
                     )
         except OSError:
             return
-        self._seen = len(entries)
+        self._seen = total
 
 
 @dataclass

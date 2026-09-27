@@ -37,6 +37,10 @@ export function Detail({
   const [results, setResults] = useState<RequestResult[]>([]);
   const [error, setError] = useState("");
   const [logs, setLogs] = useState<LogLine[]>([]);
+  const [logSearch, setLogSearch] = useState("");
+  const [logLevels, setLogLevels] = useState<string[] | null>(null);
+  const [logView, setLogView] = useState<"text" | "table" | "stats">("text");
+  const [showLogMetrics, setShowLogMetrics] = useState(false);
   const [robustness, setRobustness] = useState<RobustnessReport | null>(null);
   const resultsRef = useRef<RequestResult[]>([]);
   const logsRef = useRef<LogLine[]>([]);
@@ -44,9 +48,13 @@ export function Detail({
 
   type LogLine = {
     id: number;
-    timestamp: number | null;
+    timestamp: number | string | null;
     level: string;
     message: string;
+    metrics?: Record<string, unknown> | null;
+    session_id?: string | null;
+    test_type?: string | null;
+    error?: string | null;
   };
   type RobustnessReport = {
     job_id: string;
@@ -155,33 +163,47 @@ export function Detail({
     logsRef.current = [];
     const completed = !activeStates.has(job.status);
 
-    async function fetchLogs(since: number) {
-      if (!alive) return;
+    async function fetchLogs(
+      since: number,
+    ): Promise<{ lastId: number; count: number }> {
+      if (!alive) return { lastId: since, count: 0 };
       try {
         const data = await api<{ items: LogLine[] }>(
           token,
-          `/api/v1/jobs/${job.job_id}/logs?since_id=${since}&limit=500`,
+          `/api/v1/jobs/${job.job_id}/logs?since_id=${since}&limit=1000`,
         );
-        if (!alive || !data.items.length) return;
+        if (!alive || !data.items.length) return { lastId: since, count: 0 };
         setLogs((prev) => {
           const seen = new Set(prev.map((line) => line.id));
           const fresh = data.items.filter((line) => !seen.has(line.id));
           return fresh.length ? [...prev, ...fresh] : prev;
         });
         logsRef.current = [...logsRef.current, ...data.items];
+        return {
+          lastId: data.items[data.items.length - 1].id,
+          count: data.items.length,
+        };
       } catch {
         /* 日志不可达不阻断页面 */
+        return { lastId: since, count: 0 };
       }
     }
 
-    void fetchLogs(0);
+    void (async () => {
+      let cursor = 0;
+      for (let page = 0; page < 10; page++) {
+        const next = await fetchLogs(cursor);
+        cursor = next.lastId;
+        if (next.count < 1000) break;
+      }
+    })();
     if (completed) {
       return () => {
         alive = false;
       };
     }
     const timer = window.setInterval(
-      () => void fetchLogs(logsRef.current.length),
+      () => void fetchLogs(logsRef.current.at(-1)?.id || 0),
       2000,
     );
     return () => {
@@ -190,7 +212,7 @@ export function Detail({
     };
   }, [job.job_id, job.status, token]);
 
-  async function download(format: "json" | "html" | "csv") {
+  async function download(format: "json" | "html" | "csv" | "markdown") {
     try {
       const path =
         format === "csv"
@@ -199,7 +221,7 @@ export function Detail({
       await downloadFile(
         token,
         path,
-        `llm-test-${shortId(job.job_id)}.${format}`,
+        `llm-test-${shortId(job.job_id)}.${format === "markdown" ? "md" : format}`,
       );
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "下载失败");
@@ -218,7 +240,32 @@ export function Detail({
     }
   }
 
+  async function downloadLogs(format: "json" | "txt" | "csv") {
+    try {
+      await downloadFile(
+        token,
+        `/api/v1/jobs/${job.job_id}/logs/export?format=${format}`,
+        `llm-test-${shortId(job.job_id)}-logs.${format}`,
+      );
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : "日志下载失败");
+    }
+  }
+
   const overall = summary?.overall;
+  const availableLevels = [...new Set(logs.map((line) => line.level))].sort();
+  const filteredLogs = logs.filter(
+    (line) =>
+      (logLevels === null || logLevels.includes(line.level)) &&
+      (!logSearch ||
+        `${line.level} ${line.message} ${JSON.stringify(line.metrics || {})}`
+          .toLowerCase()
+          .includes(logSearch.toLowerCase())),
+  );
+  const logCounts = availableLevels.map((level) => ({
+    level,
+    count: filteredLogs.filter((line) => line.level === level).length,
+  }));
   return (
     <div className="page-grid">
       <div className="detail-head">
@@ -245,7 +292,15 @@ export function Detail({
               取消运行
             </button>
           )}
-          {(summary || quality) && (
+          {(summary || quality || robustness) && (
+            <button
+              className="button subtle"
+              onClick={() => void download("markdown")}
+            >
+              导出 Markdown ↓
+            </button>
+          )}
+          {(summary || quality || robustness) && (
             <button
               className="button subtle"
               onClick={() => void download("json")}
@@ -269,7 +324,7 @@ export function Detail({
               预热记录 ↓
             </button>
           ) : null}
-          {(summary || quality) && (
+          {(summary || quality || robustness) && (
             <button
               className="button primary"
               onClick={() => void download("html")}
@@ -693,19 +748,158 @@ export function Detail({
               <span className="eyebrow">EXECUTION LOG</span>
               <h2>执行日志</h2>
             </div>
-            <span className="minor-tag">{logs.length} 条</span>
+            <span className="minor-tag">
+              {filteredLogs.length} / {logs.length} 条
+            </span>
           </div>
-          <div className="log-console" role="log" aria-label="执行日志">
-            {logs.map((line) => (
-              <div
-                className={`log-line log-${line.level.toLowerCase()}`}
-                key={line.id}
+          <div className="log-tools">
+            <input
+              aria-label="搜索执行日志"
+              placeholder="搜索日志内容或级别"
+              value={logSearch}
+              onChange={(event) => setLogSearch(event.target.value)}
+            />
+            <div className="log-level-filters" aria-label="日志级别筛选">
+              <button
+                className="text-action"
+                onClick={() => setLogLevels(null)}
               >
-                <span className="log-level">{line.level}</span>
-                <span className="log-message">{line.message}</span>
-              </div>
-            ))}
+                全部级别
+              </button>
+              {availableLevels.map((level) => (
+                <label key={level}>
+                  <input
+                    type="checkbox"
+                    checked={logLevels === null || logLevels.includes(level)}
+                    onChange={() =>
+                      setLogLevels((current) => {
+                        const selected =
+                          current === null ? availableLevels : current;
+                        const next = selected.includes(level)
+                          ? selected.filter((item) => item !== level)
+                          : [...selected, level];
+                        return next.length === availableLevels.length
+                          ? null
+                          : next;
+                      })
+                    }
+                  />
+                  {level}
+                </label>
+              ))}
+            </div>
+            <div className="mode-toggle" role="tablist" aria-label="日志视图">
+              {(["text", "table", "stats"] as const).map((view) => (
+                <button
+                  key={view}
+                  role="tab"
+                  aria-selected={logView === view}
+                  className={logView === view ? "active" : ""}
+                  onClick={() => setLogView(view)}
+                >
+                  {{ text: "文本", table: "表格", stats: "统计" }[view]}
+                </button>
+              ))}
+            </div>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={showLogMetrics}
+                onChange={(event) => setShowLogMetrics(event.target.checked)}
+              />
+              显示指标
+            </label>
+            <div className="log-export-actions">
+              {(["json", "txt", "csv"] as const).map((format) => (
+                <button
+                  key={format}
+                  className="button subtle"
+                  onClick={() => void downloadLogs(format)}
+                >
+                  导出 {format.toUpperCase()} ↓
+                </button>
+              ))}
+            </div>
           </div>
+          {logView === "text" && (
+            <div className="log-console" role="log" aria-label="执行日志">
+              {filteredLogs.map((line) => (
+                <div
+                  className={`log-line log-${line.level.toLowerCase()}`}
+                  key={line.id}
+                >
+                  <span className="log-level">{line.level}</span>
+                  <span className="log-message">{line.message}</span>
+                  {showLogMetrics && line.metrics && (
+                    <span className="log-message">
+                      {JSON.stringify(line.metrics)}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {logView === "table" && (
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>时间戳</th>
+                    <th>级别</th>
+                    <th>内容</th>
+                    {showLogMetrics && <th>指标</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLogs.map((line) => (
+                    <tr key={line.id}>
+                      <td>{line.id}</td>
+                      <td>
+                        {typeof line.timestamp === "number"
+                          ? date(line.timestamp)
+                          : line.timestamp?.replace("T", " ").slice(0, 19) ||
+                            "—"}
+                      </td>
+                      <td>{line.level}</td>
+                      <td>{line.message}</td>
+                      {showLogMetrics && (
+                        <td>
+                          {line.metrics ? JSON.stringify(line.metrics) : "—"}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {logView === "stats" && (
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>级别</th>
+                    <th>当前筛选条数</th>
+                    <th>占比</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logCounts.map(({ level, count }) => (
+                    <tr key={level}>
+                      <td>{level}</td>
+                      <td>{count}</td>
+                      <td>
+                        {filteredLogs.length
+                          ? `${((count / filteredLogs.length) * 100).toFixed(1)}%`
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       )}
       <section className="surface">

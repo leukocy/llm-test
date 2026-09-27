@@ -121,6 +121,17 @@ export default function App() {
     }
   }
 
+  async function cancelBatch(batchId: string) {
+    await api(
+      token,
+      `/api/v1/jobs/batch/${encodeURIComponent(batchId)}/cancel`,
+      {
+        method: "POST",
+      },
+    );
+    await refresh(token);
+  }
+
   if (!token) return <Login onLogin={login} />;
 
   const active = jobs.filter((job) => activeStates.has(job.status)).length;
@@ -258,8 +269,10 @@ export default function App() {
                 <RunsList
                   jobs={jobs}
                   total={total}
+                  token={token}
                   onOpenJob={(id) => navigate(`/runs/${id}`)}
                   onOpenNew={nav("/new")}
+                  onCancelBatch={cancelBatch}
                 />
               }
             />
@@ -458,27 +471,62 @@ function Overview({
 function RunsList({
   jobs,
   total,
+  token,
   onOpenJob,
   onOpenNew,
+  onCancelBatch,
 }: {
   jobs: Job[];
   total: number;
+  token: string;
   onOpenJob: (id: string) => void;
   onOpenNew: () => void;
+  onCancelBatch: (batchId: string) => Promise<void>;
 }) {
   const [filter, setFilter] = useState("");
+  const [cancellingBatch, setCancellingBatch] = useState(false);
+  const [batchError, setBatchError] = useState("");
+  const [batchJobs, setBatchJobs] = useState<Job[]>([]);
   const [searchParams] = useSearchParams();
   const batchId = searchParams.get("batch") || "";
+  useEffect(() => {
+    if (!batchId) return;
+    let alive = true;
+    setBatchJobs([]);
+    const load = () => {
+      void api<{ items: Job[] }>(
+        token,
+        `/api/v1/jobs?parent_job_id=${encodeURIComponent(batchId)}&limit=200`,
+      )
+        .then((data) => {
+          if (alive) setBatchJobs(data.items);
+        })
+        .catch((exc) => {
+          if (alive)
+            setBatchError(exc instanceof Error ? exc.message : "批次读取失败");
+        });
+    };
+    load();
+    const interval = window.setInterval(load, 3500);
+    return () => {
+      alive = false;
+      window.clearInterval(interval);
+    };
+  }, [batchId, token]);
+  const sourceJobs = batchId ? batchJobs : jobs;
   const visible = useMemo(
     () =>
-      jobs.filter(
+      sourceJobs.filter(
         (job) =>
           (!batchId || job.parent_job_id === batchId) &&
           `${job.model_id} ${job.test_type} ${job.job_id} ${job.status}`
             .toLowerCase()
             .includes(filter.toLowerCase()),
       ),
-    [jobs, filter, batchId],
+    [sourceJobs, filter, batchId],
+  );
+  const batchHasActive = Boolean(
+    batchId && batchJobs.some((job) => activeStates.has(job.status)),
   );
   return (
     <div className="page-grid">
@@ -491,16 +539,49 @@ function RunsList({
             {batchId && `（正在按批次 ${batchId} 过滤）`}
           </p>
         </div>
-        <button className="button primary" onClick={onOpenNew}>
-          ＋ 创建测量
-        </button>
+        <div className="detail-actions">
+          {batchHasActive && (
+            <button
+              className="button subtle danger"
+              disabled={cancellingBatch}
+              onClick={async () => {
+                if (!window.confirm("停止此批次中所有待执行或运行中的子任务？"))
+                  return;
+                setCancellingBatch(true);
+                setBatchError("");
+                try {
+                  await onCancelBatch(batchId);
+                } catch (exc) {
+                  setBatchError(
+                    exc instanceof Error ? exc.message : "停止批次失败",
+                  );
+                } finally {
+                  setCancellingBatch(false);
+                }
+              }}
+            >
+              {cancellingBatch ? "停止中…" : "停止此批次"}
+            </button>
+          )}
+          <button className="button primary" onClick={onOpenNew}>
+            ＋ 创建测量
+          </button>
+        </div>
       </div>
+      {batchError && (
+        <p className="form-error" role="alert">
+          {batchError}
+        </p>
+      )}
       <section className="surface">
         <div className="section-head">
           <div>
             <span className="eyebrow">ALL RUNS</span>
             <h2>
-              全部任务 <span className="count-tag">{total}</span>
+              {batchId ? "批次任务" : "全部任务"}{" "}
+              <span className="count-tag">
+                {batchId ? batchJobs.length : total}
+              </span>
             </h2>
           </div>
           <input

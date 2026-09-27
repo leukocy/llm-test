@@ -12,6 +12,7 @@ import {
   schemaDefaults,
   type JsonSchema,
 } from "../components/SchemaForm";
+import { TokenizerTools } from "../components/TokenizerTools";
 
 type SpecCatalog = {
   items: Record<string, { label: string; schema: JsonSchema }>;
@@ -37,6 +38,14 @@ export function NewRun({
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedEndpoint = searchParams.get("endpoint");
+  const requestedOffset = Number(searchParams.get("latency_offset"));
+  const initialOffset =
+    searchParams.has("latency_offset") &&
+    Number.isFinite(requestedOffset) &&
+    requestedOffset >= 0 &&
+    requestedOffset <= 5
+      ? requestedOffset
+      : null;
   const [endpoint, setEndpoint] = useState(
     requestedEndpoint || endpoints[0]?.id || "",
   );
@@ -45,7 +54,10 @@ export function NewRun({
   const [params, setParams] = useState<Record<string, unknown>>(
     () => scenarios[0].parameters,
   );
-  const [runConfig, setRunConfig] = useState<Record<string, unknown>>({});
+  const [runConfig, setRunConfig] = useState<Record<string, unknown>>(
+    initialOffset == null ? {} : { latency_offset: initialOffset },
+  );
+  const [textFile, setTextFile] = useState("");
   const [specs, setSpecs] = useState<SpecCatalog | null>(null);
   const [mode, setMode] = useState<"form" | "json">("form");
   const [raw, setRaw] = useState(
@@ -61,6 +73,7 @@ export function NewRun({
   const [planError, setPlanError] = useState("");
   const specSchema = specs?.items[type]?.schema;
   const selectedEndpoint = endpoints.find((item) => item.id === endpoint);
+  const performanceRun = type !== "quality" && type !== "robustness";
 
   useEffect(() => {
     setEndpoint((current) => {
@@ -99,8 +112,11 @@ export function NewRun({
   }, [token]);
 
   useEffect(() => {
-    if (specs && !Object.keys(runConfig).length && specs.run_config_schema) {
-      setRunConfig(schemaDefaults(specs.run_config_schema));
+    if (specs && specs.run_config_schema) {
+      setRunConfig((current) => ({
+        ...schemaDefaults(specs.run_config_schema),
+        ...current,
+      }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [specs]);
@@ -154,6 +170,31 @@ export function NewRun({
     setProfile("custom");
   }
 
+  async function loadTextFile(file: File | undefined) {
+    if (!file) return;
+    setError("");
+    try {
+      if (!file.name.toLowerCase().endsWith(".txt")) {
+        throw new Error("请选择 .txt 文本文件");
+      }
+      if (file.size > 200_000) {
+        throw new Error("TXT 文件不能超过 200 KB");
+      }
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(
+        await file.arrayBuffer(),
+      );
+      if (!text.trim() || text.length > 50_000) {
+        throw new Error("文本需为非空 UTF-8，最多 50,000 字符");
+      }
+      const next = { ...params, base_prompt: text };
+      updateParams(next);
+      setRaw(JSON.stringify(next, null, 2));
+      setTextFile(file.name);
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : "读取 TXT 失败");
+    }
+  }
+
   // Use the same server validation and workload calculator as actual submission.
   useEffect(() => {
     let active = true;
@@ -173,12 +214,16 @@ export function NewRun({
           setPlanError(exc instanceof Error ? exc.message : "JSON 格式错误");
         return;
       }
-      const runConfigDiff = Object.fromEntries(
-        Object.entries(runConfig).filter(
-          ([key, value]) =>
-            value !== undefined && value !== "" && value !== knobDefaults[key],
-        ),
-      );
+      const runConfigDiff = performanceRun
+        ? Object.fromEntries(
+            Object.entries(runConfig).filter(
+              ([key, value]) =>
+                value !== undefined &&
+                value !== "" &&
+                value !== knobDefaults[key],
+            ),
+          )
+        : {};
       api<MeasurementPlan>(token, "/api/v1/jobs/plan", {
         method: "POST",
         body: JSON.stringify({
@@ -204,7 +249,17 @@ export function NewRun({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [endpoint, type, params, raw, mode, runConfig, knobDefaults, token]);
+  }, [
+    endpoint,
+    type,
+    params,
+    raw,
+    mode,
+    runConfig,
+    knobDefaults,
+    token,
+    performanceRun,
+  ]);
 
   function currentParameters(): Record<string, unknown> {
     if (mode === "json") {
@@ -217,7 +272,7 @@ export function NewRun({
   }
 
   function currentRunConfig(): Record<string, unknown> | undefined {
-    if (!specs) return undefined;
+    if (!specs || !performanceRun) return undefined;
     // 与默认值完全一致时不随提交携带, 避免噪音覆盖
     const diff = Object.fromEntries(
       Object.entries(runConfig).filter(
@@ -398,6 +453,9 @@ export function NewRun({
               </button>
             ))}
           </div>
+          <button className="text-action" onClick={() => navigate("/batch")}>
+            需要依次运行并发、Prefill、长上下文？打开一键基础三项 →
+          </button>
           <div className="section-head split">
             <div>
               <span className="section-index">02</span>
@@ -513,6 +571,70 @@ export function NewRun({
               快速检查用于确认端点和流程可用；正式性能对比请选择标准或深入测量。
             </p>
           )}
+          {mode === "form" && type === "segmented_prefill" && (
+            <div className="scenario-shortcuts">
+              <strong>分段长度策略</strong>
+              {(
+                [
+                  ["渐进", [2000, 8000, 20000, 40000, 60000]],
+                  ["快速增长", [4000, 16000, 32000, 64000]],
+                  ["细粒度", [1000, 2000, 4000, 8000, 16000, 32000, 64000]],
+                ] as const
+              ).map(([label, levels]) => (
+                <button
+                  key={label}
+                  type="button"
+                  className="button subtle"
+                  onClick={() =>
+                    updateParams({ ...params, segment_levels: [...levels] })
+                  }
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          {mode === "form" && type === "prefill" && (
+            <label className="checkbox-label prefill-isolation">
+              <input
+                type="checkbox"
+                checked={params.max_tokens === 1}
+                onChange={(event) =>
+                  updateParams({
+                    ...params,
+                    max_tokens: event.target.checked ? 1 : 256,
+                  })
+                }
+              />
+              只生成 1 token，隔离输入处理延迟
+            </label>
+          )}
+          {type === "custom_text" && (
+            <div className="text-file-import">
+              <label className="input-label" htmlFor="custom-text-file">
+                从 TXT 导入提示词正文
+              </label>
+              <input
+                id="custom-text-file"
+                type="file"
+                accept=".txt,text/plain"
+                onChange={(event) => {
+                  void loadTextFile(event.target.files?.[0]);
+                  event.target.value = "";
+                }}
+              />
+              <small>
+                UTF-8 · 最多 200 KB / 50,000 字符 · 导入后仍可编辑
+                {textFile ? ` · 已导入 ${textFile}` : ""}
+              </small>
+            </div>
+          )}
+          {initialOffset != null && (
+            <p className="profile-note">
+              已将 GET /models 响应首部参考耗时 {initialOffset.toFixed(3)}{" "}
+              秒填入本次延迟偏移；该值含服务商处理时间，可在更多运行设置中调整。
+            </p>
+          )}
           {mode === "form" && type === "dataset" ? (
             <DatasetParams value={params} onChange={updateParams} />
           ) : mode === "form" && type === "robustness" ? (
@@ -544,7 +666,7 @@ export function NewRun({
               />
             </>
           )}
-          {commonKnobSchema && (
+          {performanceRun && commonKnobSchema && (
             <div className="common-knobs">
               <strong>常用生成设置</strong>
               <SchemaForm
@@ -555,9 +677,28 @@ export function NewRun({
               />
             </div>
           )}
-          {advancedKnobSchema && (
+          {performanceRun && advancedKnobSchema && (
             <details className="knobs-section">
               <summary>更多运行设置（tokenizer、思考预算和偏移等）</summary>
+              <TokenizerTools
+                token={token}
+                modelId={selectedEndpoint?.model_id || ""}
+                selected={String(runConfig.hf_tokenizer_model_id || "").replace(
+                  "./tokenizers/",
+                  "",
+                )}
+                onSelect={(name) =>
+                  setRunConfig((current) => ({
+                    ...current,
+                    tokenizer_option: name
+                      ? "HuggingFace Tokenizer"
+                      : undefined,
+                    hf_tokenizer_model_id: name
+                      ? `./tokenizers/${name}`
+                      : undefined,
+                  }))
+                }
+              />
               <SchemaForm
                 schema={advancedKnobSchema}
                 value={runConfig}
