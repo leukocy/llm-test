@@ -8,8 +8,14 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import { api, ApiError, type Endpoint, type Job } from "./api";
-import { activeStates, type JobType } from "./constants";
+import {
+  api,
+  ApiError,
+  type BatchSummary,
+  type Endpoint,
+  type Job,
+} from "./api";
+import { activeStates, date, type JobType } from "./constants";
 import { Mark, MetricCard, JobTable } from "./components";
 import { Login } from "./pages/Login";
 import { NewRun } from "./pages/NewRun";
@@ -483,16 +489,39 @@ function RunsList({
   onOpenNew: () => void;
   onCancelBatch: (batchId: string) => Promise<void>;
 }) {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState("");
   const [cancellingBatch, setCancellingBatch] = useState(false);
   const [batchError, setBatchError] = useState("");
   const [batchJobs, setBatchJobs] = useState<Job[]>([]);
+  const [batchSummary, setBatchSummary] = useState<BatchSummary | null>(null);
+  const [recentBatches, setRecentBatches] = useState<BatchSummary[]>([]);
   const [searchParams] = useSearchParams();
   const batchId = searchParams.get("batch") || "";
+  useEffect(() => {
+    let alive = true;
+    void api<{ items: BatchSummary[] }>(token, "/api/v1/batches?limit=20")
+      .then((data) => {
+        if (alive) setRecentBatches(data.items);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [token]);
   useEffect(() => {
     if (!batchId) return;
     let alive = true;
     setBatchJobs([]);
+    setBatchSummary(null);
+    void api<BatchSummary>(
+      token,
+      `/api/v1/jobs/batch/${encodeURIComponent(batchId)}`,
+    )
+      .then((data) => {
+        if (alive) setBatchSummary(data);
+      })
+      .catch(() => {}); // Older batches have child jobs but no metadata row.
     const load = () => {
       void api<{ items: Job[] }>(
         token,
@@ -533,11 +562,18 @@ function RunsList({
       <div className="page-head">
         <div>
           <span className="eyebrow">RUN ARCHIVE</span>
-          <h1>运行记录</h1>
+          <h1>{batchSummary?.name || "运行记录"}</h1>
           <p>
-            查看任务状态、逐请求样本和可导出报告。
+            {batchSummary?.description ||
+              "查看任务状态、逐请求样本和可导出报告。"}
             {batchId && `（正在按批次 ${batchId} 过滤）`}
           </p>
+          {batchSummary && (
+            <p>
+              已提交 {batchSummary.submitted_items} /{" "}
+              {batchSummary.requested_items} 项；其余子任务在提交前停用。
+            </p>
+          )}
         </div>
         <div className="detail-actions">
           {batchHasActive && (
@@ -572,6 +608,34 @@ function RunsList({
         <p className="form-error" role="alert">
           {batchError}
         </p>
+      )}
+      {!batchId && recentBatches.length > 0 && (
+        <section className="surface">
+          <div className="section-head">
+            <div>
+              <span className="eyebrow">BATCH HISTORY</span>
+              <h2>最近批次</h2>
+            </div>
+          </div>
+          <div className="batch-history-grid">
+            {recentBatches.map((batch) => (
+              <button
+                className="batch-history-card"
+                key={batch.batch_id}
+                onClick={() =>
+                  navigate(`/runs?batch=${encodeURIComponent(batch.batch_id)}`)
+                }
+              >
+                <strong>{batch.name}</strong>
+                <span>{batch.description || "无说明"}</span>
+                <small>
+                  {date(batch.created_at)} · 已提交 {batch.submitted_items} /{" "}
+                  {batch.requested_items} 项
+                </small>
+              </button>
+            ))}
+          </div>
+        </section>
       )}
       <section className="surface">
         <div className="section-head">

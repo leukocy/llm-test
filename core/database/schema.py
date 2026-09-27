@@ -4,7 +4,7 @@ Database Schema 定义
 包含所has表 SQL 定义andMigration语句。
 """
 
-SCHEMA_VERSION = "1.8.0"
+SCHEMA_VERSION = "1.9.0"
 
 # ============================================
 # Table schema定义
@@ -353,6 +353,19 @@ CREATE TABLE IF NOT EXISTS control_jobs (
 );
 """
 
+CREATE_CONTROL_BATCHES = """
+CREATE TABLE IF NOT EXISTS control_batches (
+    batch_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    default_endpoint_id TEXT NOT NULL,
+    requested_items INTEGER NOT NULL,
+    submitted_items INTEGER NOT NULL,
+    request_hash TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+"""
+
 CREATE_JOB_EVENTS = """
 CREATE TABLE IF NOT EXISTS job_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -443,6 +456,7 @@ def get_schema_sql() -> str:
         CREATE_DB_META,
         CREATE_APPLICATION_CASES,
         CREATE_CONTROL_JOBS,
+        CREATE_CONTROL_BATCHES,
         CREATE_JOB_EVENTS,
         CREATE_CONTROL_PRESETS,
         CREATE_CONTROL_ENDPOINTS,
@@ -469,6 +483,7 @@ def create_tables(conn) -> None:
         CREATE_DB_META,
         CREATE_APPLICATION_CASES,
         CREATE_CONTROL_JOBS,
+        CREATE_CONTROL_BATCHES,
         CREATE_JOB_EVENTS,
         CREATE_CONTROL_PRESETS,
         CREATE_CONTROL_ENDPOINTS,

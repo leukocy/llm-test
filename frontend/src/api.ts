@@ -98,6 +98,16 @@ export type Job = {
   started_at: number | null;
   finished_at: number | null;
 };
+export type BatchSummary = {
+  batch_id: string;
+  name: string;
+  description: string;
+  default_endpoint_id: string;
+  requested_items: number;
+  submitted_items: number;
+  created_at: number;
+  status_counts?: Record<string, number>;
+};
 export type Metric = {
   count: number;
   mean: number | null;

@@ -41,10 +41,45 @@ export function Detail({
   const [logLevels, setLogLevels] = useState<string[] | null>(null);
   const [logView, setLogView] = useState<"text" | "table" | "stats">("text");
   const [showLogMetrics, setShowLogMetrics] = useState(false);
+  const [showLatestOutput, setShowLatestOutput] = useState(false);
+  const [latestOutput, setLatestOutput] = useState<{
+    result_id: number | null;
+    output: string | null;
+    truncated: boolean;
+  } | null>(null);
   const [robustness, setRobustness] = useState<RobustnessReport | null>(null);
   const resultsRef = useRef<RequestResult[]>([]);
   const logsRef = useRef<LogLine[]>([]);
   resultsRef.current = results;
+
+  useEffect(() => {
+    setShowLatestOutput(false);
+    setLatestOutput(null);
+  }, [job.job_id]);
+
+  useEffect(() => {
+    if (!showLatestOutput || !job.result_run_id) return;
+    let alive = true;
+    const load = () => {
+      void api<{
+        result_id: number | null;
+        output: string | null;
+        truncated: boolean;
+      }>(token, `/api/v1/jobs/${job.job_id}/latest-output`)
+        .then((data) => {
+          if (alive) setLatestOutput(data);
+        })
+        .catch(() => {});
+    };
+    load();
+    const timer = activeStates.has(job.status)
+      ? window.setInterval(load, 2000)
+      : null;
+    return () => {
+      alive = false;
+      if (timer) window.clearInterval(timer);
+    };
+  }, [showLatestOutput, job.job_id, job.result_run_id, job.status, token]);
 
   type LogLine = {
     id: number;
@@ -361,6 +396,40 @@ export function Detail({
           />
         </div>
       </div>
+      {job.result_run_id && (
+        <section className="surface">
+          <div className="section-head">
+            <div>
+              <span className="eyebrow">LATEST RESPONSE</span>
+              <h2>最新模型输出</h2>
+            </div>
+            <button
+              className="button subtle"
+              onClick={() => setShowLatestOutput((shown) => !shown)}
+            >
+              {showLatestOutput ? "收起输出" : "查看最新输出"}
+            </button>
+          </div>
+          {showLatestOutput && (
+            <>
+              <p>
+                仅在此页面主动展开时读取，最多展示最近一次输出的前 4,000 字符。
+              </p>
+              {latestOutput?.output ? (
+                <>
+                  <span className="minor-tag">
+                    请求 #{latestOutput.result_id}
+                    {latestOutput.truncated ? " · 内容已截断" : ""}
+                  </span>
+                  <pre className="output-preview">{latestOutput.output}</pre>
+                </>
+              ) : (
+                <p>当前还没有保存的模型输出。</p>
+              )}
+            </>
+          )}
+        </section>
+      )}
       {summary && (
         <>
           <div

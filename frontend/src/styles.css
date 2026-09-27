@@ -2122,6 +2122,37 @@ textarea:focus {
   margin-bottom: 12px;
   background: #fafcfd;
 }
+.batch-history-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+.batch-history-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 110px;
+  padding: 14px;
+  border: 1px solid #dce6ea;
+  border-radius: 10px;
+  background: #fafcfd;
+  color: #203641;
+  text-align: left;
+  cursor: pointer;
+}
+.batch-history-card:hover,
+.batch-history-card:focus-visible {
+  border-color: #168295;
+  background: #f0f8f9;
+}
+.batch-history-card span {
+  color: #526b77;
+}
+.batch-history-card small {
+  margin-top: auto;
+  color: #647d89;
+}
 .batch-item-head {
   display: flex;
   align-items: center;
@@ -2130,6 +2161,12 @@ textarea:focus {
 }
 .batch-item-head select {
   flex: 1;
+}
+.batch-item-head label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
 }
 .batch-item-editor {
   min-height: 120px;
@@ -2152,6 +2189,26 @@ textarea:focus {
 }
 .batch-config-actions label.button {
   cursor: pointer;
+}
+.batch-config-tools > textarea {
+  display: block;
+  width: 100%;
+  min-height: 70px;
+  margin-top: 12px;
+  resize: vertical;
+}
+.output-preview {
+  max-height: 340px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 16px;
+  border: 1px solid #dce6ea;
+  border-radius: 10px;
+  background: #f6f9fa;
+  color: #203641;
+  font-size: 13px;
+  line-height: 1.55;
 }
 .batch-all-tests p,
 .batch-plan {
