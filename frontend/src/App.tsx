@@ -19,6 +19,7 @@ import { Batch } from "./pages/Batch";
 import { Compare } from "./pages/Compare";
 import { Advanced } from "./pages/Advanced";
 import { Environment } from "./pages/Environment";
+import { ApiSettings } from "./pages/ApiSettings";
 
 const TOKEN_KEY = "llm-test-token";
 
@@ -37,6 +38,7 @@ export default function App() {
   function logout() {
     window.sessionStorage.removeItem(TOKEN_KEY);
     setToken("");
+    setEndpoints([]);
     setJobs([]);
   }
 
@@ -47,6 +49,14 @@ export default function App() {
     );
     setJobs(data.items);
     setTotal(data.total);
+  }, []);
+
+  const refreshEndpoints = useCallback(async (credential: string) => {
+    const data = await api<{ items: Endpoint[] }>(
+      credential,
+      "/api/v1/endpoints",
+    );
+    setEndpoints(data.items);
   }, []);
 
   useEffect(() => {
@@ -60,26 +70,20 @@ export default function App() {
   }, [token, refresh]);
 
   async function login(value: string) {
-    const [endpointData] = await Promise.all([
-      api<{ items: Endpoint[] }>(value, "/api/v1/endpoints"),
-      refresh(value),
-    ]);
-    setEndpoints(endpointData.items);
+    await Promise.all([refreshEndpoints(value), refresh(value)]);
     window.sessionStorage.setItem(TOKEN_KEY, value);
     setToken(value);
   }
 
   // 刷新后凭 sessionStorage 的 token 恢复会话
   useEffect(() => {
-    if (!token || endpoints.length) return;
-    api<{ items: Endpoint[] }>(token, "/api/v1/endpoints")
-      .then((data) => setEndpoints(data.items))
-      .catch((exc) => {
-        if (exc instanceof ApiError && exc.status === 401) logout();
-      });
+    if (!token) return;
+    refreshEndpoints(token).catch((exc) => {
+      if (exc instanceof ApiError && exc.status === 401) logout();
+    });
     refresh(token).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, refreshEndpoints]);
 
   async function submit(
     endpoint: string,
@@ -186,6 +190,12 @@ export default function App() {
           >
             <span>▨</span> 环境信息
           </button>
+          <button
+            className={navActive("/settings/api") ? "active" : ""}
+            onClick={nav("/settings/api")}
+          >
+            <span>⚙</span> 受测 API 设置
+          </button>
         </nav>
         <div className="sidebar-bottom">
           <div className="worker-indicator">
@@ -208,7 +218,9 @@ export default function App() {
                   ? "运行记录"
                   : navActive("/new")
                     ? "创建测量"
-                    : "数据仓库"}
+                    : navActive("/settings/api")
+                      ? "受测 API 设置"
+                      : "数据仓库"}
             </strong>
           </div>
           <div className="topbar-right">
@@ -296,6 +308,16 @@ export default function App() {
             <Route
               path="/environment"
               element={<Environment token={token} />}
+            />
+            <Route
+              path="/settings/api"
+              element={
+                <ApiSettings
+                  endpoints={endpoints}
+                  token={token}
+                  onChanged={() => refreshEndpoints(token)}
+                />
+              }
             />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

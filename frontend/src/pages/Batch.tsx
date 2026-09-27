@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, type Endpoint, type Job } from "../api";
 import { scenarios, type JobType } from "../constants";
 
@@ -13,6 +14,7 @@ export function Batch({
   token: string;
   onSubmitted: (batchId: string) => void;
 }) {
+  const navigate = useNavigate();
   const [endpoint, setEndpoint] = useState(endpoints[0]?.id || "");
   const [items, setItems] = useState<Item[]>([
     {
@@ -22,6 +24,12 @@ export function Batch({
   ]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!endpoints.some((item) => item.id === endpoint)) {
+      setEndpoint(endpoints[0]?.id || "");
+    }
+  }, [endpoints, endpoint]);
 
   function updateItem(index: number, patch: Partial<Item>) {
     setItems((current) =>
@@ -95,14 +103,22 @@ export function Batch({
         <select
           aria-label="批量端点"
           value={endpoint}
+          disabled={!endpoints.length}
           onChange={(event) => setEndpoint(event.target.value)}
         >
+          {!endpoints.length && <option value="">尚未配置受测 API</option>}
           {endpoints.map((item) => (
             <option key={item.id} value={item.id}>
               {item.label} · {item.model_id}
             </option>
           ))}
         </select>
+        <button
+          className="text-action"
+          onClick={() => navigate("/settings/api")}
+        >
+          配置受测 API →
+        </button>
       </section>
       <section className="surface">
         <div className="section-head">

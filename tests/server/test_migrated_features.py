@@ -53,12 +53,15 @@ def test_preset_roundtrip_and_strict_admission(migrated_client):
             "rounds_per_level": 2,
             "max_tokens": 64,
         },
+        "run_config": {"temperature": 0.3, "random_seed": 42},
     }
     assert client.get("/api/v1/presets").status_code == 401
     created = client.post("/api/v1/presets", json=payload, headers=headers)
     assert created.status_code == 201
     preset_id = created.json()["preset_id"]
     assert created.json()["parameters"]["input_tokens_target"] == 0
+    assert created.json()["run_config"]["temperature"] == 0.3
+    assert created.json()["run_config"]["random_seed"] == 42
     assert client.post("/api/v1/presets", json=payload, headers=headers).status_code == 409
     assert len(client.get("/api/v1/presets", headers=headers).json()["items"]) == 1
 

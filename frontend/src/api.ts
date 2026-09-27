@@ -2,7 +2,11 @@ export type Endpoint = {
   id: string;
   label: string;
   provider: string;
+  api_base_url: string;
   model_id: string;
+  tokenizer_option: string;
+  credential_configured: boolean;
+  source: "managed" | "file";
 };
 export type Preset = {
   preset_id: string;
@@ -10,6 +14,7 @@ export type Preset = {
   endpoint_id: string;
   test_type: string;
   parameters: Record<string, unknown>;
+  run_config: Record<string, unknown>;
   created_at: number;
   updated_at: number;
 };

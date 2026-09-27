@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type Endpoint, type MeasurementPlan, type Preset } from "../api";
-import { scenarios, type JobType } from "../constants";
+import {
+  profileParameters,
+  scenarios,
+  type JobType,
+  type MeasurementProfile,
+} from "../constants";
 import {
   SchemaForm,
   schemaDefaults,
@@ -28,8 +34,14 @@ export function NewRun({
   ) => Promise<void>;
   busy: boolean;
 }) {
-  const [endpoint, setEndpoint] = useState(endpoints[0]?.id || "");
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedEndpoint = searchParams.get("endpoint");
+  const [endpoint, setEndpoint] = useState(
+    requestedEndpoint || endpoints[0]?.id || "",
+  );
   const [type, setType] = useState<JobType>("concurrency");
+  const [profile, setProfile] = useState<MeasurementProfile>("standard");
   const [params, setParams] = useState<Record<string, unknown>>(
     () => scenarios[0].parameters,
   );
@@ -48,6 +60,21 @@ export function NewRun({
   const [plan, setPlan] = useState<MeasurementPlan | null>(null);
   const [planError, setPlanError] = useState("");
   const specSchema = specs?.items[type]?.schema;
+  const selectedEndpoint = endpoints.find((item) => item.id === endpoint);
+
+  useEffect(() => {
+    setEndpoint((current) => {
+      if (
+        requestedEndpoint &&
+        endpoints.some((item) => item.id === requestedEndpoint)
+      ) {
+        return requestedEndpoint;
+      }
+      return endpoints.some((item) => item.id === current)
+        ? current
+        : endpoints[0]?.id || "";
+    });
+  }, [endpoints, requestedEndpoint]);
 
   useEffect(() => {
     let active = true;
@@ -82,6 +109,50 @@ export function NewRun({
     () => (specs ? schemaDefaults(specs.run_config_schema) : {}),
     [specs],
   );
+  const commonKnobSchema = useMemo(() => {
+    if (!specs) return null;
+    const properties = Object.fromEntries(
+      Object.entries(specs.run_config_schema.properties || {}).filter(
+        ([name]) =>
+          [
+            "temperature",
+            "thinking_enabled",
+            "reasoning_effort",
+            "random_seed",
+          ].includes(name),
+      ),
+    );
+    return { ...specs.run_config_schema, properties };
+  }, [specs]);
+  const advancedKnobSchema = useMemo(() => {
+    if (!specs) return null;
+    const properties = Object.fromEntries(
+      Object.entries(specs.run_config_schema.properties || {}).filter(
+        ([name]) =>
+          ![
+            "temperature",
+            "thinking_enabled",
+            "reasoning_effort",
+            "random_seed",
+          ].includes(name),
+      ),
+    );
+    return { ...specs.run_config_schema, properties };
+  }, [specs]);
+
+  function applyProfile(next: Exclude<MeasurementProfile, "custom">) {
+    const value = profileParameters(type, next);
+    setParams(value);
+    setRaw(JSON.stringify(value, null, 2));
+    setProfile(next);
+    setPresetId("");
+    setError("");
+  }
+
+  function updateParams(next: Record<string, unknown>) {
+    setParams(next);
+    setProfile("custom");
+  }
 
   // Use the same server validation and workload calculator as actual submission.
   useEffect(() => {
@@ -172,6 +243,7 @@ export function NewRun({
             endpoint_id: endpoint,
             test_type: type,
             parameters: currentParameters(),
+            run_config: currentRunConfig(),
           }),
         },
       );
@@ -247,6 +319,8 @@ export function NewRun({
               setType(preset.test_type as JobType);
               setParams(preset.parameters);
               setRaw(JSON.stringify(preset.parameters, null, 2));
+              setRunConfig({ ...knobDefaults, ...preset.run_config });
+              setProfile("custom");
             }}
           >
             <option value="">选择已保存方案</option>
@@ -314,6 +388,7 @@ export function NewRun({
                   setType(item.id);
                   setParams(item.parameters);
                   setRaw(JSON.stringify(item.parameters, null, 2));
+                  setProfile("standard");
                   setPresetId("");
                   setError("");
                 }}
@@ -329,23 +404,38 @@ export function NewRun({
               <h2>目标端点</h2>
             </div>
           </div>
-          <label className="input-label" htmlFor="endpoint">
-            管理员预设端点
-          </label>
+          <div className="endpoint-select-head">
+            <label className="input-label" htmlFor="endpoint">
+              受测 API
+            </label>
+            <button
+              className="text-action"
+              onClick={() => navigate("/settings/api")}
+            >
+              配置 API →
+            </button>
+          </div>
           <select
             id="endpoint"
             value={endpoint}
+            disabled={!endpoints.length}
             onChange={(event) => {
               setEndpoint(event.target.value);
               setPresetId("");
             }}
           >
+            {!endpoints.length && <option value="">尚未配置受测 API</option>}
             {endpoints.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.label} · {item.model_id}
               </option>
             ))}
           </select>
+          {selectedEndpoint && !selectedEndpoint.credential_configured && (
+            <p className="form-error" role="alert">
+              此端点缺少 API key，请先配置凭证。
+            </p>
+          )}
           <div className="section-head split">
             <div>
               <span className="section-index">03</span>
@@ -360,7 +450,20 @@ export function NewRun({
                 role="tab"
                 aria-selected={mode === "form"}
                 className={mode === "form" ? "active" : ""}
-                onClick={() => setMode("form")}
+                onClick={() => {
+                  if (mode === "json") {
+                    try {
+                      setParams(currentParameters());
+                      setError("");
+                    } catch (exc) {
+                      setError(
+                        exc instanceof Error ? exc.message : "JSON 格式错误",
+                      );
+                      return;
+                    }
+                  }
+                  setMode("form");
+                }}
               >
                 表单
               </button>
@@ -377,15 +480,48 @@ export function NewRun({
               </button>
             </div>
           </div>
+          <div className="profile-picker" aria-label="测量强度">
+            <div>
+              <strong>一键设置参数</strong>
+              <small>先选强度，仍可在下方逐项调整</small>
+            </div>
+            <div className="profile-actions">
+              {(
+                [
+                  ["quick", "快速检查"],
+                  ["standard", "标准测量"],
+                  ["thorough", "深入测量"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={profile === id ? "active" : ""}
+                  aria-pressed={profile === id}
+                  onClick={() => applyProfile(id)}
+                >
+                  {label}
+                </button>
+              ))}
+              {profile === "custom" && (
+                <span className="minor-tag">已自定义</span>
+              )}
+            </div>
+          </div>
+          {profile === "quick" && (
+            <p className="profile-note">
+              快速检查用于确认端点和流程可用；正式性能对比请选择标准或深入测量。
+            </p>
+          )}
           {mode === "form" && type === "dataset" ? (
-            <DatasetParams value={params} onChange={setParams} />
+            <DatasetParams value={params} onChange={updateParams} />
           ) : mode === "form" && type === "robustness" ? (
-            <RobustnessParams value={params} onChange={setParams} />
+            <RobustnessParams value={params} onChange={updateParams} />
           ) : mode === "form" && specSchema ? (
             <SchemaForm
               schema={specSchema}
               value={params}
-              onChange={setParams}
+              onChange={updateParams}
               idPrefix={`spec-${type}`}
             />
           ) : (
@@ -401,17 +537,29 @@ export function NewRun({
                 spellCheck={false}
                 aria-label="运行参数 JSON"
                 value={raw}
-                onChange={(event) => setRaw(event.target.value)}
+                onChange={(event) => {
+                  setRaw(event.target.value);
+                  setProfile("custom");
+                }}
               />
             </>
           )}
-          {specs && (
-            <details className="knobs-section">
-              <summary>
-                运行配置旋钮（温度 / 思考 / 种子 / tokenizer 等，可选）
-              </summary>
+          {commonKnobSchema && (
+            <div className="common-knobs">
+              <strong>常用生成设置</strong>
               <SchemaForm
-                schema={specs.run_config_schema}
+                schema={commonKnobSchema}
+                value={runConfig}
+                onChange={setRunConfig}
+                idPrefix="common-config"
+              />
+            </div>
+          )}
+          {advancedKnobSchema && (
+            <details className="knobs-section">
+              <summary>更多运行设置（tokenizer、思考预算和偏移等）</summary>
+              <SchemaForm
+                schema={advancedKnobSchema}
                 value={runConfig}
                 onChange={setRunConfig}
                 idPrefix="run-config"
@@ -422,7 +570,13 @@ export function NewRun({
             <span>提交后由独立 worker 执行；页面关闭不影响任务。</span>
             <button
               className="button primary"
-              disabled={busy || !endpoint || !plan || Boolean(planError)}
+              disabled={
+                busy ||
+                !endpoint ||
+                !selectedEndpoint?.credential_configured ||
+                !plan ||
+                Boolean(planError)
+              }
               onClick={async () => {
                 setError("");
                 try {
@@ -513,7 +667,7 @@ export function NewRun({
             <h3>结果可信，从输入开始</h3>
             <ul>
               <li>每次运行都有独立 ID、状态轨迹和结果目录。</li>
-              <li>端点地址与密钥由管理员配置，提交内容不包含密钥。</li>
+              <li>端点密钥加密保存在平台数据库中，提交内容不包含密钥。</li>
               <li>统计基于逐请求数据，失败请求计入成功率。</li>
               <li>质量评估保留数据来源与样本指纹。</li>
             </ul>
