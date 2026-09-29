@@ -8,6 +8,7 @@ import json
 import math
 import sqlite3
 import statistics
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -157,10 +158,34 @@ def run_summary(
                 (run_id,),
             )
         ]
+        batch = conn.execute(
+            "SELECT max_parallel, stop_on_error FROM control_batches WHERE batch_id = ?",
+            (job.get("parent_job_id") if job else None,),
+        ).fetchone()
     finally:
         conn.close()
     version = _run_contract_version(run["config_json"], rows)
     config = json.loads(run["config_json"] or "{}")
+    stored_control = config.get("execution_control")
+    control = dict(stored_control) if isinstance(stored_control, dict) else {}
+    if job:
+        control.update(
+            pause_count=job.get("pause_count", 0),
+            paused_seconds=job.get("paused_seconds", 0.0)
+            + (
+                max(0.0, time.time() - job["pause_started_at"])
+                if job.get("pause_started_at")
+                else 0.0
+            ),
+            pause_policy=config.get("pause_policy"),
+            batch_id=job.get("parent_job_id"),
+            max_parallel=1,
+            stop_on_error=False,
+        )
+    if batch:
+        control.update(
+            max_parallel=batch["max_parallel"], stop_on_error=bool(batch["stop_on_error"])
+        )
     protocol = config.get("measurement_protocol") if isinstance(config, dict) else None
     if not isinstance(protocol, dict):
         protocol = None
@@ -220,6 +245,14 @@ def run_summary(
         if isinstance(cell, dict) and isinstance(cell.get("label"), str)
     }
     quality_warnings: list[str] = []
+    if control.get("pause_count", 0):
+        quality_warnings.append(
+            "运行曾在请求组之间暂停；单请求计时不含暂停，缓存、温度与资源监控条件可能变化。"
+        )
+    if control.get("max_parallel", 1) > 1:
+        quality_warnings.append(
+            "批次允许任务并行，共享受测服务容量；与串行结果比较前需核对重叠负载。"
+        )
     sliced = []
     for key, group in sorted(
         groups.items(),
@@ -283,6 +316,7 @@ def run_summary(
         "group_axis": " × ".join(GROUP_AXIS.get(field, field) for field in fields),
         "groups": sliced,
         "measurement_protocol": protocol,
+        "execution_control": control,
         "data_quality": {"warnings": quality_warnings},
         "provenance": {
             "config_json": run["config_json"],

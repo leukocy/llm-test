@@ -25,6 +25,9 @@ def test_report_survives_job_completion_and_excludes_prompt(tmp_path: Path):
     )
     job_id = job["job_id"]
     store.claim("test-worker")
+    store.request_pause(job_id)
+    store.acknowledge_pause(job_id, "test-worker")
+    store.resume(job_id)
     version = json.dumps({"metric_contract_version": METRIC_CONTRACT_VERSION})
     with sqlite3.connect(db_path) as conn:
         conn.execute(
@@ -57,14 +60,18 @@ def test_report_survives_job_completion_and_excludes_prompt(tmp_path: Path):
     assert summary.status_code == 200
     assert summary.json()["overall"]["metrics"]["ttft"]["median"] == 0.21
     assert summary.json()["integrity"]["verified"] is True
+    assert summary.json()["execution_control"]["pause_count"] == 1
+    assert any("暂停" in warning for warning in summary.json()["data_quality"]["warnings"])
     html = client.get(f"/api/v1/jobs/{job_id}/report?format=html", headers=headers)
     assert html.status_code == 200
     assert "test-model" in html.text
     assert "confidential prompt" not in html.text
     assert "完整性核验通过" in html.text
+    assert "执行条件" in html.text and "暂停 1 次" in html.text
     markdown = client.get(f"/api/v1/jobs/{job_id}/report?format=markdown", headers=headers)
     assert markdown.status_code == 200
     assert "完整性" in markdown.text and METRIC_CONTRACT_VERSION in markdown.text
+    assert "暂停：1 次" in markdown.text
     assert "confidential prompt" not in markdown.text
     results = client.get(f"/api/v1/jobs/{job_id}/results", headers=headers)
     assert "confidential prompt" not in results.text

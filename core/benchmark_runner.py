@@ -5,6 +5,7 @@ import json
 import random
 import threading
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -714,6 +715,7 @@ class BenchmarkRunner:
         custom_params=None,
         external_test_id: str | None = None,
         enable_live_log_server: bool = True,
+        control_checkpoint: Callable[[], Awaitable[None]] | None = None,
     ):
         self.placeholder, self.progress_bar, self.status_text = (
             placeholder,
@@ -729,6 +731,7 @@ class BenchmarkRunner:
         self.completed_requests, self.total_requests = 0, 0
         self.tokenizer = None
         self.csv_file = csv_filename
+        self._control_checkpoint = control_checkpoint
 
         self.api_key = api_key
         self.log_placeholder = log_placeholder
@@ -987,6 +990,8 @@ class BenchmarkRunner:
             if config:
                 full_config.update(config)
             full_config["metric_contract_version"] = METRIC_CONTRACT_VERSION
+            if self._control_checkpoint is not None:
+                full_config["pause_policy"] = "drained_request_group"
 
             self._db_run = db.start_test_run(
                 test_type=test_type,
@@ -2844,9 +2849,16 @@ class BenchmarkRunner:
             self._update_log(f"Save进度失败: {e}", level=LogLevel.ERROR)
             return False
 
+    async def _measurement_checkpoint(self) -> None:
+        """Persist completed groups and cooperate with control before scheduling more work."""
+        if self._control_checkpoint is not None:
+            self._batch_save_results_to_db()
+            await self._control_checkpoint()
+
     async def _run_concurrency_batch(
         self, client, prompts, max_tokens, concurrency, session_id_start
     ):
+        await self._measurement_checkpoint()
         start_batch_time = time.monotonic()
 
         # Determine prompts for each request
@@ -3284,6 +3296,7 @@ class BenchmarkRunner:
         # No client needed - requests library creates connections per-request
         for concurrency in selected_concurrencies:
             # Check控制信号
+            await self._measurement_checkpoint()
             signal = self._check_control_signal()
             if signal:
                 # Save进度
@@ -3323,6 +3336,7 @@ class BenchmarkRunner:
                 warmup_signal = None
                 if not skip_warmup:
                     for _ in range(warmup_rounds_per_level):
+                        await self._measurement_checkpoint()
                         warmup_signal = self._check_control_signal()
                         if warmup_signal:
                             break
@@ -3337,6 +3351,7 @@ class BenchmarkRunner:
 
             for r in range(rounds_per_level):
                 # Check控制信号
+                await self._measurement_checkpoint()
                 signal = warmup_signal or self._check_control_signal()
                 warmup_signal = None
                 if signal:
@@ -3498,6 +3513,7 @@ class BenchmarkRunner:
         # No client needed - requests library creates connections per-request
         for tokens_target in token_levels:
             # Check控制信号
+            await self._measurement_checkpoint()
             signal = self._check_control_signal()
             if signal:
                 return stop_for_control(signal)
@@ -3505,6 +3521,7 @@ class BenchmarkRunner:
             self.status_text.info(f"currently准备 {tokens_target} (目标) Token Tip...")
 
             for _ in range(warmup_requests_per_level):
+                await self._measurement_checkpoint()
                 signal = self._check_control_signal()
                 if signal:
                     break
@@ -3525,6 +3542,7 @@ class BenchmarkRunner:
 
                 for i in range(requests_per_level):
                     # Generate fresh random prompt of exact length
+                    await self._measurement_checkpoint()
                     # Sync with Strict Calibration Logic
                     if tokens_target <= 32:
                         raw_prompt, _prompt_source = self._calibrate_prompt_with_source(
@@ -3616,6 +3634,7 @@ class BenchmarkRunner:
 
                 for i in range(requests_per_level):
                     # Generate fresh prompt for each request
+                    await self._measurement_checkpoint()
                     prompt_text = pregen_prompts[i]
                     res = await self._run_prefill_request(None, prompt_text, max_tokens, i)
 
@@ -3801,6 +3820,7 @@ class BenchmarkRunner:
 
         # 整体轮次循环
         for overall_round in range(total_rounds):
+            await self._measurement_checkpoint()
             if is_stop_requested():
                 self._show("warning", "Test已停止。")
                 break
@@ -3830,6 +3850,7 @@ class BenchmarkRunner:
 
             # 按Segment levels从小到大发送
             for seg_idx, segment_length in enumerate(segment_levels):
+                await self._measurement_checkpoint()
                 if is_stop_requested():
                     self._show("warning", "Test已停止。")
                     break
@@ -3871,6 +3892,7 @@ class BenchmarkRunner:
 
                 # 发送Concurrency请求
                 for req_idx in range(requests_per_segment):
+                    await self._measurement_checkpoint()
                     if is_stop_requested():
                         break
 
@@ -4142,6 +4164,7 @@ class BenchmarkRunner:
 
         # No client needed - requests library creates connections per-request
         for length_target in context_lengths:
+            await self._measurement_checkpoint()
             self.status_text.info(f"currently准备 {length_target} (目标) Token Tip...")
 
             # Adjust multiplier based on tokenizer
@@ -4150,6 +4173,7 @@ class BenchmarkRunner:
             if length_target < 20:
                 self.status_text.info(f"currentlyTest (目标: {length_target}, 精细模式)...")
                 for r in range(rounds_per_level):
+                    await self._measurement_checkpoint()
                     raw_prompt, _, _, _prompt_source = self._get_text_for_token_count(
                         self._prompt_generation_target(length_target)
                     )
@@ -4222,6 +4246,7 @@ class BenchmarkRunner:
                 # > 32 tokens: Random noise body + suffix instructions
 
                 for r in range(rounds_per_level):
+                    await self._measurement_checkpoint()
                     self.status_text.info(
                         f"currentlyTest (目标: {length_target}, 轮数: {r + 1}/{rounds_per_level})..."
                     )
@@ -4354,6 +4379,7 @@ class BenchmarkRunner:
         # No client needed - requests library creates connections per-request
         for concurrency in concurrencies:
             for length_target in context_lengths:
+                await self._measurement_checkpoint()
                 if is_stop_requested():
                     self._show("warning", "Test已停止。")
                     break
@@ -4414,6 +4440,7 @@ class BenchmarkRunner:
                         f"{concurrency} 并发 / {length_target} tokens",
                     )
 
+                await self._measurement_checkpoint()
                 # Per-cell 资源监控:每个 (并发×上下文) cell 独立采样,峰值得以按 cell 归因。
                 # 失败不影响测试（与 _start_resource_monitor 同防御）。
                 cell_monitor = None
@@ -4571,6 +4598,7 @@ class BenchmarkRunner:
         session_counter = 0
         # No client needed - requests library creates connections per-request
         for concurrency in selected_concurrencies:
+            await self._measurement_checkpoint()
             self.status_text.info(
                 f"currently以 {concurrency} Concurrency运行Custom Text Test (总请求: {concurrency * rounds_per_level})..."
             )
@@ -4588,6 +4616,7 @@ class BenchmarkRunner:
             )
 
             # Use continuous execution with a prompt list
+            await self._measurement_checkpoint()
             results = await self._run_continuous_batch(
                 None,
                 prompts,
@@ -4724,6 +4753,7 @@ class BenchmarkRunner:
         for r in range(rounds):
             # Process dataset in chunks of size 'concurrency'
             for i in range(0, len(dataset_rows), concurrency):
+                await self._measurement_checkpoint()
                 batch = dataset_rows[i : i + concurrency]
                 current_concurrency = len(batch)
 

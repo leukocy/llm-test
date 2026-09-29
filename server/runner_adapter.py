@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from server.control import PAUSABLE_TEST_TYPES, JobControl
 from server.settings import Endpoint, Settings
 from server.store import JobStore
 
@@ -198,6 +199,11 @@ async def execute_job(
         template_tokens=run_config.get("template_tokens", 0),
         temperature=run_config.get("temperature"),
         custom_params=run_config.get("custom_params"),
+        control_checkpoint=(
+            JobControl(store, job_id, worker_id).checkpoint
+            if job["test_type"] in PAUSABLE_TEST_TYPES
+            else None
+        ),
     )
     methods: dict[str, Callable[..., Awaitable[Any]]] = {
         "concurrency": runner.run_concurrency_test,

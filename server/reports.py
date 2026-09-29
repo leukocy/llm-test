@@ -21,6 +21,7 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
     metrics = overall["metrics"]
     integrity = summary["integrity"]
     protocol = summary.get("measurement_protocol") or {}
+    control = summary.get("execution_control") or {}
 
     def number(value: Any, digits: int = 3) -> str:
         return "—" if value is None else f"{value:,.{digits}f}"
@@ -79,6 +80,8 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
             f"- 正式请求：{_md(protocol.get('measured_requests'))}；预热请求：{_md(protocol.get('warmup_requests'))}",
             f"- Token 来源：{_md(', '.join(summary['provenance']['token_sources']))}",
             f"- Token 算法：{_md(', '.join(summary['provenance']['token_methods']))}",
+            f"- 暂停：{control.get('pause_count', 0)} 次，共 {number(control.get('paused_seconds', 0))} 秒；仅在请求组之间暂停",
+            f"- 批次并行上限：{control.get('max_parallel', 1)}；失败即停：{'开启' if control.get('stop_on_error') else '关闭'}",
         ]
     )
     lines.extend(f"- {_md(note)}" for note in summary["notes"])
@@ -165,6 +168,13 @@ def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
         if protocol
         else "<h2>测量协议</h2><p>历史运行未记录固定工作负载协议。</p>"
     )
+    control = summary.get("execution_control") or {}
+    control_html = (
+        f"<h2>执行条件</h2><p>暂停 {cell(control.get('pause_count', 0))} 次，"
+        f"共 {fmt(control.get('paused_seconds', 0))} 秒；"
+        f"批次并行上限 {cell(control.get('max_parallel', 1))}；"
+        f"失败即停{'开启' if control.get('stop_on_error') else '关闭'}。</p>"
+    )
     integrity_label = (
         "单次运行完整性核验通过" if integrity["verified"] else "仅供诊断 · 未通过完整性核验"
     )
@@ -213,6 +223,7 @@ code {{ overflow-wrap:anywhere; }}
 <h2>条件切片</h2><table><thead><tr><th>{cell(summary["group_axis"])}</th><th>请求数</th><th>成功率</th>
 <th>输入 token 中位数</th><th>TTFT p50 · s</th><th>TTFT p95 · s</th><th>TPS p50</th></tr></thead><tbody>{rows}</tbody></table>
 {protocol_html}
+{control_html}
 {"<h2>数据质量提示</h2><ul>" + quality_warnings + "</ul>" if quality_warnings else ""}
 <h2>方法与限制</h2><ul>{notes}</ul>
 <p>成功率区间：{cell(overall["success_rate_ci95"])}；指标契约：{cell(summary["metric_contract_version"])}。</p>
