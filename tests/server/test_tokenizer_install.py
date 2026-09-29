@@ -21,7 +21,6 @@ from server.store import JobStore, LeaseLost
 from server.tokenizer_install import InstallFailure, _selected_files, execute_install
 from server.tokenizer_queue import InstallCancelled, TokenizerInstallQueue, staging_path
 from server.tokenizer_tools import count_text
-from tokenizers import Tokenizer, models, pre_tokenizers
 
 NAME = "DeepSeek-V3.2"
 SECOND = "Qwen3-Next-80B-A3B-Instruct"
@@ -39,6 +38,10 @@ def setup(tmp_path, monkeypatch):
 
 @pytest.fixture
 def fake_hub(monkeypatch):
+    # Load the third-party package at fixture time. A local tokenizers/ data
+    # directory must not change how CI classifies the top-level import block.
+    from tokenizers import Tokenizer, models, pre_tokenizers
+
     tokenizer = Tokenizer(models.WordLevel({"[UNK]": 0, "hello": 1, "world": 2}, unk_token="[UNK]"))
     tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
     files = {
