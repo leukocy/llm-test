@@ -60,6 +60,15 @@ class TestBenchmarkRunner:
         assert saved["system_info"]["machine_id"] == "worker"
         assert "report_environment" not in saved["system_info"]
 
+    def test_explicit_tokenizer_failure_does_not_use_another_model(self, runner, monkeypatch):
+        runner.tokenizer_option = "HuggingFace Tokenizer"
+        runner.hf_tokenizer_model_id = "./tokenizers/DeepSeek-V3.2"
+        monkeypatch.setattr("core.benchmark_runner.get_cached_tokenizer", lambda _: None)
+        runner._infer_hf_model_id = MagicMock()
+        with pytest.raises(RuntimeError, match="Selected local tokenizer is unavailable"):
+            runner._get_tokenizer()
+        runner._infer_hf_model_id.assert_not_called()
+
     def test_calculate_metrics_normal(self, runner):
         start_time = 100.0
         first_token_time = 100.5

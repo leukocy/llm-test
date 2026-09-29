@@ -23,7 +23,7 @@ from core.cancel_state import is_stop_requested
 from core.error_messages import get_error_info
 from core.measurement_protocol import measurement_plan
 from core.providers.factory import get_provider
-from core.tokenizer_utils import get_cached_tokenizer
+from core.tokenizer_utils import get_cached_tokenizer, tokenizer_provenance
 from utils.get_logger import get_logger
 from utils.helpers import append_to_csv, initialize_csv
 from utils.log_server import log_server
@@ -975,6 +975,9 @@ class BenchmarkRunner:
                 "latency_offset": self.latency_offset,
                 "template_tokens": self.template_tokens,
                 "hf_tokenizer_model_id": self.hf_tokenizer_model_id,
+                "tokenizer_installation": tokenizer_provenance(
+                    self.hf_tokenizer_model_id or self._infer_hf_model_id()
+                ),
                 "thinking_enabled": self.thinking_enabled,
                 "thinking_budget": self.thinking_budget,
                 "reasoning_effort": self.reasoning_effort,
@@ -1812,7 +1815,9 @@ class BenchmarkRunner:
                     f"{error_info['title']}\n\n{error_info['details']}\n\nSolution:\n"
                     + "\n".join(f"• {s}" for s in error_info["solutions"]),
                 )
-                # Fall through to other methods or return None
+                raise RuntimeError(
+                    "Selected local tokenizer is unavailable; install it before measurement"
+                ) from e
 
         # Priority 2: Auto-infer HF Tokenizer (Universal)
         inferred_id = self._infer_hf_model_id()
@@ -1858,7 +1863,9 @@ class BenchmarkRunner:
 
             # Use GPT-2 tokenizer as a reasonable default
             if not hasattr(self, "_transformers_tokenizer") or self._transformers_tokenizer is None:
-                self._transformers_tokenizer = AutoTokenizer.from_pretrained("gpt2")
+                self._transformers_tokenizer = AutoTokenizer.from_pretrained(
+                    "gpt2", local_files_only=True, trust_remote_code=False
+                )
                 self._show("info", "已Load transformers GPT-2 tokenizer 作is托底。")
             return self._transformers_tokenizer
         except Exception as tf_error:

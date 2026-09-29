@@ -36,7 +36,9 @@ export function Login({
         <div className="login-form">
           <span className="eyebrow">SECURE ACCESS</span>
           <h2>进入工作台</h2>
-          <p>输入管理员配置的访问令牌。令牌仅保存在当前页面内存中。</p>
+          <p>
+            输入管理员配置的访问令牌。令牌保存在当前标签页，关闭标签页后清除。
+          </p>
           <form
             onSubmit={async (event) => {
               event.preventDefault();

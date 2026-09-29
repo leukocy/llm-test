@@ -107,6 +107,7 @@ class JobStore:
         self,
         *,
         name: str,
+        description: str = "",
         endpoint_id: str,
         test_type: str,
         parameters: dict[str, Any],
@@ -138,10 +139,11 @@ class JobStore:
             try:
                 if preset_id:
                     conn.execute(
-                        """UPDATE control_presets SET name = ?, endpoint_id = ?, test_type = ?,
+                        """UPDATE control_presets SET name = ?, description = ?, endpoint_id = ?, test_type = ?,
                            parameters_json = ?, run_config_json = ?, updated_at = ? WHERE preset_id = ?""",
                         (
                             name,
+                            description,
                             endpoint_id,
                             test_type,
                             parameters_json,
@@ -153,12 +155,13 @@ class JobStore:
                 else:
                     conn.execute(
                         """INSERT INTO control_presets
-                           (preset_id, name, endpoint_id, test_type, parameters_json,
+                           (preset_id, name, description, endpoint_id, test_type, parameters_json,
                             run_config_json, created_at, updated_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             identifier,
                             name,
+                            description,
                             endpoint_id,
                             test_type,
                             parameters_json,
@@ -452,6 +455,12 @@ class JobStore:
         now = time.time()
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            if conn.execute(
+                "SELECT 1 FROM tokenizer_installs "
+                "WHERE status IN ('downloading', 'validating', 'cancelling') LIMIT 1"
+            ).fetchone():
+                conn.commit()
+                return None
             queued = conn.execute(
                 """SELECT job.job_id FROM control_jobs AS job
                    LEFT JOIN control_batches AS batch ON batch.batch_id = job.parent_job_id

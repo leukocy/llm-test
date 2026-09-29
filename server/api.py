@@ -72,6 +72,7 @@ from server.store import (
     PresetConflict,
     PresetNotFound,
 )
+from server.tokenizer_queue import InstallNotFound, TokenizerInstallQueue
 from server.tokenizer_tools import count_text, tokenizer_catalog
 from server.warehouse import (
     ExportScopeTooLarge,
@@ -213,9 +214,14 @@ class TokenCountBody(StrictSpec):
     name: str | None = Field(default=None, max_length=120)
 
 
+class TokenizerInstallBody(StrictSpec):
+    names: list[str] | None = Field(default=None, min_length=1, max_length=32)
+
+
 def create_app(settings: Settings | None = None, store: JobStore | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     store = store or JobStore(settings.db_path)
+    tokenizer_queue = TokenizerInstallQueue(store)
     endpoint_registry = EndpointRegistry(settings, store)
     warehouse_reader = WarehouseReader(settings.db_path)
     # 数据管理/用例/图表路径复用 core 的 manager（生产进程内单例同路径；
@@ -394,7 +400,39 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
 
     @app.get("/api/v1/tokenizers", dependencies=[auth])
     def tokenizers(model_id: Annotated[str, Query(max_length=200)] = ""):
-        return tokenizer_catalog(model_id)
+        catalog = tokenizer_catalog(model_id)
+        latest = tokenizer_queue.latest()
+        for item in catalog["items"]:
+            item["installation"] = latest.get(item["name"])
+        return catalog
+
+    @app.post("/api/v1/tokenizers/installations", dependencies=[auth], status_code=202)
+    def install_tokenizers(body: TokenizerInstallBody):
+        names = body.names
+        if names is None:
+            names = [
+                item["name"] for item in tokenizer_catalog("")["items"] if not item["available"]
+            ]
+        if not names:
+            return {"items": [], "skipped_names": []}
+        try:
+            return tokenizer_queue.enqueue(names)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/api/v1/tokenizers/installations/{install_id}", dependencies=[auth])
+    def tokenizer_installation(install_id: str):
+        try:
+            return tokenizer_queue.get(install_id)
+        except InstallNotFound as exc:
+            raise HTTPException(404, "Installation not found") from exc
+
+    @app.post("/api/v1/tokenizers/installations/{install_id}/cancel", dependencies=[auth])
+    def cancel_tokenizer_installation(install_id: str):
+        try:
+            return tokenizer_queue.cancel(install_id)
+        except InstallNotFound as exc:
+            raise HTTPException(404, "Installation not found") from exc
 
     @app.post("/api/v1/tokenizers/count", dependencies=[auth])
     async def tokenizer_count(body: TokenCountBody):
@@ -443,6 +481,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         try:
             return store.save_preset(
                 name=body.name,
+                description=body.description,
                 endpoint_id=body.endpoint_id,
                 test_type=body.test_type,
                 parameters=body.parameters,
@@ -460,6 +499,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             return store.save_preset(
                 preset_id=preset_id,
                 name=body.name,
+                description=body.description,
                 endpoint_id=body.endpoint_id,
                 test_type=body.test_type,
                 parameters=body.parameters,
@@ -879,6 +919,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             "control_jobs",
             "job_events",
             "control_presets",
+            "tokenizer_installs",
         ):
             if db.table_exists(table):
                 tables[table] = db.count(table)

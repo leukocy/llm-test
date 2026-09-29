@@ -63,6 +63,44 @@ def _md(value: Any) -> str:
     )
 
 
+def tokenizer_installation_html(installation: dict[str, Any] | None) -> str:
+    if not installation:
+        return ""
+    rows = "".join(
+        f"<tr><td>{escape(item['name'])}</td><td>{item['size']:,}</td>"
+        f"<td style='overflow-wrap:anywhere'><code>{item['sha256']}</code></td></tr>"
+        for item in installation["files"]
+    )
+    return (
+        "<section><h2>Tokenizer 安装来源</h2><p>公开 Hugging Face 仓库："
+        f"{escape(installation['repo_id'])} · 名称：{escape(installation['name'])}</p>"
+        f"<p>固定版本：<code>{installation['revision']}</code> · 离线编码校验通过，禁止执行远程代码。</p>"
+        "<p>该记录描述输入校准和本地计数器；最终 Token 指标仍以逐请求记录的来源为准。</p>"
+        f"<table><thead><tr><th>文件</th><th>字节</th><th>SHA-256</th></tr></thead><tbody>{rows}</tbody></table></section>"
+    )
+
+
+def tokenizer_installation_markdown(installation: dict[str, Any] | None) -> str:
+    if not installation:
+        return ""
+    lines = [
+        "",
+        "## Tokenizer 安装来源",
+        "",
+        f"- 仓库：{installation['repo_id']}；名称：{installation['name']}",
+        f"- 固定版本：`{installation['revision']}`；离线编码校验通过，禁止执行远程代码。",
+        "- 该记录描述输入校准和本地计数器；最终 Token 指标仍以逐请求记录的来源为准。",
+        "",
+        "| 文件 | 字节 | SHA-256 |",
+        "|---|---:|---|",
+    ]
+    lines.extend(
+        f"| {item['name']} | {item['size']} | `{item['sha256']}` |"
+        for item in installation["files"]
+    )
+    return "\n".join(lines) + "\n"
+
+
 def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
     """Portable performance report with the same integrity and metric contract as HTML."""
     overall = summary["overall"]
@@ -136,7 +174,12 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
     lines.extend(
         f"- 数据质量：{_md(note)}" for note in summary.get("data_quality", {}).get("warnings", [])
     )
-    return "\n".join(lines) + "\n" + report_environment_markdown(summary.get("report_environment"))
+    return (
+        "\n".join(lines)
+        + "\n"
+        + report_environment_markdown(summary.get("report_environment"))
+        + tokenizer_installation_markdown(summary.get("tokenizer_installation"))
+    )
 
 
 def render_quality_markdown(job: dict[str, Any], report: dict[str, Any]) -> str:
@@ -273,6 +316,7 @@ code {{ overflow-wrap:anywhere; }}
 {protocol_html}
 {control_html}
 {report_environment_html(summary.get("report_environment"))}
+{tokenizer_installation_html(summary.get("tokenizer_installation"))}
 {"<h2>数据质量提示</h2><ul>" + quality_warnings + "</ul>" if quality_warnings else ""}
 <h2>方法与限制</h2><ul>{notes}</ul>
 <p>成功率区间：{cell(overall["success_rate_ci95"])}；指标契约：{cell(summary["metric_contract_version"])}。</p>

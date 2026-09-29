@@ -4,7 +4,7 @@ Database Schema 定义
 包含所has表 SQL 定义andMigration语句。
 """
 
-SCHEMA_VERSION = "1.10.0"
+SCHEMA_VERSION = "1.11.0"
 
 # ============================================
 # Table schema定义
@@ -389,6 +389,7 @@ CREATE_CONTROL_PRESETS = """
 CREATE TABLE IF NOT EXISTS control_presets (
     preset_id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL DEFAULT '',
     endpoint_id TEXT NOT NULL,
     test_type TEXT NOT NULL,
     parameters_json TEXT NOT NULL,
@@ -412,11 +413,39 @@ CREATE TABLE IF NOT EXISTS control_endpoints (
 );
 """
 
+CREATE_TOKENIZER_INSTALLS = """
+CREATE TABLE IF NOT EXISTS tokenizer_installs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    install_id TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    repo_id TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN
+        ('queued', 'downloading', 'validating', 'completed', 'failed', 'cancelling', 'cancelled')),
+    revision TEXT,
+    downloaded_bytes INTEGER NOT NULL DEFAULT 0,
+    total_bytes INTEGER NOT NULL DEFAULT 0,
+    completed_files INTEGER NOT NULL DEFAULT 0,
+    total_files INTEGER NOT NULL DEFAULT 0,
+    message TEXT NOT NULL DEFAULT '',
+    lease_owner TEXT,
+    lease_until REAL,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+"""
+
+CREATE_TOKENIZER_INSTALL_INDEX = (
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_tokenizer_install_active_name "
+    "ON tokenizer_installs(name) "
+    "WHERE status IN ('queued', 'downloading', 'validating', 'cancelling')"
+)
+
 # ============================================
 # Index定义
 # ============================================
 
 CREATE_INDEXES = [
+    CREATE_TOKENIZER_INSTALL_INDEX,
     "CREATE INDEX IF NOT EXISTS idx_test_runs_type ON test_runs(test_type);",
     "CREATE INDEX IF NOT EXISTS idx_test_runs_model ON test_runs(model_id);",
     "CREATE INDEX IF NOT EXISTS idx_test_runs_status ON test_runs(status);",
@@ -466,6 +495,7 @@ def get_schema_sql() -> str:
         CREATE_JOB_EVENTS,
         CREATE_CONTROL_PRESETS,
         CREATE_CONTROL_ENDPOINTS,
+        CREATE_TOKENIZER_INSTALLS,
     ]
     return "\n".join(tables + CREATE_INDEXES)
 
@@ -493,6 +523,7 @@ def create_tables(conn) -> None:
         CREATE_JOB_EVENTS,
         CREATE_CONTROL_PRESETS,
         CREATE_CONTROL_ENDPOINTS,
+        CREATE_TOKENIZER_INSTALLS,
     ]:
         cursor.execute(sql)
 

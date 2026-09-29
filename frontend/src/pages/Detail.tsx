@@ -925,6 +925,39 @@ export function Detail({
           robustness?.report_environment
         }
       />
+      {summary?.tokenizer_installation && (
+        <section className="surface tokenizer-provenance">
+          <div className="section-head">
+            <div>
+              <span className="eyebrow">TOKENIZER PROVENANCE</span>
+              <h2>Tokenizer 安装来源</h2>
+            </div>
+          </div>
+          <p>
+            {summary.tokenizer_installation.name} ·{" "}
+            {summary.tokenizer_installation.repo_id}
+          </p>
+          <p>
+            固定版本：<code>{summary.tokenizer_installation.revision}</code>
+          </p>
+          <p className="field-help">
+            离线编码校验通过，禁止执行远程代码。该记录描述输入校准和本地计数器；最终
+            Token 指标仍以逐请求记录的来源为准。
+          </p>
+          <details>
+            <summary>文件清单与 SHA-256</summary>
+            <ul>
+              {summary.tokenizer_installation.files.map((file) => (
+                <li key={file.name}>
+                  {file.name} · {file.size.toLocaleString()} 字节
+                  <br />
+                  <code>{file.sha256}</code>
+                </li>
+              ))}
+            </ul>
+          </details>
+        </section>
+      )}
       {logs.length > 0 && (
         <section className="surface">
           <div className="section-head">

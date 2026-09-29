@@ -14,6 +14,8 @@ from .schema import (
     CREATE_CONTROL_JOBS,
     CREATE_CONTROL_PRESETS,
     CREATE_JOB_EVENTS,
+    CREATE_TOKENIZER_INSTALL_INDEX,
+    CREATE_TOKENIZER_INSTALLS,
     SCHEMA_VERSION,
 )
 
@@ -176,6 +178,11 @@ MIGRATIONS: dict[str, list[MigrationFunc]] = {
         _add_column("control_jobs", "pause_started_at", "REAL"),
         _add_column("control_batches", "max_parallel", "INTEGER NOT NULL DEFAULT 1"),
         _add_column("control_batches", "stop_on_error", "INTEGER NOT NULL DEFAULT 0"),
+    ],
+    "1.11.0": [
+        _add_column("control_presets", "description", "TEXT NOT NULL DEFAULT ''"),
+        _exec(CREATE_TOKENIZER_INSTALLS),
+        _exec(CREATE_TOKENIZER_INSTALL_INDEX),
     ],
 }
 

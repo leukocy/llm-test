@@ -1,6 +1,28 @@
 from core.tokenizer_utils import _from_pretrained_with_compat
 
 
+def test_offline_loader_retries_after_install_and_never_executes_code(tmp_path, monkeypatch):
+    from core.tokenizer_utils import get_cached_tokenizer
+
+    path = tmp_path / "local-test-tokenizer"
+    calls = []
+
+    class FakeAutoTokenizer:
+        @staticmethod
+        def from_pretrained(model_path, **kwargs):
+            calls.append((model_path, kwargs))
+            return object()
+
+    monkeypatch.setattr("core.tokenizer_utils._get_auto_tokenizer", lambda: FakeAutoTokenizer)
+    assert get_cached_tokenizer(str(path)) is None
+    assert get_cached_tokenizer("unregistered/remote-model") is None
+    assert calls == []
+    path.mkdir()
+    tokenizer = get_cached_tokenizer(str(path))
+    assert get_cached_tokenizer(str(path)) is tokenizer
+    assert calls == [(str(path), {"local_files_only": True, "trust_remote_code": False})]
+
+
 def test_from_pretrained_retries_gemma_extra_special_tokens_list_error():
     class FakeAutoTokenizer:
         def __init__(self):
