@@ -12,11 +12,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-# Tests for planned engine/server modules that don't exist yet.
-# Remove these entries once engine/ and server/ packages are implemented.
+# The separate engine/ package is still planned. The implemented server/ API
+# must participate in the default test command as well as targeted security tests.
 collect_ignore = [
     str(pathlib.Path(__file__).parent / "engine"),
-    str(pathlib.Path(__file__).parent / "server"),
 ]
 
 # Add items目根目录到 Python 路径

@@ -40,6 +40,26 @@ class TestBenchmarkRunner:
             provider="TestProvider",
         )
 
+    def test_report_environment_is_persisted_separately_from_host_fingerprint(
+        self, runner, monkeypatch
+    ):
+        db = MagicMock()
+        runner.report_environment = {"scope": "model_server", "processor": "Remote model CPU"}
+        runner._get_db_manager = MagicMock(return_value=db)
+        runner._start_resource_monitor = MagicMock()
+        runner._start_engine_poller = MagicMock()
+        runner._probe_kv_budget = MagicMock()
+        monkeypatch.setattr(
+            "core.system_info.get_cached_system_info",
+            lambda **_kwargs: {"processor": "Worker CPU", "machine_id": "worker"},
+        )
+        assert runner._start_db_run("concurrency") is not None
+        saved = db.start_test_run.call_args.kwargs
+        assert saved["config"]["report_environment"] == runner.report_environment
+        assert saved["system_info"]["processor"] == "Worker CPU"
+        assert saved["system_info"]["machine_id"] == "worker"
+        assert "report_environment" not in saved["system_info"]
+
     def test_calculate_metrics_normal(self, runner):
         start_time = 100.0
         first_token_time = 100.5

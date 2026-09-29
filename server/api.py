@@ -37,7 +37,12 @@ from server.endpoints import (
     EndpointNotFound,
     EndpointRegistry,
 )
-from server.figures import compare_figures, run_detail_figures, trend_figure
+from server.figures import (
+    compare_figures,
+    performance_report_figure,
+    run_detail_figures,
+    trend_figure,
+)
 from server.model_discovery import ModelDiscoveryError, discover_models, measure_reference_latency
 from server.quality_export import quality_errors_csv
 from server.reports import (
@@ -46,6 +51,7 @@ from server.reports import (
     render_quality_html,
     render_quality_markdown,
     render_robustness_markdown,
+    report_environment_html,
 )
 from server.settings import Endpoint, Settings
 from server.specs import (
@@ -258,7 +264,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         )
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"
+            "img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'"
         )
         return response
 
@@ -1187,6 +1193,17 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         except MetricContractConflict as exc:
             raise HTTPException(409, str(exc)) from exc
 
+    @app.get("/api/v1/jobs/{job_id}/figure", dependencies=[auth])
+    def job_figure(job_id: str):
+        job = job_or_404(job_id)
+        if job["result_run_id"] is None:
+            raise HTTPException(409, "尚无性能观测可供绘图")
+        summary = performance_summary(job)
+        try:
+            return performance_report_figure(job, summary)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
     @app.get("/api/v1/jobs/{job_id}", dependencies=[auth])
     def get_job(job_id: str):
         return job_or_404(job_id)
@@ -1337,6 +1354,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
 <style>body{{font-family:system-ui;margin:32px;color:#1c2b33}}table{{border-collapse:collapse;margin:12px 0}}td,th{{border:1px solid #d7e0e5;padding:6px 14px;font-size:13px}}.card{{display:inline-block;border:1px solid #d7e0e5;border-radius:10px;padding:12px 20px;margin-right:12px}}.card strong{{font-size:22px}}</style>
 </head><body>
 <h1>鲁棒性报告 · {esc(job["model_id"])}</h1>
+{report_environment_html(payload.get("report_environment"))}
 <p>作业 <code>{esc(job["job_id"])}</code> · {rob.get("total_samples", 0)} 样本 × {rob.get("perturbations_per_sample", 0)} 扰动</p>
 <div class="card">原始准确率<br><strong>{rob.get("original_accuracy", 0):.1%}</strong></div>
 <div class="card">扰动后准确率<br><strong>{rob.get("perturbed_accuracy", 0):.1%}</strong></div>

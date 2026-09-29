@@ -13,7 +13,10 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from core.benchmark.metrics import METRIC_CONTRACT_VERSION
+from server.specs import describe_report_environment
 
 NUMERIC_FIELDS = ("ttft", "tpot", "tps", "total_time", "prefill_speed")
 GROUP_FIELDS = {
@@ -166,6 +169,10 @@ def run_summary(
         conn.close()
     version = _run_contract_version(run["config_json"], rows)
     config = json.loads(run["config_json"] or "{}")
+    try:
+        report_environment = describe_report_environment(config.get("report_environment"))
+    except ValidationError as exc:
+        raise MetricContractConflict("Invalid user-reported report environment") from exc
     stored_control = config.get("execution_control")
     control = dict(stored_control) if isinstance(stored_control, dict) else {}
     if job:
@@ -317,6 +324,7 @@ def run_summary(
         "groups": sliced,
         "measurement_protocol": protocol,
         "execution_control": control,
+        "report_environment": report_environment,
         "data_quality": {"warnings": quality_warnings},
         "provenance": {
             "config_json": run["config_json"],

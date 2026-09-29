@@ -2382,6 +2382,190 @@ textarea:focus {
   margin-bottom: 12px;
 }
 
+/* First-use guidance and report context share the measurement form spacing. */
+.welcome-guide {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+  border-left: 3px solid #24a88d;
+  background: linear-gradient(110deg, #f0faf7, #ffffff);
+}
+.welcome-guide strong {
+  display: block;
+  font-size: 19px;
+  margin-top: 7px;
+}
+.welcome-guide p {
+  color: #526875;
+  margin: 8px 0 0;
+  line-height: 1.7;
+}
+.guide-actions,
+.guide-footer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.guide-actions a,
+.guide-reference a {
+  text-decoration: none;
+}
+.guide-progress {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 32px;
+}
+.guide-progress li {
+  color: #71838f;
+  font-size: 12px;
+  border-top: 2px solid #e5edf0;
+  padding-top: 14px;
+}
+.guide-progress span {
+  display: block;
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+.guide-progress .reached {
+  border-color: #20a98c;
+  color: #147a67;
+}
+.guide-progress [aria-current="step"] {
+  font-weight: 700;
+}
+.guide-content {
+  max-width: 780px;
+  padding: 12px 0 28px;
+}
+.guide-content h2 {
+  font-size: 28px;
+  margin: 12px 0;
+}
+.guide-content h3 {
+  color: #506673;
+  font-size: 16px;
+  font-weight: 500;
+}
+.guide-content p,
+.help-details p,
+.help-details li {
+  color: #4d626f;
+  line-height: 1.85;
+}
+.guide-footer {
+  padding-top: 22px;
+  border-top: 1px solid #e6edf0;
+}
+.guide-footer .text-action {
+  margin-left: auto;
+}
+.guide-reference {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.guide-reference a {
+  padding: 20px;
+  border: 1px solid #dfe9ed;
+  border-radius: 12px;
+  color: inherit;
+}
+.guide-reference a:hover {
+  background: #f2faf7;
+  border-color: #7cc8b9;
+}
+.guide-reference span {
+  color: #14806b;
+  font-size: 12px;
+  font-weight: 700;
+}
+.guide-reference strong {
+  display: block;
+  margin: 10px 0;
+}
+.guide-reference small {
+  color: #677e8c;
+  line-height: 1.7;
+}
+.help-details > summary {
+  cursor: pointer;
+  font-size: 17px;
+  font-weight: 650;
+}
+.help-faq {
+  padding: 20px 0;
+  border-bottom: 1px solid #e6edf0;
+}
+.help-faq:first-of-type {
+  margin-top: 16px;
+}
+.help-faq:last-child {
+  border-bottom: 0;
+}
+.help-faq summary {
+  cursor: pointer;
+  color: #3e5462;
+}
+.report-environment-editor fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.report-environment-editor select {
+  margin-bottom: 18px;
+}
+.report-environment-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.report-environment-editor .text-action {
+  margin-top: 18px;
+}
+.report-environment-card dd {
+  overflow-wrap: anywhere;
+}
+.plotly-container {
+  min-width: 0;
+  width: 100%;
+}
+.chart-export-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 0;
+}
+@media (max-width: 800px) {
+  .welcome-guide {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .guide-progress {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .guide-reference {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .report-environment-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 480px) {
+  .guide-reference {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .guide-footer .text-action {
+    margin-left: 0;
+  }
+}
+
 /* ---- robustness 场景 ---- */
 .perturbation-grid {
   display: grid;

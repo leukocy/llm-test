@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, type Endpoint, type Job, type MeasurementPlan } from "../api";
 import { scenarios, type JobType } from "../constants";
 import { SchemaForm, type JsonSchema } from "../components/SchemaForm";
+import { ReportEnvironmentEditor } from "../components/ReportEnvironment";
 
 type Item = {
   enabled: boolean;
@@ -11,6 +12,7 @@ type Item = {
   parameters: Record<string, unknown>;
   raw: string;
   mode: "form" | "json";
+  run_config: Record<string, unknown>;
 };
 
 type PlanState = { plan?: MeasurementPlan; error?: string };
@@ -28,6 +30,7 @@ function makeItem(
     parameters: { ...chosen },
     raw: JSON.stringify(chosen, null, 2),
     mode: "form",
+    run_config: {},
   };
 }
 
@@ -115,6 +118,7 @@ export function Batch({
                   endpoint_id: item.endpoint_id || endpoint,
                   test_type: item.test_type,
                   parameters: parametersFor(item),
+                  run_config: item.run_config,
                 }),
               },
             );
@@ -184,6 +188,7 @@ export function Batch({
             test_type: item.test_type,
             endpoint_id: item.endpoint_id || undefined,
             parameters: parametersFor(item),
+            run_config: item.run_config,
           })),
         },
         null,
@@ -267,6 +272,12 @@ export function Batch({
         if (row.enabled != null && typeof row.enabled !== "boolean") {
           throw new Error(`第 ${index + 1} 项启用状态必须为布尔值`);
         }
+        if (
+          row.run_config != null &&
+          (typeof row.run_config !== "object" || Array.isArray(row.run_config))
+        ) {
+          throw new Error(`第 ${index + 1} 项运行设置必须是 JSON 对象`);
+        }
         return {
           ...makeItem(
             row.test_type as JobType,
@@ -274,6 +285,8 @@ export function Batch({
           ),
           endpoint_id: String(row.endpoint_id || ""),
           enabled: row.enabled !== false,
+          run_config:
+            (row.run_config as Record<string, unknown> | undefined) || {},
         };
       });
       setEndpoint(config.endpoint_id);
@@ -304,6 +317,7 @@ export function Batch({
         if (!item.enabled) {
           return {
             enabled: false,
+            run_config: item.run_config,
             test_type: item.test_type,
             parameters: item.parameters,
             ...(item.endpoint_id ? { endpoint_id: item.endpoint_id } : {}),
@@ -312,6 +326,7 @@ export function Batch({
         try {
           return {
             enabled: true,
+            run_config: item.run_config,
             test_type: item.test_type,
             parameters: parametersFor(item),
             ...(item.endpoint_id ? { endpoint_id: item.endpoint_id } : {}),
@@ -531,6 +546,7 @@ export function Batch({
                     ...makeItem(event.target.value as JobType),
                     endpoint_id: current.endpoint_id,
                     enabled: current.enabled,
+                    run_config: current.run_config,
                   }))
                 }
               >
@@ -636,6 +652,14 @@ export function Batch({
                 }
               />
             )}
+            <ReportEnvironmentEditor
+              runConfig={item.run_config}
+              onChange={(run_config) =>
+                updateItem(index, (current) => ({ ...current, run_config }))
+              }
+              idPrefix={`batch-env-${index}`}
+              disabled={!item.enabled}
+            />
             {item.enabled && plans[index]?.error && (
               <p className="form-error" role="alert">
                 {plans[index].error}

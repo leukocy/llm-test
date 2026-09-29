@@ -9,6 +9,7 @@ from typing import Any
 
 from server.control import PAUSABLE_TEST_TYPES, JobControl
 from server.settings import Endpoint, Settings
+from server.specs import describe_report_environment
 from server.store import JobStore
 
 
@@ -78,6 +79,7 @@ async def execute_job(
     # （spec 校验在此前已完成, 方法实参不受污染）
     params = dict(job["parameters"])
     run_config = params.pop("_run_config", {}) or {}
+    report_environment = describe_report_environment(run_config.get("report_environment"))
 
     if job["test_type"] == "robustness":
         import dataclasses
@@ -120,6 +122,7 @@ async def execute_job(
                     "job_id": job_id,
                     "model_id": endpoint.model_id,
                     "robustness": dataclasses.asdict(report),
+                    "report_environment": report_environment,
                 },
                 ensure_ascii=False,
                 allow_nan=False,
@@ -159,6 +162,7 @@ async def execute_job(
                     "job_id": job_id,
                     "model_id": endpoint.model_id,
                     "datasets": {name: item.to_dict() for name, item in result.items()},
+                    "report_environment": report_environment,
                 },
                 ensure_ascii=False,
                 allow_nan=False,
@@ -199,6 +203,7 @@ async def execute_job(
         template_tokens=run_config.get("template_tokens", 0),
         temperature=run_config.get("temperature"),
         custom_params=run_config.get("custom_params"),
+        report_environment=run_config.get("report_environment"),
         control_checkpoint=(
             JobControl(store, job_id, worker_id).checkpoint
             if job["test_type"] in PAUSABLE_TEST_TYPES

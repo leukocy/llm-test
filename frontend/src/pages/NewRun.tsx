@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type Endpoint, type MeasurementPlan, type Preset } from "../api";
 import {
   profileParameters,
+  firstCommitParameters,
   scenarios,
   type JobType,
   type MeasurementProfile,
@@ -13,6 +14,7 @@ import {
   type JsonSchema,
 } from "../components/SchemaForm";
 import { TokenizerTools } from "../components/TokenizerTools";
+import { ReportEnvironmentEditor } from "../components/ReportEnvironment";
 
 type SpecCatalog = {
   items: Record<string, { label: string; schema: JsonSchema }>;
@@ -146,6 +148,7 @@ export function NewRun({
       Object.entries(specs.run_config_schema.properties || {}).filter(
         ([name]) =>
           ![
+            "report_environment",
             "temperature",
             "thinking_enabled",
             "reasoning_effort",
@@ -158,6 +161,14 @@ export function NewRun({
 
   function applyProfile(next: Exclude<MeasurementProfile, "custom">) {
     const value = profileParameters(type, next);
+    if (type === "custom_text") {
+      try {
+        value.base_prompt = currentParameters().base_prompt;
+      } catch {
+        setError("请先修正提示词参数 JSON，再切换测量强度");
+        return;
+      }
+    }
     setParams(value);
     setRaw(JSON.stringify(value, null, 2));
     setProfile(next);
@@ -214,16 +225,15 @@ export function NewRun({
           setPlanError(exc instanceof Error ? exc.message : "JSON 格式错误");
         return;
       }
-      const runConfigDiff = performanceRun
-        ? Object.fromEntries(
-            Object.entries(runConfig).filter(
-              ([key, value]) =>
-                value !== undefined &&
-                value !== "" &&
-                value !== knobDefaults[key],
-            ),
-          )
-        : {};
+      const runConfigDiff = Object.fromEntries(
+        Object.entries(runConfig).filter(
+          ([key, value]) =>
+            (performanceRun || key === "report_environment") &&
+            value !== undefined &&
+            value !== "" &&
+            value !== knobDefaults[key],
+        ),
+      );
       api<MeasurementPlan>(token, "/api/v1/jobs/plan", {
         method: "POST",
         body: JSON.stringify({
@@ -272,11 +282,14 @@ export function NewRun({
   }
 
   function currentRunConfig(): Record<string, unknown> | undefined {
-    if (!specs || !performanceRun) return undefined;
     // 与默认值完全一致时不随提交携带, 避免噪音覆盖
     const diff = Object.fromEntries(
       Object.entries(runConfig).filter(
-        ([key, v]) => v !== undefined && v !== "" && v !== knobDefaults[key],
+        ([key, v]) =>
+          (performanceRun || key === "report_environment") &&
+          v !== undefined &&
+          v !== "" &&
+          v !== knobDefaults[key],
       ),
     );
     return Object.keys(diff).length ? diff : undefined;
@@ -561,6 +574,16 @@ export function NewRun({
                   {label}
                 </button>
               ))}
+              {firstCommitParameters[type] && (
+                <button
+                  type="button"
+                  className={profile === "original" ? "active" : ""}
+                  aria-pressed={profile === "original"}
+                  onClick={() => applyProfile("original")}
+                >
+                  初版参数
+                </button>
+              )}
               {profile === "custom" && (
                 <span className="minor-tag">已自定义</span>
               )}
@@ -569,6 +592,12 @@ export function NewRun({
           {profile === "quick" && (
             <p className="profile-note">
               快速检查用于确认端点和流程可用；正式性能对比请选择标准或深入测量。
+            </p>
+          )}
+          {profile === "original" && (
+            <p className="profile-note">
+              已载入首次提交的默认参数。单样本配置用于复现操作，正式性能对比应增加样本与预热；可选值仍遵守当前
+              128 并发 / 131,072 输入 token 上限。
             </p>
           )}
           {mode === "form" && type === "segmented_prefill" && (
@@ -707,6 +736,10 @@ export function NewRun({
               />
             </details>
           )}
+          <ReportEnvironmentEditor
+            runConfig={runConfig}
+            onChange={setRunConfig}
+          />
           <div className="form-footer">
             <span>提交后由独立 worker 执行；页面关闭不影响任务。</span>
             <button
