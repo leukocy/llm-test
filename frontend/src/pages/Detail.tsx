@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { Figure } from "plotly.js-dist-min";
 import {
   api,
   downloadFile,
@@ -7,9 +8,12 @@ import {
   type QualityReport,
   type RequestResult,
   type Summary,
+  type ReportEnvironment,
 } from "../api";
 import { Status, MetricCard, SlicesChart, Empty } from "../components";
 import { QualityAnalysis } from "./QualityAnalysis";
+import { ReportEnvironmentCard } from "../components/ReportEnvironment";
+import { downloadFigurePng } from "../components/PlotlyFigure";
 import {
   activeStates,
   pausableTypes,
@@ -40,6 +44,7 @@ export function Detail({
   const [results, setResults] = useState<RequestResult[]>([]);
   const [error, setError] = useState("");
   const [controlBusy, setControlBusy] = useState(false);
+  const [pngBusy, setPngBusy] = useState(false);
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [logSearch, setLogSearch] = useState("");
   const [logLevels, setLogLevels] = useState<string[] | null>(null);
@@ -98,6 +103,7 @@ export function Detail({
   type RobustnessReport = {
     job_id: string;
     model_id: string;
+    report_environment?: ReportEnvironment | null;
     robustness: {
       total_samples: number;
       perturbations_per_sample: number;
@@ -279,6 +285,25 @@ export function Detail({
     }
   }
 
+  async function downloadPng() {
+    setPngBusy(true);
+    setError("");
+    try {
+      const result = await api<{ figure: Figure }>(
+        token,
+        `/api/v1/jobs/${job.job_id}/figure`,
+      );
+      await downloadFigurePng(
+        result.figure,
+        `llm-test-${shortId(job.job_id)}-ttft`,
+      );
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : "PNG 导出失败");
+    } finally {
+      setPngBusy(false);
+    }
+  }
+
   async function downloadLogs(format: "json" | "txt" | "csv") {
     try {
       await downloadFile(
@@ -388,6 +413,15 @@ export function Detail({
               onClick={() => void download("csv")}
             >
               导出 CSV ↓
+            </button>
+          )}
+          {summary && (
+            <button
+              className="button subtle"
+              disabled={pngBusy || summary.overall.metrics.ttft.count === 0}
+              onClick={() => void downloadPng()}
+            >
+              {pngBusy ? "生成 PNG…" : "导出性能 PNG ↓"}
             </button>
           )}
           {summary?.measurement_protocol?.warmup_requests ? (
@@ -884,6 +918,13 @@ export function Detail({
           )}
         </section>
       )}
+      <ReportEnvironmentCard
+        environment={
+          summary?.report_environment ||
+          quality?.report_environment ||
+          robustness?.report_environment
+        }
+      />
       {logs.length > 0 && (
         <section className="surface">
           <div className="section-head">

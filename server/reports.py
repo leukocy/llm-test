@@ -5,6 +5,54 @@ from __future__ import annotations
 from html import escape
 from typing import Any
 
+from server.specs import REPORT_ENVIRONMENT_FIELDS
+
+REPORT_ENVIRONMENT_SCOPES = {
+    "model_server": "受测模型服务器",
+    "test_client": "测试客户端",
+    "unspecified": "未明确对象",
+}
+
+
+def report_environment_html(environment: dict[str, Any] | None) -> str:
+    if not environment or not environment.get("fields"):
+        return ""
+    scope = REPORT_ENVIRONMENT_SCOPES.get(str(environment.get("scope")), "未明确对象")
+    rows = "".join(
+        f"<tr><th scope='row'>{label}</th><td style='overflow-wrap:anywhere'>"
+        f"{escape(str(environment['fields'][key]))}</td></tr>"
+        for key, label in REPORT_ENVIRONMENT_FIELDS.items()
+        if environment["fields"].get(key)
+    )
+    return (
+        f"<section><h2>报告环境信息</h2><p>对象：{scope} · 来源：用户填写，未经自动核验。"
+        "自动硬件快照来自执行端，与本表分别记录。</p>"
+        f"<table><tbody>{rows}</tbody></table></section>"
+    )
+
+
+def report_environment_markdown(environment: dict[str, Any] | None) -> str:
+    if not environment or not environment.get("fields"):
+        return ""
+    scope = REPORT_ENVIRONMENT_SCOPES.get(str(environment.get("scope")), "未明确对象")
+    lines = [
+        "",
+        "## 报告环境信息",
+        "",
+        f"对象：{scope} · 来源：用户填写，未经自动核验。自动硬件快照来自执行端，与本表分别记录。",
+        "",
+        "| 项目 | 用户填写的值 |",
+        "|---|---|",
+    ]
+    for key, label in REPORT_ENVIRONMENT_FIELDS.items():
+        value = environment["fields"].get(key)
+        if value:
+            safe = escape(_md(value), quote=False)
+            for char in "`*_[]":
+                safe = safe.replace(char, f"\\{char}")
+            lines.append(f"| {label} | {safe} |")
+    return "\n".join(lines) + "\n"
+
 
 def _md(value: Any) -> str:
     return (
@@ -88,7 +136,7 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
     lines.extend(
         f"- 数据质量：{_md(note)}" for note in summary.get("data_quality", {}).get("warnings", [])
     )
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n" + report_environment_markdown(summary.get("report_environment"))
 
 
 def render_quality_markdown(job: dict[str, Any], report: dict[str, Any]) -> str:
@@ -108,7 +156,7 @@ def render_quality_markdown(job: dict[str, Any], report: dict[str, Any]) -> str:
             f"{result.get('total_samples', 0)} | {float(result.get('accuracy') or 0) * 100:.1f}% "
             f"| {_md(provenance.get('sample_sha256'))} |"
         )
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n" + report_environment_markdown(report.get("report_environment"))
 
 
 def render_robustness_markdown(job: dict[str, Any], report: dict[str, Any]) -> str:
@@ -126,7 +174,7 @@ def render_robustness_markdown(job: dict[str, Any], report: dict[str, Any]) -> s
     ]
     for name, score in (robustness.get("sensitivity_by_type") or {}).items():
         lines.append(f"| {_md(name)} | {float(score):.3f} |")
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n" + report_environment_markdown(report.get("report_environment"))
 
 
 def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
@@ -224,6 +272,7 @@ code {{ overflow-wrap:anywhere; }}
 <th>输入 token 中位数</th><th>TTFT p50 · s</th><th>TTFT p95 · s</th><th>TPS p50</th></tr></thead><tbody>{rows}</tbody></table>
 {protocol_html}
 {control_html}
+{report_environment_html(summary.get("report_environment"))}
 {"<h2>数据质量提示</h2><ul>" + quality_warnings + "</ul>" if quality_warnings else ""}
 <h2>方法与限制</h2><ul>{notes}</ul>
 <p>成功率区间：{cell(overall["success_rate_ci95"])}；指标契约：{cell(summary["metric_contract_version"])}。</p>
@@ -280,5 +329,6 @@ dt {{ color:#7c8da0; }} dd {{ margin:0;overflow-wrap:anywhere; }} code {{ overfl
 </style></head><body><main><span class="eyebrow">LLM TEST / QUALITY REPORT</span>
 <h1>{safe(job["model_id"])}</h1><p class="muted">{safe(job["job_id"])} · {safe(job["status"])}</p>
 {"".join(cards) if cards else "<p>无可用数据集结果。</p>"}
+{report_environment_html(report.get("report_environment"))}
 <p class="note">准确率只反映所列样本与评分口径。比较模型前请核对数据来源、样本指纹、few-shot 设置和样本数量。</p>
 </main></body></html>"""

@@ -716,6 +716,7 @@ class BenchmarkRunner:
         external_test_id: str | None = None,
         enable_live_log_server: bool = True,
         control_checkpoint: Callable[[], Awaitable[None]] | None = None,
+        report_environment: dict[str, str] | None = None,
     ):
         self.placeholder, self.progress_bar, self.status_text = (
             placeholder,
@@ -732,6 +733,7 @@ class BenchmarkRunner:
         self.tokenizer = None
         self.csv_file = csv_filename
         self._control_checkpoint = control_checkpoint
+        self.report_environment = dict(report_environment or {})
 
         self.api_key = api_key
         self.log_placeholder = log_placeholder
@@ -989,6 +991,8 @@ class BenchmarkRunner:
             }
             if config:
                 full_config.update(config)
+            if self.report_environment:
+                full_config["report_environment"] = self.report_environment
             full_config["metric_contract_version"] = METRIC_CONTRACT_VERSION
             if self._control_checkpoint is not None:
                 full_config["pause_policy"] = "drained_request_group"

@@ -35,10 +35,12 @@ type FieldDef = {
 };
 
 const numericChoices: Record<string, number[]> = {
-  selected_concurrencies: [1, 2, 4, 8, 16, 32, 64, 128],
-  concurrencies: [1, 2, 4, 8, 16, 32, 64, 128],
-  token_levels: [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072],
-  context_lengths: [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072],
+  selected_concurrencies: [1, 2, 4, 6, 8, 16, 32, 64, 128],
+  concurrencies: [1, 2, 4, 6, 8, 16, 32, 64, 128],
+  token_levels: [1024, 2048, 4096, 8192, 16384, 32768, 65536, 130000, 131072],
+  context_lengths: [
+    1024, 2048, 4096, 8192, 16384, 32768, 65536, 130000, 131072,
+  ],
   segment_levels: [512, 1024, 2048, 4096, 8192, 16384, 32768],
 };
 

@@ -137,7 +137,61 @@ export const scenarios: {
   },
 ];
 
-export type MeasurementProfile = "quick" | "standard" | "thorough" | "custom";
+export type MeasurementProfile =
+  "quick" | "standard" | "thorough" | "original" | "custom";
+
+// First-commit defaults that remain inside the current workload bounds.
+export const firstCommitParameters: Partial<
+  Record<JobType, Record<string, unknown>>
+> = {
+  concurrency: {
+    selected_concurrencies: [1, 2],
+    rounds_per_level: 1,
+    input_tokens_target: 64,
+    max_tokens: 512,
+    warmup_rounds_per_level: 0,
+  },
+  prefill: {
+    token_levels: [4096, 8192, 16384, 32768, 65536, 130000],
+    requests_per_level: 1,
+    max_tokens: 1,
+    warmup_requests_per_level: 0,
+  },
+  segmented_prefill: {
+    segment_levels: [2000, 8000, 20000, 40000, 60000],
+    requests_per_segment: 1,
+    max_tokens: 512,
+    cumulative_mode: true,
+    total_rounds: 1,
+    per_round_unique: false,
+    concurrency: 1,
+  },
+  long_context: {
+    context_lengths: [4096, 8192, 16384, 32768, 65536, 130000],
+    rounds_per_level: 1,
+    max_tokens: 512,
+  },
+  matrix: {
+    concurrencies: [1, 2],
+    context_lengths: [1024, 4096, 16384, 65536],
+    rounds: 1,
+    max_tokens: 256,
+    enable_warmup: true,
+  },
+  stability: {
+    concurrency: 1,
+    duration_seconds: 60,
+    max_tokens: 512,
+    input_tokens_target: 64,
+  },
+  custom_text: {
+    selected_concurrencies: [1, 2, 4],
+    rounds_per_level: 1,
+    max_tokens: 512,
+    avoid_cache: true,
+    suffix_instruction: "Please summarize the above content.",
+  },
+};
 
 export const profileOverrides: Record<
   JobType,
@@ -235,6 +289,8 @@ export function profileParameters(
   profile: Exclude<MeasurementProfile, "custom">,
 ) {
   const base = scenarios.find((item) => item.id === type)?.parameters || {};
+  if (profile === "original")
+    return { ...base, ...firstCommitParameters[type] };
   return profile === "standard"
     ? { ...base }
     : { ...base, ...profileOverrides[type][profile] };

@@ -154,6 +154,16 @@ export type MeasurementPlan = {
   }[];
   warnings: string[];
 };
+export type ReportEnvironment = {
+  source: "user_reported";
+  scope: "model_server" | "test_client" | "unspecified";
+  fields: Partial<
+    Record<
+      "processor" | "mainboard" | "memory" | "gpu" | "system" | "engine_name",
+      string
+    >
+  >;
+};
 export type Summary = {
   metric_contract_version: string;
   integrity: {
@@ -175,6 +185,7 @@ export type Summary = {
     max_parallel?: number;
     stop_on_error?: boolean;
   };
+  report_environment?: ReportEnvironment | null;
   data_quality: { warnings: string[] };
   provenance: { token_sources: string[]; token_methods: string[] };
   notes: string[];
@@ -202,6 +213,7 @@ export type JobEvent = {
 export type QualityReport = {
   job_id: string;
   model_id: string;
+  report_environment?: ReportEnvironment | null;
   datasets: Record<
     string,
     {

@@ -236,12 +236,51 @@ SPEC_MODELS: dict[str, type[StrictSpec]] = {
 }
 
 
+REPORT_ENVIRONMENT_FIELDS = {
+    "processor": "Processor",
+    "mainboard": "Mainboard",
+    "memory": "Memory",
+    "gpu": "GPU",
+    "system": "System",
+    "engine_name": "Engine",
+}
+
+
+class ReportEnvironment(StrictSpec):
+    """User-supplied context; never replaces the automatically captured host fingerprint."""
+
+    scope: Literal["model_server", "test_client", "unspecified"] = "model_server"
+    processor: str = Field(default="", max_length=240)
+    mainboard: str = Field(default="", max_length=240)
+    memory: str = Field(default="", max_length=240)
+    gpu: str = Field(default="", max_length=240)
+    system: str = Field(default="", max_length=240)
+    engine_name: str = Field(default="", max_length=240)
+
+    @field_validator("processor", "mainboard", "memory", "gpu", "system", "engine_name")
+    @classmethod
+    def single_line(cls, value: str) -> str:
+        if any(ord(char) < 32 or ord(char) == 127 for char in value):
+            raise ValueError("Report environment values must be single-line text")
+        return value.strip()
+
+
+def describe_report_environment(raw: Any) -> dict[str, Any] | None:
+    if raw is None:
+        return None
+    environment = ReportEnvironment.model_validate(raw).model_dump()
+    fields = {key: environment[key] for key in REPORT_ENVIRONMENT_FIELDS if environment[key]}
+    if not fields:
+        return None
+    return {"source": "user_reported", "scope": environment["scope"], "fields": fields}
+
+
 class RunConfig(StrictSpec):
     """BenchmarkRunner 构造器级旋钮（全部可选；未设走端点/引擎默认）。
 
     随作业提交存入 parameters_json 的 `_run_config` 保留键，worker 执行时
-    由 runner_adapter 拆出并透传。仅对性能类测试生效（quality 作业参数
-    已含 temperature 等自有字段）。
+    由 runner_adapter 拆出并透传。生成旋钮仅对性能类测试生效（quality 作业
+    参数已含 temperature 等自有字段）；报告环境信息适用于所有测试。
     """
 
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
@@ -255,6 +294,7 @@ class RunConfig(StrictSpec):
     tokenizer_option: str | None = Field(default=None, max_length=120)
     hf_tokenizer_model_id: str | None = Field(default=None, max_length=200)
     custom_params: list[dict[str, str]] | None = Field(default=None, max_length=20)
+    report_environment: ReportEnvironment | None = None
 
 
 class JobSubmission(StrictSpec):

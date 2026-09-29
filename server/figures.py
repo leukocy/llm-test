@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from html import escape
 from typing import Any
 
 from core.warehouse.charts import (
@@ -17,6 +18,110 @@ from core.warehouse.charts import (
     build_trend_figure,
     collect_distribution_values,
 )
+from server.reports import REPORT_ENVIRONMENT_SCOPES
+from server.specs import REPORT_ENVIRONMENT_FIELDS
+
+
+def performance_report_figure(job: dict[str, Any], summary: dict[str, Any]) -> dict:
+    """Export the exact report statistics, retaining missing values and provenance."""
+    groups = summary["groups"]
+    if not any(group["metrics"]["ttft"]["count"] for group in groups):
+        raise ValueError("没有有效的 TTFT 样本，无法导出性能图")
+    labels = [escape(group["label"]) for group in groups]
+    counts = [group["metrics"]["ttft"]["count"] for group in groups]
+    overall = summary["overall"]
+    integrity = summary["integrity"]
+    protocol = summary.get("measurement_protocol") or {}
+    control = summary.get("execution_control") or {}
+    status = "完整性通过" if integrity["verified"] else "仅供诊断 · 完整性未通过"
+    footer = [
+        f"{status} · 状态 {escape(job['status'])} · 指标契约 {escape(summary['metric_contract_version'])}",
+        f"正式请求 {overall['requests']} · 失败 {overall['failures']} · "
+        f"预热记录 {protocol.get('warmup_recorded', 0)}（不计入统计） · "
+        f"暂停 {control.get('pause_count', 0)} 次 · 批次并行上限 {control.get('max_parallel', 1)}",
+        "柱顶 n 为有效 TTFT 样本数；分位数采用线性插值。小样本尾部分位数分辨率有限，不代表显著性结论。",
+        f"Token 来源：{escape(', '.join(summary['provenance']['token_sources']) or '未记录')} · "
+        f"算法：{escape(', '.join(summary['provenance']['token_methods']) or '未记录')}",
+    ]
+    environment = summary.get("report_environment")
+    if environment:
+        scope = REPORT_ENVIRONMENT_SCOPES.get(environment["scope"], "未明确对象")
+        footer.append(f"环境对象：{scope} · 用户填写，未经自动核验；自动硬件快照来自执行端。")
+        values = [
+            f"{label}: {escape(environment['fields'][key][:60])}"
+            + ("…" if len(environment["fields"][key]) > 60 else "")
+            for key, label in REPORT_ENVIRONMENT_FIELDS.items()
+            if environment["fields"].get(key)
+        ]
+        footer.extend(" · ".join(values[index : index + 2]) for index in range(0, len(values), 2))
+    footer.append(f"作业 {escape(job['job_id'])} · 完整条件和环境信息见 HTML / JSON 报告")
+    return {
+        "figure": {
+            "data": [
+                {
+                    "type": "bar",
+                    "name": name,
+                    "x": labels,
+                    "y": [group["metrics"]["ttft"][stat] for group in groups],
+                    "marker": {"color": color},
+                    "text": [f"n={count}" if count else "" for count in counts]
+                    if stat == "p95"
+                    else [],
+                    "textposition": "outside",
+                    "cliponaxis": False,
+                    "hovertemplate": "%{x}<br>%{y:.3f} s<extra>" + name + "</extra>",
+                }
+                for name, stat, color in [
+                    ("TTFT p50", "median", "#2463a6"),
+                    ("TTFT p95", "p95", "#188b79"),
+                ]
+            ],
+            "layout": {
+                "title": {
+                    "text": f"{escape(job['model_id'])} · {escape(job['test_type'])}<br>"
+                    "<sup>首字延迟 · 成功且有限、正值的逐请求观测</sup>",
+                    "x": 0.06,
+                    "xanchor": "left",
+                },
+                "width": min(2400, max(1500, len(groups) * 80)),
+                "height": 1050,
+                "font": {
+                    "family": "Noto Sans SC, Arial, sans-serif",
+                    "size": 15,
+                    "color": "#17243b",
+                },
+                "paper_bgcolor": "white",
+                "plot_bgcolor": "white",
+                "barmode": "group",
+                "margin": {"l": 110, "r": 50, "t": 130, "b": 300},
+                "xaxis": {
+                    "title": {"text": escape(summary["group_axis"])},
+                    "type": "category",
+                    "automargin": True,
+                },
+                "yaxis": {
+                    "title": {"text": "TTFT (s)"},
+                    "rangemode": "tozero",
+                    "gridcolor": "#e3eaf2",
+                },
+                "legend": {"orientation": "h", "x": 1, "xanchor": "right", "y": 1.12},
+                "annotations": [
+                    {
+                        "xref": "paper",
+                        "yref": "paper",
+                        "x": 0,
+                        "y": -0.22,
+                        "xanchor": "left",
+                        "yanchor": "top",
+                        "align": "left",
+                        "showarrow": False,
+                        "text": "<br>".join(footer),
+                        "font": {"size": 13, "color": "#5c6e83"},
+                    }
+                ],
+            },
+        }
+    }
 
 
 def _project_rows(db_manager, selection, limit: int = 2000) -> list[dict[str, Any]]:

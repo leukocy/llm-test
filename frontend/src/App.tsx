@@ -26,6 +26,7 @@ import { Compare } from "./pages/Compare";
 import { Advanced } from "./pages/Advanced";
 import { Environment } from "./pages/Environment";
 import { ApiSettings } from "./pages/ApiSettings";
+import { Help, WelcomeGuide } from "./pages/Help";
 
 const TOKEN_KEY = "llm-test-token";
 
@@ -220,6 +221,12 @@ export default function App() {
           >
             <span>⚙</span> 受测 API 设置
           </button>
+          <button
+            className={navActive("/help") ? "active" : ""}
+            onClick={nav("/help")}
+          >
+            <span>?</span> 帮助与引导
+          </button>
         </nav>
         <div className="sidebar-bottom">
           <div className="worker-indicator">
@@ -244,9 +251,11 @@ export default function App() {
                     ? "创建测量"
                     : navActive("/batch")
                       ? "批量测量"
-                      : navActive("/settings/api")
-                        ? "受测 API 设置"
-                        : "数据仓库"}
+                      : navActive("/help")
+                        ? "帮助与引导"
+                        : navActive("/settings/api")
+                          ? "受测 API 设置"
+                          : "数据仓库"}
             </strong>
           </div>
           <div className="topbar-right">
@@ -266,16 +275,19 @@ export default function App() {
             <Route
               path="/"
               element={
-                <Overview
-                  jobs={jobs}
-                  total={total}
-                  active={active}
-                  completed={completed}
-                  failed={failed}
-                  onOpenRuns={nav("/runs")}
-                  onOpenNew={nav("/new")}
-                  onOpenJob={(id) => navigate(`/runs/${id}`)}
-                />
+                <>
+                  <WelcomeGuide />
+                  <Overview
+                    jobs={jobs}
+                    total={total}
+                    active={active}
+                    completed={completed}
+                    failed={failed}
+                    onOpenRuns={nav("/runs")}
+                    onOpenNew={nav("/new")}
+                    onOpenJob={(id) => navigate(`/runs/${id}`)}
+                  />
+                </>
               }
             />
             <Route
@@ -338,6 +350,7 @@ export default function App() {
               element={<Compare jobs={jobs} token={token} />}
             />
             <Route path="/advanced" element={<Advanced token={token} />} />
+            <Route path="/help" element={<Help key={location.key} />} />
             <Route
               path="/environment"
               element={<Environment token={token} />}

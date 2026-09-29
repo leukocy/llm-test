@@ -60,7 +60,8 @@ export function Environment({ token }: { token: string }) {
           <span className="eyebrow">EXECUTION ENVIRONMENT</span>
           <h1>环境信息</h1>
           <p>
-            API 服务所在机器的硬件指纹、系统与版本快照（测量发生的真实环境）。
+            当前 API 服务所在机器的硬件与系统快照。远程模型服务器和独立 worker
+            可能位于其他机器；每次运行的报告会分别保留执行端快照与用户填写的环境信息。
           </p>
         </div>
       </div>
