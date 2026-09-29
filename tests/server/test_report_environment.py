@@ -230,8 +230,8 @@ def test_png_figure_uses_report_statistics_and_enforces_contract(platform, envir
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("test_type", ["quality", "robustness", "concurrency"])
-async def test_adapter_preserves_environment_for_every_execution_path(
+@pytest.mark.parametrize("test_type", ["quality", "robustness"])
+async def test_adapter_persists_environment_in_report_artifacts(
     platform, environment, monkeypatch, test_type
 ):
     _, store, settings, endpoint, _ = platform
@@ -257,17 +257,27 @@ async def test_adapter_preserves_environment_for_every_execution_path(
         monkeypatch.setattr(
             "core.robustness_tester.RobustnessTester", MagicMock(return_value=tester)
         )
-    else:
-        runner = MagicMock(last_run_id=1, results_list=[{}], total_requests=1, _db_run=None)
-        runner.run_concurrency_test = AsyncMock()
-        constructor = MagicMock(return_value=runner)
-        monkeypatch.setattr("core.benchmark_runner.BenchmarkRunner", constructor)
     job = store.submit(test_type=test_type, endpoint_id="lab", model_id="m", parameters=params)
     store.claim("w")
     output = await execute_job(job, endpoint, settings, store, "w")
-    if test_type == "concurrency":
-        assert constructor.call_args.kwargs["report_environment"] == environment
-        runner.run_concurrency_test.assert_awaited_once_with()
-    else:
-        artifact = json.loads((settings.artifact_root / output.result_artifact).read_text())
-        assert artifact["report_environment"] == describe_report_environment(environment)
+    artifact = json.loads((settings.artifact_root / output.result_artifact).read_text())
+    assert artifact["report_environment"] == describe_report_environment(environment)
+
+
+@pytest.mark.asyncio
+async def test_adapter_passes_environment_to_performance_runner(platform, environment, monkeypatch):
+    _, store, settings, endpoint, _ = platform
+    runner = MagicMock(last_run_id=1, results_list=[{}], total_requests=1, _db_run=None)
+    runner.run_concurrency_test = AsyncMock()
+    constructor = MagicMock(return_value=runner)
+    monkeypatch.setattr("core.benchmark_runner.BenchmarkRunner", constructor)
+    job = store.submit(
+        test_type="concurrency",
+        endpoint_id="lab",
+        model_id="m",
+        parameters={"_run_config": {"report_environment": environment}},
+    )
+    store.claim("w")
+    await execute_job(job, endpoint, settings, store, "w")
+    assert constructor.call_args.kwargs["report_environment"] == environment
+    runner.run_concurrency_test.assert_awaited_once_with()
