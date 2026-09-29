@@ -12,6 +12,7 @@ import { Status, MetricCard, SlicesChart, Empty } from "../components";
 import { QualityAnalysis } from "./QualityAnalysis";
 import {
   activeStates,
+  pausableTypes,
   labels,
   statusLabels,
   date,
@@ -25,17 +26,20 @@ export function Detail({
   token,
   onBack,
   onCancel,
+  onControl,
 }: {
   job: Job;
   token: string;
   onBack: () => void;
   onCancel: () => Promise<void>;
+  onControl: (action: "pause" | "resume") => Promise<void>;
 }) {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [quality, setQuality] = useState<QualityReport | null>(null);
   const [events, setEvents] = useState<JobEvent[]>([]);
   const [results, setResults] = useState<RequestResult[]>([]);
   const [error, setError] = useState("");
+  const [controlBusy, setControlBusy] = useState(false);
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [logSearch, setLogSearch] = useState("");
   const [logLevels, setLogLevels] = useState<string[] | null>(null);
@@ -287,7 +291,24 @@ export function Detail({
     }
   }
 
+  async function changeControl(action: "pause" | "resume") {
+    setControlBusy(true);
+    setError("");
+    try {
+      await onControl(action);
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : "运行控制失败");
+    } finally {
+      setControlBusy(false);
+    }
+  }
+
   const overall = summary?.overall;
+  const pausedSeconds =
+    (job.paused_seconds ?? 0) +
+    (job.pause_started_at
+      ? Math.max(0, Date.now() / 1000 - job.pause_started_at)
+      : 0);
   const availableLevels = [...new Set(logs.map((line) => line.level))].sort();
   const filteredLogs = logs.filter(
     (line) =>
@@ -319,6 +340,24 @@ export function Detail({
         </div>
         <div className="detail-actions">
           <span>创建于 {date(job.created_at)}</span>
+          {job.status === "running" && pausableTypes.has(job.test_type) && (
+            <button
+              className="button subtle"
+              disabled={controlBusy}
+              onClick={() => void changeControl("pause")}
+            >
+              暂停运行
+            </button>
+          )}
+          {job.status === "paused" && (
+            <button
+              className="button primary"
+              disabled={controlBusy}
+              onClick={() => void changeControl("resume")}
+            >
+              继续运行
+            </button>
+          )}
           {activeStates.has(job.status) && (
             <button
               className="button subtle danger"
@@ -369,6 +408,26 @@ export function Detail({
           )}
         </div>
       </div>
+      {(job.status === "pausing" ||
+        job.status === "paused" ||
+        job.pause_count > 0) && (
+        <section className="surface" role="status">
+          <strong>
+            {job.status === "pausing"
+              ? "正在等待当前请求组完成"
+              : job.status === "paused"
+                ? "已暂停，可以继续或取消"
+                : "本次运行包含暂停"}
+          </strong>
+          <p>
+            已完成的请求不会重跑。暂停在请求组之间生效，单请求计时不包含等待时间；暂停期间仍保留当前执行资源。
+          </p>
+          <span>
+            暂停 {job.pause_count} 次 · 已累计 {formatNumber(pausedSeconds, 1)}{" "}
+            秒
+          </span>
+        </section>
+      )}
       {error && (
         <div className="alert" role="alert">
           {error}
@@ -455,28 +514,43 @@ export function Detail({
               </ul>
             )}
           </div>
-          {summary.measurement_protocol && (
+          {(summary.measurement_protocol ||
+            summary.execution_control ||
+            summary.data_quality.warnings.length > 0) && (
             <section className="surface protocol-surface">
               <div className="section-head">
                 <div>
                   <span className="eyebrow">MEASUREMENT PROTOCOL</span>
-                  <h2>测量方法与样本计划</h2>
+                  <h2>测量方法与执行条件</h2>
                 </div>
-                <span className="minor-tag">
-                  {summary.measurement_protocol.protocol_version}
-                </span>
+                {summary.measurement_protocol && (
+                  <span className="minor-tag">
+                    {summary.measurement_protocol.protocol_version}
+                  </span>
+                )}
               </div>
-              <p>
-                {summary.measurement_protocol.workload_model ===
-                "closed_loop_fixed_concurrency"
-                  ? "闭环固定并发负载"
-                  : "顺序固定输入长度负载"}
-                ：正式 {summary.measurement_protocol.measured_requests}{" "}
-                次，预热已记录{" "}
-                {summary.measurement_protocol.warmup_recorded ?? "—"} /{" "}
-                {summary.measurement_protocol.warmup_requests}{" "}
-                次。预热不进入统计。
-              </p>
+              {summary.measurement_protocol && (
+                <p>
+                  {summary.measurement_protocol.workload_model ===
+                  "closed_loop_fixed_concurrency"
+                    ? "闭环固定并发负载"
+                    : "顺序固定输入长度负载"}
+                  ：正式 {summary.measurement_protocol.measured_requests}{" "}
+                  次，预热已记录{" "}
+                  {summary.measurement_protocol.warmup_recorded ?? "—"} /{" "}
+                  {summary.measurement_protocol.warmup_requests}{" "}
+                  次。预热不进入统计。
+                </p>
+              )}
+              {summary.execution_control && (
+                <p>
+                  暂停 {summary.execution_control.pause_count ?? 0} 次，累计{" "}
+                  {formatNumber(pausedSeconds, 1)} 秒；
+                  {summary.execution_control.batch_id
+                    ? `批次并行上限 ${summary.execution_control.max_parallel ?? 1}，失败即停${summary.execution_control.stop_on_error ? "开启" : "关闭"}。`
+                    : "独立任务。"}
+                </p>
+              )}
               {summary.data_quality.warnings.length > 0 && (
                 <ul className="protocol-warnings">
                   {summary.data_quality.warnings.map((warning) => (

@@ -259,6 +259,15 @@ export const activeStates = new Set([
   "paused",
   "cancelling",
 ]);
+export const pausableTypes = new Set([
+  "concurrency",
+  "prefill",
+  "segmented_prefill",
+  "long_context",
+  "matrix",
+  "custom_text",
+  "dataset",
+]);
 
 export function formatNumber(value: number | null | undefined, digits = 2) {
   return value === null || value === undefined || !Number.isFinite(value)

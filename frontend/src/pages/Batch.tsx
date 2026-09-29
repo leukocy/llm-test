@@ -63,6 +63,8 @@ export function Batch({
   const [error, setError] = useState("");
   const [configName, setConfigName] = useState("");
   const [description, setDescription] = useState("");
+  const [maxParallel, setMaxParallel] = useState(1);
+  const [stopOnError, setStopOnError] = useState(false);
   const [configNotice, setConfigNotice] = useState("");
 
   useEffect(() => {
@@ -174,6 +176,8 @@ export function Batch({
           schema_version: 1,
           name: configName.trim(),
           description: description.trim(),
+          max_parallel: maxParallel,
+          stop_on_error: stopOnError,
           endpoint_id: endpoint,
           items: items.map((item) => ({
             enabled: item.enabled,
@@ -225,6 +229,21 @@ export function Batch({
       ) {
         throw new Error("配置中的默认端点不存在，请先添加受测 API");
       }
+      if (
+        config.max_parallel != null &&
+        (typeof config.max_parallel !== "number" ||
+          !Number.isInteger(config.max_parallel) ||
+          config.max_parallel < 1 ||
+          config.max_parallel > 8)
+      ) {
+        throw new Error("并行上限必须是 1~8 的整数");
+      }
+      if (
+        config.stop_on_error != null &&
+        typeof config.stop_on_error !== "boolean"
+      ) {
+        throw new Error("失败即停必须为布尔值");
+      }
       const imported = config.items.map((entry, index) => {
         if (!entry || Array.isArray(entry) || typeof entry !== "object") {
           throw new Error(`第 ${index + 1} 项格式无效`);
@@ -267,6 +286,10 @@ export function Batch({
           ? config.description.slice(0, 500)
           : "",
       );
+      setMaxParallel(
+        typeof config.max_parallel === "number" ? config.max_parallel : 1,
+      );
+      setStopOnError(config.stop_on_error === true);
       setConfigNotice("已导入配置；请核对每项工作负载计划后再提交。");
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "配置导入失败");
@@ -306,6 +329,8 @@ export function Batch({
           body: JSON.stringify({
             name: configName.trim() || "批量测量",
             description: description.trim(),
+            max_parallel: maxParallel,
+            stop_on_error: stopOnError,
             endpoint_id: endpoint,
             items: parsed,
           }),
@@ -335,7 +360,7 @@ export function Batch({
         <div>
           <span className="eyebrow">BATCH MEASUREMENT</span>
           <h1>批量测量</h1>
-          <p>逐项选择端点和参数，提交前核对样本预算。worker 按顺序执行。</p>
+          <p>逐项选择端点和参数，提交前核对样本预算与执行策略。</p>
         </div>
       </div>
       <section className="surface batch-all-tests">
@@ -415,6 +440,49 @@ export function Batch({
           placeholder="测量目的、运行条件或备注（可选）"
           onChange={(event) => setDescription(event.target.value)}
         />
+        <div className="batch-policy">
+          <label>
+            <input
+              type="checkbox"
+              checked={maxParallel > 1}
+              onChange={(event) => setMaxParallel(event.target.checked ? 2 : 1)}
+            />
+            并行执行
+          </label>
+          <label>
+            同时执行上限
+            <input
+              type="number"
+              min={2}
+              max={8}
+              value={maxParallel}
+              disabled={maxParallel === 1}
+              onChange={(event) =>
+                setMaxParallel(
+                  Math.min(
+                    8,
+                    Math.max(2, Math.trunc(Number(event.target.value)) || 2),
+                  ),
+                )
+              }
+            />
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={stopOnError}
+              onChange={(event) => setStopOnError(event.target.checked)}
+            />
+            失败即停
+          </label>
+        </div>
+        <p className="batch-plan">
+          {maxParallel > 1
+            ? "并行任务共享受测服务容量，实际并行数受可用执行资源限制；结果会记录此条件。"
+            : "串行模式会等待前一项完成，即使有多个执行资源也保持顺序。"}
+          {stopOnError &&
+            " 任务执行失败或正式性能请求出现错误时，取消尚未执行的同批次任务，并通知正在执行的任务停止。答题错误不触发此策略。"}
+        </p>
         {configNotice && (
           <p className="form-success" role="status">
             {configNotice}
@@ -584,7 +652,8 @@ export function Batch({
         <div className="form-footer">
           <span>
             总计 {validPlans ? totalRequests : "校验中"} 次请求；已启用{" "}
-            {enabledCount} / {items.length} 项，按顺序排队。
+            {enabledCount} / {items.length} 项，
+            {maxParallel === 1 ? "串行执行" : `最多 ${maxParallel} 项并行`}。
           </span>
           <button
             className="button primary"

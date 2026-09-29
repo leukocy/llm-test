@@ -1,7 +1,9 @@
+import asyncio
 import csv
 import hashlib
 import json
 import sqlite3
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -12,6 +14,8 @@ from core.benchmark_runner import BenchmarkRunner
 from core.database.connection import Database
 from core.database.manager import DatabaseManager
 from core.measurement_protocol import measurement_plan
+from server.control import JobControl
+from server.store import JobStore
 
 
 class TestBenchmarkRunner:
@@ -56,6 +60,87 @@ class TestBenchmarkRunner:
 
         assert ttft == pytest.approx(expected_ttft)
         assert tps == pytest.approx(expected_tps)
+
+    @pytest.mark.asyncio
+    async def test_pause_drains_group_then_resumes_without_repeating_or_timing_wait(
+        self, runner, tmp_path, monkeypatch
+    ):
+        store = JobStore(tmp_path / "queue.db")
+        job_id = store.submit(
+            test_type="concurrency", endpoint_id="lab", model_id="m", parameters={}
+        )["job_id"]
+        store.claim("w")
+        runner.csv_file = str(tmp_path / "requests.csv")
+        runner._control_checkpoint = JobControl(store, job_id, "w").checkpoint
+        runner._start_db_run = MagicMock()
+        runner._complete_db_run = MagicMock()
+        runner.update_ui = MagicMock()
+        runner._check_control_signal = MagicMock(return_value=None)
+        runner.should_skip_cell = MagicMock(return_value=(False, ""))
+        runner._get_tokenizer = MagicMock(return_value=object())
+        runner._calibrate_prompt_with_source = MagicMock(return_value=("prompt", "generated"))
+        monkeypatch.setattr("server.control.is_stop_requested", lambda: False)
+        saved = []
+        runner._batch_save_results_to_db = lambda: saved.append(
+            [row["session_id"] for row in runner.results_list]
+        )
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        calls = []
+
+        async def request(_client, session_id, *_args, **_kwargs):
+            calls.append(session_id)
+            start = time.monotonic()
+            if session_id == 0:
+                entered.set()
+                await release.wait()
+            await asyncio.sleep(0.01)
+            end = time.monotonic()
+            return {
+                "session_id": session_id,
+                "start_time": start,
+                "first_token_time": start + 0.001,
+                "end_time": end,
+                "total_time": end - start,
+                "ttft": 0.001,
+                "decode_tokens": 10,
+                "prefill_tokens": 64,
+                "error": None,
+            }
+
+        runner.get_completion = request
+        running = asyncio.create_task(runner.run_concurrency_test([1], 3, 10))
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=3)
+            store.request_pause(job_id)
+            await asyncio.sleep(0.02)
+            assert store.get(job_id)["status"] == "pausing"
+            release.set()
+
+            async def wait_paused():
+                while store.get(job_id)["status"] != "paused":
+                    await asyncio.sleep(0.01)
+
+            await asyncio.wait_for(wait_paused(), timeout=3)
+            assert calls == [0]
+            assert saved[-1] == [0]  # Save the drained group before acknowledging pause.
+            await asyncio.sleep(0.25)
+            assert calls == [0]
+            assert not running.done()
+            resume_time = time.monotonic()
+            store.resume(job_id)
+            results = await asyncio.wait_for(running, timeout=3)
+            assert calls == [0, 1, 2]
+            assert results["session_id"].tolist() == [0, 1, 2]
+            assert results.iloc[1]["start_time"] >= resume_time
+            second = results.iloc[1]
+            assert second["system_output_throughput"] == pytest.approx(
+                10 / (second["end_time"] - second["first_token_time"])
+            )
+            assert store.get(job_id)["paused_seconds"] >= 0.25
+        finally:
+            running.cancel()
+            await asyncio.gather(running, return_exceptions=True)
 
     @pytest.mark.asyncio
     async def test_warmup_is_collected_separately_from_measured_requests(self, runner, tmp_path):

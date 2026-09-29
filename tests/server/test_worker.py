@@ -7,10 +7,67 @@ from pathlib import Path
 import pytest
 
 from core.cancel_state import is_stop_requested
+from server.control import JobControl
 from server.runner_adapter import RunOutput
 from server.settings import Endpoint, Settings
 from server.store import JobStore
 from server.worker import run_claimed_job
+
+
+@pytest.mark.asyncio
+async def test_paused_job_keeps_monitor_heartbeat_then_completes_after_resume(
+    tmp_path, monkeypatch
+):
+    store = JobStore(tmp_path / "jobs.db")
+    job_id = store.submit(
+        test_type="concurrency", endpoint_id="lab", model_id="m", parameters={}, progress_total=1
+    )["job_id"]
+    claimed = store.claim("worker")
+    original_lease = claimed["lease_until"]
+    entered = asyncio.Event()
+    checkpoint_ready = asyncio.Event()
+
+    async def fake_execute(*_args):
+        entered.set()
+        await checkpoint_ready.wait()
+        await JobControl(store, job_id, "worker").checkpoint()
+        with sqlite3.connect(store.path) as conn:
+            run_id = conn.execute(
+                """INSERT INTO test_runs(test_id,test_type,status,model_id)
+                   VALUES (?, 'concurrency', 'completed', 'm')""",
+                (job_id,),
+            ).lastrowid
+            conn.execute("INSERT INTO test_results(run_id,ttft) VALUES (?,0.2)", (run_id,))
+        return RunOutput(result_run_id=run_id, completed=1, total=1)
+
+    monkeypatch.setattr("server.worker.execute_job", fake_execute)
+    settings = Settings(
+        api_token="x" * 40,
+        db_path=store.path,
+        artifact_root=tmp_path / "artifacts",
+        endpoints={
+            "lab": Endpoint("lab", "Lab", "OpenAI", "http://127.0.0.1:9010/v1", "m", "LAB_KEY")
+        },
+    )
+    running = asyncio.create_task(run_claimed_job(claimed, settings, store, "worker"))
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=3)
+        store.request_pause(job_id)
+        checkpoint_ready.set()
+
+        async def wait_for_heartbeat():
+            while store.get(job_id)["lease_until"] <= original_lease:
+                await asyncio.sleep(0.02)
+
+        await asyncio.wait_for(wait_for_heartbeat(), timeout=5)
+        assert store.get(job_id)["status"] == "paused"
+        assert not running.done()
+        store.resume(job_id)
+        await asyncio.wait_for(running, timeout=3)
+        assert store.get(job_id)["status"] == "completed"
+    finally:
+        running.cancel()
+        await asyncio.gather(running, return_exceptions=True)
 
 
 @pytest.mark.asyncio

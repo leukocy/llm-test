@@ -29,7 +29,7 @@ FastAPI 控制 API ── SQLite WAL（任务、状态、审计、逐请求结�
 
 - **测试方案**：创建、更新、删除并复用参数方案。方案保存在 `control_presets`，包含测试参数和生成设置，沿用任务提交的严格参数校验；方案不含密钥。
 - **受测 API 设置**：内置常用服务商地址和初版模型快选，支持新增、编辑、删除、在线模型列表与一次低输出连接检测。参考网络耗时通过单独的 `/models` 响应首部测量，明确含服务商处理时间，不能视为纯网络 RTT。凭证经 Fernet 加密后存入 `control_endpoints`，列表和任务响应均不回传明文。待执行或运行中的任务引用端点时，禁止修改或删除该端点。
-- **基础三项与批量**：可一键载入并发、Prefill、长上下文三阶段；每个子任务可选不同端点和模型、单独启停，提交前分别校验启用项的工作负载和样本预算。批次名称、说明和子任务在同一事务中落库，重复提交受幂等摘要约束；worker 按序执行。批量配置可导入/导出本地 JSON；批次历史可查看元数据并停止尚未结束的子任务。
+- **基础三项与批量**：可一键载入并发、Prefill、长上下文三阶段；每个子任务可选不同端点和模型、单独启停，提交前分别校验启用项的工作负载和样本预算。批次名称、说明、执行策略和子任务在同一事务中落库，重复提交受幂等摘要约束；默认按序串行执行，可开启 2～8 项并行和失败即停。并行上限由数据库事务控制，即使多个 worker 同时领取任务也不会超限；实际并行数取决于可用 worker。批量配置可导入/导出本地 JSON；批次历史可查看元数据并停止尚未结束的子任务。
 - **Tokenizer 与文本**：创建测量可查看模型自动映射、本地安装状态，选择已登记的本地 tokenizer，或用本地、参考 tiktoken 编码及字符数对文本计数。自定义提示词可从 UTF-8 TXT 导入。计数工具不下载或执行远程代码。
 - **数据仓库**：按模型、硬件、类型、状态、对外等级和文本检索历史记录；复测链默认展示最新版本。历史表可展开完整测量字段，矩阵支持最新值或最大观测值，另有硬件盘点与扩展效率。`hwInventory` 和 `hmTest` 模板可导出 CSV/JSON。
 - **质量诊断**：按数据集查看准确率与 Wilson 区间、类别表现、评分方式、失败归因、数据指纹和逐样本输入/响应。全部错误样本可导出带有电子表格公式防护的 CSV。
@@ -42,6 +42,12 @@ FastAPI 控制 API ── SQLite WAL（任务、状态、审计、逐请求结�
 
 同一 `Idempotency-Key` 与相同参数重复提交只返回原任务；同键不同内容返回 409。任务 ID 贯穿 `control_jobs.job_id` 和 `test_runs.test_id`。任务完成或取消后，已有逐请求结果仍可查询。
 
+有限性能测试支持 `running → pausing → paused → running`。在详情页点击“暂停运行”后，当前请求组会先完成并保存，再进入暂停；点击“继续运行”沿用当前执行位置，不重复请求或预热。支持并发、Prefill、分段上下文、长上下文、矩阵、自定义文本和数据集性能测试。矩阵和自定义文本保持一个连续负载单元完整，只有单元之间能暂停。最后一个请求组完成时，任务可能直接完成。按时长测试的稳定性、质量及鲁棒性评估暂不支持暂停。
+
+暂停时 worker 保留租约并续约，占用一个批次执行槽位；关闭浏览器不影响继续或取消。暂停期间重启 worker 会丢失内存中的执行位置，过期租约会标为 `WORKER_LOST`，不能从该位置恢复。暂停、恢复、取消均通过认证后的 `POST /api/v1/jobs/{job_id}/pause|resume|cancel` 操作，非法状态或过期租约返回 409；暂停次数与累计时长随任务和测量配置保存。
+
+“失败即停”由任务执行失败（含 worker 失联）或完成的性能测量中记录了正式请求错误触发。队列中的同批次任务直接取消，已运行的同批次任务进入取消流程，原因保留为 `BATCH_STOP_ON_ERROR`；不影响其他批次。质量题目答错不触发此策略；预热错误也不作为正式请求错误处理。
+
 ## 启动
 
 1. 从 `config/endpoints.platform.example.json` 复制为 `config/endpoints.platform.json`。默认文件是空数组；如需由部署文件预设端点，可填写受信模型地址、模型 ID 与 API key 环境变量名，不要把密钥写入 JSON。
@@ -51,6 +57,14 @@ FastAPI 控制 API ── SQLite WAL（任务、状态、审计、逐请求结�
 Compose 将 `${LLM_TEST_TOKENIZERS_DIR:-./tokenizers}` 只读挂入 API 和 worker；需要把 Tokenizer 放在项目外时，在 `.env.platform` 写入绝对目录，如 `/home/ai/llm-perf/tokenizers`。没有本地文件时，参考 tiktoken 和字符计数仍可用，本地精确计数不可用。
 
 Compose 先运行一次 `migrate` 服务完成数据库迁移，再启动 API 与 worker，避免两个进程首次启动时同时修改 schema。
+
+默认部署只有一个 worker。需要批次并行时，完成上述启动后增加独立 worker 进程，例如：
+
+```bash
+docker compose -p llm-test-platform --env-file .env.platform -f compose.platform.yml up -d --no-build --no-deps --scale worker=2 worker
+```
+
+每个进程执行一个任务，不能在同一进程内并行运行多个 runner。串行批次在多个 worker 下仍保持串行；暂停任务会占用 worker。增加 worker 前核对受测模型的总并发预算，多个任务共享同一模型服务时会相互影响。
 
 本地开发：先 `pip install -e ".[dev]"`，然后在项目根目录设置相同环境变量并运行 `uvicorn server.main:app --reload` 和 `python -m server.worker`；在 `frontend/` 执行 `npm ci && npm run dev`。Vite 将 `/api` 代理至 8000 端口。
 
@@ -65,10 +79,10 @@ Compose 先运行一次 `migrate` 服务完成数据库迁移，再启动 API �
 - API 就绪检查：`GET /health/ready`；存活检查：`GET /health/live`。
 - 备份时同时保存 `platform-data` 和 `platform-results` 卷；SQLite 推荐在运行中使用 `sqlite3.Connection.backup()` 生成一致性快照。质量详细 JSON 与性能 CSV 位于结果卷。
 - 监控 worker 日志中的 `WORKER_LOST` 和 `EXECUTION_FAILED`；后者对客户端只显示通用信息，详细异常保留在受控日志。
-- 部署升级前备份数据库。schema 迁移至 1.9.0 是幂等的，新增 `control_batches` 保存批次名称、说明和幂等摘要；旧测量数据保持可读。数据库备份应与端点加密密钥一起保管。
+- 部署升级前备份数据库。schema 迁移至 1.10.0 是幂等的，`control_batches` 保存批次名称、说明、幂等摘要与执行策略，`control_jobs` 保存暂停计数和时长；旧测量数据保持可读。数据库备份应与端点加密密钥一起保管。
 - 控制令牌保存在浏览器当前标签页的 `sessionStorage`，关闭标签页后清除；API 响应标记 `no-store`。反向代理必须强制 HTTPS 并限制内网访问。
 - HumanEval/MBPP 等代码评估继续使用既有隔离 sandbox 服务；需要时按原项目文档单独启用，不能让 API 或普通 worker 获得 Docker socket。
 
 ## 当前边界
 
-这是单机、单租户控制面。任务、租约和报告已经与 Streamlit 会话分离；底层 `BenchmarkRunner` 仍是较大的兼容模块，且部分策略使用旧 token 校准逻辑。旧入口中的批次元数据入库、并行/失败即停、暂停恢复及本地 Tokenizer 下载尚未迁移至新控制台。生产推广前应为目标模型准备本地 tokenizer，并用固定版本的数据集、预热条件和硬件指纹核验指标。跨主机调度、租户隔离、集中认证与 PostgreSQL 存储需要下一次架构扩展。
+这是单机、单租户控制面。任务、租约和报告已经与 Streamlit 会话分离；底层 `BenchmarkRunner` 仍是较大的模块，且部分策略使用旧 token 校准逻辑。worker 重启后的断点恢复、本地 Tokenizer 下载与部分初版引导/导出入口尚未迁移至新控制台。生产推广前应为目标模型准备本地 tokenizer，并用固定版本的数据集、预热条件和硬件指纹核验指标。跨主机调度、租户隔离、集中认证与 PostgreSQL 存储需要下一次架构扩展。

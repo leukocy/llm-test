@@ -1318,8 +1318,13 @@ textarea:focus {
   }
   .sidebar nav {
     display: flex;
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
   }
   .sidebar nav button {
+    flex: 0 0 auto;
+    width: auto;
     padding: 8px;
   }
   .sidebar nav button span {
@@ -2196,6 +2201,21 @@ textarea:focus {
   min-height: 70px;
   margin-top: 12px;
   resize: vertical;
+}
+.batch-policy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20px;
+  margin-top: 16px;
+}
+.batch-policy label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.batch-policy input[type="number"] {
+  width: 70px;
 }
 .output-preview {
   max-height: 340px;

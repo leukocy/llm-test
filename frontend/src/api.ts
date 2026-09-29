@@ -90,6 +90,9 @@ export type Job = {
   parameters: Record<string, unknown>;
   progress_completed: number;
   progress_total: number;
+  pause_count: number;
+  paused_seconds: number;
+  pause_started_at: number | null;
   result_run_id: number | null;
   result_artifact: string | null;
   error_code: string | null;
@@ -105,6 +108,8 @@ export type BatchSummary = {
   default_endpoint_id: string;
   requested_items: number;
   submitted_items: number;
+  max_parallel: number;
+  stop_on_error: boolean;
   created_at: number;
   status_counts?: Record<string, number>;
 };
@@ -162,6 +167,14 @@ export type Summary = {
   group_axis: string;
   groups: Slice[];
   measurement_protocol: MeasurementPlan | null;
+  execution_control: {
+    batch_id?: string | null;
+    pause_policy?: string | null;
+    pause_count?: number;
+    paused_seconds?: number;
+    max_parallel?: number;
+    stop_on_error?: boolean;
+  };
   data_quality: { warnings: string[] };
   provenance: { token_sources: string[]; token_methods: string[] };
   notes: string[];

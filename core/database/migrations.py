@@ -170,6 +170,13 @@ MIGRATIONS: dict[str, list[MigrationFunc]] = {
         _add_column("control_presets", "run_config_json", "TEXT"),
     ],
     "1.9.0": [_exec(CREATE_CONTROL_BATCHES)],
+    "1.10.0": [
+        _add_column("control_jobs", "pause_count", "INTEGER NOT NULL DEFAULT 0"),
+        _add_column("control_jobs", "paused_seconds", "REAL NOT NULL DEFAULT 0"),
+        _add_column("control_jobs", "pause_started_at", "REAL"),
+        _add_column("control_batches", "max_parallel", "INTEGER NOT NULL DEFAULT 1"),
+        _add_column("control_batches", "stop_on_error", "INTEGER NOT NULL DEFAULT 0"),
+    ],
 }
 
 

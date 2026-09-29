@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import time
 import uuid
@@ -13,6 +14,8 @@ from typing import Any, Iterator
 from core.database.migrations import run_migrations
 from core.database.schema import create_tables
 from core.run_lifecycle import RunEvent, RunStatus, advance_run
+
+logger = logging.getLogger(__name__)
 
 
 class IdempotencyConflict(ValueError):
@@ -271,6 +274,8 @@ class JobStore:
         request_hash: str,
         requested_items: int,
         items: list[dict[str, Any]],
+        max_parallel: int = 1,
+        stop_on_error: bool = False,
     ) -> list[dict[str, Any]]:
         """Create a named batch and every enabled child in one SQLite transaction.
 
@@ -279,6 +284,8 @@ class JobStore:
         """
         if not items or requested_items < len(items):
             raise ValueError("A batch needs at least one enabled item")
+        if not 1 <= max_parallel <= 8:
+            raise ValueError("Batch parallel limit must be between 1 and 8")
         now = time.time()
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -304,8 +311,8 @@ class JobStore:
                 conn.execute(
                     """INSERT INTO control_batches
                        (batch_id, name, description, default_endpoint_id, requested_items,
-                        submitted_items, request_hash, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        submitted_items, max_parallel, stop_on_error, request_hash, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         batch_id,
                         name,
@@ -313,6 +320,8 @@ class JobStore:
                         default_endpoint_id,
                         requested_items,
                         len(items),
+                        max_parallel,
+                        int(stop_on_error),
                         request_hash,
                         now,
                     ),
@@ -371,6 +380,7 @@ class JobStore:
                 (batch_id,),
             ).fetchall()
         result = dict(row)
+        result["stop_on_error"] = bool(result["stop_on_error"])
         result.pop("request_hash")
         result["status_counts"] = {item["status"]: item["count"] for item in counts}
         return result
@@ -381,11 +391,11 @@ class JobStore:
         with self._connection() as conn:
             rows = conn.execute(
                 """SELECT batch_id, name, description, default_endpoint_id,
-                          requested_items, submitted_items, created_at
+                          requested_items, submitted_items, max_parallel, stop_on_error, created_at
                    FROM control_batches ORDER BY created_at DESC LIMIT ?""",
                 (limit,),
             ).fetchall()
-        return [dict(row) for row in rows]
+        return [{**dict(row), "stop_on_error": bool(row["stop_on_error"])} for row in rows]
 
     def get(self, job_id: str) -> dict[str, Any]:
         with self._connection() as conn:
@@ -443,7 +453,15 @@ class JobStore:
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             queued = conn.execute(
-                "SELECT job_id FROM control_jobs WHERE status = ? ORDER BY created_at LIMIT 1",
+                """SELECT job.job_id FROM control_jobs AS job
+                   LEFT JOIN control_batches AS batch ON batch.batch_id = job.parent_job_id
+                   WHERE job.status = ? AND (
+                       job.parent_job_id IS NULL OR (
+                           SELECT COUNT(*) FROM control_jobs AS active
+                           WHERE active.parent_job_id = job.parent_job_id
+                           AND active.status IN ('running', 'pausing', 'paused', 'cancelling')
+                       ) < COALESCE(batch.max_parallel, 1)
+                   ) ORDER BY job.created_at, job.rowid LIMIT 1""",
                 (RunStatus.QUEUED.value,),
             ).fetchone()
             if queued is None:
@@ -467,7 +485,7 @@ class JobStore:
         with self._connection() as conn:
             cursor = conn.execute(
                 """UPDATE control_jobs SET lease_until = ?, updated_at = ?
-                   WHERE job_id = ? AND lease_owner = ? AND status IN (?, ?, ?)""",
+                   WHERE job_id = ? AND lease_owner = ? AND status IN (?, ?, ?, ?)""",
                 (
                     now + lease_seconds,
                     now,
@@ -475,6 +493,7 @@ class JobStore:
                     worker_id,
                     RunStatus.RUNNING.value,
                     RunStatus.PAUSING.value,
+                    RunStatus.PAUSED.value,
                     RunStatus.CANCELLING.value,
                 ),
             )
@@ -488,7 +507,7 @@ class JobStore:
                 """UPDATE control_jobs SET
                    progress_completed = MAX(progress_completed, ?),
                    progress_total = MAX(progress_total, ?), updated_at = ?
-                   WHERE job_id = ? AND lease_owner = ? AND status IN (?, ?)""",
+                   WHERE job_id = ? AND lease_owner = ? AND status IN (?, ?, ?, ?)""",
                 (
                     completed,
                     total,
@@ -496,6 +515,8 @@ class JobStore:
                     job_id,
                     worker_id,
                     RunStatus.RUNNING.value,
+                    RunStatus.PAUSING.value,
+                    RunStatus.PAUSED.value,
                     RunStatus.CANCELLING.value,
                 ),
             )
@@ -516,7 +537,7 @@ class JobStore:
                 """UPDATE control_jobs SET result_run_id = ?,
                    progress_completed = MAX(progress_completed, ?),
                    progress_total = MAX(progress_total, ?), updated_at = ?
-                   WHERE job_id = ? AND lease_owner = ? AND status IN (?, ?)""",
+                   WHERE job_id = ? AND lease_owner = ? AND status IN (?, ?, ?, ?)""",
                 (
                     row["id"],
                     row["recorded_requests"] or 0,
@@ -525,6 +546,8 @@ class JobStore:
                     job_id,
                     worker_id,
                     RunStatus.RUNNING.value,
+                    RunStatus.PAUSING.value,
+                    RunStatus.PAUSED.value,
                     RunStatus.CANCELLING.value,
                 ),
             )
@@ -550,6 +573,94 @@ class JobStore:
                 f"Measurement persistence mismatch: {row['recorded']} of {expected_rows} rows saved"
             )
 
+    def request_pause(self, job_id: str, *, actor: str = "api") -> dict[str, Any]:
+        now = time.time()
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT * FROM control_jobs WHERE job_id = ?", (job_id,)).fetchone()
+            if row is None:
+                raise JobNotFound(job_id)
+            before = RunStatus(row["status"])
+            if before in (RunStatus.PAUSING, RunStatus.PAUSED):
+                conn.commit()
+                return self._as_job(row)  # type: ignore[return-value]
+            after = advance_run(before, RunEvent.REQUEST_PAUSE)
+            if not row["lease_owner"] or row["lease_until"] is None or row["lease_until"] < now:
+                raise LeaseLost(job_id)
+            conn.execute(
+                "UPDATE control_jobs SET status = ?, updated_at = ? WHERE job_id = ?",
+                (after.value, now, job_id),
+            )
+            self._event(conn, job_id, before.value, after.value, "request_pause", actor, now)
+            conn.commit()
+        return self.get(job_id)
+
+    def acknowledge_pause(self, job_id: str, worker_id: str) -> None:
+        now = time.time()
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT * FROM control_jobs WHERE job_id = ?", (job_id,)).fetchone()
+            if (
+                row is None
+                or row["lease_owner"] != worker_id
+                or row["lease_until"] is None
+                or row["lease_until"] < now
+            ):
+                raise LeaseLost(job_id)
+            # Cancellation may arrive while the worker is reaching this boundary.
+            if row["status"] == RunStatus.CANCELLING.value:
+                conn.commit()
+                return
+            if row["status"] == RunStatus.PAUSED.value:
+                conn.commit()
+                return
+            after = advance_run(row["status"], RunEvent.PAUSE)
+            conn.execute(
+                """UPDATE control_jobs SET status = ?, pause_count = pause_count + 1,
+                   pause_started_at = ?, updated_at = ? WHERE job_id = ?""",
+                (after.value, now, now, job_id),
+            )
+            self._event(
+                conn,
+                job_id,
+                row["status"],
+                after.value,
+                "pause",
+                worker_id,
+                now,
+                {"boundary": "drained_request_group"},
+            )
+            conn.commit()
+
+    def resume(self, job_id: str, *, actor: str = "api") -> dict[str, Any]:
+        now = time.time()
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT * FROM control_jobs WHERE job_id = ?", (job_id,)).fetchone()
+            if row is None:
+                raise JobNotFound(job_id)
+            after = advance_run(row["status"], RunEvent.RESUME)
+            if not row["lease_owner"] or row["lease_until"] is None or row["lease_until"] < now:
+                raise LeaseLost(job_id)
+            paused = max(0.0, now - (row["pause_started_at"] or now))
+            conn.execute(
+                """UPDATE control_jobs SET status = ?, paused_seconds = paused_seconds + ?,
+                   pause_started_at = NULL, updated_at = ? WHERE job_id = ?""",
+                (after.value, paused, now, job_id),
+            )
+            self._event(
+                conn,
+                job_id,
+                row["status"],
+                after.value,
+                "resume",
+                actor,
+                now,
+                {"paused_seconds": paused},
+            )
+            conn.commit()
+        return self.get(job_id)
+
     def request_cancel(self, job_id: str, *, actor: str = "api") -> dict[str, Any]:
         now = time.time()
         with self._connection() as conn:
@@ -562,11 +673,7 @@ class JobStore:
             if before in (RunStatus.CANCELLING, RunStatus.CANCELLED):
                 conn.commit()
                 return self._as_job(row)  # type: ignore[return-value]
-            event = (
-                RunEvent.CANCEL
-                if before in (RunStatus.QUEUED, RunStatus.PAUSED)
-                else RunEvent.REQUEST_CANCEL
-            )
+            event = RunEvent.CANCEL if before == RunStatus.QUEUED else RunEvent.REQUEST_CANCEL
             after = advance_run(before, event)
             terminal = after == RunStatus.CANCELLED
             conn.execute(
@@ -581,8 +688,46 @@ class JobStore:
             updated = conn.execute(
                 "SELECT * FROM control_jobs WHERE job_id = ?", (job_id,)
             ).fetchone()
+            self._persist_execution_context(conn, updated)
             conn.commit()
         return self._as_job(updated)  # type: ignore[return-value]
+
+    @staticmethod
+    def _persist_execution_context(conn: sqlite3.Connection, job: sqlite3.Row) -> None:
+        run = conn.execute(
+            "SELECT config_json FROM test_runs WHERE test_id = ?", (job["job_id"],)
+        ).fetchone()
+        if run is None:
+            return
+        try:
+            config = json.loads(run["config_json"] or "{}")
+        except (TypeError, ValueError):
+            return
+        if not isinstance(config, dict):
+            return
+        batch = conn.execute(
+            "SELECT max_parallel, stop_on_error FROM control_batches WHERE batch_id = ?",
+            (job["parent_job_id"],),
+        ).fetchone()
+        config["execution_control"] = {
+            "pause_count": job["pause_count"],
+            "paused_seconds": job["paused_seconds"],
+            "pause_policy": config.get("pause_policy"),
+            "batch_id": job["parent_job_id"],
+            "max_parallel": batch["max_parallel"] if batch else 1,
+            "stop_on_error": bool(batch["stop_on_error"]) if batch else False,
+        }
+        try:
+            serialized = json.dumps(config, ensure_ascii=False, allow_nan=False)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Could not attach execution conditions to invalid run config: %s", job["job_id"]
+            )
+            return
+        conn.execute(
+            "UPDATE test_runs SET config_json = ? WHERE test_id = ?",
+            (serialized, job["job_id"]),
+        )
 
     def finish(
         self,
@@ -622,11 +767,16 @@ class JobStore:
                 conn.rollback()
                 raise ValueError("Invalid terminal outcome")
             after = advance_run(before, event)
+            if after == RunStatus.CANCELLED and row["error_code"] == "BATCH_STOP_ON_ERROR":
+                error_code = row["error_code"]
+                error_message = row["error_message"]
+            paused = max(0.0, now - row["pause_started_at"]) if row["pause_started_at"] else 0.0
             conn.execute(
                 """UPDATE control_jobs SET status = ?,
                    result_run_id = COALESCE(?, result_run_id),
                    result_artifact = COALESCE(?, result_artifact),
                    error_code = ?, error_message = ?, lease_owner = NULL, lease_until = NULL,
+                   paused_seconds = paused_seconds + ?, pause_started_at = NULL,
                    finished_at = ?, updated_at = ? WHERE job_id = ? AND status = ? AND lease_owner = ?""",
                 (
                     after.value,
@@ -634,6 +784,7 @@ class JobStore:
                     result_artifact,
                     error_code,
                     (error_message or "")[:1000] or None,
+                    paused,
                     now,
                     now,
                     job_id,
@@ -642,11 +793,68 @@ class JobStore:
                 ),
             )
             self._event(conn, job_id, before.value, after.value, event.value, worker_id, now)
+            failed_observation = (
+                after == RunStatus.COMPLETED
+                and conn.execute(
+                    """SELECT 1 FROM test_results WHERE run_id = ?
+                       AND error IS NOT NULL AND error != '' LIMIT 1""",
+                    (result_run_id or row["result_run_id"],),
+                ).fetchone()
+                is not None
+            )
+            if after == RunStatus.FAILED or failed_observation:
+                self._stop_batch_after_error(conn, row, now, worker_id)
             updated = conn.execute(
                 "SELECT * FROM control_jobs WHERE job_id = ?", (job_id,)
             ).fetchone()
+            self._persist_execution_context(conn, updated)
             conn.commit()
         return self._as_job(updated)  # type: ignore[return-value]
+
+    def _stop_batch_after_error(
+        self, conn: sqlite3.Connection, failed_job: sqlite3.Row, now: float, actor: str
+    ) -> None:
+        batch_id = failed_job["parent_job_id"]
+        if (
+            not batch_id
+            or not conn.execute(
+                "SELECT 1 FROM control_batches WHERE batch_id = ? AND stop_on_error = 1",
+                (batch_id,),
+            ).fetchone()
+        ):
+            return
+        siblings = conn.execute(
+            """SELECT job_id, status FROM control_jobs WHERE parent_job_id = ? AND job_id != ?
+               AND status IN ('queued', 'running', 'pausing', 'paused')""",
+            (batch_id, failed_job["job_id"]),
+        ).fetchall()
+        for sibling in siblings:
+            before = RunStatus(sibling["status"])
+            event = RunEvent.CANCEL if before == RunStatus.QUEUED else RunEvent.REQUEST_CANCEL
+            after = advance_run(before, event)
+            conn.execute(
+                """UPDATE control_jobs SET status = ?, error_code = 'BATCH_STOP_ON_ERROR',
+                   error_message = ?, updated_at = ?,
+                   finished_at = CASE WHEN ? THEN ? ELSE finished_at END WHERE job_id = ?""",
+                (
+                    after.value,
+                    "Stopped after another batch item failed",
+                    now,
+                    after == RunStatus.CANCELLED,
+                    now,
+                    sibling["job_id"],
+                ),
+            )
+            self._event(
+                conn,
+                sibling["job_id"],
+                before.value,
+                after.value,
+                event.value,
+                actor,
+                now,
+                {"reason": "batch_stop_on_error", "failed_job_id": failed_job["job_id"]},
+            )
 
     def reap_expired(self) -> int:
         """Mark abandoned measurements failed; never blend retries into a score."""
@@ -655,11 +863,12 @@ class JobStore:
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             rows = conn.execute(
-                """SELECT job_id, status FROM control_jobs WHERE status IN (?, ?, ?)
+                """SELECT * FROM control_jobs WHERE status IN (?, ?, ?, ?)
                    AND lease_until < ?""",
                 (
                     RunStatus.RUNNING.value,
                     RunStatus.PAUSING.value,
+                    RunStatus.PAUSED.value,
                     RunStatus.CANCELLING.value,
                     now,
                 ),
@@ -682,6 +891,18 @@ class JobStore:
                     ),
                 )
                 self._event(conn, row["job_id"], before.value, after.value, "fail", "reaper", now)
+                if row["pause_started_at"]:
+                    conn.execute(
+                        """UPDATE control_jobs SET paused_seconds = paused_seconds + ?,
+                           pause_started_at = NULL WHERE job_id = ?""",
+                        (max(0.0, now - row["pause_started_at"]), row["job_id"]),
+                    )
                 recovered += 1
+            for row in rows:
+                self._stop_batch_after_error(conn, row, now, "reaper")
+                updated = conn.execute(
+                    "SELECT * FROM control_jobs WHERE job_id = ?", (row["job_id"],)
+                ).fetchone()
+                self._persist_execution_context(conn, updated)
             conn.commit()
         return recovered

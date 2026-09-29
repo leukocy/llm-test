@@ -4,7 +4,7 @@ Database Schema 定义
 包含所has表 SQL 定义andMigration语句。
 """
 
-SCHEMA_VERSION = "1.9.0"
+SCHEMA_VERSION = "1.10.0"
 
 # ============================================
 # Table schema定义
@@ -338,6 +338,9 @@ CREATE TABLE IF NOT EXISTS control_jobs (
     parameters_json TEXT NOT NULL,
     progress_completed INTEGER NOT NULL DEFAULT 0,
     progress_total INTEGER NOT NULL DEFAULT 0,
+    pause_count INTEGER NOT NULL DEFAULT 0,
+    paused_seconds REAL NOT NULL DEFAULT 0,
+    pause_started_at REAL,
     result_run_id INTEGER,
     result_artifact TEXT,
     error_code TEXT,
@@ -361,6 +364,8 @@ CREATE TABLE IF NOT EXISTS control_batches (
     default_endpoint_id TEXT NOT NULL,
     requested_items INTEGER NOT NULL,
     submitted_items INTEGER NOT NULL,
+    max_parallel INTEGER NOT NULL DEFAULT 1,
+    stop_on_error INTEGER NOT NULL DEFAULT 0,
     request_hash TEXT NOT NULL,
     created_at REAL NOT NULL
 );
@@ -441,6 +446,7 @@ CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_app_cases_machine ON application_cases(machine_id);",
     "CREATE INDEX IF NOT EXISTS idx_control_jobs_queue ON control_jobs(status, created_at);",
     "CREATE INDEX IF NOT EXISTS idx_control_jobs_lease ON control_jobs(status, lease_until);",
+    "CREATE INDEX IF NOT EXISTS idx_control_jobs_batch ON control_jobs(parent_job_id, status);",
     "CREATE INDEX IF NOT EXISTS idx_job_events_job ON job_events(job_id, id);",
 ]
 

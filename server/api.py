@@ -30,6 +30,7 @@ from server.analytics import (
     run_results_csv,
     run_summary,
 )
+from server.control import PAUSABLE_TEST_TYPES
 from server.endpoints import (
     EndpointConflict,
     EndpointCredentialUnavailable,
@@ -61,6 +62,7 @@ from server.store import (
     IdempotencyConflict,
     JobNotFound,
     JobStore,
+    LeaseLost,
     PresetConflict,
     PresetNotFound,
 )
@@ -174,6 +176,8 @@ class BatchItem(StrictSpec):
 class BatchSubmission(StrictSpec):
     name: str = Field(default="批量测量", min_length=1, max_length=80)
     description: str = Field(default="", max_length=500)
+    max_parallel: int = Field(default=1, ge=1, le=8)
+    stop_on_error: bool = False
     endpoint_id: str = Field(min_length=1, max_length=64)
     items: list[BatchItem] = Field(min_length=1, max_length=10)
 
@@ -1006,6 +1010,8 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
                 request_hash=request_hash,
                 requested_items=len(body.items),
                 items=prepared,
+                max_parallel=body.max_parallel,
+                stop_on_error=body.stop_on_error,
             )
         except IdempotencyConflict as exc:
             raise HTTPException(409, str(exc)) from exc
@@ -1197,6 +1203,24 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         except JobNotFound as exc:
             raise HTTPException(404, "Job not found") from exc
         except InvalidRunTransition as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.post("/api/v1/jobs/{job_id}/pause", dependencies=[auth])
+    def pause(job_id: str):
+        job = job_or_404(job_id)
+        if job["test_type"] not in PAUSABLE_TEST_TYPES:
+            raise HTTPException(409, "此测试按连续时间或评测样本执行，暂不支持暂停")
+        try:
+            return store.request_pause(job_id)
+        except (InvalidRunTransition, LeaseLost) as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.post("/api/v1/jobs/{job_id}/resume", dependencies=[auth])
+    def resume(job_id: str):
+        job_or_404(job_id)
+        try:
+            return store.resume(job_id)
+        except (InvalidRunTransition, LeaseLost) as exc:
             raise HTTPException(409, str(exc)) from exc
 
     @app.get("/api/v1/jobs/{job_id}/summary", dependencies=[auth])

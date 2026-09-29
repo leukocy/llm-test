@@ -171,6 +171,34 @@ def test_api_auth_validation_and_report_boundary(client: TestClient):
     assert client.get("/health/ready").status_code == 200
 
 
+def test_pause_resume_api_auth_and_lifecycle(client: TestClient, store: JobStore):
+    headers = {"Authorization": f"Bearer {TOKEN}"}
+    job_id = submit(store)["job_id"]
+    path = f"/api/v1/jobs/{job_id}"
+    assert client.post(f"{path}/pause").status_code == 401
+    assert client.post(f"{path}/resume").status_code == 401
+    assert client.post(f"{path}/pause", headers=headers).status_code == 409  # Still queued.
+    store.claim("w")
+    assert client.post(f"{path}/pause", headers=headers).json()["status"] == "pausing"
+    assert client.post(f"{path}/resume", headers=headers).status_code == 409  # Not drained yet.
+    store.acknowledge_pause(job_id, "w")
+    assert client.post(f"{path}/resume", headers=headers).json()["status"] == "running"
+    store.finish(job_id, "w", outcome=RunStatus.COMPLETED)
+    assert client.post(f"{path}/pause", headers=headers).status_code == 409
+    assert client.post("/api/v1/jobs/missing/resume", headers=headers).status_code == 404
+
+
+@pytest.mark.parametrize("test_type", ["stability", "quality", "robustness"])
+def test_pause_api_rejects_continuous_or_quality_workloads(client, store, test_type):
+    job = store.submit(test_type=test_type, endpoint_id="lab", model_id="m", parameters={})
+    store.claim("w")
+    response = client.post(
+        f"/api/v1/jobs/{job['job_id']}/pause", headers={"Authorization": f"Bearer {TOKEN}"}
+    )
+    assert response.status_code == 409
+    assert store.get(job["job_id"])["status"] == "running"
+
+
 def test_plan_preview_validates_and_does_not_enqueue(client: TestClient):
     headers = {"Authorization": f"Bearer {TOKEN}"}
     response = client.post(

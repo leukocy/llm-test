@@ -16,7 +16,7 @@ import {
   type Job,
 } from "./api";
 import { activeStates, date, type JobType } from "./constants";
-import { Mark, MetricCard, JobTable } from "./components";
+import { Mark, MetricCard, JobTable, Empty } from "./components";
 import { Login } from "./pages/Login";
 import { NewRun } from "./pages/NewRun";
 import { Detail } from "./pages/Detail";
@@ -138,6 +138,13 @@ export default function App() {
     await refresh(token);
   }
 
+  async function control(job: Job, action: "pause" | "resume") {
+    await api(token, `/api/v1/jobs/${job.job_id}/${action}`, {
+      method: "POST",
+    });
+    await refresh(token);
+  }
+
   if (!token) return <Login onLogin={login} />;
 
   const active = jobs.filter((job) => activeStates.has(job.status)).length;
@@ -235,9 +242,11 @@ export default function App() {
                   ? "运行记录"
                   : navActive("/new")
                     ? "创建测量"
-                    : navActive("/settings/api")
-                      ? "受测 API 设置"
-                      : "数据仓库"}
+                    : navActive("/batch")
+                      ? "批量测量"
+                      : navActive("/settings/api")
+                        ? "受测 API 设置"
+                        : "数据仓库"}
             </strong>
           </div>
           <div className="topbar-right">
@@ -285,7 +294,12 @@ export default function App() {
             <Route
               path="/runs/:jobId"
               element={
-                <DetailRoute jobs={jobs} token={token} onCancel={cancel} />
+                <DetailRoute
+                  jobs={jobs}
+                  token={token}
+                  onCancel={cancel}
+                  onControl={control}
+                />
               }
             />
             <Route
@@ -350,21 +364,70 @@ function DetailRoute({
   jobs,
   token,
   onCancel,
+  onControl,
 }: {
   jobs: Job[];
   token: string;
   onCancel: (job: Job) => Promise<void>;
+  onControl: (job: Job, action: "pause" | "resume") => Promise<void>;
 }) {
   const { jobId } = useParams();
   const navigate = useNavigate();
-  const job = jobs.find((item) => item.job_id === jobId);
-  if (!job) return <Navigate to="/runs" replace />;
+  const [loadedJob, setLoadedJob] = useState<Job | null>(null);
+  const [loadError, setLoadError] = useState("");
+  useEffect(() => {
+    let alive = true;
+    let timer: number | undefined;
+    setLoadedJob(null);
+    setLoadError("");
+    const load = async () => {
+      try {
+        const selected = await api<Job>(token, `/api/v1/jobs/${jobId}`);
+        if (!alive) return;
+        setLoadedJob(selected);
+        setLoadError("");
+        if (activeStates.has(selected.status))
+          timer = window.setTimeout(load, 3500);
+      } catch (exc) {
+        if (alive) {
+          setLoadError(exc instanceof Error ? exc.message : "任务读取失败");
+          timer = window.setTimeout(load, 3500);
+        }
+      }
+    };
+    void load();
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [jobId, token]);
+  const job =
+    loadedJob?.job_id === jobId
+      ? loadedJob
+      : jobs.find((item) => item.job_id === jobId);
+  if (!job)
+    return (
+      <Empty
+        title={loadError ? "任务读取失败" : "正在读取任务…"}
+        text={loadError || "正在加载持久化运行记录"}
+      />
+    );
+  async function reloadSelected() {
+    setLoadedJob(await api<Job>(token, `/api/v1/jobs/${jobId}`));
+  }
   return (
     <Detail
       job={job}
       token={token}
       onBack={() => navigate("/runs")}
-      onCancel={() => onCancel(job)}
+      onCancel={async () => {
+        await onCancel(job);
+        await reloadSelected();
+      }}
+      onControl={async (action) => {
+        await onControl(job, action);
+        await reloadSelected();
+      }}
     />
   );
 }
@@ -491,6 +554,9 @@ function RunsList({
 }) {
   const navigate = useNavigate();
   const [filter, setFilter] = useState("");
+  const [pausedOnly, setPausedOnly] = useState(false);
+  const [pausedJobs, setPausedJobs] = useState<Job[]>([]);
+  const [pausedTotal, setPausedTotal] = useState(0);
   const [cancellingBatch, setCancellingBatch] = useState(false);
   const [batchError, setBatchError] = useState("");
   const [batchJobs, setBatchJobs] = useState<Job[]>([]);
@@ -498,6 +564,34 @@ function RunsList({
   const [recentBatches, setRecentBatches] = useState<BatchSummary[]>([]);
   const [searchParams] = useSearchParams();
   const batchId = searchParams.get("batch") || "";
+  useEffect(() => {
+    if (!pausedOnly || batchId) return;
+    let alive = true;
+    const load = () => {
+      void api<{ items: Job[]; total: number }>(
+        token,
+        "/api/v1/jobs?status=paused&limit=200",
+      )
+        .then((data) => {
+          if (alive) {
+            setPausedJobs(data.items);
+            setPausedTotal(data.total);
+          }
+        })
+        .catch((exc) => {
+          if (alive)
+            setBatchError(
+              exc instanceof Error ? exc.message : "暂停任务读取失败",
+            );
+        });
+    };
+    load();
+    const interval = window.setInterval(load, 3500);
+    return () => {
+      alive = false;
+      window.clearInterval(interval);
+    };
+  }, [token, pausedOnly, batchId]);
   useEffect(() => {
     let alive = true;
     void api<{ items: BatchSummary[] }>(token, "/api/v1/batches?limit=20")
@@ -542,17 +636,18 @@ function RunsList({
       window.clearInterval(interval);
     };
   }, [batchId, token]);
-  const sourceJobs = batchId ? batchJobs : jobs;
+  const sourceJobs = batchId ? batchJobs : pausedOnly ? pausedJobs : jobs;
   const visible = useMemo(
     () =>
       sourceJobs.filter(
         (job) =>
           (!batchId || job.parent_job_id === batchId) &&
+          (!pausedOnly || job.status === "paused") &&
           `${job.model_id} ${job.test_type} ${job.job_id} ${job.status}`
             .toLowerCase()
             .includes(filter.toLowerCase()),
       ),
-    [sourceJobs, filter, batchId],
+    [sourceJobs, filter, batchId, pausedOnly],
   );
   const batchHasActive = Boolean(
     batchId && batchJobs.some((job) => activeStates.has(job.status)),
@@ -572,6 +667,10 @@ function RunsList({
             <p>
               已提交 {batchSummary.submitted_items} /{" "}
               {batchSummary.requested_items} 项；其余子任务在提交前停用。
+              {batchSummary.max_parallel > 1
+                ? ` 最多 ${batchSummary.max_parallel} 项并行。`
+                : " 串行执行。"}
+              {batchSummary.stop_on_error && " 失败即停已启用。"}
             </p>
           )}
         </div>
@@ -642,12 +741,26 @@ function RunsList({
           <div>
             <span className="eyebrow">ALL RUNS</span>
             <h2>
-              {batchId ? "批次任务" : "全部任务"}{" "}
+              {pausedOnly ? "已暂停任务" : batchId ? "批次任务" : "全部任务"}{" "}
               <span className="count-tag">
-                {batchId ? batchJobs.length : total}
+                {batchId
+                  ? sourceJobs.filter(
+                      (job) => !pausedOnly || job.status === "paused",
+                    ).length
+                  : pausedOnly
+                    ? pausedTotal
+                    : total}
               </span>
             </h2>
           </div>
+          <label className="batch-plan">
+            <input
+              type="checkbox"
+              checked={pausedOnly}
+              onChange={(event) => setPausedOnly(event.target.checked)}
+            />
+            只看已暂停
+          </label>
           <input
             className="search"
             value={filter}
@@ -656,6 +769,14 @@ function RunsList({
             aria-label="搜索运行记录"
           />
         </div>
+        {pausedOnly && (
+          <p className="batch-plan">
+            选择任务进入详情，点击“继续运行”即可接着执行。暂停任务仍保留执行资源。
+            {!batchId &&
+              pausedTotal > pausedJobs.length &&
+              ` 当前展示最近 ${pausedJobs.length} / ${pausedTotal} 项。`}
+          </p>
+        )}
         <JobTable jobs={visible} onSelect={(job) => onOpenJob(job.job_id)} />
       </section>
     </div>

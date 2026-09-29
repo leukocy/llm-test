@@ -111,13 +111,51 @@ def test_migration_1_1_0_to_latest_adds_all_warehouse_columns(tmp_path):
         # 1.3.0 引擎列必须在
         for c in ENGINE_COLUMNS:
             assert c in cols
-        assert {"batch_id", "name", "description", "request_hash"} <= _columns(
-            conn, "control_batches"
+        assert {
+            "batch_id",
+            "name",
+            "description",
+            "request_hash",
+            "max_parallel",
+            "stop_on_error",
+        } <= _columns(conn, "control_batches")
+        assert {"pause_count", "paused_seconds", "pause_started_at"} <= _columns(
+            conn, "control_jobs"
         )
         ver = conn.execute("SELECT value FROM db_meta WHERE key='schema_version'").fetchone()[0]
         assert ver == SCHEMA_VERSION
     finally:
         conn.close()
+
+
+def test_queue_migration_from_1_9_preserves_jobs_and_defaults_to_serial(tmp_path):
+    with sqlite3.connect(tmp_path / "queue-1-9.db") as conn:
+        conn.executescript(
+            """
+            CREATE TABLE db_meta (
+                key TEXT PRIMARY KEY, value TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO db_meta(key,value) VALUES ('schema_version','1.9.0');
+            CREATE TABLE control_jobs (job_id TEXT PRIMARY KEY, status TEXT, parent_job_id TEXT);
+            INSERT INTO control_jobs VALUES ('running-job','running','old-batch');
+            INSERT INTO control_jobs VALUES ('queued-job','queued','old-batch');
+            CREATE TABLE control_batches (batch_id TEXT PRIMARY KEY, name TEXT);
+            INSERT INTO control_batches VALUES ('old-batch','Old batch');
+            """
+        )
+        run_migrations(conn, "1.10.0")
+        assert conn.execute(
+            "SELECT job_id,status,pause_count,paused_seconds,pause_started_at FROM control_jobs ORDER BY job_id"
+        ).fetchall() == [
+            ("queued-job", "queued", 0, 0.0, None),
+            ("running-job", "running", 0, 0.0, None),
+        ]
+        assert conn.execute(
+            "SELECT name,max_parallel,stop_on_error FROM control_batches"
+        ).fetchone() == ("Old batch", 1, 0)
+        for migration in MIGRATIONS["1.10.0"]:
+            migration(conn)
 
 
 def test_migration_is_idempotent(tmp_path):

@@ -482,6 +482,8 @@ def test_batch_persists_metadata_skips_disabled_items_and_rejects_changed_replay
         "name": "模型上线前验证",
         "description": "相同端点，依次测并发与输入长度",
         "endpoint_id": "lab",
+        "max_parallel": 2,
+        "stop_on_error": True,
         "items": [
             {
                 "test_type": "concurrency",
@@ -510,6 +512,8 @@ def test_batch_persists_metadata_skips_disabled_items_and_rejects_changed_replay
     assert metadata.json()["requested_items"] == 3
     assert metadata.json()["submitted_items"] == 2
     assert metadata.json()["status_counts"] == {"queued": 2}
+    assert metadata.json()["max_parallel"] == 2
+    assert metadata.json()["stop_on_error"] is True
     assert "request_hash" not in metadata.json()
     assert client.get("/api/v1/jobs/batch/named-batch").status_code == 401
     history = client.get("/api/v1/batches?limit=10", headers=auth())
@@ -525,6 +529,10 @@ def test_batch_persists_metadata_skips_disabled_items_and_rejects_changed_replay
         "/api/v1/jobs/batch", json={**body, "name": "另一个批次"}, headers=headers
     )
     assert changed.status_code == 409
+    changed_policy = client.post(
+        "/api/v1/jobs/batch", json={**body, "max_parallel": 1}, headers=headers
+    )
+    assert changed_policy.status_code == 409
     assert JobStore(settings.db_path).list(parent_job_id="named-batch")[1] == 2
 
 
