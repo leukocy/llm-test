@@ -102,7 +102,7 @@ def wilson_interval(successes: int, trials: int, z: float = 1.96) -> list[float]
     return [max(0.0, midpoint - width), min(1.0, midpoint + width)]
 
 
-def _describe(rows: list[dict[str, Any]]) -> dict[str, Any]:
+def describe_observations(rows: list[dict[str, Any]]) -> dict[str, Any]:
     successful = [row for row in rows if not row["error"]]
     metrics: dict[str, Any] = {}
     for field in NUMERIC_FIELDS:
@@ -288,7 +288,7 @@ def run_summary(
         )
         slice_data = {
             "label": label,
-            **_describe(group),
+            **describe_observations(group),
             "planned_requests": planned.get("measured_requests") if planned else None,
             "input_tokens": {
                 "target": target,
@@ -326,7 +326,7 @@ def run_summary(
             for key, value in dict(run).items()
             if key not in {"config_json", "system_info_json"}
         },
-        "overall": _describe(rows),
+        "overall": describe_observations(rows),
         "group_axis": " × ".join(GROUP_AXIS.get(field, field) for field in fields),
         "groups": sliced,
         "measurement_protocol": protocol,

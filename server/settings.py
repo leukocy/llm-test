@@ -74,6 +74,7 @@ class Settings:
     artifact_root: Path
     endpoints: dict[str, Endpoint]
     worker_poll_seconds: float = 2.0
+    history_root: Path | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -101,4 +102,7 @@ class Settings:
             db_path=Path(os.getenv("LLM_TEST_DB_PATH", "data/benchmark.db")),
             artifact_root=Path(os.getenv("LLM_TEST_ARTIFACT_ROOT", "results/jobs")),
             endpoints=endpoints,
+            history_root=Path(os.environ["LLM_TEST_HISTORY_ROOT"])
+            if os.getenv("LLM_TEST_HISTORY_ROOT")
+            else None,
         )

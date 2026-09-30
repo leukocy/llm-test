@@ -27,6 +27,7 @@ import { Advanced } from "./pages/Advanced";
 import { Environment } from "./pages/Environment";
 import { ApiSettings } from "./pages/ApiSettings";
 import { Help, WelcomeGuide } from "./pages/Help";
+import { HistoryCsv } from "./pages/HistoryCsv";
 
 const TOKEN_KEY = "llm-test-token";
 
@@ -180,6 +181,12 @@ export default function App() {
             <span>▤</span> 运行记录 <i>{total}</i>
           </button>
           <button
+            className={navActive("/history") ? "active" : ""}
+            onClick={nav("/history")}
+          >
+            <span>▥</span> 历史 CSV
+          </button>
+          <button
             className={navActive("/new") ? "active" : ""}
             onClick={nav("/new")}
           >
@@ -247,15 +254,17 @@ export default function App() {
                 ? "总览"
                 : navActive("/runs")
                   ? "运行记录"
-                  : navActive("/new")
-                    ? "创建测量"
-                    : navActive("/batch")
-                      ? "批量测量"
-                      : navActive("/help")
-                        ? "帮助与引导"
-                        : navActive("/settings/api")
-                          ? "受测 API 设置"
-                          : "数据仓库"}
+                  : navActive("/history")
+                    ? "历史 CSV"
+                    : navActive("/new")
+                      ? "创建测量"
+                      : navActive("/batch")
+                        ? "批量测量"
+                        : navActive("/help")
+                          ? "帮助与引导"
+                          : navActive("/settings/api")
+                            ? "受测 API 设置"
+                            : "数据仓库"}
             </strong>
           </div>
           <div className="topbar-right">
@@ -314,6 +323,7 @@ export default function App() {
                 />
               }
             />
+            <Route path="/history" element={<HistoryCsv token={token} />} />
             <Route
               path="/new"
               element={

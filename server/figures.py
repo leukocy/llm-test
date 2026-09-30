@@ -22,13 +22,23 @@ from server.reports import REPORT_ENVIRONMENT_SCOPES
 from server.specs import REPORT_ENVIRONMENT_FIELDS
 
 
-def performance_report_figure(job: dict[str, Any], summary: dict[str, Any]) -> dict:
+def performance_report_figure(
+    job: dict[str, Any], summary: dict[str, Any], metric: str = "ttft"
+) -> dict:
     """Export the exact report statistics, retaining missing values and provenance."""
     groups = summary["groups"]
-    if not any(group["metrics"]["ttft"]["count"] for group in groups):
-        raise ValueError("没有有效的 TTFT 样本，无法导出性能图")
+    metrics = {
+        "ttft": ("首字延迟", "TTFT", "s"),
+        "tps": ("逐请求生成速度", "TPS", "token/s"),
+        "tpot": ("每 token 延迟", "TPOT", "s"),
+        "total_time": ("请求总耗时", "Total time", "s"),
+        "prefill_speed": ("输入处理速度", "Prefill speed", "token/s"),
+    }
+    title, abbreviation, unit = metrics[metric]
+    if not any(group["metrics"][metric]["count"] for group in groups):
+        raise ValueError(f"没有有效的 {abbreviation} 样本，无法导出性能图")
     labels = [escape(group["label"]) for group in groups]
-    counts = [group["metrics"]["ttft"]["count"] for group in groups]
+    counts = [group["metrics"][metric]["count"] for group in groups]
     overall = summary["overall"]
     integrity = summary["integrity"]
     protocol = summary.get("measurement_protocol") or {}
@@ -39,7 +49,7 @@ def performance_report_figure(job: dict[str, Any], summary: dict[str, Any]) -> d
         f"正式请求 {overall['requests']} · 失败 {overall['failures']} · "
         f"预热记录 {protocol.get('warmup_recorded', 0)}（不计入统计） · "
         f"暂停 {control.get('pause_count', 0)} 次 · 批次并行上限 {control.get('max_parallel', 1)}",
-        "柱顶 n 为有效 TTFT 样本数；分位数采用线性插值。小样本尾部分位数分辨率有限，不代表显著性结论。",
+        f"柱顶 n 为有效 {abbreviation} 样本数；分位数采用线性插值。小样本尾部分位数分辨率有限，不代表显著性结论。",
         f"Token 来源：{escape(', '.join(summary['provenance']['token_sources']) or '未记录')} · "
         f"算法：{escape(', '.join(summary['provenance']['token_methods']) or '未记录')}",
     ]
@@ -55,6 +65,15 @@ def performance_report_figure(job: dict[str, Any], summary: dict[str, Any]) -> d
         ]
         footer.extend(" · ".join(values[index : index + 2]) for index in range(0, len(values), 2))
     footer.append(f"作业 {escape(job['job_id'])} · 完整条件和环境信息见 HTML / JSON 报告")
+    origin = summary.get("origin") or {}
+    if origin.get("kind") == "saved_csv":
+        footer[1] = (
+            f"CSV 请求 {overall['requests']} · 失败 {overall['failures']} · 未知状态 {overall.get('unknown_outcomes', 0)}；原运行的预热、暂停和计划请求数未经核验。"
+        )
+        footer.append(
+            f"历史 CSV：{escape(origin['filename'][:120])} · 已知状态样本；原执行条件未经核验。"
+        )
+        footer.append(f"源 CSV SHA-256：{origin['csv_sha256']}")
     return {
         "figure": {
             "data": [
@@ -62,24 +81,24 @@ def performance_report_figure(job: dict[str, Any], summary: dict[str, Any]) -> d
                     "type": "bar",
                     "name": name,
                     "x": labels,
-                    "y": [group["metrics"]["ttft"][stat] for group in groups],
+                    "y": [group["metrics"][metric][stat] for group in groups],
                     "marker": {"color": color},
                     "text": [f"n={count}" if count else "" for count in counts]
                     if stat == "p95"
                     else [],
                     "textposition": "outside",
                     "cliponaxis": False,
-                    "hovertemplate": "%{x}<br>%{y:.3f} s<extra>" + name + "</extra>",
+                    "hovertemplate": "%{x}<br>%{y:.3f} " + unit + "<extra>" + name + "</extra>",
                 }
                 for name, stat, color in [
-                    ("TTFT p50", "median", "#2463a6"),
-                    ("TTFT p95", "p95", "#188b79"),
+                    (f"{abbreviation} p50", "median", "#2463a6"),
+                    (f"{abbreviation} p95", "p95", "#188b79"),
                 ]
             ],
             "layout": {
                 "title": {
                     "text": f"{escape(job['model_id'])} · {escape(job['test_type'])}<br>"
-                    "<sup>首字延迟 · 成功且有限、正值的逐请求观测</sup>",
+                    f"<sup>{title} · 成功且有限、正值的逐请求观测</sup>",
                     "x": 0.06,
                     "xanchor": "left",
                 },
@@ -100,7 +119,7 @@ def performance_report_figure(job: dict[str, Any], summary: dict[str, Any]) -> d
                     "automargin": True,
                 },
                 "yaxis": {
-                    "title": {"text": "TTFT (s)"},
+                    "title": {"text": f"{abbreviation} ({unit})"},
                     "rangemode": "tozero",
                     "gridcolor": "#e3eaf2",
                 },

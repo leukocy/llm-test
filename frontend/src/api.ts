@@ -128,6 +128,7 @@ export type Slice = {
   requests: number;
   successes: number;
   failures: number;
+  unknown_outcomes?: number;
   success_rate: number | null;
   success_rate_ci95: number[] | null;
   metrics: Record<string, Metric>;
@@ -270,7 +271,9 @@ export async function api<T>(
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
+      ...(init.body && !(init.body instanceof FormData)
+        ? { "Content-Type": "application/json" }
+        : {}),
       ...init.headers,
     },
   });

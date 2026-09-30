@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from html import escape
 from typing import Any
 
@@ -108,6 +109,7 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
     integrity = summary["integrity"]
     protocol = summary.get("measurement_protocol") or {}
     control = summary.get("execution_control") or {}
+    historical = summary.get("origin", {}).get("kind") == "saved_csv"
 
     def number(value: Any, digits: int = 3) -> str:
         return "—" if value is None else f"{value:,.{digits}f}"
@@ -115,8 +117,16 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
     def rate(value: Any) -> str:
         return "—" if value is None else f"{value * 100:.1f}%"
 
+    def token_list(values: list[str]) -> str:
+        safe = escape(_md(", ".join(values)), quote=False)
+        for char in "`*_[]":
+            safe = safe.replace(char, f"\\{char}")
+        return safe
+
     lines = [
-        f"# LLM Test 测量报告 · {_md(job['model_id'])}",
+        "# LLM Test 历史 CSV 报告"
+        if historical
+        else f"# LLM Test 测量报告 · {_md(job['model_id'])}",
         "",
         f"- 作业 ID：`{_md(job['job_id'])}`",
         f"- 测试类型：{_md(job['test_type'])}",
@@ -164,10 +174,14 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
             f"- 协议版本：{_md(protocol.get('protocol_version'))}",
             f"- 负载模型：{_md(protocol.get('workload_model'))}",
             f"- 正式请求：{_md(protocol.get('measured_requests'))}；预热请求：{_md(protocol.get('warmup_requests'))}",
-            f"- Token 来源：{_md(', '.join(summary['provenance']['token_sources']))}",
-            f"- Token 算法：{_md(', '.join(summary['provenance']['token_methods']))}",
-            f"- 暂停：{control.get('pause_count', 0)} 次，共 {number(control.get('paused_seconds', 0))} 秒；仅在请求组之间暂停",
-            f"- 批次并行上限：{control.get('max_parallel', 1)}；失败即停：{'开启' if control.get('stop_on_error') else '关闭'}",
+            f"- Token 来源：{token_list(summary['provenance']['token_sources'])}",
+            f"- Token 算法：{token_list(summary['provenance']['token_methods'])}",
+            "- 原运行的暂停、批次并行与失败策略未经核验。"
+            if historical
+            else f"- 暂停：{control.get('pause_count', 0)} 次，共 {number(control.get('paused_seconds', 0))} 秒；仅在请求组之间暂停",
+            "- 此处不提供新测量的执行完整性证明。"
+            if historical
+            else f"- 批次并行上限：{control.get('max_parallel', 1)}；失败即停：{'开启' if control.get('stop_on_error') else '关闭'}",
         ]
     )
     lines.extend(f"- {_md(note)}" for note in summary["notes"])
@@ -177,6 +191,7 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
     return (
         "\n".join(lines)
         + "\n"
+        + history_origin_markdown(summary)
         + report_environment_markdown(summary.get("report_environment"))
         + tokenizer_installation_markdown(summary.get("tokenizer_installation"))
     )
@@ -266,14 +281,17 @@ def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
         f"批次并行上限 {cell(control.get('max_parallel', 1))}；"
         f"失败即停{'开启' if control.get('stop_on_error') else '关闭'}。</p>"
     )
+    if summary.get("origin", {}).get("kind") == "saved_csv":
+        control_html = "<h2>执行条件</h2><p>原运行的暂停、批次并行与失败策略未经核验。</p>"
     integrity_label = (
         "单次运行完整性核验通过" if integrity["verified"] else "仅供诊断 · 未通过完整性核验"
     )
     expected = integrity["expected_requests"]
+    record_source = "CSV" if summary.get("origin", {}).get("kind") == "saved_csv" else "数据库"
     integrity_detail = (
-        f"数据库已记录 {integrity['recorded_requests']} / 计划 {expected} 次请求"
+        f"{record_source}已记录 {integrity['recorded_requests']} / 计划 {expected} 次请求"
         if expected is not None
-        else f"数据库已记录 {integrity['recorded_requests']} 次请求；计划请求数未知"
+        else f"{record_source}已记录 {integrity['recorded_requests']} 次请求；计划请求数未知"
     )
     return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -315,6 +333,7 @@ code {{ overflow-wrap:anywhere; }}
 <th>输入 token 中位数</th><th>TTFT p50 · s</th><th>TTFT p95 · s</th><th>TPS p50</th></tr></thead><tbody>{rows}</tbody></table>
 {protocol_html}
 {control_html}
+{history_origin_html(summary)}
 {report_environment_html(summary.get("report_environment"))}
 {tokenizer_installation_html(summary.get("tokenizer_installation"))}
 {"<h2>数据质量提示</h2><ul>" + quality_warnings + "</ul>" if quality_warnings else ""}
@@ -325,6 +344,33 @@ code {{ overflow-wrap:anywhere; }}
 <p>Token 算法：<code>{cell(summary["provenance"]["token_methods"])}</code></p>
 <p class="muted">由逐请求记录计算。空值表示样本不足或该指标未采集。</p>
 </main></body></html>"""
+
+
+def history_origin_html(summary: dict[str, Any]) -> str:
+    origin = summary.get("origin")
+    if not origin or origin.get("kind") != "saved_csv":
+        return ""
+    context = escape(json.dumps({"run": summary["run"], **origin}, ensure_ascii=False, indent=2))
+    unknown = summary["overall"].get("unknown_outcomes", 0)
+    return (
+        "<section><h2>历史文件来源与配置</h2><p>由保存的 CSV 重新计算，未重新运行测量。"
+        f"未知成功状态：{unknown} 次；成功率的分母仅含已知状态的请求。"
+        "配置与硬件说明来自配套元数据，未经核验；哈希仅用于识别本次读取的文件内容。</p>"
+        f"<pre style='white-space:pre-wrap;overflow-wrap:anywhere'>{context}</pre></section>"
+    )
+
+
+def history_origin_markdown(summary: dict[str, Any]) -> str:
+    origin = summary.get("origin")
+    if not origin or origin.get("kind") != "saved_csv":
+        return ""
+    context = json.dumps({"run": summary["run"], **origin}, ensure_ascii=False, indent=2)
+    return (
+        "\n## 历史文件来源与配置\n\n由保存的 CSV 重新计算，未重新运行测量。"
+        f"未知成功状态：{summary['overall'].get('unknown_outcomes', 0)} 次；成功率的分母仅含已知状态的请求。"
+        "配置与硬件说明来自配套元数据，未经核验；哈希仅用于识别本次读取的文件内容。\n\n"
+        f"```json\n{context}\n```\n"
+    )
 
 
 def render_quality_html(job: dict[str, Any], report: dict[str, Any]) -> str:

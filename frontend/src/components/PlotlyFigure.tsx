@@ -63,9 +63,11 @@ export async function downloadFigurePng(figure: Figure, filename: string) {
 /** 后端 fig.to_plotly_json() 的直接渲染包装（plotly.js 懒加载）。 */
 export function PlotlyFigure({
   figure,
+  exportFigure,
   ariaLabel,
 }: {
   figure: Figure | null | undefined;
+  exportFigure?: Figure;
   ariaLabel?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -118,7 +120,7 @@ export function PlotlyFigure({
             setError("");
             try {
               await downloadFigurePng(
-                figure,
+                exportFigure || figure,
                 `llm-test-${ariaLabel || "chart"}`,
               );
             } catch (exc) {
