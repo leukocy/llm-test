@@ -4,6 +4,7 @@ declare module "plotly.js-dist-min" {
     layout: Record<string, unknown>;
   }
   const Plotly: {
+    Plots: { resize(el: HTMLElement): Promise<void> };
     react(el: HTMLElement, figure: Figure): Promise<void>;
     purge(el: HTMLElement): void;
     toImage(

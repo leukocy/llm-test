@@ -19,22 +19,27 @@ from core.warehouse.charts import (
     collect_distribution_values,
 )
 from server.reports import REPORT_ENVIRONMENT_SCOPES
+from server.scenario_reports import METRICS, STATISTICS, profile_series, scenario_analysis
 from server.specs import REPORT_ENVIRONMENT_FIELDS
 
 
 def performance_report_figure(
-    job: dict[str, Any], summary: dict[str, Any], metric: str = "ttft"
+    job: dict[str, Any],
+    summary: dict[str, Any],
+    metric: str = "ttft",
+    *,
+    view: str = "comparison",
+    statistic: str = "median",
 ) -> dict:
     """Export the exact report statistics, retaining missing values and provenance."""
     groups = summary["groups"]
-    metrics = {
-        "ttft": ("首字延迟", "TTFT", "s"),
-        "tps": ("逐请求生成速度", "TPS", "token/s"),
-        "tpot": ("每 token 延迟", "TPOT", "s"),
-        "total_time": ("请求总耗时", "Total time", "s"),
-        "prefill_speed": ("输入处理速度", "Prefill speed", "token/s"),
-    }
-    title, abbreviation, unit = metrics[metric]
+    if (
+        metric not in METRICS
+        or view not in {"comparison", "profile", "heatmap"}
+        or statistic not in STATISTICS
+    ):
+        raise ValueError("不支持的指标、图形或统计量")
+    title, abbreviation, unit = METRICS[metric]
     if not any(group["metrics"][metric]["count"] for group in groups):
         raise ValueError(f"没有有效的 {abbreviation} 样本，无法导出性能图")
     labels = [escape(group["label"]) for group in groups]
@@ -74,7 +79,7 @@ def performance_report_figure(
             f"历史 CSV：{escape(origin['filename'][:120])} · 已知状态样本；原执行条件未经核验。"
         )
         footer.append(f"源 CSV SHA-256：{origin['csv_sha256']}")
-    return {
+    result = {
         "figure": {
             "data": [
                 {
@@ -141,6 +146,82 @@ def performance_report_figure(
             },
         }
     }
+    if view != "comparison":
+        _scenario_view(result["figure"], summary, metric, view, statistic)
+    result["analysis"] = scenario_analysis(summary)
+    return result
+
+
+def _scenario_view(figure: dict, summary: dict, metric: str, view: str, statistic: str) -> None:
+    axis, numeric, series = profile_series(summary)
+    _, abbreviation, unit = METRICS[metric]
+    stat = STATISTICS[statistic]
+    layout = figure["layout"]
+    layout["title"]["text"] = (
+        layout["title"]["text"].split("<br>")[0] + f"<br>{abbreviation} {stat} ({unit})"
+    )
+    layout["annotations"][0]["text"] = layout["annotations"][0]["text"].replace(
+        "柱顶 n 为", "悬停 n 为"
+    )
+    layout["xaxis"] = {
+        "title": {"text": axis},
+        "type": "linear" if numeric else "category",
+        "automargin": True,
+    }
+    layout["height"] = 950
+    layout["width"] = 1500
+    if not numeric:
+        layout["annotations"][0]["text"] += "<br>结构化条件未记录，横轴使用分类标签。"
+    if view == "heatmap":
+        if summary["run"]["test_type"] != "throughput_matrix" or not numeric:
+            raise ValueError("热力图需要并发 × 上下文矩阵的完整结构化条件")
+        layout["xaxis"]["type"] = "category"
+        layout["yaxis"] = {"title": {"text": "并发数"}, "type": "category", "automargin": True}
+        layout["annotations"][0]["text"] += (
+            "<br>色标为 " + abbreviation + " " + stat + "；空白为无有效样本或缺测组合。"
+        )
+        figure["data"] = [
+            {
+                "type": "heatmap",
+                "x": [str(x) for x in series[0]["x"]],
+                "y": [s["name"].removeprefix("并发 ") for s in series],
+                "z": [
+                    [g["metrics"][metric][statistic] if g else None for g in s["groups"]]
+                    for s in series
+                ],
+                "customdata": [[_hover_data(g, metric) for g in s["groups"]] for s in series],
+                "colorscale": "Cividis",
+                "hoverongaps": False,
+                "colorbar": {"title": {"text": f"{abbreviation} ({unit})"}},
+                "hovertemplate": "上下文 %{x} token · 并发 %{y}<br>%{z:.4g} "
+                + unit
+                + "<br>n=%{customdata[0]} · 请求=%{customdata[1]} · 失败=%{customdata[2]}<extra></extra>",
+            }
+        ]
+        return
+    figure["data"] = [
+        {
+            "type": "scatter",
+            "mode": "lines+markers",
+            "name": escape(s["name"]),
+            "x": s["x"] if numeric else [escape(str(x)) for x in s["x"]],
+            "y": [g["metrics"][metric][statistic] if g else None for g in s["groups"]],
+            "connectgaps": False,
+            "customdata": [_hover_data(g, metric) for g in s["groups"]],
+            "hovertemplate": "%{x}<br>%{y:.4g} "
+            + unit
+            + "<br>n=%{customdata[0]} · 请求=%{customdata[1]} · 失败=%{customdata[2]}<extra>%{fullData.name}</extra>",
+        }
+        for s in series
+    ]
+
+
+def _hover_data(group: dict | None, metric: str) -> list[int | None]:
+    return (
+        [group["metrics"][metric]["count"], group["requests"], group["failures"]]
+        if group
+        else [None, None, None]
+    )
 
 
 def _project_rows(db_manager, selection, limit: int = 2000) -> list[dict[str, Any]]:

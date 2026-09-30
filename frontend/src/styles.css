@@ -262,6 +262,7 @@ h3 {
 }
 .page-grid {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 22px;
 }
 .page-head {
@@ -840,6 +841,14 @@ textarea:focus {
 }
 .detail-title h1 {
   margin: 0;
+  overflow-wrap: anywhere;
+}
+.detail-title > div {
+  min-width: 0;
+  flex: 1;
+}
+.detail-title .status {
+  flex-shrink: 0;
 }
 .detail-actions {
   border-top: 1px solid #e4ebf2;
@@ -2910,5 +2919,46 @@ textarea:focus {
 @media (max-width: 800px) {
   .perturbation-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.scenario-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  margin: 20px 0;
+}
+.scenario-controls label {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.scenario-controls select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #dce5f2;
+  border-radius: 8px;
+  background: #f9fbff;
+  color: #1b2a40;
+}
+.scenario-analysis,
+.scenario-explanation {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.scenario-explanation {
+  padding-top: 16px;
+  border-top: 1px solid #dce5f2;
+}
+.scenario-explanation li {
+  margin: 8px 0;
+  line-height: 1.7;
+}
+.scenario-explanation summary {
+  cursor: pointer;
+}
+@media (max-width: 700px) {
+  .scenario-controls {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

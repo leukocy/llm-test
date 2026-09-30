@@ -10,7 +10,8 @@ import {
   type Summary,
   type ReportEnvironment,
 } from "../api";
-import { Status, MetricCard, SlicesChart, Empty } from "../components";
+import { Status, MetricCard, Empty } from "../components";
+import { ScenarioAnalysis } from "../components/ScenarioAnalysis";
 import { QualityAnalysis } from "./QualityAnalysis";
 import { ReportEnvironmentCard } from "../components/ReportEnvironment";
 import { downloadFigurePng } from "../components/PlotlyFigure";
@@ -621,18 +622,12 @@ export function Detail({
               note="tokens/s · 成功请求"
             />
           </div>
-          <section className="surface chart-surface">
-            <div className="section-head">
-              <div>
-                <span className="eyebrow">LATENCY PROFILE</span>
-                <h2>延迟随{summary.group_axis}变化</h2>
-              </div>
-              <span className="minor-tag">
-                指标契约 v{summary.metric_contract_version}
-              </span>
-            </div>
-            <SlicesChart summary={summary} />
-          </section>
+          <ScenarioAnalysis
+            key={job.job_id}
+            job={job}
+            summary={summary}
+            token={token}
+          />
           <section className="surface">
             <div className="section-head">
               <div>
