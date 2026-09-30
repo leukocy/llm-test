@@ -124,10 +124,12 @@ export function JobTable({
   jobs,
   onSelect,
   compact = false,
+  savedProgress = false,
 }: {
   jobs: Job[];
   onSelect: (job: Job) => void;
   compact?: boolean;
+  savedProgress?: boolean;
 }) {
   if (!jobs.length)
     return (
@@ -145,6 +147,7 @@ export function JobTable({
             <th>目标模型</th>
             <th>状态</th>
             <th>进度</th>
+            {savedProgress && <th>保存进度</th>}
             <th>创建时间</th>
             <th />
           </tr>
@@ -183,6 +186,15 @@ export function JobTable({
                   </small>
                 </div>
               </td>
+              {savedProgress && (
+                <td>
+                  <strong>
+                    {job.saved_progress_committed ?? 0} /{" "}
+                    {job.saved_progress_planned ?? 0} 个样本
+                  </strong>
+                  <small>保存于 {date(job.saved_progress_at)}</small>
+                </td>
+              )}
               <td className="muted-cell">{date(job.created_at)}</td>
               <td className="row-arrow">↗</td>
             </tr>

@@ -50,6 +50,7 @@ export function Detail({
     null,
   );
   const [controlBusy, setControlBusy] = useState(false);
+  const [checkpointDeleted, setCheckpointDeleted] = useState(false);
   const [pngBusy, setPngBusy] = useState(false);
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [logSearch, setLogSearch] = useState("");
@@ -98,6 +99,7 @@ export function Detail({
   }, [job.job_id, job.status, job.test_type, token]);
 
   useEffect(() => {
+    setCheckpointDeleted(false);
     setShowLatestOutput(false);
     setLatestOutput(null);
   }, [job.job_id]);
@@ -377,6 +379,50 @@ export function Detail({
     }
   }
 
+  async function removeCheckpoint() {
+    if (!checkpoint?.can_delete || !checkpoint.revision) return;
+    if (
+      !window.confirm(
+        "删除本次测试的保存进度？删除后无法从此检查点恢复。已有测试结果、报告和审计记录仍会保留。",
+      )
+    )
+      return;
+    setControlBusy(true);
+    setError("");
+    try {
+      const info = await api<EvaluationCheckpoint>(
+        token,
+        `/api/v1/jobs/${job.job_id}/checkpoint`,
+        {
+          method: "DELETE",
+          headers: { "If-Match": `"${checkpoint.revision}"` },
+        },
+      );
+      setCheckpoint(info);
+      setCheckpointDeleted(true);
+      void api<{ items: JobEvent[] }>(
+        token,
+        `/api/v1/jobs/${job.job_id}/events`,
+      )
+        .then((data) => setEvents(data.items))
+        .catch(() => {});
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : "删除保存进度失败");
+      try {
+        setCheckpoint(
+          await api<EvaluationCheckpoint>(
+            token,
+            `/api/v1/jobs/${job.job_id}/checkpoint`,
+          ),
+        );
+      } catch {
+        /* keep the original error */
+      }
+    } finally {
+      setControlBusy(false);
+    }
+  }
+
   const overall = summary?.overall;
   const pausedSeconds =
     (job.paused_seconds ?? 0) +
@@ -500,15 +546,37 @@ export function Detail({
           )}
         </div>
       </div>
+      {checkpointDeleted && (
+        <p className="surface" role="status">
+          保存进度已删除，已有测试结果、报告和审计记录保留。
+        </p>
+      )}
       {checkpoint?.available && (
         <section className="surface" aria-label="样本检查点">
-          <h2>样本检查点</h2>
+          <div className="section-head">
+            <h2>样本检查点</h2>
+            {checkpoint.can_delete && (
+              <button
+                className="button subtle danger"
+                disabled={controlBusy}
+                onClick={() => void removeCheckpoint()}
+              >
+                删除保存进度
+              </button>
+            )}
+          </div>
+          <p className="muted">最后保存于 {date(checkpoint.saved_at)}</p>
           <p>
             已保存 {checkpoint.committed_units} / {checkpoint.planned_units}{" "}
             个样本 · 恢复 {checkpoint.recoveries} 次 · 样本发起{" "}
             {checkpoint.issued_unit_attempts} 次 · 重复发起{" "}
             {checkpoint.repeated_unit_attempts} 次
           </p>
+          {job.status === "cancelled" && checkpoint.can_recover && (
+            <p>
+              测试已停止。点击“从检查点恢复”会继续这次测试，并保留此前样本和停止记录。
+            </p>
+          )}
           {checkpoint.notes.map((note) => (
             <p className="muted" key={note}>
               {note}

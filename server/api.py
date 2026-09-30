@@ -31,7 +31,7 @@ from server.analytics import (
     run_results_csv,
     run_summary,
 )
-from server.checkpoints import CheckpointConflict, checkpoint_info, recover_job
+from server.checkpoints import CheckpointConflict, checkpoint_info, delete_checkpoint, recover_job
 from server.control import PAUSABLE_TEST_TYPES
 from server.endpoints import (
     EndpointConflict,
@@ -977,12 +977,19 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
     @app.get("/api/v1/jobs", dependencies=[auth])
     def list_jobs(
         status: RunStatus | None = None,
+        recoverable: bool = False,
+        saved_progress: bool = False,
         parent_job_id: Annotated[str | None, Query(max_length=64)] = None,
         limit: Annotated[int, Query(ge=1, le=200)] = 50,
         offset: Annotated[int, Query(ge=0)] = 0,
     ):
         items, total = store.list(
-            status=status, limit=limit, offset=offset, parent_job_id=parent_job_id
+            status=status,
+            recoverable=recoverable,
+            saved_progress=saved_progress,
+            limit=limit,
+            offset=offset,
+            parent_job_id=parent_job_id,
         )
         return {"items": items, "total": total, "limit": limit, "offset": offset}
 
@@ -1274,7 +1281,21 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
 
     @app.get("/api/v1/jobs/{job_id}/checkpoint", dependencies=[auth])
     def evaluation_checkpoint(job_id: str):
-        return checkpoint_info(store, job_or_404(job_id))
+        info = checkpoint_info(store, job_or_404(job_id))
+        headers = {"ETag": f'"{info["revision"]}"'} if info["revision"] else {}
+        return JSONResponse(info, headers=headers)
+
+    @app.delete("/api/v1/jobs/{job_id}/checkpoint", dependencies=[auth])
+    def remove_saved_progress(
+        job_id: str, if_match: Annotated[str | None, Header(alias="If-Match", max_length=68)] = None
+    ):
+        job = job_or_404(job_id)
+        if if_match is None:
+            raise HTTPException(428, "删除保存进度前请先读取并提供版本")
+        try:
+            return delete_checkpoint(store, job, if_match.strip('"'))
+        except CheckpointConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     @app.post("/api/v1/jobs/{job_id}/recover", dependencies=[auth])
     def recover_evaluation(job_id: str):

@@ -74,7 +74,7 @@ _TRANSITIONS: dict[RunStatus, dict[RunEvent, RunStatus]] = {
         RunEvent.CANCEL: RunStatus.CANCELLED,
         RunEvent.FAIL: RunStatus.FAILED,
     },
-    RunStatus.CANCELLED: {},
+    RunStatus.CANCELLED: {RunEvent.RECOVER: RunStatus.QUEUED},
     RunStatus.COMPLETED: {},
     RunStatus.FAILED: {RunEvent.RECOVER: RunStatus.QUEUED},
 }

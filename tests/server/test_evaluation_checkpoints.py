@@ -127,11 +127,10 @@ def test_recovery_rejects_corrupt_or_changed_provenance(lab, change, monkeypatch
     "outcome,error",
     [
         (RunStatus.COMPLETED, None),
-        (RunStatus.CANCELLED, None),
         (RunStatus.FAILED, "EXECUTION_FAILED"),
     ],
 )
-def test_recovery_does_not_retry_scores_cancellations_or_api_failures(lab, outcome, error):
+def test_recovery_does_not_retry_scores_or_api_failures(lab, outcome, error):
     store, endpoint, _ = lab
     job = claim(store)
     journal = JobJournal(store, job, "w", endpoint)
@@ -248,7 +247,10 @@ class SyntheticEvaluator(BaseEvaluator):
 
 
 @pytest.mark.asyncio
-async def test_quality_adapter_recovers_exact_samples_and_few_shot_without_repeat(lab, monkeypatch):
+@pytest.mark.parametrize("termination", ["interruption", "stop"])
+async def test_quality_adapter_recovers_exact_samples_and_few_shot_without_repeat(
+    lab, monkeypatch, termination
+):
     store, endpoint, settings = lab
     config = QualityTestConfig(
         datasets=["synthetic"], max_samples=3, concurrency=1, use_cache=False
@@ -270,11 +272,18 @@ async def test_quality_adapter_recovers_exact_samples_and_few_shot_without_repea
     job = claim(store, parameters=config.to_dict())
     task = asyncio.create_task(execute_job(job, endpoint, settings, store, "w"))
     await asyncio.wait_for(started.wait(), 3)
+    if termination == "stop":
+        store.request_cancel(job["job_id"])
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
     assert checkpoint_info(store, store.get(job["job_id"]))["committed_units"] == 1
-    recover_job(store, interrupt(store, job), endpoint)
+    if termination == "stop":
+        store.finish(job["job_id"], "w", outcome=RunStatus.CANCELLED)
+        stopped = store.get(job["job_id"])
+    else:
+        stopped = interrupt(store, job)
+    recover_job(store, stopped, endpoint)
     monkeypatch.setattr(
         QualityEvaluator,
         "get_evaluator",
@@ -299,7 +308,10 @@ async def test_quality_adapter_recovers_exact_samples_and_few_shot_without_repea
 
 
 @pytest.mark.asyncio
-async def test_robustness_freezes_perturbations_and_skips_committed_samples(lab, monkeypatch):
+@pytest.mark.parametrize("termination", ["interruption", "stop"])
+async def test_robustness_freezes_perturbations_and_skips_committed_samples(
+    lab, monkeypatch, termination
+):
     store, endpoint, settings = lab
     params = {
         "samples": [
@@ -321,12 +333,19 @@ async def test_robustness_freezes_perturbations_and_skips_committed_samples(lab,
     job = claim(store, "robustness", params)
     task = asyncio.create_task(execute_job(job, endpoint, settings, store, "w"))
     await asyncio.wait_for(blocked.wait(), 3)
+    if termination == "stop":
+        store.request_cancel(job["job_id"])
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
     journal = JobJournal(store, job, "w", endpoint)
     _, frozen = journal.prepare_scope("robustness", lambda: pytest.fail("existing plan"))
-    recover_job(store, interrupt(store, job), endpoint)
+    if termination == "stop":
+        store.finish(job["job_id"], "w", outcome=RunStatus.CANCELLED)
+        stopped = store.get(job["job_id"])
+    else:
+        stopped = interrupt(store, job)
+    recover_job(store, stopped, endpoint)
     output = await execute_job(store.claim("w2"), endpoint, settings, store, "w2")
     payload = json.loads((settings.artifact_root / output.result_artifact).read_text())
     expected = [

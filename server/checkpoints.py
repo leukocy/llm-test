@@ -11,12 +11,38 @@ from typing import Any
 
 from core.run_lifecycle import RunEvent, RunStatus, advance_run
 from server.settings import Endpoint
-from server.store import JobStore, LeaseLost
+from server.store import JobNotFound, JobStore, LeaseLost
 
 CONTRACT = "evaluation-checkpoint-v1"
 RECOVERABLE_ERRORS = {"WORKER_LOST", "INTERRUPTED"}
 SUPPORTED_TYPES = {"quality", "robustness"}
 MAX_BYTES = 16 * 1024 * 1024
+
+
+def recovery_filter() -> tuple[str, tuple[str, ...]]:
+    """Candidate eligibility only; recovery performs full provenance verification."""
+    types = sorted(SUPPORTED_TYPES)
+    errors = sorted(RECOVERABLE_ERRORS)
+    return (
+        "test_type IN ("
+        + ",".join("?" for _ in types)
+        + ")"
+        + " AND ((status = 'failed' AND error_code IN ("
+        + ",".join("?" for _ in errors)
+        + ")) OR (status = 'cancelled' AND error_code IS NULL))"
+        + " AND EXISTS (SELECT 1 FROM job_checkpoints h WHERE h.job_id = control_jobs.job_id AND h.contract = ?)"
+        + " AND EXISTS (SELECT 1 FROM checkpoint_units u WHERE u.job_id = control_jobs.job_id)",
+        (*types, *errors, CONTRACT),
+    )
+
+
+def resumable_state(job: Any) -> bool:
+    return (
+        job["status"] == "failed"
+        and job["error_code"] in RECOVERABLE_ERRORS
+        or job["status"] == "cancelled"
+        and job["error_code"] is None
+    )
 
 
 class CheckpointConflict(ValueError):
@@ -88,33 +114,57 @@ def execution_signature(job: dict, endpoint: Endpoint) -> str:
     )
 
 
+def _read_checkpoint(conn, job_id: str):
+    job = conn.execute("SELECT * FROM control_jobs WHERE job_id = ?", (job_id,)).fetchone()
+    if job is None:
+        raise JobNotFound(job_id)
+    header = conn.execute("SELECT * FROM job_checkpoints WHERE job_id = ?", (job_id,)).fetchone()
+    counts = conn.execute(
+        """SELECT COUNT(*) AS planned, COALESCE(SUM(result_json IS NOT NULL),0) AS committed,
+        COALESCE(SUM(issued_attempts),0) AS issued,
+        COALESCE(SUM(MAX(0,issued_attempts-1)),0) AS repeated
+        FROM checkpoint_units WHERE job_id = ?""",
+        (job_id,),
+    ).fetchone()
+    revision = (
+        _hash(
+            _encode(
+                {
+                    "header": dict(header),
+                    "counts": dict(counts),
+                    "job_updated_at": job["updated_at"],
+                    "status": job["status"],
+                }
+            )
+        )
+        if header
+        else None
+    )
+    return job, header, counts, revision
+
+
 def checkpoint_info(store: JobStore, job: dict) -> dict[str, Any]:
     with store._connection() as conn:
-        header = conn.execute(
-            "SELECT * FROM job_checkpoints WHERE job_id = ?", (job["job_id"],)
-        ).fetchone()
-        counts = conn.execute(
-            """SELECT COUNT(*) AS planned, SUM(result_json IS NOT NULL) AS committed,
-            COALESCE(SUM(issued_attempts),0) AS issued,
-            COALESCE(SUM(MAX(0,issued_attempts-1)),0) AS repeated
-            FROM checkpoint_units WHERE job_id = ?""",
-            (job["job_id"],),
-        ).fetchone()
+        conn.execute("BEGIN")
+        current, header, counts, revision = _read_checkpoint(conn, job["job_id"])
     return {
         "contract": CONTRACT,
-        "supported": job["test_type"] in SUPPORTED_TYPES,
+        "supported": current["test_type"] in SUPPORTED_TYPES,
         "available": bool(header),
+        "revision": revision,
+        "saved_at": header["updated_at"] if header else None,
         "planned_units": counts["planned"],
-        "committed_units": counts["committed"] or 0,
+        "committed_units": counts["committed"],
         "issued_unit_attempts": counts["issued"],
         "repeated_unit_attempts": counts["repeated"],
         "recoveries": header["recoveries"] if header else 0,
+        "can_delete": bool(header and current["status"] in {"failed", "cancelled", "completed"}),
         "can_recover": bool(
             header
+            and header["contract"] == CONTRACT
             and counts["planned"]
-            and job["status"] == "failed"
-            and job["error_code"] in RECOVERABLE_ERRORS
-            and job["test_type"] in SUPPORTED_TYPES
+            and resumable_state(current)
+            and current["test_type"] in SUPPORTED_TYPES
         ),
         "notes": [
             "恢复会复用已提交样本，保留原始样本顺序、few-shot 和扰动计划，并核验模型、参数与执行代码。",
@@ -122,6 +172,39 @@ def checkpoint_info(store: JobStore, job: dict) -> dict[str, Any]:
             "含恢复样本的结果跨越执行中断；当前执行时长只描述本次尝试，不能作为连续吞吐或不中断稳定性的证明。",
         ],
     }
+
+
+def delete_checkpoint(store: JobStore, job: dict, revision: str) -> dict[str, Any]:
+    """Delete terminal saved progress, retaining observations, reports and audit events."""
+    with store._connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        current, header, counts, expected = _read_checkpoint(conn, job["job_id"])
+        if current["status"] not in {"failed", "cancelled", "completed"}:
+            raise CheckpointConflict("正在排队或执行的任务不能删除保存进度")
+        if header:
+            if revision != expected:
+                raise CheckpointConflict("保存进度已变更，请重新读取后删除")
+            now = time.time()
+            conn.execute("DELETE FROM job_checkpoints WHERE job_id = ?", (job["job_id"],))
+            conn.execute(
+                "UPDATE control_jobs SET updated_at = ? WHERE job_id = ?", (now, job["job_id"])
+            )
+            store._event(
+                conn,
+                job["job_id"],
+                current["status"],
+                current["status"],
+                "delete_checkpoint",
+                "api",
+                now,
+                {
+                    "planned_units": counts["planned"],
+                    "committed_units": counts["committed"],
+                    "revision": revision,
+                },
+            )
+        conn.commit()
+    return checkpoint_info(store, job)
 
 
 class JobJournal:
@@ -145,7 +228,14 @@ class JobJournal:
                 "INSERT OR IGNORE INTO job_checkpoints(job_id,contract,signature,created_at,updated_at) VALUES (?,?,?,?,?)",
                 (job["job_id"], CONTRACT, self.signature, now, now),
             )
+            self._touch(conn)
             conn.commit()
+
+    def _touch(self, conn) -> None:
+        conn.execute(
+            "UPDATE job_checkpoints SET updated_at=? WHERE job_id=?",
+            (time.time(), self.job["job_id"]),
+        )
 
     def _lease(self, conn) -> None:
         if not conn.execute(
@@ -190,6 +280,7 @@ class JobJournal:
                 "INSERT INTO checkpoint_units(job_id,scope_key,unit_index,input_json,input_sha256) VALUES (?,?,?,?,?)",
                 [(self.job["job_id"], key, i, raw, _hash(raw)) for i, raw in enumerate(encoded)],
             )
+            self._touch(conn)
             conn.commit()
         return metadata, inputs
 
@@ -214,6 +305,7 @@ class JobJournal:
             )
             if updated.rowcount != 1:
                 raise CheckpointConflict("Sample is absent or already committed")
+            self._touch(conn)
             conn.commit()
 
     def commit(self, key: str, index: int, result: dict[str, Any]) -> None:
@@ -238,6 +330,7 @@ class JobJournal:
                 raise CheckpointConflict(
                     "Sample was not issued by this attempt or is already committed"
                 )
+            self._touch(conn)
             conn.commit()
 
     def describe(self) -> dict[str, Any]:
@@ -261,13 +354,9 @@ def recover_job(store: JobStore, job: dict, endpoint: Endpoint) -> dict[str, Any
         if current["status"] == "queued" and saved["recoveries"]:
             conn.commit()
             return store.get(job["job_id"])
-        if (
-            current["status"] != "failed"
-            or current["error_code"] not in RECOVERABLE_ERRORS
-            or current["test_type"] not in SUPPORTED_TYPES
-        ):
+        if not resumable_state(current) or current["test_type"] not in SUPPORTED_TYPES:
             raise CheckpointConflict(
-                "Only interrupted evaluations with a saved plan can be recovered"
+                "Only interrupted or explicitly stopped evaluations with a saved plan can be recovered"
             )
         scopes = conn.execute(
             "SELECT * FROM checkpoint_scopes WHERE job_id=?", (job["job_id"],)
@@ -287,7 +376,8 @@ def recover_job(store: JobStore, job: dict, endpoint: Endpoint) -> dict[str, Any
                 if row["result_json"] is not None:
                     _decode(row["result_json"], row["result_sha256"])
         now = time.time()
-        after = advance_run(RunStatus.FAILED, RunEvent.RECOVER)
+        before = RunStatus(current["status"])
+        after = advance_run(before, RunEvent.RECOVER)
         conn.execute(
             """UPDATE control_jobs SET status=?,finished_at=NULL,error_code=NULL,error_message=NULL,
             lease_owner=NULL,lease_until=NULL,updated_at=? WHERE job_id=?""",
@@ -300,7 +390,7 @@ def recover_job(store: JobStore, job: dict, endpoint: Endpoint) -> dict[str, Any
         store._event(
             conn,
             job["job_id"],
-            "failed",
+            before.value,
             after.value,
             "recover",
             "api",

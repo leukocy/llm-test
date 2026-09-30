@@ -585,8 +585,12 @@ function RunsList({
   const navigate = useNavigate();
   const [filter, setFilter] = useState("");
   const [pausedOnly, setPausedOnly] = useState(false);
-  const [pausedJobs, setPausedJobs] = useState<Job[]>([]);
-  const [pausedTotal, setPausedTotal] = useState(0);
+  const [recoverableOnly, setRecoverableOnly] = useState(false);
+  const [savedOnly, setSavedOnly] = useState(false);
+  const [controlPage, setControlPage] = useState(0);
+  const [controlLoading, setControlLoading] = useState(false);
+  const [controlJobs, setControlJobs] = useState<Job[]>([]);
+  const [controlTotal, setControlTotal] = useState(0);
   const [cancellingBatch, setCancellingBatch] = useState(false);
   const [batchError, setBatchError] = useState("");
   const [batchJobs, setBatchJobs] = useState<Job[]>([]);
@@ -594,34 +598,56 @@ function RunsList({
   const [recentBatches, setRecentBatches] = useState<BatchSummary[]>([]);
   const [searchParams] = useSearchParams();
   const batchId = searchParams.get("batch") || "";
+  useEffect(() => setControlPage(0), [batchId]);
   useEffect(() => {
-    if (!pausedOnly || batchId) return;
+    if (!pausedOnly && !recoverableOnly && !savedOnly) return;
     let alive = true;
-    const load = () => {
-      void api<{ items: Job[]; total: number }>(
-        token,
-        "/api/v1/jobs?status=paused&limit=200",
-      )
-        .then((data) => {
-          if (alive) {
-            setPausedJobs(data.items);
-            setPausedTotal(data.total);
-          }
-        })
-        .catch((exc) => {
-          if (alive)
-            setBatchError(
-              exc instanceof Error ? exc.message : "暂停任务读取失败",
-            );
-        });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
+    setControlJobs([]);
+    setControlTotal(0);
+    const query = new URLSearchParams({
+      limit: "50",
+      offset: String(controlPage * 50),
+    });
+    if (pausedOnly) query.set("status", "paused");
+    if (recoverableOnly) query.set("recoverable", "true");
+    if (savedOnly || recoverableOnly) query.set("saved_progress", "true");
+    if (batchId) query.set("parent_job_id", batchId);
+    const load = async () => {
+      setControlLoading(true);
+      try {
+        const data = await api<{ items: Job[]; total: number }>(
+          token,
+          `/api/v1/jobs?${query}`,
+          { signal: controller.signal },
+        );
+        if (alive) {
+          setControlJobs(data.items);
+          setControlTotal(data.total);
+          setBatchError("");
+          if (controlPage > 0 && controlPage * 50 >= data.total)
+            setControlPage(Math.max(0, Math.ceil(data.total / 50) - 1));
+        }
+      } catch (exc) {
+        if (alive)
+          setBatchError(
+            exc instanceof Error ? exc.message : "运行控制任务读取失败",
+          );
+      } finally {
+        if (alive) {
+          setControlLoading(false);
+          timer = setTimeout(() => void load(), 3500);
+        }
+      }
     };
-    load();
-    const interval = window.setInterval(load, 3500);
+    void load();
     return () => {
       alive = false;
-      window.clearInterval(interval);
+      controller.abort();
+      clearTimeout(timer);
     };
-  }, [token, pausedOnly, batchId]);
+  }, [token, pausedOnly, recoverableOnly, savedOnly, batchId, controlPage]);
   useEffect(() => {
     let alive = true;
     void api<{ items: BatchSummary[] }>(token, "/api/v1/batches?limit=20")
@@ -666,7 +692,8 @@ function RunsList({
       window.clearInterval(interval);
     };
   }, [batchId, token]);
-  const sourceJobs = batchId ? batchJobs : pausedOnly ? pausedJobs : jobs;
+  const controlFiltered = pausedOnly || recoverableOnly || savedOnly;
+  const sourceJobs = controlFiltered ? controlJobs : batchId ? batchJobs : jobs;
   const visible = useMemo(
     () =>
       sourceJobs.filter(
@@ -771,14 +798,20 @@ function RunsList({
           <div>
             <span className="eyebrow">ALL RUNS</span>
             <h2>
-              {pausedOnly ? "已暂停任务" : batchId ? "批次任务" : "全部任务"}{" "}
+              {pausedOnly
+                ? "已暂停任务"
+                : recoverableOnly
+                  ? "可恢复中断任务"
+                  : savedOnly
+                    ? "保存进度历史"
+                    : batchId
+                      ? "批次任务"
+                      : "全部任务"}{" "}
               <span className="count-tag">
-                {batchId
-                  ? sourceJobs.filter(
-                      (job) => !pausedOnly || job.status === "paused",
-                    ).length
-                  : pausedOnly
-                    ? pausedTotal
+                {controlFiltered
+                  ? controlTotal
+                  : batchId
+                    ? sourceJobs.length
                     : total}
               </span>
             </h2>
@@ -787,27 +820,120 @@ function RunsList({
             <input
               type="checkbox"
               checked={pausedOnly}
-              onChange={(event) => setPausedOnly(event.target.checked)}
+              onChange={(event) => {
+                setPausedOnly(event.target.checked);
+                setRecoverableOnly(false);
+                setSavedOnly(false);
+                setControlPage(0);
+              }}
             />
             只看已暂停
+          </label>
+          <label className="batch-plan">
+            <input
+              type="checkbox"
+              checked={recoverableOnly}
+              onChange={(event) => {
+                setRecoverableOnly(event.target.checked);
+                setPausedOnly(false);
+                setSavedOnly(false);
+                setControlPage(0);
+              }}
+            />
+            只看可恢复中断
+          </label>
+          <label className="batch-plan">
+            <input
+              type="checkbox"
+              checked={savedOnly}
+              onChange={(event) => {
+                setSavedOnly(event.target.checked);
+                setPausedOnly(false);
+                setRecoverableOnly(false);
+                setControlPage(0);
+              }}
+            />
+            只看保存进度
           </label>
           <input
             className="search"
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
-            placeholder="搜索模型、类型或 ID"
+            placeholder={
+              controlFiltered
+                ? "搜索当前页的模型、类型或 ID"
+                : "搜索模型、类型或 ID"
+            }
             aria-label="搜索运行记录"
           />
         </div>
         {pausedOnly && (
           <p className="batch-plan">
             选择任务进入详情，点击“继续运行”即可接着执行。暂停任务仍保留执行资源。
-            {!batchId &&
-              pausedTotal > pausedJobs.length &&
-              ` 当前展示最近 ${pausedJobs.length} / ${pausedTotal} 项。`}
           </p>
         )}
-        <JobTable jobs={visible} onSelect={(job) => onOpenJob(job.job_id)} />
+        {recoverableOnly && (
+          <p className="batch-plan">
+            选择任务进入详情，从保存进度恢复。恢复时会核验模型、参数、代码与记录完整性；已提交样本复用，未提交样本可能重跑。
+          </p>
+        )}
+        {savedOnly && (
+          <p className="batch-plan">
+            查看保存时间与样本进度。进入任务详情可恢复符合条件的测试；已停止或结束任务的保存进度可删除，结果、报告和审计记录保留。
+          </p>
+        )}
+        {controlFiltered && (
+          <div className="detail-actions" aria-label="运行控制任务分页">
+            <button
+              className="button subtle"
+              disabled={controlLoading || controlPage === 0}
+              onClick={() => setControlPage((page) => page - 1)}
+            >
+              上一页
+            </button>
+            <span>
+              第 {controlPage + 1} / {Math.max(1, Math.ceil(controlTotal / 50))}{" "}
+              页 · 共 {controlTotal} 项{controlLoading ? " · 更新中…" : ""}
+            </span>
+            <button
+              className="button subtle"
+              disabled={
+                controlLoading || (controlPage + 1) * 50 >= controlTotal
+              }
+              onClick={() => setControlPage((page) => page + 1)}
+            >
+              下一页
+            </button>
+          </div>
+        )}
+        {controlFiltered && visible.length === 0 ? (
+          <Empty
+            title={
+              controlLoading
+                ? "正在读取任务…"
+                : filter
+                  ? "本页没有匹配任务"
+                  : "没有符合条件的任务"
+            }
+            text={
+              controlLoading
+                ? "正在读取持久化运行记录。"
+                : filter
+                  ? "搜索只匹配当前页，清空搜索或切换分页查看其他任务。"
+                  : recoverableOnly
+                    ? "没有保存计划且符合恢复条件的中断任务。"
+                    : savedOnly
+                      ? "没有保存进度记录。"
+                      : "没有已暂停任务。"
+            }
+          />
+        ) : (
+          <JobTable
+            jobs={visible}
+            onSelect={(job) => onOpenJob(job.job_id)}
+            savedProgress={savedOnly || recoverableOnly}
+          />
+        )}
       </section>
     </div>
   );

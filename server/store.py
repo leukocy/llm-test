@@ -412,6 +412,8 @@ class JobStore:
         self,
         *,
         status: RunStatus | None = None,
+        recoverable: bool = False,
+        saved_progress: bool = False,
         limit: int = 50,
         offset: int = 0,
         parent_job_id: str | None = None,
@@ -423,17 +425,34 @@ class JobStore:
         if status:
             clauses.append("status = ?")
             params_list.append(status.value)
+        if recoverable:
+            from server.checkpoints import recovery_filter
+
+            clause, values = recovery_filter()
+            clauses.append(clause)
+            params_list.extend(values)
+        if saved_progress:
+            clauses.append(
+                "EXISTS (SELECT 1 FROM job_checkpoints h WHERE h.job_id = control_jobs.job_id)"
+            )
         if parent_job_id:
             clauses.append("parent_job_id = ?")
             params_list.append(parent_job_id)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         params = tuple(params_list)
+        projection = "control_jobs.*"
+        if saved_progress:
+            projection += """,
+                (SELECT COUNT(*) FROM checkpoint_units u WHERE u.job_id=control_jobs.job_id) AS saved_progress_planned,
+                (SELECT COUNT(*) FROM checkpoint_units u WHERE u.job_id=control_jobs.job_id AND result_json IS NOT NULL) AS saved_progress_committed,
+                (SELECT updated_at FROM job_checkpoints h WHERE h.job_id=control_jobs.job_id) AS saved_progress_at"""
         with self._connection() as conn:
+            conn.execute("BEGIN")
             count = int(
                 conn.execute(f"SELECT COUNT(*) FROM control_jobs {where}", params).fetchone()[0]
             )
             rows = conn.execute(
-                f"SELECT * FROM control_jobs {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                f"SELECT {projection} FROM control_jobs {where} ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?",
                 params + (limit, offset),
             ).fetchall()
         return [self._as_job(row) for row in rows if row is not None], count  # type: ignore[misc]
@@ -884,22 +903,27 @@ class JobStore:
             ).fetchall()
             for row in rows:
                 before = RunStatus(row["status"])
-                after = advance_run(before, RunEvent.FAIL)
+                event = RunEvent.CANCEL if before == RunStatus.CANCELLING else RunEvent.FAIL
+                after = advance_run(before, event)
                 conn.execute(
                     """UPDATE control_jobs SET status = ?, error_code = ?, error_message = ?,
                        lease_owner = NULL, lease_until = NULL, finished_at = ?, updated_at = ?
                        WHERE job_id = ? AND status = ?""",
                     (
                         after.value,
-                        "WORKER_LOST",
-                        "Worker lease expired; measurement is invalid",
+                        row["error_code"] if event == RunEvent.CANCEL else "WORKER_LOST",
+                        row["error_message"]
+                        if event == RunEvent.CANCEL
+                        else "Worker lease expired; measurement is invalid",
                         now,
                         now,
                         row["job_id"],
                         before.value,
                     ),
                 )
-                self._event(conn, row["job_id"], before.value, after.value, "fail", "reaper", now)
+                self._event(
+                    conn, row["job_id"], before.value, after.value, event.value, "reaper", now
+                )
                 if row["pause_started_at"]:
                     conn.execute(
                         """UPDATE control_jobs SET paused_seconds = paused_seconds + ?,
@@ -908,7 +932,8 @@ class JobStore:
                     )
                 recovered += 1
             for row in rows:
-                self._stop_batch_after_error(conn, row, now, "reaper")
+                if row["status"] != RunStatus.CANCELLING.value:
+                    self._stop_batch_after_error(conn, row, now, "reaper")
                 updated = conn.execute(
                     "SELECT * FROM control_jobs WHERE job_id = ?", (row["job_id"],)
                 ).fetchone()

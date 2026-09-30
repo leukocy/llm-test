@@ -89,6 +89,9 @@ export type Job = {
   model_id: string;
   parent_job_id: string | null;
   parameters: Record<string, unknown>;
+  saved_progress_planned?: number;
+  saved_progress_committed?: number;
+  saved_progress_at?: number;
   progress_completed: number;
   progress_total: number;
   pause_count: number;
@@ -375,5 +378,8 @@ export type EvaluationCheckpoint = {
   repeated_unit_attempts: number;
   recoveries: number;
   can_recover: boolean;
+  can_delete: boolean;
+  revision: string | null;
+  saved_at: number | null;
   notes: string[];
 };
