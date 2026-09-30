@@ -266,7 +266,11 @@ export default function App() {
                             ? "受测 API 设置"
                             : navActive("/advanced")
                               ? "高级评估"
-                              : "数据仓库"}
+                              : navActive("/compare")
+                                ? "模型对比"
+                                : navActive("/environment")
+                                  ? "环境与数据"
+                                  : "数据仓库"}
             </strong>
           </div>
           <div className="topbar-right">

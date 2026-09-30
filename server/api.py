@@ -135,6 +135,7 @@ class RestoreBody(StrictSpec):
 class CompareQualityBody(StrictSpec):
     job_id_a: str = Field(min_length=1, max_length=64)
     job_id_b: str = Field(min_length=1, max_length=64)
+    score_basis: Literal["standard", "final"] = "standard"
 
 
 class BatchItem(StrictSpec):
@@ -855,10 +856,12 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             raise HTTPException(422, "两个作业不能相同")
         job_a = job_or_404(body.job_id_a)
         job_b = job_or_404(body.job_id_b)
+        if job_a["status"] != "completed" or job_b["status"] != "completed":
+            raise HTTPException(409, "对比需要两个已完成质量作业")
         payload_a = quality_payload(job_a)
         payload_b = quality_payload(job_b)
 
-        from core.model_comparator import mcnemar_test
+        from server.paired_quality import PairingConflict, adjust_family, compare_dataset
 
         names_a = set(payload_a["datasets"])
         names_b = set(payload_b["datasets"])
@@ -870,28 +873,13 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         for name in common:
             da = payload_a["datasets"][name]
             db_ = payload_b["datasets"][name]
-            by_id_a = {
-                d.get("sample_id"): bool(d.get("is_correct"))
-                for d in da.get("details", [])
-                if d.get("sample_id") is not None
-            }
-            by_id_b = {
-                d.get("sample_id"): bool(d.get("is_correct"))
-                for d in db_.get("details", [])
-                if d.get("sample_id") is not None
-            }
-            shared = sorted(set(by_id_a) & set(by_id_b))
-            if not shared:
-                continue
-            test = mcnemar_test([by_id_a[s] for s in shared], [by_id_b[s] for s in shared])
-            datasets[name] = {
-                "samples": len(shared),
-                "accuracy_a": da.get("accuracy"),
-                "accuracy_b": db_.get("accuracy"),
-                **test,
-            }
+            try:
+                datasets[name] = compare_dataset(da, db_, body.score_basis, name)
+            except PairingConflict as exc:
+                raise HTTPException(409, f"{name}: {exc}") from exc
         if not datasets:
             raise HTTPException(422, "共同数据集的样本无法按 sample_id 对齐")
+        adjust_family(datasets)
 
         return {
             "job_a": {

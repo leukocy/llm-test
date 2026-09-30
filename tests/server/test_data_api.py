@@ -804,7 +804,7 @@ def _make_quality_job(client, settings, sample_outcomes):
     from core.database.connection import Database
 
     Database().execute(
-        "UPDATE control_jobs SET result_artifact = ? WHERE job_id = ?",
+        "UPDATE control_jobs SET result_artifact = ?, status='completed', progress_completed=progress_total WHERE job_id = ?",
         (f"{job['job_id']}/report.json", job["job_id"]),
     )
     return job

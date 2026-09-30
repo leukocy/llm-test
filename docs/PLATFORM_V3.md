@@ -179,3 +179,11 @@ CSV 最多 10 MiB / 20,000 行 / 80 列，JSON 元数据最多 64 KiB，条件�
 本地开发可执行 `export LLM_TEST_DATASET_ROOT="$HOME/llm-perf/runtime/datasets"`，把数据和临时下载留在项目外；未设置时保留现有 `datasets/` 路径，容器使用已挂载的数据卷。API 与 worker 需使用相同设置。已准备数据记录固定源版本、文件哈希和实际分区；运行报告另外冻结有序样本与 few-shot 的内容哈希。
 
 C-Eval 默认评分 test，也可用 `ceval_split="val"`；few-shot 使用同科目的 dev。最新[官方数据卡](https://huggingface.co/datasets/ceval/ceval-exam/blob/main/README.md) 公告 test 已在 2025 年发布。缺答案标签的旧 test 文件拒绝评分，dev 不足时不借用评分题作示例。页面、JSON、Markdown 和离线 HTML 均记录实际评分及 few-shot 分区，跨分区成绩不能直接等同。
+
+## 已完成质量作业的配对对比
+
+`POST /api/v1/compare` 接受 `job_id_a`、`job_id_b` 和可选 `score_basis`（默认 `standard`，可选 `final`）。两个作业必须已完成。`standard` 排除 Judge 改判，`final` 使用包含改判的最终成绩；请求错误与非布尔成绩不会被转成正确样本。
+
+配对先核对唯一 ID、问题与参考答案。返回的两侧准确率使用同一有效配对分母，另外给出缺失 ID、无效成绩、请求错误和未配对数量。源样本/few-shot、提示词、生成条件、评分源或覆盖未经核验时，`verified=false`，p、统计量与显著性均为空；页面显示“未检验”，仍可查看描述性计数。代码评分缺少共同 sandbox 身份时也不做显著性推断。
+
+已核验组采用双侧精确二项 McNemar（[方法文档](https://www.statsmodels.org/v0.14.0/generated/statsmodels.stats.contingency_tables.mcnemar.html)），对本次已核验组做 Holm 校正。报告同时保存原始与校正 p、分歧表、口径及配对内容哈希，可从页面下载同源 JSON。极小 p 保存对数和显示边界；未检出不代表模型等效，配对样本独立性仍依赖试验设计。相同评分源在样本准备时冻结，并随检查点复用。

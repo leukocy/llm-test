@@ -5,11 +5,13 @@ Quality Assessment引擎 - 管理Dataset评估核心模块
 
 import asyncio
 import hashlib
+import inspect
 import json
 import os
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, cast
 
 import pandas as pd
@@ -38,6 +40,35 @@ def fingerprint_samples(samples: list[dict[str, Any]]) -> str:
         ).encode("utf-8")
         digest.update(len(encoded).to_bytes(8, "big"))
         digest.update(encoded)
+    return digest.hexdigest()
+
+
+def scoring_fingerprint(evaluator: BaseEvaluator) -> str | None:
+    """Identify scoring/prompt source and runtime; exclude model credentials and responses."""
+    import importlib.metadata
+    import platform
+
+    source = inspect.getsourcefile(type(evaluator))
+    if not source or not Path(source).is_file():
+        return None
+    root = Path(__file__).resolve().parent.parent
+    files = set((root / "evaluators").rglob("*.py")) | set((root / "task_configs").glob("*.yaml"))
+    files.update((root / "core").rglob("*.py"))
+    files.update((root / "utils").rglob("*.py"))
+    files.add(Path(source))
+    digest = hashlib.sha256()
+    digest.update(f"{type(evaluator).__module__}.{type(evaluator).__qualname__}".encode())
+    for path in sorted(files):
+        if path.is_file():
+            digest.update(path.name.encode())
+            digest.update(path.read_bytes())
+    versions = {"python": platform.python_version()}
+    for package in ("numpy", "sympy", "pandas"):
+        try:
+            versions[package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            versions[package] = "not-installed"
+    digest.update(json.dumps(versions, sort_keys=True).encode())
     return digest.hexdigest()
 
 
@@ -606,6 +637,7 @@ class QualityEvaluator:
                 "seed": evaluator.seed,
                 "evaluation_split": getattr(evaluator, "evaluation_split", None),
                 "few_shot_split": getattr(evaluator, "few_shot_split", None),
+                "scoring_contract": scoring_fingerprint(evaluator),
             }, samples
 
         metadata, samples = self.journal.prepare_scope(scope_key, load) if self.journal else load()
@@ -614,6 +646,7 @@ class QualityEvaluator:
         evaluator.dataset_source = metadata["dataset_source"]
         evaluator.dataset_path = metadata["dataset_path"]
         evaluator.seed = metadata["seed"]
+        evaluator.scoring_contract = metadata.get("scoring_contract")
         if metadata.get("evaluation_split"):
             evaluator.evaluation_split = metadata["evaluation_split"]
             evaluator.few_shot_split = metadata.get("few_shot_split")
@@ -797,6 +830,10 @@ class QualityEvaluator:
 
             # BuildResult
             result_config = config.to_dict()
+            result_config["scoring_contract"] = evaluator.scoring_contract
+            result_config["requires_code_execution"] = bool(
+                getattr(evaluator, "requires_code_execution", False)
+            )
             result_config["dataset_provenance"] = {
                 "source": evaluator.dataset_source,
                 "path": evaluator.dataset_path,

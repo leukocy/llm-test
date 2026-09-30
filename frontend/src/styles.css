@@ -2286,12 +2286,22 @@ textarea:focus {
   margin: 12px 0;
   align-items: start;
 }
-.compare-picker select {
+.compare-picker select,
+.compare-basis select {
   width: 100%;
   border: 1px solid #d7e0e5;
   border-radius: 8px;
   padding: 8px;
   font-size: 12px;
+}
+.compare-basis {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+  margin-bottom: 18px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #51626f;
 }
 .compare-actions p {
   font-size: 12px;

@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Job } from "../api";
 import { Empty } from "../components";
-import { formatNumber, formatPercent, shortId } from "../constants";
+import { formatPercent, shortId } from "../constants";
 
 type ComparePayload = {
   job_a: { job_id: string; model_id: string; endpoint_id: string };
@@ -12,9 +12,21 @@ type ComparePayload = {
       samples: number;
       accuracy_a: number | null;
       accuracy_b: number | null;
-      statistic: number;
-      p_value: number;
-      significant: boolean;
+      statistic: number | null;
+      p_value: number | null;
+      significant: boolean | null;
+      verified: boolean;
+      p_value_label: string;
+      adjusted_p_value_label: string;
+      adjusted_significant: boolean | null;
+      test_family_size: number;
+      score_basis: string;
+      accuracy_difference: number;
+      unpaired_a: number;
+      unpaired_b: number;
+      excluded_a: Record<string, number>;
+      excluded_b: Record<string, number>;
+      warnings: string[];
       b01_count: number;
       b10_count: number;
       interpretation: string;
@@ -36,26 +48,55 @@ export function Compare({ jobs, token }: { jobs: Job[]; token: string }) {
   const [result, setResult] = useState<ComparePayload | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [basis, setBasis] = useState("standard");
+  const pending = useRef<AbortController | null>(null);
+  useEffect(() => {
+    pending.current?.abort();
+    setResult(null);
+    setError("");
+    setBusy(false);
+    return () => pending.current?.abort();
+  }, [idA, idB, basis]);
 
   async function run() {
     setBusy(true);
     setError("");
     setResult(null);
+    const controller = new AbortController();
+    pending.current?.abort();
+    pending.current = controller;
     try {
       const payload = await api<ComparePayload>(token, "/api/v1/compare", {
         method: "POST",
-        body: JSON.stringify({ job_id_a: idA, job_id_b: idB }),
+        body: JSON.stringify({
+          job_id_a: idA,
+          job_id_b: idB,
+          score_basis: basis,
+        }),
+        signal: controller.signal,
       });
-      setResult(payload);
+      if (!controller.signal.aborted) setResult(payload);
     } catch (exc) {
-      setError(exc instanceof Error ? exc.message : "对比失败");
+      if (!controller.signal.aborted)
+        setError(exc instanceof Error ? exc.message : "对比失败");
     } finally {
-      setBusy(false);
+      if (pending.current === controller) setBusy(false);
     }
   }
 
   function jobLabel(job: Job) {
     return `${job.model_id} · #${shortId(job.job_id)}`;
+  }
+  function exportResult() {
+    if (!result) return;
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(result, null, 2)], { type: "application/json" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `comparison-${idA}-${idB}-${basis}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -65,12 +106,24 @@ export function Compare({ jobs, token }: { jobs: Job[]; token: string }) {
           <span className="eyebrow">A/B COMPARISON</span>
           <h1>模型对比</h1>
           <p>
-            对两个已完成的质量评估作业做 McNemar 显著性检验：共同数据集内按
-            sample_id 对齐逐样本比对，判定差异是否统计显著。
+            对两个已完成质量作业核对同一题目、参考答案与提示词。成绩来自有效配对样本；完整来源与条件通过核验后使用双侧精确
+            McNemar 检验，并对本次已核验数据集做 Holm
+            校正。证据不足时保留描述，不给出显著性结论。
           </p>
         </div>
       </div>
       <section className="surface">
+        <label className="compare-basis">
+          评分口径
+          <select
+            aria-label="对比评分口径"
+            value={basis}
+            onChange={(event) => setBasis(event.target.value)}
+          >
+            <option value="standard">规则成绩（排除 Judge 改判）</option>
+            <option value="final">最终成绩（含 Judge 改判）</option>
+          </select>
+        </label>
         <div className="compare-picker">
           <label>
             作业 A
@@ -137,18 +190,22 @@ export function Compare({ jobs, token }: { jobs: Job[]; token: string }) {
               #{shortId(result.job_a.job_id)} vs #{shortId(result.job_b.job_id)}
             </span>
           </div>
+          <button className="button subtle" onClick={exportResult}>
+            导出对比 JSON ↓
+          </button>
           <div className="table-scroll">
             <table className="data-table stats-table">
               <thead>
                 <tr>
                   <th>数据集</th>
                   <th>对齐样本</th>
-                  <th>A 准确率</th>
-                  <th>B 准确率</th>
+                  <th>A 配对准确率</th>
+                  <th>B 配对准确率</th>
                   <th>A 对 B 错</th>
                   <th>A 错 B 对</th>
-                  <th>p 值</th>
-                  <th>显著 (p&lt;0.05)</th>
+                  <th>精确 p</th>
+                  <th>Holm p</th>
+                  <th>校正后检出差异</th>
                 </tr>
               </thead>
               <tbody>
@@ -162,9 +219,16 @@ export function Compare({ jobs, token }: { jobs: Job[]; token: string }) {
                     <td>{formatPercent(entry.accuracy_b)}</td>
                     <td>{entry.b01_count}</td>
                     <td>{entry.b10_count}</td>
-                    <td>{formatNumber(entry.p_value, 4)}</td>
-                    <td className={entry.significant ? "text-good" : ""}>
-                      {entry.significant ? "显著" : "不显著"}
+                    <td>{entry.p_value_label}</td>
+                    <td>{entry.adjusted_p_value_label}</td>
+                    <td
+                      className={entry.adjusted_significant ? "text-good" : ""}
+                    >
+                      {entry.adjusted_significant == null
+                        ? "未检验"
+                        : entry.adjusted_significant
+                          ? "检出"
+                          : "未检出"}
                     </td>
                   </tr>
                 ))}
@@ -172,9 +236,25 @@ export function Compare({ jobs, token }: { jobs: Job[]; token: string }) {
             </table>
           </div>
           {Object.entries(result.datasets).map(([name, entry]) => (
-            <p className="chart-caption" key={name}>
-              {name}：{entry.interpretation}
-            </p>
+            <div key={name}>
+              <p className="chart-caption">
+                {name}：{entry.interpretation} A−B 差值{" "}
+                {formatPercent(entry.accuracy_difference)}；未配对 A{" "}
+                {entry.unpaired_a} / B {entry.unpaired_b}，排除 A{" "}
+                {Object.values(entry.excluded_a).reduce((a, b) => a + b, 0)} / B{" "}
+                {Object.values(entry.excluded_b).reduce((a, b) => a + b, 0)}
+                。校正检验数 {entry.test_family_size}
+                ；未检出不代表等效，独立性仍依赖试验设计。
+                {basis === "final" && "同一模型自评 Judge 不构成独立验证。"}
+              </p>
+              {entry.warnings.length > 0 && (
+                <ul className="chart-caption">
+                  {entry.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
           ))}
           {result.skipped_datasets.length > 0 && (
             <p className="chart-caption">

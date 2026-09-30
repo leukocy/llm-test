@@ -175,6 +175,10 @@ def mcnemar_test(correct_a: list[bool], correct_b: list[bool]) -> dict[str, Any]
     """
     if len(correct_a) != len(correct_b):
         return {"error": "长度not匹配"}
+    if not correct_a:
+        return {"error": "No paired observations"}
+    if any(type(value) is not bool for value in [*correct_a, *correct_b]):
+        return {"error": "Grades must be booleans"}
 
     # Build 2x2 列联表
     # b01: A 对 B 错
@@ -184,64 +188,55 @@ def mcnemar_test(correct_a: list[bool], correct_b: list[bool]) -> dict[str, Any]
 
     n = b01 + b10
 
-    if n == 0:
-        return {
-            "statistic": 0,
-            "p_value": 1.0,
-            "significant": False,
-            "interpretation": "两Model表现完全一致",
-        }
-
-    # McNemar 检验Statistics量 (带连续性校正)
-    statistic = (abs(b01 - b10) - 1) ** 2 / (b01 + b10) if n > 0 else 0
-
-    # 近似 p 值 (use卡方分布)
-    # 简化Calculate，not依赖 scipy
-    p_value = _chi2_p_value(statistic, df=1)
+    # Two-sided conditional exact test: 2 P[Binomial(n, 1/2) <= min(b01,b10)].
+    # Sum relative to the largest term in the lower tail to avoid underflow.
+    k = min(b01, b10)
+    term = relative_sum = 1.0
+    for i in range(k, 0, -1):
+        term *= i / (n - i + 1)
+        relative_sum += term
+    log_p = (
+        min(
+            0.0,
+            math.log(2)
+            + math.lgamma(n + 1)
+            - math.lgamma(k + 1)
+            - math.lgamma(n - k + 1)
+            - n * math.log(2)
+            + math.log(relative_sum),
+        )
+        if n
+        else 0.0
+    )
+    p_value = math.exp(log_p)
+    underflow = p_value == 0
+    if underflow:
+        p_value = float.fromhex("0x0.0000000000001p-1022")
 
     return {
-        "statistic": statistic,
+        "statistic": k,
+        "method": "mcnemar-exact-binomial-two-sided-v1",
+        "log_p_value": log_p,
+        "p_value_label": "<5e-324" if underflow else f"{p_value:.6g}",
         "p_value": p_value,
         "significant": p_value < 0.05,
         "b01_count": b01,  # A 对 B 错
         "b10_count": b10,  # A 错 B 对
+        "both_correct": sum(a and b for a, b in zip(correct_a, correct_b, strict=False)),
+        "both_wrong": sum(not a and not b for a, b in zip(correct_a, correct_b, strict=False)),
         "interpretation": _interpret_mcnemar(b01, b10, p_value),
     }
-
-
-def _chi2_p_value(x: float, df: int = 1) -> float:
-    """简化卡方分布 p 值Calculate"""
-    if x <= 0:
-        return 1.0
-
-    # use近似公式
-    # P(X > x) ≈ exp(-x/2) for df=1 when x is large
-    if x > 10:
-        return math.exp(-x / 2)
-
-    # 对于较小 x，use查表近似
-    # 卡方分布 df=1 临界值: 3.84 (α=0.05), 6.63 (α=0.01)
-    if x >= 6.63:
-        return 0.01
-    elif x >= 5.02:
-        return 0.025
-    elif x >= 3.84:
-        return 0.05
-    elif x >= 2.71:
-        return 0.10
-    else:
-        return 0.5
 
 
 def _interpret_mcnemar(b01: int, b10: int, p_value: float) -> str:
     """解释 McNemar 检验Result"""
     if p_value >= 0.05:
-        return "两Model表现no显著差异"
+        return "当前配对样本未检出正确率差异；不代表两模型等效。"
 
     if b01 > b10:
-        return f"Model A 显著优于Model B (p={p_value:.4f})"
+        return "当前配对样本中 A 正确率较高；精确检验检出差异。"
     else:
-        return f"Model B 显著优于Model A (p={p_value:.4f})"
+        return "当前配对样本中 B 正确率较高；精确检验检出差异。"
 
 
 # ============================================
