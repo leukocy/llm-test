@@ -23,6 +23,7 @@ from pydantic import Field, model_validator
 from core.providers.factory import get_provider
 from core.run_lifecycle import InvalidRunTransition, RunStatus
 from core.url_validator import SSRFError
+from server.advanced_api import advanced_router
 from server.analytics import (
     MetricContractConflict,
     latest_output,
@@ -134,19 +135,6 @@ class CompareQualityBody(StrictSpec):
     job_id_b: str = Field(min_length=1, max_length=64)
 
 
-class ParseBody(StrictSpec):
-    response: str = Field(min_length=1, max_length=50000)
-    answer_type: Literal["number", "choice", "text", "boolean", "code", "math"] = "text"
-    expected_answer: str | None = Field(default=None, max_length=10000)
-
-
-class ReasoningBody(StrictSpec):
-    question: str = Field(min_length=1, max_length=20000)
-    reasoning: str = Field(default="", max_length=100000)
-    final_answer: str = Field(default="", max_length=20000)
-    correct_answer: str = Field(default="", max_length=20000)
-
-
 class BatchItem(StrictSpec):
     enabled: bool = True
     test_type: Literal[
@@ -253,6 +241,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
 
     auth = Depends(authenticate)
     app.include_router(history_router(settings), dependencies=[auth])
+    app.include_router(advanced_router(), dependencies=[auth])
 
     def resolve_endpoint(endpoint_id: str) -> Endpoint:
         try:
@@ -847,37 +836,6 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             "datasets": datasets,
             "skipped_datasets": sorted((names_a | names_b) - set(common)),
         }
-
-    @app.post("/api/v1/advanced/parse", dependencies=[auth])
-    def advanced_parse(body: ParseBody):
-        """Smart Parser 演示：规则解析模型响应, 可选与参考答案判分。"""
-        from core.smart_answer_parser import AnswerType, SmartAnswerParser, compare_answers
-
-        answer_type = AnswerType(body.answer_type)
-        result = SmartAnswerParser().parse(body.response, answer_type, body.expected_answer)
-        out = dataclasses.asdict(result)
-        if body.expected_answer is not None:
-            is_correct, score = compare_answers(
-                result.extracted_answer or body.response,
-                body.expected_answer,
-                answer_type,
-            )
-            out["is_correct"] = is_correct
-            out["score"] = score
-        return out
-
-    @app.post("/api/v1/advanced/reasoning", dependencies=[auth])
-    def advanced_reasoning(body: ReasoningBody):
-        """推理过程质量评估（规则法: 连贯/完整/相关/正确/效率五维）。"""
-        from core.reasoning_evaluator import ReasoningQualityEvaluator
-
-        result = ReasoningQualityEvaluator().evaluate(
-            question=body.question,
-            reasoning=body.reasoning,
-            final_answer=body.final_answer,
-            correct_answer=body.correct_answer,
-        )
-        return dataclasses.asdict(result)
 
     # ------------------------------------------------------------------
     # 数据管理（导入 / 备份 / 健康）

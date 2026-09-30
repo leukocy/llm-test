@@ -5,10 +5,13 @@
 支持多种Answer类型：数值、选择题、文本etc.。
 """
 
+import math
 import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
+
+from core.bounded_math import parse_bounded_math
 
 
 class AnswerType(Enum):
@@ -154,7 +157,9 @@ class SmartAnswerParser:
                     )
 
         # 策略4: 匹配末尾etc.式Result
-        eq_match = re.search(r"=\s*([-+]?[\d,]+(?:\.\d+)?)[^=\n]*$", response.strip())
+        last_line = response.strip().rsplit("\n", 1)[-1]
+        _, separator, rhs = last_line.rpartition("=")
+        eq_match = re.match(r"\s*([-+]?[\d,]+(?:\.\d+)?)", rhs) if separator else None
         if eq_match:
             value_str = eq_match.group(1)
             normalized = self._normalize_number(value_str)
@@ -164,7 +169,7 @@ class SmartAnswerParser:
                     confidence=0.7,
                     method="rule_equation",
                     normalized_value=normalized,
-                    raw_match=eq_match.group(0),
+                    raw_match="=" + rhs,
                 )
 
         # 策略5: 取最后一出现数字（低置信度）
@@ -334,11 +339,13 @@ class SmartAnswerParser:
     def _evaluate_expression(self, expr: str) -> float | None:
         """安全地求值简单数学表达式"""
         try:
-            # 只允许数字and基本运算符
-            safe_expr = re.sub(r"[^0-9+\-*/().\s]", "", expr)
-            return float(eval(safe_expr))
-        except Exception:
+            expression = parse_bounded_math(expr)
+            if expression.is_number:
+                value = float(expression)
+                return value if math.isfinite(value) else None
+        except (ValueError, SyntaxError, TypeError, OverflowError, RecursionError):
             return None
+        return None
 
     async def parse_with_llm_fallback(
         self,
@@ -381,9 +388,7 @@ class SmartAnswerParser:
             rule_result.error = f"LLM fallback failed: {e}"
             return rule_result
 
-    async def _llm_parse(
-        self, response: str, answer_type: AnswerType, llm_func
-    ) -> ParseResult:
+    async def _llm_parse(self, response: str, answer_type: AnswerType, llm_func) -> ParseResult:
         """use LLM ParseAnswer"""
         type_instruction = {
             AnswerType.NUMBER: "Extract the final numerical answer. Return ONLY the number, nothing else. If the answer is a fraction, convert it to decimal.",
@@ -465,11 +470,7 @@ def compare_answers(
 
     if answer_type == AnswerType.NUMBER:
         try:
-            pred_val = (
-                float(predicted)
-                if not isinstance(predicted, (int, float))
-                else predicted
-            )
+            pred_val = float(predicted) if not isinstance(predicted, (int, float)) else predicted
             exp_val = float(str(expected).replace(",", ""))
 
             # 完全相etc.

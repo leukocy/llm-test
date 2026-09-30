@@ -20,6 +20,8 @@ import re
 from difflib import SequenceMatcher
 from math import isclose
 
+from core.bounded_math import bounded_math_equal
+
 # ---------------------------------------------------------------------------
 # Optional dependency availability
 # ---------------------------------------------------------------------------
@@ -80,9 +82,7 @@ class MultiChoiceParser:
             # --- Chinese verbose ---
             (
                 "explicit_cn",
-                re.compile(
-                    rf"(?:答案是|选择|选项|正确答案为|答案为)\s*[（(]?\s*([{C}])\s*[）)]?"
-                ),
+                re.compile(rf"(?:答案是|选择|选项|正确答案为|答案为)\s*[（(]?\s*([{C}])\s*[）)]?"),
             ),
             # --- Structured formats ---
             ("paren_cn", re.compile(r"[（(]\s*([{C}])\s*[）)]")),
@@ -91,7 +91,9 @@ class MultiChoiceParser:
             ("dot_end", re.compile(rf"^([{C}])\s*[.。]?\s*$", re.MULTILINE)),
         ]
 
-    def parse(self, response: str, choices: list[str] | None = None) -> str:
+    def parse(
+        self, response: str, choices: list[str] | None = None, *, allow_fallback: bool = True
+    ) -> str:
         """Extract a choice letter from *response*.
 
         Returns uppercase letter (e.g. ``"A"``) or empty string.
@@ -107,6 +109,9 @@ class MultiChoiceParser:
                 ch = m.group(1).upper()
                 if ch in valid:
                     return ch
+
+        if not allow_fallback:
+            return ""
 
         # EvalScope fallback: last valid uppercase letter
         for letter in reversed(response_stripped):
@@ -133,7 +138,7 @@ class MathAnswerParser:
     Comparison (``check_answer``):
     1. Exact / normalized string match
     2. Numeric: float tolerance + percentage (EvalScope numeric_equal)
-    3. Symbolic: SymPy ``simplify(a - b) == 0`` (EvalScope symbolic_equal)
+    3. Symbolic: bounded arithmetic/polynomials constructed from a whitelisted AST
     """
 
     _BOXED_RE = re.compile(r"\\boxed\s*\{", re.DOTALL)
@@ -201,12 +206,10 @@ class MathAnswerParser:
     # -- comparison (ref: EvalScope math_equal) ------------------------------
 
     @staticmethod
-    def check_answer(
-        predicted: str, correct: str, tolerance: float = 1e-6
-    ) -> bool:  # noqa: ARG004
+    def check_answer(predicted: str, correct: str, tolerance: float = 1e-6) -> bool:  # noqa: ARG004
         """Compare predicted and correct math answers.
 
-        Strategy: exact string → float tolerance (+ percentage) → SymPy symbolic.
+        Strategy: exact string → legacy numeric tolerance → bounded symbolic comparison.
         """
         pred = (predicted or "").strip()
         exp = (correct or "").strip()
@@ -256,23 +259,9 @@ class MathAnswerParser:
         except (ValueError, TypeError, ZeroDivisionError):
             pass
 
-        # 4. SymPy symbolic equivalence (EvalScope symbolic_equal)
+        # 4. Bounded symbolic equivalence; never evaluate submitted Python source.
         if _sympy_available:
-            try:
-                import sympy
-
-                pred_expr = sympy.sympify(_norm(pred).replace("^", "**"))
-                exp_expr = sympy.sympify(_norm(exp).replace("^", "**"))
-                if sympy.simplify(pred_expr - exp_expr) == 0:
-                    return True
-                # Also try .equals() method (EvalScope)
-                try:
-                    if pred_expr.equals(exp_expr):
-                        return True
-                except Exception:
-                    pass
-            except Exception:
-                pass
+            return bounded_math_equal(pred, exp) is True
 
         return False
 
@@ -378,9 +367,7 @@ class TextAnswerParser:
         return text
 
     @staticmethod
-    def check_answer(
-        predicted: str, correct: str, fuzzy_threshold: float = 0.8
-    ) -> bool:
+    def check_answer(predicted: str, correct: str, fuzzy_threshold: float = 0.8) -> bool:
         if not predicted or not correct:
             return False
         pred_norm = TextAnswerParser.normalize(predicted)

@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+PERTURBATION_GENERATOR_VERSION = "text-perturber-v2"
+
 
 class PerturbationType(Enum):
     """扰动类型"""
@@ -65,6 +67,7 @@ class RobustnessReport:
     model_id: str
     total_samples: int
     perturbations_per_sample: int
+    perturbation_generator_version: str = PERTURBATION_GENERATOR_VERSION
 
     # 总体指标
     original_accuracy: float = 0.0
@@ -93,7 +96,7 @@ class TextPerturber:
     """
 
     def __init__(self, seed: int = 42):
-        random.seed(seed)
+        self.rng = random.Random(seed)
 
         # 同义词字典
         self.synonyms = {
@@ -111,9 +114,7 @@ class TextPerturber:
             "Calculate": ["算", "求", "得出"],
         }
 
-    def perturb(
-        self, text: str, perturbation_type: PerturbationType
-    ) -> PerturbedSample:
+    def perturb(self, text: str, perturbation_type: PerturbationType) -> PerturbedSample:
         """
         对文本Apply扰动
 
@@ -154,10 +155,11 @@ class TextPerturber:
         replaced = []
 
         for word, synonyms in self.synonyms.items():
-            if word.lower() in text.lower():
-                replacement = random.choice(synonyms)
+            match = re.search(rf"\b{re.escape(word)}\b", text, re.IGNORECASE)
+            if match:
+                replacement = self.rng.choice(synonyms)
                 # 保持原始大小写
-                if word[0].isupper():
+                if match[0][0].isupper():
                     replacement = replacement.capitalize()
                 perturbed = re.sub(
                     rf"\b{re.escape(word)}\b",
@@ -173,14 +175,12 @@ class TextPerturber:
             original_question=text,
             perturbed_question=perturbed,
             perturbation_type=PerturbationType.SYNONYM_REPLACE,
-            perturbation_details=(
-                ", ".join(replaced) if replaced else "No synonyms found"
-            ),
+            perturbation_details=(", ".join(replaced) if replaced else "No synonyms found"),
         )
 
     def _insert_typo(self, text: str) -> PerturbedSample:
         """Insert拼写Error"""
-        words = text.split()
+        words = list(re.finditer(r"\S+", text))
         if len(words) < 3:
             return PerturbedSample(
                 original_question=text,
@@ -190,9 +190,7 @@ class TextPerturber:
             )
 
         # 选择一长度>=4单词
-        long_words = [
-            (i, w) for i, w in enumerate(words) if len(w) >= 4 and w.isalpha()
-        ]
+        long_words = [match for match in words if len(match[0]) >= 4 and match[0].isalpha()]
         if not long_words:
             return PerturbedSample(
                 original_question=text,
@@ -201,14 +199,14 @@ class TextPerturber:
                 perturbation_details="No suitable words",
             )
 
-        idx, word = random.choice(long_words)
+        match = self.rng.choice(long_words)
+        word = match[0]
 
         # 交换两相邻字母
-        pos = random.randint(1, len(word) - 2)
+        pos = self.rng.randint(1, len(word) - 2)
         typo_word = word[:pos] + word[pos + 1] + word[pos] + word[pos + 2 :]
 
-        words[idx] = typo_word
-        perturbed = " ".join(words)
+        perturbed = text[: match.start()] + typo_word + text[match.end() :]
 
         return PerturbedSample(
             original_question=text,
@@ -231,7 +229,7 @@ class TextPerturber:
     def _change_punctuation(self, text: str) -> PerturbedSample:
         """标点变化"""
         # 移除末尾标点
-        perturbed = re.sub(r"[?.!]+$", "", text)
+        perturbed = text.rstrip("?.!")
 
         return PerturbedSample(
             original_question=text,
@@ -258,14 +256,46 @@ class TextPerturber:
         # 1000 -> 1,000 or反过来
         def swap_format(match):
             num = match.group(0)
-            if "," in num:
-                return num.replace(",", "")
-            elif len(num) >= 4:
-                # Add逗号
-                return f"{int(num):,}"
-            return num
+            # Consume candidates once, then validate their pieces without regex
+            # backtracking or reinterpreting part of an identifier/invalid number.
+            before = text[match.start() - 1] if match.start() else ""
+            after = text[match.end()] if match.end() < len(text) else ""
+            if (before and (before.isalnum() or before in "_.,+-")) or (
+                after and (after.isalnum() or after == "_")
+            ):
+                return num
+            if "e" in num.lower():
+                return num
+            candidate = num.rstrip(".,")
+            punctuation = num[len(candidate) :]
+            sign = candidate[:1] if candidate.startswith(("-", "+")) else ""
+            unsigned = candidate[len(sign) :]
+            integer, dot, fraction = unsigned.partition(".")
+            if not integer or (dot and (not fraction or not fraction.isdigit())):
+                return num
+            if "," in integer:
+                pieces = integer.split(",")
+                if not (
+                    1 <= len(pieces[0]) <= 3
+                    and pieces[0].isdigit()
+                    and all(len(piece) == 3 and piece.isdigit() for piece in pieces[1:])
+                ):
+                    return num
+                integer = integer.replace(",", "")
+            elif not integer.isdigit():
+                return num
+            elif len(integer) >= 4 and not integer.startswith("0"):
+                first = len(integer) % 3 or 3
+                integer = ",".join(
+                    [integer[:first]] + [integer[i : i + 3] for i in range(first, len(integer), 3)]
+                )
+            return sign + integer + dot + fraction + punctuation
 
-        perturbed = re.sub(r"\d[\d,]+", swap_format, text)
+        perturbed = re.sub(
+            r"[-+]?[0-9][0-9,.eE+-]*",
+            swap_format,
+            text,
+        )
 
         return PerturbedSample(
             original_question=text,
@@ -282,7 +312,7 @@ class TextPerturber:
             "Let me think about this carefully. ",
         ]
 
-        prefix = random.choice(prefixes)
+        prefix = self.rng.choice(prefixes)
         perturbed = prefix + text
 
         return PerturbedSample(
@@ -334,9 +364,7 @@ class RobustnessTester:
         print(result.robustness_score)
     """
 
-    def __init__(
-        self, perturbation_types: list[PerturbationType] | None = None, seed: int = 42
-    ):
+    def __init__(self, perturbation_types: list[PerturbationType] | None = None, seed: int = 42):
         self.perturber = TextPerturber(seed)
         self.perturbation_types = perturbation_types or [
             PerturbationType.SYNONYM_REPLACE,
@@ -366,12 +394,8 @@ class RobustnessTester:
         # 1. Test原始问题
         try:
             original_response = await get_response_func(question)
-            result.original_answer = self._extract_answer(
-                original_response, answer_parser
-            )
-            result.original_correct = self._check_answer(
-                result.original_answer, correct_answer
-            )
+            result.original_answer = self._extract_answer(original_response, answer_parser)
+            result.original_correct = self._check_answer(result.original_answer, correct_answer)
         except Exception as e:
             result.original_answer = f"Error: {e}"
             result.original_correct = False
@@ -379,9 +403,7 @@ class RobustnessTester:
         # 2. Test各种扰动
         consistent_count = 0
         correct_after_perturbation = 0
-        type_results: dict[str, list[bool]] = {
-            t.value: [] for t in self.perturbation_types
-        }
+        type_results: dict[str, list[bool]] = {t.value: [] for t in self.perturbation_types}
 
         for ptype in self.perturbation_types:
             perturbed = self.perturber.perturb(question, ptype)
@@ -411,15 +433,11 @@ class RobustnessTester:
                     correct_after_perturbation += 1
 
             except Exception as e:
-                result.perturbed_results.append(
-                    {"perturbation_type": ptype.value, "error": str(e)}
-                )
+                result.perturbed_results.append({"perturbation_type": ptype.value, "error": str(e)})
 
         # 3. Calculated metrics
         if self.perturbation_types:
-            result.robustness_score = correct_after_perturbation / len(
-                self.perturbation_types
-            )
+            result.robustness_score = correct_after_perturbation / len(self.perturbation_types)
             result.consistency_score = consistent_count / len(self.perturbation_types)
 
         # 按类型敏感性
@@ -434,9 +452,7 @@ class RobustnessTester:
         if parser:
             return str(parser(response))
 
-        content = (
-            response.get("content", "") if isinstance(response, dict) else str(response)
-        )
+        content = response.get("content", "") if isinstance(response, dict) else str(response)
 
         # 简单提取最后一数字
         numbers = re.findall(r"[-+]?\d+(?:\.\d+)?", content)
@@ -552,5 +568,3 @@ class RobustnessTester:
             recommendations.append("Model鲁棒性表现Good")
 
         return recommendations
-
-
