@@ -157,7 +157,12 @@ def run_summary(
     version = _run_contract_version(run["config_json"], rows)
     config = json.loads(run["config_json"] or "{}")
     if run["test_type"] == "stability":
-        rows = [resolve_stability_row(row, config.get("stability_window")) for row in rows]
+        rows = [
+            resolve_stability_row(
+                row, config.get("stability_windows", config.get("stability_window"))
+            )
+            for row in rows
+        ]
     try:
         report_environment = describe_report_environment(config.get("report_environment"))
     except ValidationError as exc:
@@ -374,7 +379,10 @@ def run_summary(
     }
     summary["scenario_analysis"] = scenario_analysis(summary)
     if run["test_type"] == "stability":
-        summary["time_series"] = stability_time_series(rows, config.get("stability_window"))
+        summary["stability_budget"] = config.get("stability_budget")
+        summary["time_series"] = stability_time_series(
+            rows, config.get("stability_windows", config.get("stability_window"))
+        )
         if summary["time_series"]["live"] and (
             run["status"] != "running"
             or (
@@ -384,6 +392,9 @@ def run_summary(
         ):
             summary["time_series"]["live"] = False
             summary["time_series"]["window_state"] = "interrupted"
+            for segment in summary["time_series"].get("segments", []):
+                if segment["live"]:
+                    segment.update(live=False, window_state="interrupted", complete=False)
             summary["time_series"]["notes"].append(
                 "执行已结束，但时间窗口未最终关闭；曲线只展示最后一次成功保存的窗口，不能视为完整运行。"
             )
@@ -500,7 +511,11 @@ def run_results_csv(db_path: str, run_id: int) -> str:
             stored_config = json.loads(stored_run[0] or "{}") if stored_run else {}
         except (ValueError, TypeError):
             stored_config = {}
-        window = stored_config.get("stability_window") if isinstance(stored_config, dict) else None
+        window = (
+            stored_config.get("stability_windows", stored_config.get("stability_window"))
+            if isinstance(stored_config, dict)
+            else None
+        )
         rows = conn.execute(
             f"SELECT {', '.join(stored_columns)}, extra_metrics, error "
             "FROM test_results WHERE run_id = ? ORDER BY id",

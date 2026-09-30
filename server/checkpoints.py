@@ -23,6 +23,7 @@ MEASUREMENT_TYPES = {
     "prefill",
     "long_context",
     "segmented_prefill",
+    "stability",
 }
 MEASUREMENT_CONTRACT = "measurement-group-checkpoint-v1"
 SUPPORTED_TYPES = {"quality", "robustness"} | MEASUREMENT_TYPES
@@ -30,6 +31,16 @@ SUPPORTED_TYPES = {"quality", "robustness"} | MEASUREMENT_TYPES
 
 def checkpoint_contract(test_type: str) -> str:
     return MEASUREMENT_CONTRACT if test_type in MEASUREMENT_TYPES else CONTRACT
+
+
+def checkpoint_unit_label(test_type: str) -> str:
+    return (
+        "请求"
+        if test_type == "stability"
+        else "测量组"
+        if test_type in MEASUREMENT_TYPES
+        else "样本"
+    )
 
 
 MAX_BYTES = 16 * 1024 * 1024
@@ -113,6 +124,7 @@ def execution_signature(job: dict, endpoint: Endpoint) -> str:
         Path(__file__),
         root / "server/runner_adapter.py",
         root / "server/measurement_checkpoints.py",
+        root / "server/stability_checkpoints.py",
     ]
     for path in sorted(files):
         digest.update(path.relative_to(root).as_posix().encode("utf-8"))
@@ -185,9 +197,15 @@ def checkpoint_info(store: JobStore, job: dict) -> dict[str, Any]:
             0,
             "分段检查点以整轮有序前缀序列保存，恢复原提示词和缓存推断基线；未提交轮次整轮重发，不能证明服务端缓存跨中断连续。",
         )
+    if current["test_type"] == "stability":
+        notes = [
+            "连续稳定性按请求保存；分母为已生成的发起计划，不是按时长任务的最终请求数。",
+            "恢复复用已提交观测，未提交请求可能重复发起；剩余有效发起时长按最后成功保存的调度时钟计算，未保存的时间可能再次执行。",
+            "每次执行有独立单调时钟窗口，分别展示，不能拼接为不中断稳定性或计算跨中断连续系统速率。",
+        ]
     return {
         "contract": checkpoint_contract(current["test_type"]),
-        "unit_label": "测量组" if current["test_type"] in MEASUREMENT_TYPES else "样本",
+        "unit_label": checkpoint_unit_label(current["test_type"]),
         "supported": current["test_type"] in SUPPORTED_TYPES,
         "available": bool(header),
         "revision": revision,
@@ -414,6 +432,10 @@ def recover_job(store: JobStore, job: dict, endpoint: Endpoint) -> dict[str, Any
             from server.measurement_checkpoints import verify_measurement_observations
 
             verify_measurement_observations(conn, current)
+            if current["test_type"] == "stability":
+                from server.stability_checkpoints import verify_stability_state
+
+                verify_stability_state(conn, current)
         now = time.time()
         before = RunStatus(current["status"])
         after = advance_run(before, RunEvent.RECOVER)

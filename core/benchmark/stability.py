@@ -15,6 +15,9 @@ async def continuous_load(
     concurrency: int,
     duration: float,
     session_id_start: int = 0,
+    session_id: Callable[[int], int] | None = None,
+    minimum_requests: int = 0,
+    planned_seconds: float | None = None,
     stopped: Callable[[], bool],
     pause_requested: Callable[[], bool] | None = None,
     checkpoint: Callable[[], Awaitable[None]] | None = None,
@@ -48,7 +51,8 @@ async def continuous_load(
             "anchor": "scheduler_start",
             "id": window_id,
             "window_seconds": max(0.000001, now - origin),
-            "planned_seconds": duration,
+            "planned_seconds": duration if planned_seconds is None else planned_seconds,
+            "admission_budget_seconds": duration,
             "expected_requests": scheduled,
             "recorded_requests": len(results),
             "paused_seconds": paused_seconds,
@@ -62,7 +66,8 @@ async def continuous_load(
 
     async def measured(index: int) -> dict[str, Any]:
         start = clock()
-        row = await request(session_id_start + index)
+        identifier = session_id(index) if session_id else session_id_start + index
+        row = await request(identifier)
         end = clock()
         row.setdefault("extra_metrics", {})["timing_observation"] = {
             "version": "stability-clock-v1",
@@ -74,7 +79,7 @@ async def continuous_load(
             "end_seconds": end - origin,
         }
         row["batch_id"] = window_id
-        row["request_index"] = index
+        row["request_index"] = identifier
         return row
 
     def collect(done: set[asyncio.Task]) -> None:
@@ -106,8 +111,10 @@ async def continuous_load(
                 state = "running"
                 flush(force=True)
                 continue
-            if not pausing and elapsed < duration:
-                while len(active) < concurrency:
+            if not pausing and (elapsed < duration or scheduled < minimum_requests):
+                while len(active) < concurrency and (
+                    clock() - origin - paused_seconds < duration or scheduled < minimum_requests
+                ):
                     active.add(asyncio.create_task(measured(scheduled)))
                     scheduled += 1
             if not active:

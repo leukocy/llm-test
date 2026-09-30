@@ -2,6 +2,7 @@ import asyncio
 import csv
 import hashlib
 import json
+import math
 import random
 import threading
 import time
@@ -1583,6 +1584,11 @@ class BenchmarkRunner:
 
     def _append_metric_csv(self, result: dict, csv_columns: list):
         """Tag each exported row and its persisted DB metadata with the metric contract."""
+        self._tag_metric_result(result)
+        append_to_csv(result, csv_columns, self.csv_file)
+
+    def _tag_metric_result(self, result: dict):
+        """Prepare the immutable observation before a durable live commit or export."""
         if self._measurement_journal:
             self._measurement_journal.restore_fields(result)
         result["metric_contract_version"] = METRIC_CONTRACT_VERSION
@@ -1595,7 +1601,6 @@ class BenchmarkRunner:
             extra_metrics["prompt_sha256"] = hashlib.sha256(
                 result["prompt_text"].encode("utf-8")
             ).hexdigest()
-        append_to_csv(result, csv_columns, self.csv_file)
 
     def _begin_measurement_protocol(self, test_type: str, config: dict) -> None:
         """Snapshot the planned workload and keep warmup outside measured rows."""
@@ -5132,6 +5137,7 @@ class BenchmarkRunner:
         duration,
         session_id_start,
         observation_callback=None,
+        recovery=None,
     ):
         """Continuous load with one clock, live observations and drained pause boundaries."""
         await self._measurement_checkpoint()
@@ -5149,7 +5155,9 @@ class BenchmarkRunner:
 
         async def request(session_id):
             source = "generic"
-            if isinstance(prompt_func_or_str, list):
+            if recovery:
+                prompt, source = recovery.freeze_request(self, session_id, prompt_func_or_str)
+            elif isinstance(prompt_func_or_str, list):
                 prompt = prompt_func_or_str[session_id % len(prompt_func_or_str)]
             elif callable(prompt_func_or_str):
                 prompt = prompt_func_or_str(session_id)
@@ -5175,11 +5183,24 @@ class BenchmarkRunner:
             if not isinstance(res.get("extra_metrics"), dict):
                 res["extra_metrics"] = {}
             now = time.monotonic()
-            stats["min_start"] = min(stats["min_start"], res.get("start_time") or start)
-            first = res.get("first_token_time")
-            if first:
+            stats["min_start"] = min(stats["min_start"], start)
+            provider_start = res.get("start_time")
+            provider_first = res.get("first_token_time")
+            first = None
+            if (
+                isinstance(provider_start, (int, float))
+                and isinstance(provider_first, (int, float))
+                and math.isfinite(provider_start)
+                and math.isfinite(provider_first)
+                and provider_first >= provider_start
+            ):
+                first = start + (provider_first - provider_start)
+            if first is not None:
                 stats["min_first"] = min(stats["min_first"], first)
                 stats["max_first"] = max(stats["max_first"], first)
+                res["extra_metrics"]["phase_estimate_source"] = (
+                    "provider_interval_aligned_to_client_monotonic"
+                )
             if not res.get("error"):
                 stats["successful"] += 1
                 stats["input"] += res.get("prefill_tokens", 0) or 0
@@ -5201,6 +5222,8 @@ class BenchmarkRunner:
                 max(0, stats["input"] - stats["cache"]) / prefill_elapsed
             )
             res["rps"] = stats["successful"] / elapsed
+            if recovery:
+                recovery.tag_request(res, session_id, prompt, source)
             return res
 
         def observe(rows, window):
@@ -5213,12 +5236,17 @@ class BenchmarkRunner:
             concurrency=concurrency,
             duration=duration,
             session_id_start=session_id_start,
+            session_id=recovery.session_id if recovery else None,
+            minimum_requests=recovery.minimum_requests if recovery else 0,
+            planned_seconds=recovery.planned_seconds if recovery else None,
             stopped=is_stop_requested,
             pause_requested=self._control_poll,
             checkpoint=self._control_checkpoint,
             observe=observe,
             clock=time.monotonic,
         )
+        if recovery:
+            return results
         for res in results:
             res["extra_metrics"]["timing_observation"].update(
                 window_seconds=last_window["window_seconds"],
@@ -5272,6 +5300,14 @@ class BenchmarkRunner:
             "input_tokens_target": input_tokens_target,
         }
         self._start_db_run("stability", config)
+        recovery = self._measurement_journal
+        remaining = duration_seconds
+        if recovery:
+            restored, remaining = recovery.begin_stability(self)
+            for row in restored:
+                self._append_metric_csv(row, csv_columns)
+                self.results_list.append(row)
+            self.completed_requests = len(self.results_list)
 
         self.status_text.info(
             f"currently以 {concurrency} Concurrency运行Stability Test (持续 {duration_seconds} seconds)..."
@@ -5298,26 +5334,36 @@ class BenchmarkRunner:
                 res["input_tokens_target"] = input_tokens_target
                 res["timestamp"] = res["extra_metrics"]["timing_observation"]["end_seconds"]
                 res["prompt_source"] = res.pop("_prompt_source", "generic")
-                self._append_metric_csv(res, csv_columns)
-                self.results_list.append(res)
-            if self._db_run is not None:
+                self._tag_metric_result(res)
+            if recovery:
+                recovery.save_snapshot(self, rows, window)
+            elif self._db_run is not None:
                 saved = self._get_db_manager().save_stability_snapshot(
                     self._db_run, rows, window, worker_id=self._persistence_owner
                 )
                 if saved != len(rows):
                     raise RuntimeError("Incomplete live observation flush")
                 self._persisted_result_ids.update(id(res) for res in rows)
+            for res in rows:
+                self._append_metric_csv(res, csv_columns)
+                self.results_list.append(res)
             self.completed_requests = len(self.results_list)
             self.update_ui()
+
+        if recovery and remaining == 0 and recovery.minimum_requests == 0:
+            self._batch_save_results_to_db()
+            self._complete_db_run(success=True)
+            return pd.DataFrame(self.results_list)
 
         await self._run_time_based_batch(
             None,
             prompt_source,
             max_tokens,
             concurrency,
-            duration_seconds,
+            remaining,
             session_id_start=0,
             observation_callback=observe,
+            recovery=recovery,
         )
 
         # 批量SaveResult到Database并完成运行

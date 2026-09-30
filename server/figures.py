@@ -34,6 +34,7 @@ def performance_report_figure(
     *,
     view: str = "comparison",
     statistic: str = "median",
+    attempt: int | None = None,
 ) -> dict:
     """Export the exact report statistics, retaining missing values and provenance."""
     groups = summary["groups"]
@@ -162,15 +163,25 @@ def performance_report_figure(
         }
     }
     if view == "timeline":
-        _timeline_view(result["figure"], summary, metric, statistic)
+        _timeline_view(result["figure"], summary, metric, statistic, attempt=attempt)
     elif view != "comparison":
         _scenario_view(result["figure"], summary, metric, view, statistic)
     result["analysis"] = scenario_analysis(summary)
     return result
 
 
-def _timeline_view(figure: dict, summary: dict, metric: str, statistic: str) -> None:
+def _timeline_view(
+    figure: dict, summary: dict, metric: str, statistic: str, *, attempt: int | None = None
+) -> None:
     timeline = summary.get("time_series")
+    if timeline and "segments" in timeline:
+        segments = timeline["segments"]
+        selected = [s for s in segments if s["attempt"] == attempt] if attempt else segments[-1:]
+        if not selected:
+            raise ValueError("所选执行尝试没有可核验的计时窗口")
+        timeline = selected[0]
+    elif attempt is not None:
+        raise ValueError("此测量没有按执行尝试保存的计时窗口")
     if summary["run"]["test_type"] != "stability" or metric not in REQUEST_METRICS:
         raise ValueError("时间序列仅支持稳定性测试的五种逐请求指标")
     if not timeline or not timeline["bins"]:
@@ -230,6 +241,8 @@ def _timeline_view(figure: dict, summary: dict, metric: str, statistic: str) -> 
     layout["title"]["text"] += (
         f"<br><sup>稳定性完成时间序列 · {STATISTICS[statistic]} · stability-clock-v1</sup>"
     )
+    if timeline.get("attempt"):
+        layout["title"]["text"] += f" · 执行尝试 #{timeline['attempt']}（独立时钟窗口）"
     layout["xaxis"] = {
         "title": {"text": "距调度开始的时间（秒）· 时间窗中点"},
         "type": "linear",
@@ -241,14 +254,20 @@ def _timeline_view(figure: dict, summary: dict, metric: str, statistic: str) -> 
         "domain": [0, 0.22],
         "anchor": "x",
         "rangemode": "tozero",
-        "dtick": 1,
+        "tickformat": ",d",
+        "nticks": 5,
     }
+    if max((b["requests"] for b in bins), default=0) <= 4:
+        layout["yaxis2"]["dtick"] = 1
+    admission_budget = timeline.get("admission_budget_seconds")
+    if admission_budget is None:
+        admission_budget = timeline["planned_seconds"]
     layout["annotations"][0]["text"] = "<br>".join(
         [
             layout["annotations"][0]["text"].replace("柱顶 n 为", "悬停 n 为"),
             f"计时记录完整：{'是' if timeline['complete'] else '否'} · 有效计时 {timeline['timed_requests']} · 缺失 {timeline['missing_requests']} · 无效 {timeline['invalid_requests']}",
             f"窗口状态：{timeline.get('window_state') or '历史记录'}；运行中的时间窗仅供诊断，尚未最终确认。",
-            f"计划发起 {timeline['planned_seconds']} 秒 · 调度至排空 {timeline['window_seconds']:.3f} 秒 · 每窗 {timeline['bin_seconds']} 秒",
+            f"本次发起预算 {admission_budget:.3f} 秒 · 调度至排空 {timeline['window_seconds']:.3f} 秒 · 每窗 {timeline['bin_seconds']} 秒",
             *timeline["notes"],
             f"作业 {escape(summary['run']['test_id'])} · 完整来源见 HTML / JSON 报告",
         ]

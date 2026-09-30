@@ -29,8 +29,17 @@ export function StabilityTimeline({
   const [error, setError] = useState<{ key: string; text: string } | null>(
     null,
   );
-  const timeline = summary.time_series;
-  const key = `${job.job_id}:${metric}:${statistic}`;
+  const [selectedAttempt, setSelectedAttempt] = useState("latest");
+  const collection = summary.time_series;
+  const segments = collection?.segments;
+  const timeline = segments
+    ? segments.find((item) => String(item.attempt) === selectedAttempt) ||
+      segments.at(-1)
+    : collection;
+  const attempt = timeline?.attempt;
+  const admissionBudget =
+    timeline?.admission_budget_seconds ?? timeline?.planned_seconds;
+  const key = `${job.job_id}:${attempt || "single"}:${metric}:${statistic}`;
   useEffect(() => {
     const controller = new AbortController();
     setResult(null);
@@ -38,7 +47,7 @@ export function StabilityTimeline({
     if (!timeline?.bins.length) return () => controller.abort();
     void api<{ figure: Figure }>(
       token,
-      `/api/v1/jobs/${job.job_id}/figure?${new URLSearchParams({ view: "timeline", metric, statistic })}`,
+      `/api/v1/jobs/${job.job_id}/figure?${new URLSearchParams({ view: "timeline", metric, statistic, ...(attempt ? { attempt: String(attempt) } : {}) })}`,
       { signal: controller.signal },
     )
       .then(({ figure }) => {
@@ -52,7 +61,7 @@ export function StabilityTimeline({
           });
       });
     return () => controller.abort();
-  }, [token, job.job_id, key, metric, statistic, timeline]);
+  }, [token, job.job_id, key, metric, statistic, timeline, attempt]);
   if (!timeline) return null;
   const current = result?.key === key ? result.figure : null;
   const currentError = error?.key === key ? error.text : "";
@@ -78,6 +87,45 @@ export function StabilityTimeline({
         </div>
         <span className="minor-tag">单调时钟 · 完整记录分窗</span>
       </div>
+      {segments && (
+        <div className="scenario-controls">
+          <label>
+            执行尝试
+            <select
+              aria-label="稳定性执行尝试"
+              value={selectedAttempt}
+              onChange={(event) => setSelectedAttempt(event.target.value)}
+            >
+              <option value="latest">最新执行尝试</option>
+              {segments.map((item) => (
+                <option key={item.attempt} value={String(item.attempt)}>
+                  执行尝试 #{item.attempt} ·{" "}
+                  {item.window_state === "interrupted"
+                    ? "中断"
+                    : item.complete
+                      ? "计时完整"
+                      : "部分观测"}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      {collection?.cross_interruption && (
+        <p className="alert" role="status">
+          本任务包含 {segments?.length} 个独立执行窗口。当前显示执行尝试 #
+          {attempt}；窗口分别展示，不能拼接为一次不中断稳定性测试。
+        </p>
+      )}
+      {summary.stability_budget && (
+        <p className="muted">
+          计划有效发起 {summary.stability_budget.planned_seconds.toFixed(3)} 秒
+          · 已保存{" "}
+          {summary.stability_budget.saved_scheduling_seconds.toFixed(3)} 秒 ·
+          剩余 {summary.stability_budget.remaining_seconds.toFixed(3)}{" "}
+          秒。未保存时间可能重复执行。
+        </p>
+      )}
       {timeline.live && (
         <p role="status" className="muted">
           实时观测 · 测量
@@ -89,7 +137,7 @@ export function StabilityTimeline({
         有效计时 {timeline.timed_requests}；缺失 {timeline.missing_requests}
         ；无效 {timeline.invalid_requests}。计时记录完整：
         {timeline.complete ? "是" : "否"}。每窗 {timeline.bin_seconds ?? "未知"}{" "}
-        秒，计划发起 {timeline.planned_seconds ?? "未知"} 秒，调度至排空{" "}
+        秒，本次发起预算 {admissionBudget?.toFixed(3) ?? "未知"} 秒，调度至排空{" "}
         {timeline.window_seconds?.toFixed(3) ?? "未知"} 秒。
       </p>
       {!timeline.bins.length ? (
@@ -185,7 +233,7 @@ export function StabilityTimeline({
       <details>
         <summary>计时方法与解释边界</summary>
         <ul>
-          {timeline.notes.map((note) => (
+          {(collection?.notes || timeline.notes).map((note) => (
             <li key={note}>{note}</li>
           ))}
         </ul>

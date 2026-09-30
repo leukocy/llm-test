@@ -220,17 +220,29 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
     timeline = summary.get("time_series")
     if timeline:
         lines.extend(["", "## 稳定性完成时间序列", "", _timeline_description(timeline), ""])
+        if summary.get("stability_budget"):
+            lines.extend([_budget_description(summary["stability_budget"]), ""])
         lines.extend("- " + _md(note) for note in timeline["notes"])
-        lines.extend(
-            [
-                "",
-                "| 时间窗 (s) | 完成 | 失败 | 指标 | 有效 n | 均值 | p50 | p95 | p99 | 最小 | 最大 |",
-                "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|",
-            ]
-        )
-        lines.extend(
-            "| " + " | ".join(_md(v) for v in row) + " |" for row in _timeline_rows(timeline)
-        )
+        for section in timeline.get("segments", [timeline]):
+            if section.get("attempt"):
+                lines.extend(
+                    [
+                        "",
+                        f"### 执行尝试 #{section['attempt']}（独立时钟窗口）",
+                        "",
+                        _timeline_description(section),
+                    ]
+                )
+            lines.extend(
+                [
+                    "",
+                    "| 时间窗 (s) | 完成 | 失败 | 指标 | 有效 n | 均值 | p50 | p95 | p99 | 最小 | 最大 |",
+                    "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|",
+                ]
+            )
+            lines.extend(
+                "| " + " | ".join(_md(v) for v in row) + " |" for row in _timeline_rows(section)
+            )
     return (
         "\n".join(lines)
         + "\n"
@@ -389,41 +401,54 @@ def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
     )
     timeline = summary.get("time_series")
     if timeline:
-        timeline_rows = "".join(
-            "<tr>" + "".join(f"<td>{cell(value)}</td>" for value in row) + "</tr>"
-            for row in _timeline_rows(timeline)
-        )
         scenario_html += (
             "<section><h2>稳定性完成时间序列</h2><p>"
             + cell(_timeline_description(timeline))
-            + "</p><ul>"
-            + "".join(f"<li>{cell(note)}</li>" for note in timeline["notes"])
-            + "</ul>"
-            + "".join(
-                timeline_svg(timeline, key, METRICS[key][1], METRICS[key][2])
-                for key in REQUEST_METRICS
-            )
-            + "<div style='overflow-x:auto'><table><thead><tr>"
-            + "".join(
-                f"<th>{label}</th>"
-                for label in [
-                    "时间窗 (s)",
-                    "完成",
-                    "失败",
-                    "指标",
-                    "有效 n",
-                    "均值",
-                    "p50",
-                    "p95",
-                    "p99",
-                    "最小",
-                    "最大",
-                ]
-            )
-            + "</tr></thead><tbody>"
-            + timeline_rows
-            + "</tbody></table></div></section>"
+            + "</p>"
         )
+        if summary.get("stability_budget"):
+            scenario_html += "<p>" + cell(_budget_description(summary["stability_budget"])) + "</p>"
+        scenario_html += (
+            "<ul>" + "".join(f"<li>{cell(note)}</li>" for note in timeline["notes"]) + "</ul>"
+        )
+        for section in timeline.get("segments", [timeline]):
+            if section.get("attempt"):
+                scenario_html += (
+                    f"<h3>执行尝试 #{int(section['attempt'])}（独立时钟窗口）</h3><p>"
+                    + cell(_timeline_description(section))
+                    + "</p>"
+                )
+            timeline_rows = "".join(
+                "<tr>" + "".join(f"<td>{cell(value)}</td>" for value in row) + "</tr>"
+                for row in _timeline_rows(section)
+            )
+            scenario_html += (
+                "".join(
+                    timeline_svg(section, key, METRICS[key][1], METRICS[key][2])
+                    for key in REQUEST_METRICS
+                )
+                + "<div style='overflow-x:auto'><table><thead><tr>"
+                + "".join(
+                    f"<th>{label}</th>"
+                    for label in [
+                        "时间窗 (s)",
+                        "完成",
+                        "失败",
+                        "指标",
+                        "有效 n",
+                        "均值",
+                        "p50",
+                        "p95",
+                        "p99",
+                        "最小",
+                        "最大",
+                    ]
+                )
+                + "</tr></thead><tbody>"
+                + timeline_rows
+                + "</tbody></table></div>"
+            )
+        scenario_html += "</section>"
     return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LLM Test 报告 · {cell(job["job_id"])}</title>
@@ -480,14 +505,30 @@ figcaption {{ font-size:13px; color:#536780; }}
 </main></body></html>"""
 
 
+def _budget_description(value: dict[str, Any]) -> str:
+    return (
+        f"计划有效发起 {value['planned_seconds']:.3f} 秒；已保存有效发起 {value['saved_scheduling_seconds']:.3f} 秒；"
+        f"剩余 {value['remaining_seconds']:.3f} 秒。未保存时间可能重复执行；各窗口另含请求排空与暂停等待。"
+    )
+
+
 def _timeline_description(timeline: dict[str, Any]) -> str:
+    if "segments" in timeline:
+        if len(timeline["segments"]) == 1:
+            return _timeline_description(timeline["segments"][0])
+        return f"已保存 {len(timeline['segments'])} 个独立执行窗口；各窗口有独立单调时钟原点，不能合成为一次连续负载。有效计时 {timeline['timed_requests']}，缺失 {timeline['missing_requests']}，无效 {timeline['invalid_requests']}。"
+
     window = timeline["window_seconds"]
     window_text = f"{window:.3f}" if window is not None else "未知"
+    admission_budget = timeline.get("admission_budget_seconds")
+    if admission_budget is None:
+        admission_budget = timeline["planned_seconds"]
+    budget_text = f"{admission_budget:.3f}" if admission_budget is not None else "未知"
     return (
         f"stability-clock-v1 · 窗口状态：{timeline.get('window_state') or '历史记录'}；"
         f"计时记录完整：{'是' if timeline['complete'] else '否'}；"
         f"有效计时 {timeline['timed_requests']}，缺失 {timeline['missing_requests']}，无效 {timeline['invalid_requests']}；"
-        f"计划发起 {timeline['planned_seconds'] if timeline['planned_seconds'] is not None else '未知'} 秒，"
+        f"本次发起预算 {budget_text} 秒，"
         f"调度至排空 {window_text} 秒；每窗 {timeline['bin_seconds'] if timeline['bin_seconds'] is not None else '未知'} 秒。"
     )
 

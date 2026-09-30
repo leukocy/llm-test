@@ -170,28 +170,39 @@ export type ReportEnvironment = {
     >
   >;
 };
+export type StabilityTimeSeries = {
+  live: boolean;
+  window_state: string | null;
+  contract: string;
+  timed_requests: number;
+  missing_requests: number;
+  invalid_requests: number;
+  complete: boolean;
+  window_seconds: number | null;
+  planned_seconds: number | null;
+  admission_budget_seconds?: number | null;
+  attempt?: number | null;
+  bin_seconds: number | null;
+  notes: string[];
+  cross_interruption?: boolean;
+  segments?: StabilityTimeSeries[];
+  bins: {
+    start_seconds: number;
+    end_seconds: number;
+    requests: number;
+    failures: number;
+    successes: number;
+    metrics: Record<string, Metric>;
+  }[];
+};
+
 export type Summary = {
-  time_series?: {
-    live: boolean;
-    window_state: string | null;
-    contract: string;
-    timed_requests: number;
-    missing_requests: number;
-    invalid_requests: number;
-    complete: boolean;
-    window_seconds: number | null;
-    planned_seconds: number | null;
-    bin_seconds: number | null;
-    notes: string[];
-    bins: {
-      start_seconds: number;
-      end_seconds: number;
-      requests: number;
-      failures: number;
-      successes: number;
-      metrics: Record<string, Metric>;
-    }[];
-  };
+  stability_budget?: {
+    planned_seconds: number;
+    saved_scheduling_seconds: number;
+    remaining_seconds: number;
+  } | null;
+  time_series?: StabilityTimeSeries;
   extended_observations?: {
     system: {
       contract: string;

@@ -457,13 +457,11 @@ class JobStore:
             ).fetchall()
         items = [self._as_job(row) for row in rows if row is not None]
         if saved_progress:
-            from server.checkpoints import MEASUREMENT_TYPES
+            from server.checkpoints import checkpoint_unit_label
 
             for item in items:
                 if item is not None:
-                    item["saved_progress_unit"] = (
-                        "测量组" if item["test_type"] in MEASUREMENT_TYPES else "样本"
-                    )
+                    item["saved_progress_unit"] = checkpoint_unit_label(item["test_type"])
         return items, count  # type: ignore[return-value]
 
     def events(self, job_id: str, *, limit: int = 100) -> JobList:

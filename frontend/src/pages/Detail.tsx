@@ -81,6 +81,7 @@ export function Detail({
         "prefill",
         "long_context",
         "segmented_prefill",
+        "stability",
       ].includes(job.test_type)
     )
       return;
@@ -178,9 +179,13 @@ export function Detail({
   };
   useEffect(() => {
     let alive = true;
-    setSummary(null);
-    setQuality(null);
-    setRobustness(null);
+    setSummary((current) =>
+      current?.run.test_id === job.job_id ? current : null,
+    );
+    setQuality((current) => (current?.job_id === job.job_id ? current : null));
+    setRobustness((current) =>
+      current?.job_id === job.job_id ? current : null,
+    );
     setResults([]);
     setEvents([]);
     api<{ items: JobEvent[] }>(token, `/api/v1/jobs/${job.job_id}/events`)
@@ -437,6 +442,27 @@ export function Detail({
   }
 
   const overall = summary?.overall;
+  const reportCompleted =
+    summary?.integrity.verified &&
+    summary.run.test_id === job.job_id &&
+    summary.run.status === "completed";
+  const displayStatus = reportCompleted ? "completed" : job.status;
+  const savedRequests = reportCompleted
+    ? summary.overall.requests
+    : job.progress_completed;
+  const plannedRequests = reportCompleted
+    ? summary.integrity.expected_requests
+    : job.progress_total;
+  const schedulingBudget =
+    job.test_type === "stability" ? summary?.stability_budget : null;
+  const progressPercent =
+    schedulingBudget && schedulingBudget.planned_seconds > 0
+      ? (schedulingBudget.saved_scheduling_seconds /
+          schedulingBudget.planned_seconds) *
+        100
+      : plannedRequests
+        ? (savedRequests / plannedRequests) * 100
+        : 0;
   const pausedSeconds =
     (job.paused_seconds ?? 0) +
     (job.pause_started_at
@@ -469,11 +495,11 @@ export function Detail({
               {job.model_id} · {job.endpoint_id}
             </p>
           </div>
-          <Status value={job.status} />
+          <Status value={displayStatus} />
         </div>
         <div className="detail-actions">
           <span>创建于 {date(job.created_at)}</span>
-          {job.status === "running" && pausableTypes.has(job.test_type) && (
+          {displayStatus === "running" && pausableTypes.has(job.test_type) && (
             <button
               className="button subtle"
               disabled={controlBusy}
@@ -482,7 +508,7 @@ export function Detail({
               暂停运行
             </button>
           )}
-          {job.status === "paused" && (
+          {displayStatus === "paused" && (
             <button
               className="button primary"
               disabled={controlBusy}
@@ -500,7 +526,7 @@ export function Detail({
               从检查点恢复
             </button>
           )}
-          {activeStates.has(job.status) && (
+          {activeStates.has(displayStatus) && (
             <button
               className="button subtle danger"
               onClick={() => void onCancel()}
@@ -588,12 +614,14 @@ export function Detail({
             · 发起 {checkpoint.issued_unit_attempts} 次 · 重复发起{" "}
             {checkpoint.repeated_unit_attempts} 次
           </p>
-          {checkpoint.unit_label === "测量组" && (
+          {["测量组", "请求"].includes(checkpoint.unit_label || "") && (
             <p className="muted">
-              分母为已生成的测量组，包含预热；后续组在执行前继续生成并冻结。
+              {job.test_type === "stability"
+                ? "分母为已生成的请求计划；按时长的测试会继续发起新请求，当前分母不是最终请求数。"
+                : "分母为已生成的测量组，包含预热；后续组在执行前继续生成并冻结。"}
             </p>
           )}
-          {job.status === "cancelled" && checkpoint.can_recover && (
+          {displayStatus === "cancelled" && checkpoint.can_recover && (
             <p>
               测试已停止。点击“从检查点恢复”会继续这次测试，并保留此前样本和停止记录。
             </p>
@@ -603,25 +631,25 @@ export function Detail({
               {note}
             </p>
           ))}
-          {job.status === "failed" && !checkpoint.can_recover && (
+          {displayStatus === "failed" && !checkpoint.can_recover && (
             <p>本次失败不满足恢复条件，请排查原因后创建新任务。</p>
           )}
         </section>
       )}
-      {(job.status === "pausing" ||
-        job.status === "paused" ||
+      {(displayStatus === "pausing" ||
+        displayStatus === "paused" ||
         job.pause_count > 0) && (
         <section className="surface" role="status">
           <strong>
-            {job.status === "pausing"
+            {displayStatus === "pausing"
               ? "正在等待当前请求组完成"
-              : job.status === "paused"
+              : displayStatus === "paused"
                 ? "已暂停，可以继续或取消"
                 : "本次运行包含暂停"}
           </strong>
           <p>
             {job.test_type === "stability"
-              ? "先停止发起新请求，待在途请求结束后暂停；恢复后继续剩余有效测试时长。时间轴保留暂停间隔，系统墙钟速率包含暂停等待。"
+              ? "先停止发起新请求，待在途请求结束后暂停；继续剩余有效发起时长。各执行窗口分别保留暂停间隔，窗口内的系统墙钟速率包含等待；重启后的时间轴不拼接。"
               : job.test_type === "segmented_prefill"
                 ? "分段测试等待当前整轮前缀序列完成并保存后暂停；继续时保留原顺序和基线。暂停或重启后的结果不能证明缓存连续性。"
                 : ["quality", "robustness"].includes(job.test_type)
@@ -646,17 +674,19 @@ export function Detail({
       )}
       <div className="detail-progress surface">
         <div>
-          <strong>任务进度</strong>
+          <strong>{schedulingBudget ? "有效发起进度" : "任务进度"}</strong>
           <span>
-            {job.progress_total
-              ? `${job.progress_completed} / ${job.progress_total} 请求`
-              : "等待测量引擎报告进度"}
+            {schedulingBudget
+              ? `${schedulingBudget.saved_scheduling_seconds.toFixed(3)} / ${schedulingBudget.planned_seconds.toFixed(3)} 秒 · 已保存 ${savedRequests} 个请求`
+              : plannedRequests
+                ? `${savedRequests} / ${plannedRequests} 请求`
+                : "等待测量引擎报告进度"}
           </span>
         </div>
         <div className="progress-track large">
           <i
             style={{
-              width: `${job.progress_total ? Math.min(100, (job.progress_completed / job.progress_total) * 100) : 0}%`,
+              width: `${Math.min(100, Math.max(0, progressPercent))}%`,
             }}
           />
         </div>
@@ -975,12 +1005,12 @@ export function Detail({
         <section className="surface">
           <Empty
             title={
-              activeStates.has(job.status)
+              activeStates.has(displayStatus)
                 ? "测量正在准备或执行"
                 : "暂无可用结果"
             }
             text={
-              activeStates.has(job.status)
+              activeStates.has(displayStatus)
                 ? "数据写入后会自动显示；离开页面不影响任务。"
                 : "检查任务事件或 worker 日志了解原因。"
             }

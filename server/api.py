@@ -1236,13 +1236,16 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         ),
         view: str = Query("comparison", pattern="^(comparison|profile|heatmap|timeline)$"),
         statistic: str = Query("median", pattern="^(median|mean|p95|p99|min|max)$"),
+        attempt: Annotated[int | None, Query(ge=1)] = None,
     ):
         job = job_or_404(job_id)
         if job["result_run_id"] is None:
             raise HTTPException(409, "尚无性能观测可供绘图")
         summary = performance_summary(job)
         try:
-            return performance_report_figure(job, summary, metric, view=view, statistic=statistic)
+            return performance_report_figure(
+                job, summary, metric, view=view, statistic=statistic, attempt=attempt
+            )
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
 

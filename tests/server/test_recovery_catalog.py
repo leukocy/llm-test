@@ -71,7 +71,7 @@ def test_catalog_and_detail_use_same_recovery_eligibility(catalog):
     invalid = [
         saved_job(store, endpoint, error="EXECUTION_FAILED"),
         saved_job(store, endpoint, plan=False),
-        saved_job(store, endpoint, test_type="stability"),
+        saved_job(store, endpoint, test_type="unsupported_test"),
         saved_job(store, endpoint),
     ]
     with store._connection() as conn:

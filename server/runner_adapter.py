@@ -12,6 +12,7 @@ from server.control import PAUSABLE_TEST_TYPES, JobControl
 from server.measurement_checkpoints import MeasurementJournal
 from server.settings import Endpoint, Settings
 from server.specs import describe_report_environment
+from server.stability_checkpoints import StabilityJournal
 from server.store import JobStore
 
 
@@ -87,6 +88,8 @@ async def execute_job(
     journal = (
         JobJournal(store, job, worker_id, endpoint)
         if job["test_type"] in {"quality", "robustness"}
+        else StabilityJournal(store, job, worker_id, endpoint)
+        if job["test_type"] == "stability"
         else MeasurementJournal(store, job, worker_id, endpoint)
         if job["test_type"] in MEASUREMENT_TYPES
         else None

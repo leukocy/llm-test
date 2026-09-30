@@ -26,6 +26,8 @@ TIMING_FIELDS = (
     "window_state",
     "paused_seconds",
     "scheduling_seconds",
+    "attempt",
+    "admission_budget_seconds",
 )
 REQUEST_METRICS = ("ttft", "tpot", "tps", "prefill_speed", "total_time")
 TIMELINE_NOTES = [
@@ -99,11 +101,23 @@ def _valid_window(window: Any) -> bool:
         and type(window.get("expected_requests")) is int
         and type(window.get("recorded_requests")) is int
         and 0 <= window["recorded_requests"] <= window["expected_requests"]
+        and ("attempt" not in window or (type(window["attempt"]) is int and window["attempt"] > 0))
+        and (
+            "admission_budget_seconds" not in window
+            or (
+                _finite(window["admission_budget_seconds"])
+                and 0 <= window["admission_budget_seconds"] <= window["planned_seconds"]
+            )
+        )
     )
 
 
 def resolve_stability_row(row: dict[str, Any], window: Any) -> dict[str, Any]:
     """Resolve live rows using only the window from the same database read transaction."""
+    if isinstance(window, list):
+        value = timing_observation(row.get("extra_metrics"))
+        matching = [w for w in window if _valid_window(w) and value and w["id"] == value["id"]]
+        return resolve_stability_row(row, matching[0]) if len(matching) == 1 else row
     if not _valid_window(window):
         return row
     value = timing_observation(row.get("extra_metrics"))
@@ -118,9 +132,16 @@ def resolve_stability_row(row: dict[str, Any], window: Any) -> dict[str, Any]:
         paused_seconds=window["paused_seconds"],
         scheduling_seconds=window["scheduling_seconds"],
     )
+    for key in ("attempt", "admission_budget_seconds"):
+        if key in window:
+            value[key] = window[key]
     extra = json.loads(row.get("extra_metrics") or "{}")
     extra["timing_observation"] = value
-    if window["state"] == "completed" and _valid(value):
+    if (
+        window["state"] == "completed"
+        and _valid(value)
+        and window.get("admission_budget_seconds", window["planned_seconds"]) > 0
+    ):
         extra["system_measurement"] = {
             "version": BATCH_CONTRACT,
             "id": window["id"],
@@ -132,6 +153,8 @@ def resolve_stability_row(row: dict[str, Any], window: Any) -> dict[str, Any]:
 
 
 def stability_time_series(rows: list[dict[str, Any]], window: Any = None) -> dict[str, Any]:
+    if isinstance(window, list):
+        return segmented_time_series(rows, window)
     rows = [resolve_stability_row(row, window) for row in rows]
     valid = []
     missing = invalid = 0
@@ -171,10 +194,16 @@ def stability_time_series(rows: list[dict[str, Any]], window: Any = None) -> dic
         "notes": list(TIMELINE_NOTES),
         "live": _valid_window(window) and window["state"] in {"running", "paused"},
         "window_state": window["state"] if _valid_window(window) else None,
+        "attempt": window.get("attempt") if _valid_window(window) else None,
+        "admission_budget_seconds": window.get("admission_budget_seconds")
+        if _valid_window(window)
+        else None,
     }
     if not valid:
         result["notes"].append("没有可核验的单调时钟时间记录，无法绘制稳定性时间序列。")
         return result
+    if result.get("admission_budget_seconds") == 0:
+        result["notes"].append("本窗口仅补做中断前未提交的请求，不产生连续负载系统速率。")
     _, span, planned, expected = next(iter(signatures))
     width = max(1, math.ceil(span / 60))
     count = max(1, math.ceil(span / width))
@@ -215,6 +244,46 @@ def stability_time_series(rows: list[dict[str, Any]], window: Any = None) -> dic
         bins=bins,
     )
     return result
+
+
+def segmented_time_series(rows: list[dict[str, Any]], windows: list[dict]) -> dict[str, Any]:
+    """Keep each clock origin separate; no concatenated or cross-interruption curve."""
+    ids = [window.get("id") if isinstance(window, dict) else None for window in windows]
+    valid_windows = all(_valid_window(window) for window in windows) and len(ids) == len(set(ids))
+    segments = []
+    orphaned = []
+    members: dict[str, list] = defaultdict(list)
+    for row in rows:
+        timing = timing_observation(row.get("extra_metrics"))
+        if not timing or timing["id"] not in ids:
+            orphaned.append(row)
+        else:
+            members[timing["id"]].append(row)
+    if valid_windows:
+        segments = [stability_time_series(members[window["id"]], window) for window in windows]
+    latest = segments[-1] if segments else None
+    return {
+        "contract": "stability-clock-v1",
+        "segments": segments,
+        "cross_interruption": len(windows) > 1,
+        "timed_requests": sum(s["timed_requests"] for s in segments),
+        "missing_requests": sum(s["missing_requests"] for s in segments) + len(orphaned),
+        "invalid_requests": sum(s["invalid_requests"] for s in segments)
+        + (0 if valid_windows else len(rows)),
+        "conflict": not valid_windows or bool(orphaned) or any(s["conflict"] for s in segments),
+        "complete": bool(len(segments) == 1 and segments[0]["complete"] and not orphaned),
+        "window_seconds": None,
+        "planned_seconds": latest["planned_seconds"] if latest else None,
+        "bin_seconds": None,
+        "bins": [],
+        "live": bool(latest and latest["live"]),
+        "window_state": latest["window_state"] if latest else None,
+        "notes": [
+            *TIMELINE_NOTES,
+            "每次执行尝试有独立时钟原点，窗口分别展示，不拼接、不跨中断连线；各窗口系统速率仅解释其原始观测。",
+            "剩余发起时长以最后成功保存的调度时间计算；未保存的时间和未提交的请求可能重复执行，不能证明远端只执行一次。",
+        ],
+    }
 
 
 def timeline_svg(timeline: dict[str, Any], metric: str, label: str, unit: str) -> str:

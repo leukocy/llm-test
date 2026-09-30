@@ -315,8 +315,12 @@ class MeasurementJournal(JobJournal):
                 "contract": MEASUREMENT_CONTRACT,
                 "checkpoint": checkpoint,
                 "attempts": self.job["attempts"],
-                "duration_scope": "complete_groups_across_attempts",
-                "plan_scope": "materialized_groups",
+                "duration_scope": "independent_continuous_windows"
+                if self.job["test_type"] == "stability"
+                else "complete_groups_across_attempts",
+                "plan_scope": "admitted_requests"
+                if self.job["test_type"] == "stability"
+                else "materialized_groups",
                 "resource_scope": "current_attempt",
             }
             fields.update(
