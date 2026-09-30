@@ -4,7 +4,44 @@ Database Schema 定义
 包含所has表 SQL 定义andMigration语句。
 """
 
-SCHEMA_VERSION = "1.11.0"
+SCHEMA_VERSION = "1.12.0"
+
+CREATE_JOB_CHECKPOINTS = """
+CREATE TABLE IF NOT EXISTS job_checkpoints (
+    job_id TEXT PRIMARY KEY REFERENCES control_jobs(job_id) ON DELETE CASCADE,
+    contract TEXT NOT NULL,
+    signature TEXT NOT NULL,
+    recoveries INTEGER NOT NULL DEFAULT 0,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+"""
+CREATE_CHECKPOINT_SCOPES = """
+CREATE TABLE IF NOT EXISTS checkpoint_scopes (
+    job_id TEXT NOT NULL REFERENCES job_checkpoints(job_id) ON DELETE CASCADE,
+    scope_key TEXT NOT NULL,
+    metadata_json TEXT NOT NULL,
+    metadata_sha256 TEXT NOT NULL,
+    units INTEGER NOT NULL,
+    PRIMARY KEY (job_id, scope_key)
+);
+"""
+CREATE_CHECKPOINT_UNITS = """
+CREATE TABLE IF NOT EXISTS checkpoint_units (
+    job_id TEXT NOT NULL,
+    scope_key TEXT NOT NULL,
+    unit_index INTEGER NOT NULL,
+    input_json TEXT NOT NULL,
+    input_sha256 TEXT NOT NULL,
+    result_json TEXT,
+    result_sha256 TEXT,
+    issued_attempts INTEGER NOT NULL DEFAULT 0,
+    issued_by_attempt INTEGER,
+    committed_at REAL,
+    PRIMARY KEY (job_id, scope_key, unit_index),
+    FOREIGN KEY (job_id, scope_key) REFERENCES checkpoint_scopes(job_id, scope_key) ON DELETE CASCADE
+);
+"""
 
 # ============================================
 # Table schema定义
@@ -496,6 +533,9 @@ def get_schema_sql() -> str:
         CREATE_CONTROL_PRESETS,
         CREATE_CONTROL_ENDPOINTS,
         CREATE_TOKENIZER_INSTALLS,
+        CREATE_JOB_CHECKPOINTS,
+        CREATE_CHECKPOINT_SCOPES,
+        CREATE_CHECKPOINT_UNITS,
     ]
     return "\n".join(tables + CREATE_INDEXES)
 
@@ -524,6 +564,9 @@ def create_tables(conn) -> None:
         CREATE_CONTROL_PRESETS,
         CREATE_CONTROL_ENDPOINTS,
         CREATE_TOKENIZER_INSTALLS,
+        CREATE_JOB_CHECKPOINTS,
+        CREATE_CHECKPOINT_SCOPES,
+        CREATE_CHECKPOINT_UNITS,
     ]:
         cursor.execute(sql)
 

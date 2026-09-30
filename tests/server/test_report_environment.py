@@ -258,7 +258,7 @@ async def test_adapter_persists_environment_in_report_artifacts(
             "core.robustness_tester.RobustnessTester", MagicMock(return_value=tester)
         )
     job = store.submit(test_type=test_type, endpoint_id="lab", model_id="m", parameters=params)
-    store.claim("w")
+    job = store.claim("w")
     output = await execute_job(job, endpoint, settings, store, "w")
     artifact = json.loads((settings.artifact_root / output.result_artifact).read_text())
     assert artifact["report_environment"] == describe_report_environment(environment)

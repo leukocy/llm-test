@@ -140,7 +140,7 @@ export default function App() {
     await refresh(token);
   }
 
-  async function control(job: Job, action: "pause" | "resume") {
+  async function control(job: Job, action: "pause" | "resume" | "recover") {
     await api(token, `/api/v1/jobs/${job.job_id}/${action}`, {
       method: "POST",
     });
@@ -394,16 +394,20 @@ function DetailRoute({
   jobs: Job[];
   token: string;
   onCancel: (job: Job) => Promise<void>;
-  onControl: (job: Job, action: "pause" | "resume") => Promise<void>;
+  onControl: (
+    job: Job,
+    action: "pause" | "resume" | "recover",
+  ) => Promise<void>;
 }) {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const [loadedJob, setLoadedJob] = useState<Job | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [reloadGeneration, setReloadGeneration] = useState(0);
   useEffect(() => {
     let alive = true;
     let timer: number | undefined;
-    setLoadedJob(null);
+    setLoadedJob((previous) => (previous?.job_id === jobId ? previous : null));
     setLoadError("");
     const load = async () => {
       try {
@@ -425,7 +429,7 @@ function DetailRoute({
       alive = false;
       window.clearTimeout(timer);
     };
-  }, [jobId, token]);
+  }, [jobId, token, reloadGeneration]);
   const job =
     loadedJob?.job_id === jobId
       ? loadedJob
@@ -439,6 +443,7 @@ function DetailRoute({
     );
   async function reloadSelected() {
     setLoadedJob(await api<Job>(token, `/api/v1/jobs/${jobId}`));
+    setReloadGeneration((value) => value + 1);
   }
   return (
     <Detail

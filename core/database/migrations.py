@@ -9,10 +9,13 @@ import sqlite3
 from typing import Any, Callable
 
 from .schema import (
+    CREATE_CHECKPOINT_SCOPES,
+    CREATE_CHECKPOINT_UNITS,
     CREATE_CONTROL_BATCHES,
     CREATE_CONTROL_ENDPOINTS,
     CREATE_CONTROL_JOBS,
     CREATE_CONTROL_PRESETS,
+    CREATE_JOB_CHECKPOINTS,
     CREATE_JOB_EVENTS,
     CREATE_TOKENIZER_INSTALL_INDEX,
     CREATE_TOKENIZER_INSTALLS,
@@ -183,6 +186,11 @@ MIGRATIONS: dict[str, list[MigrationFunc]] = {
         _add_column("control_presets", "description", "TEXT NOT NULL DEFAULT ''"),
         _exec(CREATE_TOKENIZER_INSTALLS),
         _exec(CREATE_TOKENIZER_INSTALL_INDEX),
+    ],
+    "1.12.0": [
+        _exec(CREATE_JOB_CHECKPOINTS),
+        _exec(CREATE_CHECKPOINT_SCOPES),
+        _exec(CREATE_CHECKPOINT_UNITS),
     ],
 }
 

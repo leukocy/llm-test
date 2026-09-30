@@ -30,6 +30,7 @@ class RunEvent(str, Enum):
     CANCEL = "cancel"
     COMPLETE = "complete"
     FAIL = "fail"
+    RECOVER = "recover"
 
 
 class InvalidRunTransition(ValueError):
@@ -75,7 +76,7 @@ _TRANSITIONS: dict[RunStatus, dict[RunEvent, RunStatus]] = {
     },
     RunStatus.CANCELLED: {},
     RunStatus.COMPLETED: {},
-    RunStatus.FAILED: {},
+    RunStatus.FAILED: {RunEvent.RECOVER: RunStatus.QUEUED},
 }
 
 

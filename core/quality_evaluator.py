@@ -8,13 +8,14 @@ import hashlib
 import json
 import os
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
 import pandas as pd
 
 from core.cancel_state import is_stop_requested
+from core.evaluation_control import EvaluationJournal
 from core.failure_analyzer import analyze_failures
 from core.providers.factory import get_provider
 from core.safe_executor import SandboxUnavailableError, require_sandbox_available
@@ -190,6 +191,9 @@ class QualityEvaluator:
         tokenizer_model_id: str | None = None,
         enable_cache: bool = True,
         warehouse_context: dict | None = None,
+        control_checkpoint: Callable[[], Awaitable[None]] | None = None,
+        control_poll: Callable[[], bool] | None = None,
+        journal: EvaluationJournal | None = None,
     ):
         """
         InitializeQuality Assessment引擎
@@ -207,6 +211,9 @@ class QualityEvaluator:
                 system_info），用于把评估样本持久化为 application_cases（模型×应用质量评估表）。
                 缺则 machine/tester/engine 维度留空（与 benchmark_runner 同渐进填充）。
         """
+        self.control_checkpoint = control_checkpoint
+        self.control_poll = control_poll
+        self.journal = journal
         self.api_base_url = api_base_url
         self.model_id = model_id
         self.api_key = api_key
@@ -567,6 +574,33 @@ class QualityEvaluator:
 
         return cast("BaseEvaluator", evaluator)
 
+    @staticmethod
+    def _scope_key(dataset_name: str, subset: str | None) -> str:
+        return "quality:" + json.dumps([dataset_name, subset], ensure_ascii=False)
+
+    def _load_plan(
+        self, evaluator: BaseEvaluator, subset: str | None, scope_key: str
+    ) -> list[dict]:
+        def load() -> tuple[dict, list[dict]]:
+            evaluator.dataset_source = "configured_dataset"
+            samples = evaluator.load_dataset(subset=subset)
+            if not samples:
+                raise DatasetUnavailableError("Dataset has no usable samples")
+            return {
+                "few_shot_examples": evaluator.few_shot_examples,
+                "dataset_source": evaluator.dataset_source,
+                "dataset_path": evaluator.dataset_path,
+                "seed": evaluator.seed,
+            }, samples
+
+        metadata, samples = self.journal.prepare_scope(scope_key, load) if self.journal else load()
+        evaluator.samples = samples
+        evaluator.few_shot_examples = metadata["few_shot_examples"]
+        evaluator.dataset_source = metadata["dataset_source"]
+        evaluator.dataset_path = metadata["dataset_path"]
+        evaluator.seed = metadata["seed"]
+        return samples
+
     async def evaluate_dataset(
         self,
         dataset_name: str,
@@ -593,15 +627,8 @@ class QualityEvaluator:
             raise DatasetUnavailableError(f"No evaluator is registered for '{dataset_name}'.")
 
         try:
-            # LoadDataset
-            evaluator.dataset_source = "configured_dataset"
-            samples = evaluator.load_dataset(subset=subset)
-            if not samples:
-                raise DatasetUnavailableError(
-                    f"Dataset '{dataset_name}' has no usable samples"
-                    + (f" for subset '{subset}'" if subset else "")
-                    + "."
-                )
+            scope_key = self._scope_key(dataset_name, subset)
+            samples = self._load_plan(evaluator, subset, scope_key)
 
             sample_hash = fingerprint_samples(samples)
 
@@ -689,15 +716,42 @@ class QualityEvaluator:
                 live_sample_results.append(result)
 
             # 执行批量评估
-            start_time = time.time()
+            batch_control: dict[str, Any] = {}
+            if self.control_checkpoint or self.control_poll:
+                batch_control.update(
+                    control_checkpoint=self.control_checkpoint, control_poll=self.control_poll
+                )
+            if self.journal:
+                restored = {
+                    index: SampleResult(**value)
+                    for index, value in self.journal.results(scope_key).items()
+                }
+                live_sample_results.extend(restored[index] for index in sorted(restored))
+
+                def commit_sample(index: int, result: SampleResult) -> None:
+                    # Infrastructure failures must stop the run, not become incorrect answers.
+                    if result.error and result.error.startswith(
+                        ("Provider request failed:", "Sandbox unavailable:")
+                    ):
+                        raise ProviderRequestError(result.error)
+                    assert self.journal is not None
+                    self.journal.commit(scope_key, index, result.to_dict())
+
+                batch_control.update(
+                    restored_results=restored,
+                    start_callback=lambda index: self.journal.start(scope_key, index),
+                    commit_callback=commit_sample,
+                )
+            start_time = time.monotonic()
             sample_results = await evaluator.evaluate_batch(
                 samples=samples,
                 get_response_func=get_response_func,
                 concurrency=config.concurrency,
                 progress_callback=internal_progress,
                 result_callback=on_result_complete,
+                **batch_control,
             )
-            duration = time.time() - start_time
+            duration = time.monotonic() - start_time
 
             if len(sample_results) != len(samples):
                 raise RuntimeError(
@@ -735,6 +789,9 @@ class QualityEvaluator:
                 "few_shot_sha256": fingerprint_samples(evaluator.few_shot_examples),
                 "selection_seed": evaluator.seed,
             }
+            if self.journal:
+                result_config["checkpoint"] = self.journal.describe()
+                result_config["duration_scope"] = "current_attempt_dataset_phase"
             result = EvaluationResult(
                 dataset_name=dataset_name + (f"_{subset}" if subset else ""),
                 model_id=self.model_id,
@@ -794,7 +851,7 @@ class QualityEvaluator:
 
         except asyncio.CancelledError:
             self._log("评估被Cancel", LogLevel.WARNING)
-            return None
+            raise
         except (DatasetUnavailableError, SandboxUnavailableError, ProviderRequestError):
             raise
         except Exception as e:
@@ -833,6 +890,24 @@ class QualityEvaluator:
             total_samples_all += estimated
 
         try:
+            if self.journal:
+                # Freeze every dataset/subset before the first provider request.
+                dataset_sample_counts = {}
+                for name in config.datasets:
+                    subsets_to_prepare: list[str | None] = list(
+                        (config.subsets or {}).get(name, [])
+                    ) or [None]
+                    for subset in subsets_to_prepare:
+                        evaluator = self.get_evaluator(name, config)
+                        if evaluator is None:
+                            raise DatasetUnavailableError(
+                                f"No evaluator is registered for '{name}'."
+                            )
+                        samples = self._load_plan(evaluator, subset, self._scope_key(name, subset))
+                        dataset_sample_counts[name + (f"_{subset}" if subset else "")] = len(
+                            samples
+                        )
+                total_samples_all = sum(dataset_sample_counts.values())
             total_datasets = len(config.datasets)
 
             for i, dataset_name in enumerate(config.datasets):

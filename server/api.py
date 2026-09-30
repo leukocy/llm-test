@@ -31,6 +31,7 @@ from server.analytics import (
     run_results_csv,
     run_summary,
 )
+from server.checkpoints import CheckpointConflict, checkpoint_info, recover_job
 from server.control import PAUSABLE_TEST_TYPES
 from server.endpoints import (
     EndpointConflict,
@@ -49,6 +50,7 @@ from server.history_api import history_router
 from server.model_discovery import ModelDiscoveryError, discover_models, measure_reference_latency
 from server.quality_export import quality_errors_csv
 from server.reports import (
+    checkpoint_html,
     render_html,
     render_markdown,
     render_quality_html,
@@ -1270,6 +1272,21 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         except (InvalidRunTransition, LeaseLost) as exc:
             raise HTTPException(409, str(exc)) from exc
 
+    @app.get("/api/v1/jobs/{job_id}/checkpoint", dependencies=[auth])
+    def evaluation_checkpoint(job_id: str):
+        return checkpoint_info(store, job_or_404(job_id))
+
+    @app.post("/api/v1/jobs/{job_id}/recover", dependencies=[auth])
+    def recover_evaluation(job_id: str):
+        job = job_or_404(job_id)
+        try:
+            endpoint = endpoint_registry.get(job["endpoint_id"])
+            return recover_job(store, job, endpoint)
+        except (CheckpointConflict, LeaseLost, InvalidRunTransition) as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except (EndpointNotFound, EndpointCredentialUnavailable) as exc:
+            raise HTTPException(409, "恢复所需端点不可用") from exc
+
     @app.get("/api/v1/jobs/{job_id}/summary", dependencies=[auth])
     def summary(job_id: str):
         job = job_or_404(job_id)
@@ -1384,6 +1401,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
 <style>body{{font-family:system-ui;margin:32px;color:#1c2b33}}table{{border-collapse:collapse;margin:12px 0}}td,th{{border:1px solid #d7e0e5;padding:6px 14px;font-size:13px}}.card{{display:inline-block;border:1px solid #d7e0e5;border-radius:10px;padding:12px 20px;margin-right:12px}}.card strong{{font-size:22px}}</style>
 </head><body>
 <h1>鲁棒性报告 · {esc(job["model_id"])}</h1>
+{checkpoint_html(payload)}
 {report_environment_html(payload.get("report_environment"))}
 <p>作业 <code>{esc(job["job_id"])}</code> · {rob.get("total_samples", 0)} 样本 × {rob.get("perturbations_per_sample", 0)} 扰动</p>
 <div class="card">原始准确率<br><strong>{rob.get("original_accuracy", 0):.1%}</strong></div>
@@ -1391,8 +1409,9 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
 <div class="card">准确率落差<br><strong>{rob.get("accuracy_drop", 0):.1%}</strong></div>
 <div class="card">鲁棒性<br><strong>{rob.get("overall_robustness", 0):.1%}</strong></div>
 <div class="card">一致性<br><strong>{rob.get("overall_consistency", 0):.1%}</strong></div>
-<h2>按扰动类型敏感性（越低越敏感）</h2>
-<table><tr><th>扰动类型</th><th>保持率</th></tr>{rows}</table>
+<p>指标契约：{esc(str(rob.get("metric_contract_version") or "未记录，可能使用旧公式；对比前请重新评测"))}</p>
+<h2>按扰动类型错误率（越高越敏感）</h2>
+<table><tr><th>扰动类型</th><th>错误率</th></tr>{rows}</table>
 <h2>逐样本</h2>
 <table><tr><th>样本</th><th>原始正确</th><th>鲁棒性</th><th>一致性</th></tr>{sample_rows}</table>
 </body></html>"""

@@ -19,6 +19,8 @@ PAUSABLE_TEST_TYPES = frozenset(
         "custom_text",
         "dataset",
         "stability",
+        "quality",
+        "robustness",
     }
 )
 

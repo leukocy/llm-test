@@ -11,6 +11,7 @@ Difficulty levels:
 - 3-needle (reasoning chain): Multi-hop reasoning
 """
 
+import copy
 import json
 import os
 from typing import Any
@@ -27,6 +28,11 @@ class CustomNeedleEvaluator(BaseEvaluator):
     Evaluates using pre-made test files with specific prompts and expected answers.
     Supports keyword matching and numerical calculation verification.
     """
+
+    _current_keywords: list[str]
+    _current_required: int
+    _current_calc_base: Any
+    _current_calc_multiplier: Any
 
     # defaultTest文件目录
     DEFAULT_TEST_DIR = "needle_haystack_data"
@@ -226,22 +232,15 @@ Please provide your answer based strictly on the information in the text above."
 
         重写父类方法以传递关键词信息到 check_answer
         """
-        # Set当前样本评估参数
-        self._current_keywords = sample.get("keywords", [])
-        self._current_required = sample.get("required_keywords", 1)
-        self._current_calc_base = sample.get("calc_base")
-        self._current_calc_multiplier = sample.get("calc_multiplier")
-
-        # 调用父类方法
-        result = await super().evaluate_single(sample, get_response_func, sample_index)
-
-        # Cleanup临时变量
-        self._current_keywords = []
-        self._current_required = 1
-        self._current_calc_base = None
-        self._current_calc_multiplier = None
-
-        return result
+        # Per-sample scoring state must not cross concurrent await boundaries.
+        evaluator = copy.copy(self)
+        evaluator._current_keywords = sample.get("keywords", [])
+        evaluator._current_required = sample.get("required_keywords", 1)
+        evaluator._current_calc_base = sample.get("calc_base")
+        evaluator._current_calc_multiplier = sample.get("calc_multiplier")
+        return await BaseEvaluator.evaluate_single(
+            evaluator, sample, get_response_func, sample_index
+        )
 
 
 class NeedleTestRunner:

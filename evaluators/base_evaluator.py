@@ -3,16 +3,17 @@ Base Evaluator Module
 Defines the core Evaluator base class and common data structures for quality evaluation.
 """
 
-import asyncio
 import json
 import os
 import re
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
+
+from core.evaluation_control import run_samples
 
 # Try to import enhanced parser
 try:
@@ -648,6 +649,12 @@ class BaseEvaluator(ABC):
         concurrency: int = 4,
         progress_callback: Callable[[int, int], None] | None = None,
         result_callback: Callable[["SampleResult"], None] | None = None,
+        *,
+        restored_results: dict[int, SampleResult] | None = None,
+        control_checkpoint: Callable[[], Awaitable[None]] | None = None,
+        control_poll: Callable[[], bool] | None = None,
+        start_callback: Callable[[int], None] | None = None,
+        commit_callback: Callable[[int, SampleResult], None] | None = None,
     ) -> list[SampleResult]:
         """
         Evaluate a list of samples in parallel.
@@ -662,32 +669,27 @@ class BaseEvaluator(ABC):
         Returns:
             List of SampleResult objects.
         """
-        semaphore = asyncio.Semaphore(concurrency)
-        completed = 0
-        results_lock = asyncio.Lock()
 
-        async def evaluate_with_semaphore(sample: dict, index: int) -> SampleResult:
-            nonlocal completed
-            async with semaphore:
-                result = await self.evaluate_single(sample, get_response_func, index)
+        def persist(index: int, result: SampleResult) -> None:
+            if commit_callback:
+                commit_callback(index, result)
+            if result_callback:
+                try:
+                    result_callback(result)
+                except Exception:
+                    pass
 
-                async with results_lock:
-                    completed += 1
-                    if result_callback:
-                        try:
-                            result_callback(result)
-                        except Exception:
-                            pass
-
-                    if progress_callback:
-                        progress_callback(completed, len(samples))
-
-                return result
-
-        tasks = [evaluate_with_semaphore(sample, i) for i, sample in enumerate(samples)]
-
-        results = await asyncio.gather(*tasks)
-        return list(results)
+        return await run_samples(
+            lambda index: self.evaluate_single(samples[index], get_response_func, index),
+            total=len(samples),
+            concurrency=concurrency,
+            restored=restored_results,
+            checkpoint=control_checkpoint,
+            pause_requested=control_poll,
+            start=start_callback,
+            commit=persist,
+            progress=progress_callback,
+        )
 
     def compute_metrics(
         self, results: list[SampleResult]

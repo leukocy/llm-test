@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from server.checkpoints import JobJournal
 from server.control import PAUSABLE_TEST_TYPES, JobControl
 from server.settings import Endpoint, Settings
 from server.specs import describe_report_environment
@@ -81,6 +82,30 @@ async def execute_job(
     run_config = params.pop("_run_config", {}) or {}
     report_environment = describe_report_environment(run_config.get("report_environment"))
 
+    control = JobControl(store, job_id, worker_id)
+    journal = (
+        JobJournal(store, job, worker_id, endpoint)
+        if job["test_type"] in {"quality", "robustness"}
+        else None
+    )
+    artifact_name = (
+        "report.json" if job["attempts"] == 1 else f"report-attempt-{job['attempts']}.json"
+    )
+
+    def save_report(payload: dict) -> str:
+        current = store.get(job_id)
+        payload["execution_control"].update(
+            pause_count=current["pause_count"],
+            paused_seconds=current["paused_seconds"],
+        )
+        artifact = job_dir / artifact_name
+        temporary = artifact.with_suffix(".json.tmp")
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, allow_nan=False), encoding="utf-8"
+        )
+        temporary.replace(artifact)
+        return f"{job_id}/{artifact_name}"
+
     if job["test_type"] == "robustness":
         import dataclasses
 
@@ -108,30 +133,37 @@ async def execute_job(
             return str(result.get("full_response_content") or "")
 
         def robustness_progress(completed: int, total: int) -> None:
-            store.update_progress(job_id, worker_id, completed=completed, total=total)
+            factor = 1 + len(tester.perturbation_types)
+            store.update_progress(
+                job_id, worker_id, completed=completed * factor, total=total * factor
+            )
 
         tester = RobustnessTester(perturbation_types=types)
         report = await tester.test_batch(
-            params["samples"], get_response, progress_callback=robustness_progress
+            params["samples"],
+            get_response,
+            progress_callback=robustness_progress,
+            control_checkpoint=control.checkpoint,
+            control_poll=control.pause_requested,
+            journal=journal,
         )
         report.model_id = endpoint.model_id
-        artifact = job_dir / "report.json"
-        artifact.write_text(
-            json.dumps(
-                {
-                    "job_id": job_id,
-                    "model_id": endpoint.model_id,
-                    "robustness": dataclasses.asdict(report),
-                    "report_environment": report_environment,
+        artifact_path = save_report(
+            {
+                "job_id": job_id,
+                "model_id": endpoint.model_id,
+                "robustness": dataclasses.asdict(report),
+                "report_environment": report_environment,
+                "checkpoint": journal.describe() if journal else None,
+                "execution_control": {
+                    "attempts": job["attempts"],
+                    "duration_scope": "sample_observations_across_attempts",
                 },
-                ensure_ascii=False,
-                allow_nan=False,
-            ),
-            encoding="utf-8",
+            }
         )
         total_requests = sum(1 + len(r.perturbed_results) for r in report.results)
         return RunOutput(
-            result_artifact=f"{job_id}/report.json",
+            result_artifact=artifact_path,
             completed=total_requests,
             total=total_requests,
         )
@@ -147,6 +179,9 @@ async def execute_job(
             provider=endpoint.provider,
             output_dir=str(job_dir),
             enable_cache=config.use_cache,
+            control_checkpoint=control.checkpoint,
+            control_poll=control.pause_requested,
+            journal=journal,
         )
 
         def progress(completed: int, total: int, _: str) -> None:
@@ -155,22 +190,21 @@ async def execute_job(
         result = await evaluator.run_evaluation(config, progress_callback=progress)
         if not result or any(item.total_samples == 0 for item in result.values()):
             raise RuntimeError("Quality evaluation produced no complete samples")
-        artifact = job_dir / "report.json"
-        artifact.write_text(
-            json.dumps(
-                {
-                    "job_id": job_id,
-                    "model_id": endpoint.model_id,
-                    "datasets": {name: item.to_dict() for name, item in result.items()},
-                    "report_environment": report_environment,
+        artifact_path = save_report(
+            {
+                "job_id": job_id,
+                "model_id": endpoint.model_id,
+                "datasets": {name: item.to_dict() for name, item in result.items()},
+                "report_environment": report_environment,
+                "checkpoint": journal.describe() if journal else None,
+                "execution_control": {
+                    "attempts": job["attempts"],
+                    "duration_scope": "current_attempt_dataset_phase",
                 },
-                ensure_ascii=False,
-                allow_nan=False,
-            ),
-            encoding="utf-8",
+            }
         )
         return RunOutput(
-            result_artifact=f"{job_id}/report.json",
+            result_artifact=artifact_path,
             completed=sum(item.total_samples for item in result.values()),
             total=sum(item.total_samples for item in result.values()),
         )

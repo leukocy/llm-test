@@ -365,3 +365,15 @@ export async function downloadFile(
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+export type EvaluationCheckpoint = {
+  supported: boolean;
+  available: boolean;
+  planned_units: number;
+  committed_units: number;
+  issued_unit_attempts: number;
+  repeated_unit_attempts: number;
+  recoveries: number;
+  can_recover: boolean;
+  notes: string[];
+};

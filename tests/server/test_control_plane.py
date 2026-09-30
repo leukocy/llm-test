@@ -189,14 +189,14 @@ def test_pause_resume_api_auth_and_lifecycle(client: TestClient, store: JobStore
 
 
 @pytest.mark.parametrize("test_type", ["quality", "robustness"])
-def test_pause_api_rejects_quality_workloads(client, store, test_type):
+def test_pause_api_accepts_quality_workloads(client, store, test_type):
     job = store.submit(test_type=test_type, endpoint_id="lab", model_id="m", parameters={})
     store.claim("w")
     response = client.post(
         f"/api/v1/jobs/{job['job_id']}/pause", headers={"Authorization": f"Bearer {TOKEN}"}
     )
-    assert response.status_code == 409
-    assert store.get(job["job_id"])["status"] == "running"
+    assert response.status_code == 200
+    assert store.get(job["job_id"])["status"] == "pausing"
 
 
 def test_plan_preview_validates_and_does_not_enqueue(client: TestClient):

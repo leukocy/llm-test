@@ -240,6 +240,37 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
     )
 
 
+def checkpoint_markdown(report: dict[str, Any]) -> str:
+    checkpoint = report.get("checkpoint")
+    if not checkpoint:
+        return ""
+    return (
+        "\n## 样本检查点与执行中断\n\n"
+        f"- 已提交 {checkpoint['committed_units']} / {checkpoint['planned_units']} 个样本；"
+        f"恢复 {checkpoint['recoveries']} 次；重复发起 {checkpoint['repeated_unit_attempts']} 次。\n"
+        + "\n".join("- " + _md(note) for note in checkpoint.get("notes", []))
+        + "\n"
+        + f"- 暂停 {report.get('execution_control', {}).get('pause_count', 0)} 次；"
+        f"累计暂停 {report.get('execution_control', {}).get('paused_seconds', 0):.3f} 秒。\n"
+    )
+
+
+def checkpoint_html(report: dict[str, Any]) -> str:
+    checkpoint = report.get("checkpoint")
+    if not checkpoint:
+        return ""
+    return (
+        "<section><h2>样本检查点与执行中断</h2>"
+        f"<p>已提交 {int(checkpoint['committed_units'])} / {int(checkpoint['planned_units'])} 个样本；"
+        f"恢复 {int(checkpoint['recoveries'])} 次；重复发起 {int(checkpoint['repeated_unit_attempts'])} 次。</p>"
+        + "<ul>"
+        + "".join("<li>" + escape(str(note)) + "</li>" for note in checkpoint.get("notes", []))
+        + "</ul>"
+        + f"<p>暂停 {int(report.get('execution_control', {}).get('pause_count', 0))} 次；"
+        f"累计暂停 {report.get('execution_control', {}).get('paused_seconds', 0):.3f} 秒。</p></section>"
+    )
+
+
 def render_quality_markdown(job: dict[str, Any], report: dict[str, Any]) -> str:
     lines = [
         f"# LLM Test 质量报告 · {_md(job['model_id'])}",
@@ -257,7 +288,12 @@ def render_quality_markdown(job: dict[str, Any], report: dict[str, Any]) -> str:
             f"{result.get('total_samples', 0)} | {float(result.get('accuracy') or 0) * 100:.1f}% "
             f"| {_md(provenance.get('sample_sha256'))} |"
         )
-    return "\n".join(lines) + "\n" + report_environment_markdown(report.get("report_environment"))
+    return (
+        "\n".join(lines)
+        + "\n"
+        + checkpoint_markdown(report)
+        + report_environment_markdown(report.get("report_environment"))
+    )
 
 
 def render_robustness_markdown(job: dict[str, Any], report: dict[str, Any]) -> str:
@@ -268,14 +304,20 @@ def render_robustness_markdown(job: dict[str, Any], report: dict[str, Any]) -> s
         f"- 作业 ID：`{_md(job['job_id'])}`",
         f"- 原始准确率：{float(robustness.get('original_accuracy') or 0) * 100:.1f}%",
         f"- 扰动后准确率：{float(robustness.get('perturbed_accuracy') or 0) * 100:.1f}%",
+        f"- 指标契约：{_md(robustness.get('metric_contract_version') or '未记录，可能使用旧公式；对比前请重新评测')}",
         f"- 总体鲁棒性：{float(robustness.get('overall_robustness') or 0):.3f}",
         "",
-        "| 扰动类型 | 敏感性 |",
+        "| 扰动类型 | 错误率（越高越敏感） |",
         "|---|---:|",
     ]
     for name, score in (robustness.get("sensitivity_by_type") or {}).items():
         lines.append(f"| {_md(name)} | {float(score):.3f} |")
-    return "\n".join(lines) + "\n" + report_environment_markdown(report.get("report_environment"))
+    return (
+        "\n".join(lines)
+        + "\n"
+        + checkpoint_markdown(report)
+        + report_environment_markdown(report.get("report_environment"))
+    )
 
 
 def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
@@ -543,6 +585,7 @@ dt {{ color:#7c8da0; }} dd {{ margin:0;overflow-wrap:anywhere; }} code {{ overfl
 </style></head><body><main><span class="eyebrow">LLM TEST / QUALITY REPORT</span>
 <h1>{safe(job["model_id"])}</h1><p class="muted">{safe(job["job_id"])} · {safe(job["status"])}</p>
 {"".join(cards) if cards else "<p>无可用数据集结果。</p>"}
+{checkpoint_html(report)}
 {report_environment_html(report.get("report_environment"))}
 <p class="note">准确率只反映所列样本与评分口径。比较模型前请核对数据来源、样本指纹、few-shot 设置和样本数量。</p>
 </main></body></html>"""

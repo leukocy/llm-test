@@ -5,6 +5,7 @@ import {
   downloadFile,
   type Job,
   type JobEvent,
+  type EvaluationCheckpoint,
   type QualityReport,
   type RequestResult,
   type Summary,
@@ -38,13 +39,16 @@ export function Detail({
   token: string;
   onBack: () => void;
   onCancel: () => Promise<void>;
-  onControl: (action: "pause" | "resume") => Promise<void>;
+  onControl: (action: "pause" | "resume" | "recover") => Promise<void>;
 }) {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [quality, setQuality] = useState<QualityReport | null>(null);
   const [events, setEvents] = useState<JobEvent[]>([]);
   const [results, setResults] = useState<RequestResult[]>([]);
   const [error, setError] = useState("");
+  const [checkpoint, setCheckpoint] = useState<EvaluationCheckpoint | null>(
+    null,
+  );
   const [controlBusy, setControlBusy] = useState(false);
   const [pngBusy, setPngBusy] = useState(false);
   const [logs, setLogs] = useState<LogLine[]>([]);
@@ -62,6 +66,36 @@ export function Detail({
   const resultsRef = useRef<RequestResult[]>([]);
   const logsRef = useRef<LogLine[]>([]);
   resultsRef.current = results;
+
+  useEffect(() => {
+    setCheckpoint(null);
+    if (!["quality", "robustness"].includes(job.test_type)) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
+    const load = async () => {
+      try {
+        const data = await api<EvaluationCheckpoint>(
+          token,
+          `/api/v1/jobs/${job.job_id}/checkpoint`,
+          { signal: controller.signal },
+        );
+        if (alive) setCheckpoint(data);
+      } catch (exc) {
+        if (alive)
+          setError(exc instanceof Error ? exc.message : "检查点读取失败");
+      } finally {
+        if (alive && activeStates.has(job.status))
+          timer = setTimeout(() => void load(), 2000);
+      }
+    };
+    void load();
+    return () => {
+      alive = false;
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [job.job_id, job.status, job.test_type, token]);
 
   useEffect(() => {
     setShowLatestOutput(false);
@@ -115,6 +149,7 @@ export function Detail({
       overall_robustness: number;
       overall_consistency: number;
       sensitivity_by_type: Record<string, number>;
+      metric_contract_version?: string;
       most_sensitive_perturbation: string;
       results: {
         sample_id: string;
@@ -330,7 +365,7 @@ export function Detail({
     }
   }
 
-  async function changeControl(action: "pause" | "resume") {
+  async function changeControl(action: "pause" | "resume" | "recover") {
     setControlBusy(true);
     setError("");
     try {
@@ -397,6 +432,15 @@ export function Detail({
               继续运行
             </button>
           )}
+          {checkpoint?.can_recover && (
+            <button
+              className="button primary"
+              disabled={controlBusy}
+              onClick={() => void changeControl("recover")}
+            >
+              从检查点恢复
+            </button>
+          )}
           {activeStates.has(job.status) && (
             <button
               className="button subtle danger"
@@ -456,6 +500,25 @@ export function Detail({
           )}
         </div>
       </div>
+      {checkpoint?.available && (
+        <section className="surface" aria-label="样本检查点">
+          <h2>样本检查点</h2>
+          <p>
+            已保存 {checkpoint.committed_units} / {checkpoint.planned_units}{" "}
+            个样本 · 恢复 {checkpoint.recoveries} 次 · 样本发起{" "}
+            {checkpoint.issued_unit_attempts} 次 · 重复发起{" "}
+            {checkpoint.repeated_unit_attempts} 次
+          </p>
+          {checkpoint.notes.map((note) => (
+            <p className="muted" key={note}>
+              {note}
+            </p>
+          ))}
+          {job.status === "failed" && !checkpoint.can_recover && (
+            <p>本次失败不满足恢复条件，请排查原因后创建新任务。</p>
+          )}
+        </section>
+      )}
       {(job.status === "pausing" ||
         job.status === "paused" ||
         job.pause_count > 0) && (
@@ -470,7 +533,9 @@ export function Detail({
           <p>
             {job.test_type === "stability"
               ? "先停止发起新请求，待在途请求结束后暂停；恢复后继续剩余有效测试时长。时间轴保留暂停间隔，系统墙钟速率包含暂停等待。"
-              : "已完成的请求不会重跑。暂停在请求组之间生效，单请求计时不包含等待时间；暂停期间仍保留当前执行资源。"}
+              : ["quality", "robustness"].includes(job.test_type)
+                ? "先停止发起新样本，待当前样本（鲁棒性含其全部扰动）提交检查点后暂停。继续时复用已提交结果；暂停期间仍保留 worker。"
+                : "已完成的请求不会重跑。暂停在请求组之间生效，单请求计时不包含等待时间；暂停期间仍保留当前执行资源。"}
           </p>
           <span>
             暂停 {job.pause_count} 次 · 已累计 {formatNumber(pausedSeconds, 1)}{" "}
@@ -866,6 +931,11 @@ export function Detail({
               note="扰动后答案一致比例"
             />
           </div>
+          {!robustness.robustness.metric_contract_version && (
+            <p className="alert">
+              历史报告未记录准确率统计契约，扰动后准确率可能使用旧公式；对比前请重新评测。
+            </p>
+          )}
           {Object.keys(robustness.robustness.sensitivity_by_type).length >
             0 && (
             <div className="table-scroll">
@@ -873,12 +943,12 @@ export function Detail({
                 <thead>
                   <tr>
                     <th>扰动类型</th>
-                    <th>保持率（越低越敏感）</th>
+                    <th>错误率（越高越敏感）</th>
                   </tr>
                 </thead>
                 <tbody>
                   {Object.entries(robustness.robustness.sensitivity_by_type)
-                    .sort((a, b) => a[1] - b[1])
+                    .sort((a, b) => b[1] - a[1])
                     .map(([name, value]) => (
                       <tr key={name}>
                         <td>

@@ -6,10 +6,13 @@
 
 import random
 import re
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
+
+from core.evaluation_control import EvaluationJournal, run_samples
+from evaluators.base_evaluator import ProviderRequestError
 
 PERTURBATION_GENERATOR_VERSION = "text-perturber-v2"
 
@@ -68,6 +71,7 @@ class RobustnessReport:
     total_samples: int
     perturbations_per_sample: int
     perturbation_generator_version: str = PERTURBATION_GENERATOR_VERSION
+    metric_contract_version: str = "robustness-accuracy-v2"
 
     # 总体指标
     original_accuracy: float = 0.0
@@ -381,6 +385,7 @@ class RobustnessTester:
         correct_answer: str,
         get_response_func: Callable,
         answer_parser: Callable | None = None,
+        perturbations: list[PerturbedSample] | None = None,
     ) -> RobustnessResult:
         """
         Test单 samples鲁棒性
@@ -397,16 +402,22 @@ class RobustnessTester:
             result.original_answer = self._extract_answer(original_response, answer_parser)
             result.original_correct = self._check_answer(result.original_answer, correct_answer)
         except Exception as e:
-            result.original_answer = f"Error: {e}"
-            result.original_correct = False
+            raise ProviderRequestError(f"Provider request failed: {e}") from e
 
         # 2. Test各种扰动
         consistent_count = 0
         correct_after_perturbation = 0
         type_results: dict[str, list[bool]] = {t.value: [] for t in self.perturbation_types}
 
-        for ptype in self.perturbation_types:
-            perturbed = self.perturber.perturb(question, ptype)
+        planned = (
+            perturbations
+            if perturbations is not None
+            else [self.perturber.perturb(question, ptype) for ptype in self.perturbation_types]
+        )
+        if [p.perturbation_type for p in planned] != self.perturbation_types:
+            raise ValueError("Frozen perturbation types differ from the test plan")
+        for perturbed in planned:
+            ptype = perturbed.perturbation_type
 
             try:
                 response = await get_response_func(perturbed.perturbed_question)
@@ -433,7 +444,7 @@ class RobustnessTester:
                     correct_after_perturbation += 1
 
             except Exception as e:
-                result.perturbed_results.append({"perturbation_type": ptype.value, "error": str(e)})
+                raise ProviderRequestError(f"Provider request failed: {e}") from e
 
         # 3. Calculated metrics
         if self.perturbation_types:
@@ -473,6 +484,10 @@ class RobustnessTester:
         get_response_func: Callable,
         answer_parser: Callable | None = None,
         progress_callback: Callable | None = None,
+        *,
+        control_checkpoint: Callable[[], Awaitable[None]] | None = None,
+        control_poll: Callable[[], bool] | None = None,
+        journal: EvaluationJournal | None = None,
     ) -> RobustnessReport:
         """批量鲁棒性Test"""
 
@@ -482,21 +497,65 @@ class RobustnessTester:
             perturbations_per_sample=len(self.perturbation_types),
         )
 
-        results = []
-        for i, sample in enumerate(samples):
-            result = await self.test_single(
-                sample_id=sample.get("sample_id", str(i)),
+        scope_key = "robustness"
+
+        def freeze() -> tuple[dict, list[dict]]:
+            return {"generator_version": PERTURBATION_GENERATOR_VERSION}, [
+                {
+                    "sample": sample,
+                    "perturbations": [
+                        {**asdict(p), "perturbation_type": p.perturbation_type.value}
+                        for p in [
+                            self.perturber.perturb(sample.get("question", ""), ptype)
+                            for ptype in self.perturbation_types
+                        ]
+                    ],
+                }
+                for sample in samples
+            ]
+
+        metadata, plan = journal.prepare_scope(scope_key, freeze) if journal else freeze()
+        if metadata["generator_version"] != PERTURBATION_GENERATOR_VERSION:
+            raise ValueError("Frozen perturbation generator version differs")
+        restored = (
+            {
+                index: RobustnessResult(**value)
+                for index, value in journal.results(scope_key).items()
+            }
+            if journal
+            else {}
+        )
+
+        async def evaluate(index: int) -> RobustnessResult:
+            unit = plan[index]
+            sample = unit["sample"]
+            return await self.test_single(
+                sample_id=sample.get("sample_id", str(index)),
                 question=sample.get("question", ""),
                 correct_answer=sample.get("correct_answer", ""),
                 get_response_func=get_response_func,
                 answer_parser=answer_parser,
+                perturbations=[
+                    PerturbedSample(
+                        **{**p, "perturbation_type": PerturbationType(p["perturbation_type"])}
+                    )
+                    for p in unit["perturbations"]
+                ],
             )
-            results.append(result)
 
-            if progress_callback:
-                progress_callback(i + 1, len(samples))
-
-        report.results = results
+        report.results = await run_samples(
+            evaluate,
+            total=len(plan),
+            concurrency=1,
+            restored=restored,
+            checkpoint=control_checkpoint,
+            pause_requested=control_poll,
+            start=(lambda index: journal.start(scope_key, index)) if journal else None,
+            commit=(lambda index, result: journal.commit(scope_key, index, asdict(result)))
+            if journal
+            else None,
+            progress=progress_callback,
+        )
 
         # Calculate汇总指标
         self._calculate_report_metrics(report)
@@ -520,7 +579,12 @@ class RobustnessTester:
         report.overall_consistency = sum(consistency_scores) / len(consistency_scores)
 
         # 扰动后Accuracy
-        report.perturbed_accuracy = report.overall_robustness * report.original_accuracy
+        perturbations = [p for result in report.results for p in result.perturbed_results]
+        report.perturbed_accuracy = (
+            sum(bool(p.get("is_correct")) for p in perturbations) / len(perturbations)
+            if perturbations
+            else 0.0
+        )
         report.accuracy_drop = report.original_accuracy - report.perturbed_accuracy
 
         # 按类型敏感性
