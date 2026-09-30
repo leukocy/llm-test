@@ -144,6 +144,7 @@ class QualityTestConfig:
             "reasoning_effort": self.reasoning_effort,
             "dataset_overrides": self.dataset_overrides,
             "use_cache": self.use_cache,
+            "use_llm_judge": self.use_llm_judge,
             "cache_ttl_hours": self.cache_ttl_hours,
         }
 
@@ -908,6 +909,10 @@ class QualityEvaluator:
                             samples
                         )
                 total_samples_all = sum(dataset_sample_counts.values())
+                if total_samples_all > 100000:
+                    raise ValueError(
+                        "Frozen quality plan exceeds 100000 samples; split the datasets into separate jobs"
+                    )
             total_datasets = len(config.datasets)
 
             for i, dataset_name in enumerate(config.datasets):

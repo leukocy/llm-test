@@ -64,6 +64,7 @@ class SampleResult:
     tokens_used: int = 0
     error: str | None = None
     is_judge_corrected: bool = False  # Whether it was corrected by an AI judge
+    judge_verdict: str | None = None
     evaluation_method: str = "regex"  # Evaluation method: regex, llm_judge, smart_parser
 
     # Performance Metrics
@@ -135,6 +136,14 @@ class EvaluationResult:
             "performance_stats": self.performance_stats,
             "extended_metrics": self.extended_metrics,
             "details": [d.to_dict() for d in self.details],
+            "standard_correct_samples": sum(
+                d.is_correct and not d.is_judge_corrected for d in self.details
+            )
+            if len(self.details) == self.total_samples
+            else None,
+            "judge_corrected_samples": sum(d.is_judge_corrected for d in self.details)
+            if len(self.details) == self.total_samples
+            else None,
         }
         return result
 
@@ -554,6 +563,7 @@ class BaseEvaluator(ABC):
             is_correct = self.check_answer(predicted, correct_answer)
             error_msg = None
             is_judge_corrected = False
+            judge_verdict = None
             evaluation_method = "regex"
 
             judge_enabled = getattr(self, "use_llm_judge", False)
@@ -594,13 +604,15 @@ class BaseEvaluator(ABC):
                             f"[AI Judge] Sample {sample_id} | Correct: {correct_answer} | Judge Says: {judge_content}"
                         )
 
-                        if "YES" in judge_content.upper():
+                        judge_verdict = judge_content.strip().upper()
+                        if judge_verdict == "YES":
                             is_correct = True
-                            error_msg = "Validated by AI Judge"
                             is_judge_corrected = True
                             evaluation_method = "llm_judge_passed"
-                        else:
+                        elif judge_verdict == "NO":
                             evaluation_method = "llm_judge_rejected"
+                        else:
+                            evaluation_method = "llm_judge_invalid"
 
                 except ProviderRequestError:
                     raise
@@ -616,6 +628,7 @@ class BaseEvaluator(ABC):
                 predicted_answer=predicted,
                 is_correct=is_correct,
                 is_judge_corrected=is_judge_corrected,
+                judge_verdict=judge_verdict,
                 evaluation_method=evaluation_method,
                 category=category,
                 latency_ms=latency_ms,

@@ -292,6 +292,8 @@ export type QualityReport = {
     {
       accuracy: number;
       correct_samples: number;
+      standard_correct_samples?: number | null;
+      judge_corrected_samples?: number | null;
       total_samples: number;
       duration_seconds: number;
       config: Record<string, unknown>;

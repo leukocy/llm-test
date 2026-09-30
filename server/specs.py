@@ -197,13 +197,18 @@ class RobustnessSpec(StrictSpec):
 
 
 class QualitySpec(StrictSpec):
-    datasets: list[str] = Field(min_length=1, max_length=8)
-    max_samples: int = Field(ge=1, le=1000)
+    datasets: list[str] = Field(min_length=1, max_length=32)
+    max_samples: int | None = Field(default=100, ge=1, le=10000)
     num_shots: int = Field(default=0, ge=0, le=10)
-    max_tokens: int = Field(default=512, ge=1, le=8192)
+    max_tokens: int = Field(default=8192, ge=1, le=131072)
     concurrency: int = Field(default=4, ge=1, le=32)
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     use_cache: bool = False
+    model_type: Literal["standard", "thinking", "code"] = "standard"
+    thinking_enabled: bool = False
+    thinking_budget: int = Field(default=4096, ge=256, le=131072)
+    reasoning_effort: Literal["low", "medium", "high"] = "medium"
+    use_llm_judge: bool = False
 
     @field_validator("datasets")
     @classmethod
@@ -217,8 +222,8 @@ class QualitySpec(StrictSpec):
 
     @model_validator(mode="after")
     def request_budget(self) -> QualitySpec:
-        if len(self.datasets) * self.max_samples > 1000:
-            raise ValueError("A job may evaluate at most 1000 samples")
+        if self.max_samples is not None and len(self.datasets) * self.max_samples > 100000:
+            raise ValueError("A job may evaluate at most 100000 samples")
         return self
 
 
@@ -363,7 +368,11 @@ def expected_requests(test_type: str, parameters: dict) -> int:
             * parameters["rounds"]
         )
     if test_type == "quality":
-        return int(len(parameters["datasets"]) * parameters["max_samples"])
+        return (
+            int(len(parameters["datasets"]) * parameters["max_samples"])
+            if parameters["max_samples"] is not None
+            else 0
+        )
     if test_type == "dataset" and parameters.get("rows"):
         return int(len(parameters["rows"]) * parameters.get("rounds", 1))
     if test_type == "robustness":

@@ -15,6 +15,7 @@ import {
 } from "../components/SchemaForm";
 import { TokenizerTools } from "../components/TokenizerTools";
 import { ReportEnvironmentEditor } from "../components/ReportEnvironment";
+import { QualityParameters } from "../components/QualityParameters";
 
 type SpecCatalog = {
   items: Record<string, { label: string; schema: JsonSchema }>;
@@ -689,6 +690,13 @@ export function NewRun({
             <DatasetParams value={params} onChange={updateParams} />
           ) : mode === "form" && type === "robustness" ? (
             <RobustnessParams value={params} onChange={updateParams} />
+          ) : mode === "form" && type === "quality" && specSchema ? (
+            <QualityParameters
+              token={token}
+              schema={specSchema}
+              value={params}
+              onChange={updateParams}
+            />
           ) : mode === "form" && specSchema ? (
             <SchemaForm
               schema={specSchema}

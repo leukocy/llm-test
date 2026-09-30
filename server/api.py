@@ -466,6 +466,12 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
 
         return get_cached_system_info(wait=False) or {}
 
+    @app.get("/api/v1/quality/datasets", dependencies=[auth])
+    def quality_dataset_catalog():
+        from server.quality_catalog import quality_catalog
+
+        return {"items": quality_catalog()}
+
     @app.get("/api/v1/datasets", dependencies=[auth])
     def datasets():
         """可用数据集目录：质量评估注册表 + dataset_loader 自定义集。"""

@@ -297,16 +297,20 @@ def render_quality_markdown(job: dict[str, Any], report: dict[str, Any]) -> str:
         f"- 作业 ID：`{_md(job['job_id'])}`",
         f"- 状态：{_md(job['status'])}",
         "",
-        "| 数据集 | 正确 / 总数 | 准确率 | 样本 SHA-256 |",
-        "|---|---:|---:|---|",
+        "| 数据集 | 最终正确 / 总数 | 最终准确率 | 规则正确数 | Judge 改判 | 样本 SHA-256 |",
+        "|---|---:|---:|---:|---:|---|",
     ]
     for name, result in report.get("datasets", {}).items():
         provenance = (result.get("config") or {}).get("dataset_provenance") or {}
         lines.append(
             f"| {_md(name)} | {result.get('correct_samples', 0)} / "
             f"{result.get('total_samples', 0)} | {float(result.get('accuracy') or 0) * 100:.1f}% "
+            f"| {result.get('standard_correct_samples') if result.get('standard_correct_samples') is not None else '未记录'} | {result.get('judge_corrected_samples') if result.get('judge_corrected_samples') is not None else '未记录'} "
             f"| {_md(provenance.get('sample_sha256'))} |"
         )
+    lines.append(
+        "\nAI Judge 为同一模型的错题二次复核，不构成独立验证；未记录的旧报告不推算规则成绩。"
+    )
     return (
         "\n".join(lines)
         + "\n"
@@ -614,6 +618,7 @@ def render_quality_html(job: dict[str, Any], report: dict[str, Any]) -> str:
             f"<strong>{accuracy * 100:.1f}%</strong>"
             f"<p>{safe(result.get('correct_samples', 0))} / {safe(result.get('total_samples', 0))} 正确"
             f" · 95% Wilson 区间 {safe(interval)}</p>"
+            f"<p>规则正确数 {safe(result.get('standard_correct_samples') if result.get('standard_correct_samples') is not None else '未记录')}；Judge 改判 {safe(result.get('judge_corrected_samples') if result.get('judge_corrected_samples') is not None else '未记录')}。上方为最终评分；同一模型自评复核不构成独立验证。</p>"
             f"<dl><dt>数据来源</dt><dd>{safe(provenance.get('source', '未记录'))}</dd>"
             f"<dt>样本 SHA-256</dt><dd><code>{safe(provenance.get('sample_sha256', '未记录'))}</code></dd>"
             f"<dt>Few-shot SHA-256</dt><dd><code>{safe(provenance.get('few_shot_sha256', '未记录'))}</code></dd>"

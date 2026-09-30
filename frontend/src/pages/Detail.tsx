@@ -969,6 +969,11 @@ export function Detail({
                   {value.correct_samples} / {value.total_samples} 正确 ·{" "}
                   {formatNumber(value.duration_seconds, 1)} 秒
                 </p>
+                <p>
+                  规则正确数：{value.standard_correct_samples ?? "未记录"}
+                  ；Judge 改判：{value.judge_corrected_samples ?? "未记录"}
+                  。上方为最终评分；自评复核不构成独立验证。
+                </p>
                 <small>
                   样本指纹：
                   {String(
