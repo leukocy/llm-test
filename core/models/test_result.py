@@ -80,6 +80,8 @@ class TestResult:
         return cls(
             run_id=run_id,
             session_id=result.get("session_id"),
+            request_index=result.get("request_index"),
+            batch_id=result.get("batch_id"),
             round=result.get("round"),
             concurrency_level=result.get("concurrency"),
             input_tokens_target=result.get("input_tokens_target"),
@@ -121,9 +123,7 @@ class TestResult:
         result = {}
         for k, v in asdict(self).items():
             if k == "extra_metrics":
-                result["extra_metrics"] = (
-                    json.dumps(v, ensure_ascii=False) if v else None
-                )
+                result["extra_metrics"] = json.dumps(v, ensure_ascii=False) if v else None
             elif k == "created_at":
                 result["created_at"] = v.isoformat() if v else None
             else:

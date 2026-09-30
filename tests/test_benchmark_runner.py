@@ -19,6 +19,39 @@ from server.store import JobStore
 
 
 class TestBenchmarkRunner:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("continuous", [False, True])
+    async def test_batch_window_provenance_is_attached_before_persistence(
+        self, runner, monkeypatch, continuous
+    ):
+        monkeypatch.setattr("core.benchmark_runner.is_stop_requested", lambda: False)
+        runner._measurement_checkpoint = AsyncMock()
+        runner.update_ui = MagicMock()
+        runner.completed_requests = 0
+        runner.get_completion = AsyncMock(
+            side_effect=[
+                {
+                    "error": None,
+                    "start_time": 100.0,
+                    "first_token_time": 100.2,
+                    "end_time": 101.0,
+                    "prefill_tokens": 100,
+                    "decode_tokens": 20,
+                },
+                {"error": "timeout", "start_time": 100.0, "end_time": 102.0},
+            ]
+        )
+        if continuous:
+            rows = await runner._run_continuous_batch(MagicMock(), "prompt", 20, 2, 2, 0)
+        else:
+            rows = await runner._run_concurrency_batch(MagicMock(), "prompt", 20, 2, 0)
+        assert len(rows) == 2
+        first = rows[0]["extra_metrics"]["system_measurement"]
+        assert first["elapsed_seconds"] > 0 and first["expected_requests"] == 2
+        assert first == rows[1]["extra_metrics"]["system_measurement"]
+        assert rows[0]["batch_id"] == rows[1]["batch_id"] == first["id"]
+        assert [row["request_index"] for row in rows] == [0, 1]
+
     @pytest.fixture
     def runner(self):
         # Mock dependencies

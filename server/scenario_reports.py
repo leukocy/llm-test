@@ -5,13 +5,23 @@ from __future__ import annotations
 from html import escape
 from typing import Any
 
+from server.extended_analytics import CACHE_METRICS, SYSTEM_METRICS
+
 METRICS = {
     "ttft": ("首字延迟", "TTFT", "s"),
     "tpot": ("每 token 延迟", "TPOT", "s"),
     "tps": ("逐请求生成速度", "TPS", "token/s"),
     "prefill_speed": ("逐请求输入处理速度", "Prefill speed", "token/s"),
     "total_time": ("请求总耗时", "Total time", "s"),
+    **SYSTEM_METRICS,
+    **CACHE_METRICS,
 }
+
+
+def sampling_unit(metric: str) -> str:
+    return "测量批次" if metric in SYSTEM_METRICS else "请求"
+
+
 STATISTICS = {
     "median": "p50",
     "mean": "均值",
@@ -37,7 +47,7 @@ def scenario_analysis(summary: dict[str, Any]) -> dict[str, Any]:
     title, _, axis = SCENARIOS.get(kind, ("分组观测", "concurrency_level", summary["group_axis"]))
     notes = [
         "图形使用完整正式观测的分组统计，不使用详情页最近 50 条预览；预热不计入。",
-        "p50 描述典型请求，p95 / p99 描述尾部；分位数为线性插值，不是置信区间。",
+        "p50 描述典型样本（请求或测量批次），p95 / p99 描述尾部；分位数为线性插值，不是置信区间。",
         "TPS 与输入处理速度为逐请求指标；不能乘以并发数作为系统吞吐或 QPM。",
         "均值与观测极值可用于核对初版图形；极值受样本数影响，不代表稳定性能上限。",
         "空值表示未采集或无有效样本，失败仍计入成功率分母；曲线不跨空值连线。",
@@ -49,7 +59,7 @@ def scenario_analysis(summary: dict[str, Any]) -> dict[str, Any]:
         notes.append("矩阵按并发分别绘制，热力图以并发 × 目标上下文定位；缺测组合保留为空。")
     elif kind == "segmented_prefill":
         notes.append(
-            "分段 TTFT 变化仅为观测相关性；本图未按缓存命中分层，不能称为未缓存 TTFT 或缓存收益。"
+            "总体分段 TTFT 变化仅为观测相关性；总体 TTFT 未按缓存命中分层，不能称为未缓存 TTFT 或缓存收益。可单独选择 API 缓存分层指标。"
         )
     elif kind == "stability":
         notes.append("此图按并发聚合，不是时间序列；不能据此判断随时间漂移或连续运行稳定性。")
@@ -59,7 +69,9 @@ def scenario_analysis(summary: dict[str, Any]) -> dict[str, Any]:
         notes.append("运行未通过完整性核验，分析仅供诊断；缺失组合与中途停止可能影响比较。")
     observations = []
     for metric, (label, _, unit) in METRICS.items():
-        usable = [g for g in summary["groups"] if g["metrics"][metric]["median"] is not None]
+        usable = [
+            g for g in summary["groups"] if g["metrics"].get(metric, {}).get("median") is not None
+        ]
         if not usable:
             continue
         low = min(usable, key=lambda g: g["metrics"][metric]["median"])
@@ -69,10 +81,29 @@ def scenario_analysis(summary: dict[str, Any]) -> dict[str, Any]:
                 "metric": metric,
                 "text": f"{label} p50 观测范围：{low['metrics'][metric]['median']:.4g}–"
                 f"{high['metrics'][metric]['median']:.4g} {unit}；"
-                f"最小值所在组 {low['label']}（n={low['metrics'][metric]['count']}），"
-                f"最大值所在组 {high['label']}（n={high['metrics'][metric]['count']}）。"
+                f"最小值所在组 {low['label']}（n={low['metrics'][metric]['count']} {sampling_unit(metric)}），"
+                f"最大值所在组 {high['label']}（n={high['metrics'][metric]['count']} {sampling_unit(metric)}）。"
                 "并列时仅列首组，不是显著性或优劣排名。",
             }
+        )
+    notes.extend(
+        [
+            "系统输入/输出/总吞吐与 QPM 使用 batch-wall-v1：成功 token / 完整批次墙钟窗口；n 为批次数，每批一次，不按请求重复加权。QPM = 成功请求数 / 窗口秒数 × 60。",
+            "批次窗口包含调度、失败等待和客户端开销，不扣延迟校准；不含批次外的提示词准备、预热或暂停。输入吞吐包含缓存 token；这是墙钟吞吐，不是引擎阶段吞吐或峰值容量。",
+            "缺少批次来源、成员不齐或成员元数据冲突时不推算系统吞吐。历史重复的 system_* 字段不能代替该口径。",
+            "API 与 TTFT 推断的缓存值分开；API 明确返回零才计零命中，缺字段为未知。API 比例只使用 API prompt token 分母，未采集分母不补零。",
+            "缓存分层 TTFT 是 API 明确零命中 / 有命中的观测对照，不证明缓存因果收益。系统速率和明确缓存零值是有效观测。",
+        ]
+    )
+    extended = summary.get("extended_observations")
+    if extended:
+        system = extended["system"]
+        cache = extended["cache"]
+        notes.extend(
+            [
+                f"本报告完整测量批次 {system['valid_batches']}；排除不完整/冲突批次 {system['invalid_batches']}；缺少批次来源的请求 {system['untagged_requests']}。",
+                f"成功请求中，API 缓存记录 {cache['sources'].get('API', 0)}；TTFT 推断记录 {cache['sources'].get('TTFT_inferred', 0)}；缓存来源未知 {cache['unknown_successes']}；无效缓存观测 {cache['invalid_observations']}。",
+            ]
         )
     return {"title": title, "axis": axis, "notes": notes, "observations": observations}
 
@@ -128,7 +159,7 @@ def profile_svg(summary: dict[str, Any], metric: str) -> str:
         g["metrics"][metric]["median"]
         for s in series
         for g in s["groups"]
-        if g and g["metrics"][metric]["median"] is not None
+        if g and g["metrics"].get(metric, {}).get("median") is not None
     ]
     if not values:
         return ""
@@ -161,14 +192,14 @@ def profile_svg(summary: dict[str, Any], metric: str) -> str:
         previous = None
         color = colors[index % len(colors)]
         for position, g in zip(s["x"], s["groups"], strict=True):
-            value = g["metrics"][metric]["median"] if g else None
+            value = g["metrics"].get(metric, {}).get("median") if g else None
             if value is None:
                 previous = None
                 continue
             x = 80 + 870 * ((position if numeric else xs.index(position)) - low_x) / (
                 high_x - low_x or 1
             )
-            y = 330 - 260 * (value / high_y)
+            y = 330 - 260 * (value / (high_y or 1))
             if previous:
                 elements.append(
                     f'<path d="M{previous[0]:.2f} {previous[1]:.2f}L{x:.2f} {y:.2f}" stroke="{color}" fill="none"/>'
@@ -183,4 +214,4 @@ def profile_svg(summary: dict[str, Any], metric: str) -> str:
     elements.append(
         f'<text x="515" y="375" text-anchor="middle" font-size="13">{escape(axis)}</text></svg>'
     )
-    return f"<figure><figcaption>{abbreviation} p50 · 正式成功请求；完整性与来源见报告</figcaption>{''.join(elements)}</figure>"
+    return f"<figure><figcaption>{abbreviation} p50 · n 的单位：{sampling_unit(metric)}；完整性与来源见报告</figcaption>{''.join(elements)}</figure>"

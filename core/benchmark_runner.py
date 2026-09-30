@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from config.settings import HF_MODEL_MAPPING
+from core.benchmark.batch_observations import api_cached_tokens, tag_batch_window
 from core.benchmark.metrics import (
     METRIC_CONTRACT_VERSION,
     calculate_request_metrics,
@@ -2361,37 +2362,9 @@ class BenchmarkRunner:
         return max(0, (res.get("decode_tokens") or 0) - 1)
 
     def _get_cache_hit_tokens(self, usage_info):
-        """从 usage_info in提取Cache Hit Token 数，兼容not同 API 结构
-
-        Priority:
-        1. OpenAI Standard (prompt_tokens_details.cached_tokens)
-        2. Direct keys (cache_hit_tokens, etc.)
-        3. Anthropic (cache_read_input_tokens)
-        """
-        if not usage_info:
-            return 0
-
-        # 1. OpenAI/vLLM 标准嵌套结构 (Qwen3-Coder, DeepSeek-V3)
-        prompt_details = usage_info.get("prompt_tokens_details")
-        if prompt_details and isinstance(prompt_details, dict):
-            hit = prompt_details.get("cached_tokens", 0)
-            if hit:
-                return hit
-
-        # 2. 直接in usage 根目录 (MiMo, 部分 SiliconFlow)
-        for key in [
-            "cache_hit_tokens",
-            "prompt_cache_hit_tokens",
-            "disk_cache_hit_tokens",
-        ]:
-            if usage_info.get(key):
-                return usage_info.get(key)
-
-        # 3. Anthropic 风格
-        if usage_info.get("cache_read_input_tokens"):
-            return usage_info.get("cache_read_input_tokens")
-
-        return 0
+        """Read an explicit API observation; preserve zero and ignore malformed values."""
+        hit = api_cached_tokens(usage_info)
+        return hit if hit is not None else 0
 
     def _calculate_tokens(self, prompt, full_response_content, usage_info=None):
         prompt_tokens = 0
@@ -2682,6 +2655,7 @@ class BenchmarkRunner:
             "created_at": created_at,  # absolute
             "cache_hit_tokens": cache_hit_tokens,
             "token_calc_method": token_calc_method,
+            "cache_hit_source": "API" if api_cached_tokens(usage_info) is not None else "unknown",
             "token_source": (
                 "API"
                 if token_calc_method.startswith("API")
@@ -2989,6 +2963,11 @@ class BenchmarkRunner:
                 res["system_throughput"] = system_throughput
                 res["rps"] = rps
 
+        tag_batch_window(
+            results,
+            elapsed_seconds=end_batch_time - start_batch_time,
+            expected_requests=concurrency,
+        )
         return results
 
     async def _run_continuous_batch(
@@ -3009,6 +2988,7 @@ class BenchmarkRunner:
         results = []
 
         start_test_time = time.time()
+        wall_start = time.monotonic()
 
         # Shared stats for real-time throughput calculation
         stats = {
@@ -3200,6 +3180,9 @@ class BenchmarkRunner:
                 res["system_input_throughput"] = final_system_input_throughput
                 res["rps"] = final_rps
 
+        tag_batch_window(
+            results, elapsed_seconds=time.monotonic() - wall_start, expected_requests=total_requests
+        )
         return results
 
     async def _run_prefill_request(self, client, prompt, max_tokens, session_id):
@@ -3981,7 +3964,7 @@ class BenchmarkRunner:
                 # Calculate cache_hit_tokens（从 API ReturninGet）
                 if "cache_hit_tokens" not in res or res["cache_hit_tokens"] is None:
                     res["cache_hit_tokens"] = 0
-                res["cache_hit_source"] = "API" if res["cache_hit_tokens"] > 0 else "none"
+                res.setdefault("cache_hit_source", "unknown")
 
                 # === 优先use API usage Data，回退到 tokenizer Statistics ===
                 # api_prefill / api_decode is API Return原始 usage 字段
@@ -4063,7 +4046,12 @@ class BenchmarkRunner:
                             level=LogLevel.INFO,
                         )
 
-                elif cumulative_mode and res["cache_hit_tokens"] == 0 and c_idx in baseline_speeds:
+                elif (
+                    cumulative_mode
+                    and res["cache_hit_source"] != "API"
+                    and res["cache_hit_tokens"] == 0
+                    and c_idx in baseline_speeds
+                ):
                     # 非首次请求且 API 没hason报 cache_hit → 尝试 TTFT 推断
                     baseline_speed = baseline_speeds[c_idx]
                     if baseline_speed > 0 and effective_prefill > 0 and res["ttft"] > 0:

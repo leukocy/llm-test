@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from core.benchmark.metrics import METRIC_CONTRACT_VERSION
 from core.run_lifecycle import RunStatus
-from server.analytics import run_summary
+from server.analytics import NUMERIC_FIELDS, run_summary
 from server.api import create_app
 from server.figures import performance_report_figure
 from server.reports import render_html, render_markdown
@@ -121,13 +121,15 @@ def test_matrix_keeps_missing_cells_and_all_failed_cells(matrix):
 
 
 @pytest.mark.parametrize("statistic", list(STATISTICS))
-@pytest.mark.parametrize("metric", list(METRICS))
+@pytest.mark.parametrize("metric", list(NUMERIC_FIELDS))
 def test_every_metric_and_statistic_matches_full_summary(tmp_path, metric, statistic):
-    rows = [{"concurrency_level": 2, **dict.fromkeys(METRICS, value)} for value in range(1, 81)]
+    rows = [
+        {"concurrency_level": 2, **dict.fromkeys(NUMERIC_FIELDS, value)} for value in range(1, 81)
+    ]
     rows.extend(
         [
-            {"concurrency_level": 2, **dict.fromkeys(METRICS, 999), "error": "timeout"},
-            {"concurrency_level": 2, **dict.fromkeys(METRICS, 0)},
+            {"concurrency_level": 2, **dict.fromkeys(NUMERIC_FIELDS, 999), "error": "timeout"},
+            {"concurrency_level": 2, **dict.fromkeys(NUMERIC_FIELDS, 0)},
         ]
     )
     _, store, job, _ = platform(tmp_path, "concurrency", rows)

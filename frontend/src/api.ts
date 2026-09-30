@@ -167,6 +167,19 @@ export type ReportEnvironment = {
   >;
 };
 export type Summary = {
+  extended_observations?: {
+    system: {
+      contract: string;
+      valid_batches: number;
+      invalid_batches: number;
+      untagged_requests: number;
+    };
+    cache: {
+      sources: Record<string, number>;
+      unknown_successes: number;
+      invalid_observations: number;
+    };
+  };
   scenario_analysis?: {
     title: string;
     axis: string;

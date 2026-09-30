@@ -7,7 +7,6 @@ import io
 import json
 import math
 import sqlite3
-import statistics
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -17,6 +16,8 @@ from pydantic import ValidationError
 
 from config.tokenizer_paths import describe_tokenizer_installation
 from core.benchmark.metrics import METRIC_CONTRACT_VERSION
+from server.extended_analytics import extended_observations
+from server.observations import describe_values, percentile
 from server.scenario_reports import scenario_analysis
 from server.specs import describe_report_environment
 
@@ -79,16 +80,6 @@ def _run_contract_version(config_json: str | None, rows: list[dict[str, Any]]) -
     return run_version
 
 
-def percentile(values: list[float], probability: float) -> float | None:
-    if not values:
-        return None
-    ordered = sorted(values)
-    position = (len(ordered) - 1) * probability
-    lower = math.floor(position)
-    upper = math.ceil(position)
-    return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
-
-
 def wilson_interval(successes: int, trials: int, z: float = 1.96) -> list[float] | None:
     if trials == 0:
         return None
@@ -112,15 +103,7 @@ def describe_observations(rows: list[dict[str, Any]]) -> dict[str, Any]:
             for row in successful
             if row[field] is not None and math.isfinite(float(row[field])) and float(row[field]) > 0
         ]
-        metrics[field] = {
-            "count": len(values),
-            "mean": statistics.fmean(values) if values else None,
-            "median": percentile(values, 0.5),
-            "p95": percentile(values, 0.95),
-            "p99": percentile(values, 0.99),
-            "min": min(values) if values else None,
-            "max": max(values) if values else None,
-        }
+        metrics[field] = describe_values(values)
     n = len(rows)
     ok = len(successful)
     return {
@@ -155,10 +138,11 @@ def run_summary(
         rows = [
             dict(row)
             for row in conn.execute(
-                """SELECT id, concurrency_level, input_tokens_target, context_length_target,
+                """SELECT id, request_index, batch_id, concurrency_level, input_tokens_target, context_length_target,
                           ttft, tpot, tps, total_time,
                           prefill_speed, prefill_tokens, decode_tokens, error, error_type,
-                          token_source, token_calc_method, cache_hit_source, extra_metrics
+                          token_source, token_calc_method, cache_hit_source, cache_hit_tokens,
+                          api_prefill, effective_prefill_tokens, extra_metrics
                    FROM test_results WHERE run_id = ? ORDER BY id""",
                 (run_id,),
             )
@@ -312,6 +296,11 @@ def run_summary(
                 "target_deviation_pct": drift_pct,
             },
         }
+        extended = extended_observations(group)
+        slice_data["metrics"].update(extended["metrics"])
+        slice_data["extended_observations"] = {
+            key: value for key, value in extended.items() if key != "metrics"
+        }
         sliced.append(slice_data)
         if planned and len(group) != planned["measured_requests"]:
             integrity_reasons.append(
@@ -328,7 +317,7 @@ def run_summary(
     token_methods = sorted({row["token_calc_method"] for row in rows if row["token_calc_method"]})
     if len(token_sources) > 1 or len(token_methods) > 1:
         quality_warnings.append("本次运行混用了不同的 token 来源或算法；比较前需核对口径。")
-    summary = {
+    summary: dict[str, Any] = {
         "metric_contract_version": version,
         "integrity": {
             "verified": not integrity_reasons,
@@ -356,12 +345,17 @@ def run_summary(
             "token_methods": token_methods,
         },
         "notes": [
-            "延迟和吞吐统计只使用成功且数值有限、大于零的请求；零表示未采集。",
+            "逐请求延迟和速度统计只使用成功且数值有限、大于零的请求；这些指标的零表示未采集。系统批次速率与明确的缓存零值另按来源统计。",
             "分位数使用相邻观测值线性插值。",
             "成功率区间采用双侧 95% Wilson score。",
             "本报告仅描述观测结果，不推断模型间差异的统计显著性。",
             "跨运行对比仍须核对硬件、模型配置、工作负载和 token 来源。",
         ],
+    }
+    extended = extended_observations(rows)
+    summary["overall"]["metrics"].update(extended["metrics"])
+    summary["extended_observations"] = {
+        key: value for key, value in extended.items() if key != "metrics"
     }
     summary["scenario_analysis"] = scenario_analysis(summary)
     return summary
@@ -429,6 +423,8 @@ def run_results_csv(db_path: str, run_id: int) -> str:
     columns = (
         "id",
         "session_id",
+        "batch_id",
+        "request_index",
         "concurrency_level",
         "input_tokens_target",
         "context_length_target",
@@ -438,11 +434,16 @@ def run_results_csv(db_path: str, run_id: int) -> str:
         "total_time",
         "prefill_tokens",
         "decode_tokens",
+        "cache_hit_tokens",
+        "cache_hit_source",
+        "api_prefill",
+        "effective_prefill_tokens",
         "token_source",
         "token_calc_method",
         "error_type",
         "metric_contract_version",
         "prompt_sha256",
+        "system_measurement_json",
     )
     buffer = io.StringIO()
     writer = csv.writer(buffer)
@@ -451,7 +452,9 @@ def run_results_csv(db_path: str, run_id: int) -> str:
     conn.row_factory = sqlite3.Row
     try:
         stored_columns = tuple(
-            field for field in columns if field not in {"metric_contract_version", "prompt_sha256"}
+            field
+            for field in columns
+            if field not in {"metric_contract_version", "prompt_sha256", "system_measurement_json"}
         )
         rows = conn.execute(
             f"SELECT {', '.join(stored_columns)}, extra_metrics, error "
@@ -466,6 +469,28 @@ def run_results_csv(db_path: str, run_id: int) -> str:
                     value = _contract_version(row["extra_metrics"], f"request {row['id']}")
                 elif field == "prompt_sha256":
                     value = _prompt_sha256(row["extra_metrics"])
+                elif field == "system_measurement_json":
+                    payload = json.loads(row["extra_metrics"] or "{}")
+                    observation = (
+                        payload.get("system_measurement") if isinstance(payload, dict) else None
+                    )
+                    value = (
+                        json.dumps(
+                            {
+                                key: observation.get(key)
+                                for key in [
+                                    "version",
+                                    "id",
+                                    "elapsed_seconds",
+                                    "expected_requests",
+                                    "recorded_requests",
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                        if isinstance(observation, dict)
+                        else None
+                    )
                 else:
                     value = row[field]
                 if isinstance(value, str) and value.startswith(

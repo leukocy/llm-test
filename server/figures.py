@@ -18,8 +18,15 @@ from core.warehouse.charts import (
     build_trend_figure,
     collect_distribution_values,
 )
+from server.extended_analytics import SYSTEM_METRICS
 from server.reports import REPORT_ENVIRONMENT_SCOPES
-from server.scenario_reports import METRICS, STATISTICS, profile_series, scenario_analysis
+from server.scenario_reports import (
+    METRICS,
+    STATISTICS,
+    profile_series,
+    sampling_unit,
+    scenario_analysis,
+)
 from server.specs import REPORT_ENVIRONMENT_FIELDS
 
 
@@ -40,10 +47,10 @@ def performance_report_figure(
     ):
         raise ValueError("不支持的指标、图形或统计量")
     title, abbreviation, unit = METRICS[metric]
-    if not any(group["metrics"][metric]["count"] for group in groups):
+    if not any(group["metrics"].get(metric, {}).get("count") for group in groups):
         raise ValueError(f"没有有效的 {abbreviation} 样本，无法导出性能图")
     labels = [escape(group["label"]) for group in groups]
-    counts = [group["metrics"][metric]["count"] for group in groups]
+    counts = [group["metrics"].get(metric, {}).get("count", 0) for group in groups]
     overall = summary["overall"]
     integrity = summary["integrity"]
     protocol = summary.get("measurement_protocol") or {}
@@ -54,7 +61,7 @@ def performance_report_figure(
         f"正式请求 {overall['requests']} · 失败 {overall['failures']} · "
         f"预热记录 {protocol.get('warmup_recorded', 0)}（不计入统计） · "
         f"暂停 {control.get('pause_count', 0)} 次 · 批次并行上限 {control.get('max_parallel', 1)}",
-        f"柱顶 n 为有效 {abbreviation} 样本数；分位数采用线性插值。小样本尾部分位数分辨率有限，不代表显著性结论。",
+        f"柱顶 n 为有效 {abbreviation} 样本数（{sampling_unit(metric)}）；分位数采用线性插值。小样本尾部分位数分辨率有限，不代表显著性结论。",
         f"Token 来源：{escape(', '.join(summary['provenance']['token_sources']) or '未记录')} · "
         f"算法：{escape(', '.join(summary['provenance']['token_methods']) or '未记录')}",
     ]
@@ -71,6 +78,15 @@ def performance_report_figure(
         footer.extend(" · ".join(values[index : index + 2]) for index in range(0, len(values), 2))
     footer.append(f"作业 {escape(job['job_id'])} · 完整条件和环境信息见 HTML / JSON 报告")
     origin = summary.get("origin") or {}
+    if metric in SYSTEM_METRICS:
+        system = summary.get("extended_observations", {}).get("system", {})
+        footer.append(
+            f"batch-wall-v1 · 完整批次 {system.get('valid_batches', 0)} · 排除不完整/冲突批次 {system.get('invalid_batches', 0)} · 未标记请求 {system.get('untagged_requests', 0)}；窗口包含失败等待与客户端开销。输入包含缓存 token。"
+        )
+    elif metric.startswith("cache_") or metric.startswith("ttft_"):
+        footer.append(
+            "API 与 TTFT 推断分开；缺失缓存字段不当作零命中。API 比例分母使用 API 输入 token；不是缓存因果收益。"
+        )
     if origin.get("kind") == "saved_csv":
         footer[1] = (
             f"CSV 请求 {overall['requests']} · 失败 {overall['failures']} · 未知状态 {overall.get('unknown_outcomes', 0)}；原运行的预热、暂停和计划请求数未经核验。"
@@ -86,7 +102,7 @@ def performance_report_figure(
                     "type": "bar",
                     "name": name,
                     "x": labels,
-                    "y": [group["metrics"][metric][stat] for group in groups],
+                    "y": [group["metrics"].get(metric, {}).get(stat) for group in groups],
                     "marker": {"color": color},
                     "text": [f"n={count}" if count else "" for count in counts]
                     if stat == "p95"
@@ -103,7 +119,7 @@ def performance_report_figure(
             "layout": {
                 "title": {
                     "text": f"{escape(job['model_id'])} · {escape(job['test_type'])}<br>"
-                    f"<sup>{title} · 成功且有限、正值的逐请求观测</sup>",
+                    f"<sup>{title} · 样本单位：{sampling_unit(metric)}</sup>",
                     "x": 0.06,
                     "xanchor": "left",
                 },
@@ -186,7 +202,10 @@ def _scenario_view(figure: dict, summary: dict, metric: str, view: str, statisti
                 "x": [str(x) for x in series[0]["x"]],
                 "y": [s["name"].removeprefix("并发 ") for s in series],
                 "z": [
-                    [g["metrics"][metric][statistic] if g else None for g in s["groups"]]
+                    [
+                        g["metrics"].get(metric, {}).get(statistic) if g else None
+                        for g in s["groups"]
+                    ]
                     for s in series
                 ],
                 "customdata": [[_hover_data(g, metric) for g in s["groups"]] for s in series],
@@ -205,7 +224,7 @@ def _scenario_view(figure: dict, summary: dict, metric: str, view: str, statisti
             "mode": "lines+markers",
             "name": escape(s["name"]),
             "x": s["x"] if numeric else [escape(str(x)) for x in s["x"]],
-            "y": [g["metrics"][metric][statistic] if g else None for g in s["groups"]],
+            "y": [g["metrics"].get(metric, {}).get(statistic) if g else None for g in s["groups"]],
             "connectgaps": False,
             "customdata": [_hover_data(g, metric) for g in s["groups"]],
             "hovertemplate": "%{x}<br>%{y:.4g} "
@@ -218,7 +237,7 @@ def _scenario_view(figure: dict, summary: dict, metric: str, view: str, statisti
 
 def _hover_data(group: dict | None, metric: str) -> list[int | None]:
     return (
-        [group["metrics"][metric]["count"], group["requests"], group["failures"]]
+        [group["metrics"].get(metric, {}).get("count", 0), group["requests"], group["failures"]]
         if group
         else [None, None, None]
     )

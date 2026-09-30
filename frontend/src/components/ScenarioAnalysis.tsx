@@ -9,9 +9,19 @@ const metrics = {
   tps: "逐请求生成速度 TPS · token/s",
   prefill_speed: "逐请求输入处理速度 · token/s",
   total_time: "请求总耗时 · s",
+  system_input_wall: "系统输入吞吐（含缓存）· token/s",
+  system_output_wall: "系统输出吞吐 · token/s",
+  system_total_wall: "系统总吞吐 · token/s",
+  system_qpm: "成功请求处理速率 QPM · req/min",
+  cache_tokens_api: "API 缓存命中 token · token",
+  cache_rate_api: "API 缓存命中比例 · %",
+  cache_tokens_inferred: "TTFT 推断缓存 token · token",
+  cache_rate_inferred: "TTFT 推断缓存比例 · %",
+  ttft_zero_cache_api: "API 明确零命中 TTFT · s",
+  ttft_cache_api: "API 有命中 TTFT · s",
 };
 const statistics = {
-  median: "p50 · 典型请求",
+  median: "p50 · 中位数",
   mean: "均值",
   p95: "p95 · 尾部",
   p99: "p99 · 尾部",
@@ -137,12 +147,40 @@ export function ScenarioAnalysis({
           </select>
         </label>
       </div>
+      {summary.extended_observations &&
+        (metric.startsWith("system_") ? (
+          <p className="muted">
+            完整测量批次 {summary.extended_observations.system.valid_batches}
+            ；排除不完整/冲突批次{" "}
+            {summary.extended_observations.system.invalid_batches}
+            ；缺少批次来源的请求{" "}
+            {summary.extended_observations.system.untagged_requests}
+            。系统速率使用墙钟窗口，包含失败等待与客户端开销。
+          </p>
+        ) : metric.startsWith("cache_") || metric.startsWith("ttft_") ? (
+          <p className="muted">
+            已采集 API 缓存记录{" "}
+            {summary.extended_observations.cache.sources.API || 0}；TTFT
+            推断记录{" "}
+            {summary.extended_observations.cache.sources.TTFT_inferred || 0}
+            ；成功请求中缓存来源未知{" "}
+            {
+              summary.extended_observations.cache.unknown_successes
+            }；无效观测{" "}
+            {summary.extended_observations.cache.invalid_observations}。记录数为
+            0 表示未采集。
+          </p>
+        ) : null)}
       <p className="muted">
         {metrics[metric as keyof typeof metrics]} ·{" "}
         {view === "comparison"
           ? "p50 / p95"
           : statistics[statistic as keyof typeof statistics]}
-        ；PNG 保留样本数、完整性、指标口径与来源。
+        ；n 为
+        {metric.startsWith("system_")
+          ? "测量批次数（batch-wall-v1）"
+          : "有效请求数"}
+        。PNG 保留样本数、完整性、指标口径与来源。
       </p>
       {currentError ? (
         <p role="alert" className="form-error">
@@ -179,6 +217,7 @@ export function ScenarioAnalysis({
                 <tbody>
                   {summary.groups.map((group) => {
                     const stats = group.metrics[metric];
+                    if (!stats) return null;
                     const value =
                       stats[
                         view === "comparison"

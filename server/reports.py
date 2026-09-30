@@ -6,7 +6,7 @@ import json
 from html import escape
 from typing import Any
 
-from server.scenario_reports import METRICS, profile_svg, scenario_analysis
+from server.scenario_reports import METRICS, profile_svg, sampling_unit, scenario_analysis
 from server.specs import REPORT_ENVIRONMENT_FIELDS
 
 REPORT_ENVIRONMENT_SCOPES = {
@@ -201,18 +201,20 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
             "",
             "### 完整指标切片",
             "",
-            "| 条件 | 指标 | 有效 n | 均值 | p50 | p95 | p99 | 最小 | 最大 | 单位 |",
-            "|---|---|---:|---:|---:|---:|---:|---:|---:|---|",
+            "| 条件 | 指标 | 有效 n | 采样单位 | 均值 | p50 | p95 | p99 | 最小 | 最大 | 单位 |",
+            "|---|---|---:|---|---:|---:|---:|---:|---:|---:|---|",
         ]
     )
     for group in summary["groups"]:
         for key, (_, abbreviation, unit) in METRICS.items():
+            if key not in group["metrics"]:
+                continue
             value = group["metrics"][key]
             stats = " | ".join(
                 number(value[stat]) for stat in ["mean", "median", "p95", "p99", "min", "max"]
             )
             lines.append(
-                f"| {_md(group['label'])} | {abbreviation} | {value['count']} | {stats} | {unit} |"
+                f"| {_md(group['label'])} | {abbreviation} | {value['count']} | {sampling_unit(key)} | {stats} | {unit} |"
             )
     return (
         "\n".join(lines)

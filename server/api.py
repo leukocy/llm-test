@@ -1218,7 +1218,10 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
     @app.get("/api/v1/jobs/{job_id}/figure", dependencies=[auth])
     def job_figure(
         job_id: str,
-        metric: str = Query("ttft", pattern="^(ttft|tpot|tps|prefill_speed|total_time)$"),
+        metric: str = Query(
+            "ttft",
+            pattern="^(ttft|tpot|tps|prefill_speed|total_time|system_input_wall|system_output_wall|system_total_wall|system_qpm|cache_tokens_api|cache_rate_api|cache_tokens_inferred|cache_rate_inferred|ttft_zero_cache_api|ttft_cache_api)$",
+        ),
         view: str = Query("comparison", pattern="^(comparison|profile|heatmap)$"),
         statistic: str = Query("median", pattern="^(median|mean|p95|p99|min|max)$"),
     ):
