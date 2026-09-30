@@ -229,7 +229,7 @@ class TextPerturber:
     def _change_punctuation(self, text: str) -> PerturbedSample:
         """标点变化"""
         # 移除末尾标点
-        perturbed = re.sub(r"[?.!]+$", "", text)
+        perturbed = text.rstrip("?.!")
 
         return PerturbedSample(
             original_question=text,
@@ -256,22 +256,43 @@ class TextPerturber:
         # 1000 -> 1,000 or反过来
         def swap_format(match):
             num = match.group(0)
+            # Consume candidates once, then validate their pieces without regex
+            # backtracking or reinterpreting part of an identifier/invalid number.
+            before = text[match.start() - 1] if match.start() else ""
+            after = text[match.end()] if match.end() < len(text) else ""
+            if (before and (before.isalnum() or before in "_.,+-")) or (
+                after and (after.isalnum() or after == "_")
+            ):
+                return num
             if "e" in num.lower():
                 return num
-            sign = num[:1] if num.startswith(("-", "+")) else ""
-            unsigned = num[len(sign) :]
+            candidate = num.rstrip(".,")
+            punctuation = num[len(candidate) :]
+            sign = candidate[:1] if candidate.startswith(("-", "+")) else ""
+            unsigned = candidate[len(sign) :]
             integer, dot, fraction = unsigned.partition(".")
+            if not integer or (dot and (not fraction or not fraction.isdigit())):
+                return num
             if "," in integer:
+                pieces = integer.split(",")
+                if not (
+                    1 <= len(pieces[0]) <= 3
+                    and pieces[0].isdigit()
+                    and all(len(piece) == 3 and piece.isdigit() for piece in pieces[1:])
+                ):
+                    return num
                 integer = integer.replace(",", "")
+            elif not integer.isdigit():
+                return num
             elif len(integer) >= 4 and not integer.startswith("0"):
                 first = len(integer) % 3 or 3
                 integer = ",".join(
                     [integer[:first]] + [integer[i : i + 3] for i in range(first, len(integer), 3)]
                 )
-            return sign + integer + dot + fraction
+            return sign + integer + dot + fraction + punctuation
 
         perturbed = re.sub(
-            r"(?<![\w.,])[-+]?(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?(?![\w.,])",
+            r"[-+]?[0-9][0-9,.eE+-]*",
             swap_format,
             text,
         )

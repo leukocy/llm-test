@@ -127,15 +127,16 @@ def _select_parser(response: str, dataset: str) -> tuple[Any, str, list[str]]:
             if isinstance(parser, CodeAnswerParser)
             else "text"
         )
-        return parser, kind, ["数据集抽取规则可能使用兜底匹配，建议复核提取结果。"]
+        return parser, kind, ["选项需有明确标记；数学规则可能取末尾数字，请复核提取结果。"]
     if "```" in response:
         return CodeAnswerParser(), "code", []
+    hint = " ".join(response.split())
     if re.search(
-        r"\\boxed\s*\{|####|(?:answer|答案|结果)\s*(?:is|是|为|:|：|=)\s*[-+]?\d", response, re.I
+        r"\\boxed ?\{|####|(?:answer|答案|结果) ?(?:is|是|为|:|：|=) ?[-+]?\d", hint, re.I
     ):
         return MathAnswerParser(), "math", []
     if re.search(
-        r"(?:answer|choose|select|答案|选择|选项)\s*(?:is|是|为|:|：)?\s*[A-D]\b", response, re.I
+        r"(?:answer|choose|select|答案|选择|选项) ?(?:is|是|为|:|：)? ?[A-D]\b", hint, re.I
     ) or re.fullmatch(r"[A-D]", response.strip(), re.I):
         return MultiChoiceParser(), "choice", []
     try:
@@ -173,7 +174,7 @@ def _compare(actual: str, expected: str, kind: str) -> tuple[bool | None, str]:
 
 
 def _extract(parser: Any, response: str, kind: str) -> str:
-    if kind == "math":
+    if kind in {"math", "number"}:
         # Preserve a bare expression, including unsupported syntax. A last-number
         # fallback must not silently turn e.g. sin(2) or 1/0 into the answer 2/0.
         source = response.strip()
@@ -181,13 +182,30 @@ def _extract(parser: Any, response: str, kind: str) -> str:
             parse_bounded_math(source)
             return source
         except (ValueError, SyntaxError, TypeError, OverflowError, RecursionError):
+            if re.fullmatch(r"[-+]?[0-9][0-9,.%eE+\-]*", source):
+                return source
             if (
                 "\n" not in source
                 and re.fullmatch(r"[A-Za-z0-9_\\{}+\-*/^%.,()\s$]+", source)
                 and (re.search(r"[+*/^%()]", source) or source.startswith(r"\frac"))
             ):
                 return source
-    return str(parser.parse(response))
+    if isinstance(parser, MultiChoiceParser):
+        return parser.parse(response, allow_fallback=False)
+    extracted = str(parser.parse(response))
+    if kind in {"math", "number"}:
+        extracted = extracted.rstrip("。!！")
+        # Preserve the percent suffix that older numeric extraction patterns
+        # sometimes omit, including #### and Chinese result declarations.
+        suffix = response.strip().rstrip(".。!").rstrip()
+        if suffix.endswith("%") and not extracted.endswith("%"):
+            start = len(suffix) - 2
+            while start >= 0 and suffix[start] in "0123456789.,+-":
+                start -= 1
+            percentage = suffix[start + 1 :]
+            if bounded_math_equal(extracted, percentage[:-1]) is True:
+                return percentage
+    return extracted
 
 
 def parse_answer(body: ParseBody) -> dict[str, Any]:
@@ -204,11 +222,17 @@ def parse_answer(body: ParseBody) -> dict[str, Any]:
             "raw_match": extracted,
             "error": None if extracted else "未提取到答案",
         }
-    elif kind in {"math", "code", "text"}:
+    elif kind in {"math", "number", "choice", "code", "text"}:
         parser_types: dict[
-            str, type[MathAnswerParser] | type[CodeAnswerParser] | type[TextAnswerParser]
+            str,
+            type[MathAnswerParser]
+            | type[MultiChoiceParser]
+            | type[CodeAnswerParser]
+            | type[TextAnswerParser],
         ] = {
             "math": MathAnswerParser,
+            "number": MathAnswerParser,
+            "choice": MultiChoiceParser,
             "code": CodeAnswerParser,
             "text": TextAnswerParser,
         }
@@ -222,7 +246,7 @@ def parse_answer(body: ParseBody) -> dict[str, Any]:
             "error": None if extracted else "未提取到答案",
         }
     else:
-        out = dataclasses.asdict(SmartAnswerParser().parse(body.response, AnswerType(kind)))
+        out = dataclasses.asdict(SmartAnswerParser().parse(body.response, AnswerType.BOOLEAN))
     normalized: Any = out["extracted_answer"]
     if kind in {"math", "number"}:
         try:

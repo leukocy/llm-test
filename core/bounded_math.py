@@ -123,5 +123,5 @@ def bounded_math_equal(left: str, right: str) -> bool | None:
         if actual.is_polynomial() and expected.is_polynomial():
             return bool((actual - expected).expand() == 0)
     except (ValueError, SyntaxError, TypeError, OverflowError, ZeroDivisionError, RecursionError):
-        pass
+        return None
     return None

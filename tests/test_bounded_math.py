@@ -67,3 +67,17 @@ def test_no_sympy_source_evaluation(monkeypatch):
     monkeypatch.setattr(sympy, "sympify", reject_source)
     assert bounded_math_equal("(x+1)^2", "x*x+2*x+1") is True
     assert bounded_math_equal("__import__('os').system('true')", "1") is None
+
+
+def test_shared_smart_parser_uses_bounded_math_without_source_execution():
+    from core.smart_answer_parser import AnswerType, SmartAnswerParser
+
+    parser = SmartAnswerParser()
+    result = parser.parse(r"\boxed{2+3*4}", AnswerType.MATH_EXPRESSION)
+    assert result.normalized_value == 14
+    assert parser._evaluate_expression("10**10000000") is None
+    assert parser._evaluate_expression("__import__('os').getcwd()") is None
+    assert parser._evaluate_expression("x+1") is None
+    assert parser._evaluate_expression("abc2+3") is None
+    result = parser.parse("value =," + "0" * 10000 + "!", AnswerType.NUMBER)
+    assert result.normalized_value == 0.0

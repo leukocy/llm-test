@@ -124,6 +124,11 @@ def test_bare_fractions_and_percent_keep_their_value(dataset):
     [
         ("number", "The answer is 0.4", "0.49", False),
         ("number", "0.5", "50", False),
+        ("number", "50%", "0.5", True),
+        ("number", "1/2", "0.5", True),
+        ("number", "1,2", "12", None),
+        ("number", "结果为50%", "0.5", True),
+        ("choice", "Answer unavailable", "A", None),
         ("math", "50%", "0.5", True),
         ("math", "sin(2)", "2", None),
         ("math", "1/0", "0", None),
@@ -317,3 +322,14 @@ def test_default_answer_type_remains_text(env):
     result = post(client, "parse", {"response": "Full response"})
     assert result["answer_type"] == "text"
     assert "is_correct" not in result
+
+
+def test_adversarial_inputs_preserve_data_and_finish_without_regex_backtracking():
+    punctuated = "Hello" + "!" * 10000
+    result = TextPerturber(42).perturb(punctuated, PerturbationType.PUNCTUATION)
+    assert result.perturbed_question == "Hello"
+    for source in ["0" * 10000 + "x", "1000abc", "abc1000", "1,00", "1.2.3"]:
+        result = TextPerturber(42).perturb(source, PerturbationType.NUMBER_FORMAT)
+        assert result.perturbed_question == source
+    result = parse_answer(ParseBody(response="答案是" + " " * 10000 + "B", dataset_type="auto"))
+    assert result["extracted_answer"] == "B"

@@ -91,7 +91,9 @@ class MultiChoiceParser:
             ("dot_end", re.compile(rf"^([{C}])\s*[.。]?\s*$", re.MULTILINE)),
         ]
 
-    def parse(self, response: str, choices: list[str] | None = None) -> str:
+    def parse(
+        self, response: str, choices: list[str] | None = None, *, allow_fallback: bool = True
+    ) -> str:
         """Extract a choice letter from *response*.
 
         Returns uppercase letter (e.g. ``"A"``) or empty string.
@@ -107,6 +109,9 @@ class MultiChoiceParser:
                 ch = m.group(1).upper()
                 if ch in valid:
                     return ch
+
+        if not allow_fallback:
+            return ""
 
         # EvalScope fallback: last valid uppercase letter
         for letter in reversed(response_stripped):
