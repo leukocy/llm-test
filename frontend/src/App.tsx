@@ -264,7 +264,9 @@ export default function App() {
                           ? "帮助与引导"
                           : navActive("/settings/api")
                             ? "受测 API 设置"
-                            : "数据仓库"}
+                            : navActive("/advanced")
+                              ? "高级评估"
+                              : "数据仓库"}
             </strong>
           </div>
           <div className="topbar-right">
