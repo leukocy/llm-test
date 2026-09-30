@@ -188,8 +188,8 @@ def test_pause_resume_api_auth_and_lifecycle(client: TestClient, store: JobStore
     assert client.post("/api/v1/jobs/missing/resume", headers=headers).status_code == 404
 
 
-@pytest.mark.parametrize("test_type", ["stability", "quality", "robustness"])
-def test_pause_api_rejects_continuous_or_quality_workloads(client, store, test_type):
+@pytest.mark.parametrize("test_type", ["quality", "robustness"])
+def test_pause_api_rejects_quality_workloads(client, store, test_type):
     job = store.submit(test_type=test_type, endpoint_id="lab", model_id="m", parameters={})
     store.claim("w")
     response = client.post(

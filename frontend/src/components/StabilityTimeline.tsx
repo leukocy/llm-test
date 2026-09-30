@@ -78,6 +78,13 @@ export function StabilityTimeline({
         </div>
         <span className="minor-tag">单调时钟 · 完整记录分窗</span>
       </div>
+      {timeline.live && (
+        <p role="status" className="muted">
+          实时观测 · 测量
+          {timeline.window_state === "paused" ? "已暂停" : "进行中"}
+          ，当前统计未最终确认。
+        </p>
+      )}
       <p className="muted">
         有效计时 {timeline.timed_requests}；缺失 {timeline.missing_requests}
         ；无效 {timeline.invalid_requests}。计时记录完整：
@@ -87,7 +94,9 @@ export function StabilityTimeline({
       </p>
       {!timeline.bins.length ? (
         <p role="status">
-          缺少可核验的单调时钟记录，无法绘制时间序列。数据库写入时间不能替代请求时间。
+          {timeline.live
+            ? "等待首批请求完成并保存，当前没有可绘制的完成时间观测。"
+            : "缺少可核验的单调时钟记录，无法绘制时间序列。数据库写入时间不能替代请求时间。"}
         </p>
       ) : (
         <>

@@ -168,6 +168,8 @@ export type ReportEnvironment = {
 };
 export type Summary = {
   time_series?: {
+    live: boolean;
+    window_state: string | null;
     contract: string;
     timed_requests: number;
     missing_requests: number;

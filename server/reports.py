@@ -441,7 +441,8 @@ def _timeline_description(timeline: dict[str, Any]) -> str:
     window = timeline["window_seconds"]
     window_text = f"{window:.3f}" if window is not None else "未知"
     return (
-        f"stability-clock-v1 · 计时记录完整：{'是' if timeline['complete'] else '否'}；"
+        f"stability-clock-v1 · 窗口状态：{timeline.get('window_state') or '历史记录'}；"
+        f"计时记录完整：{'是' if timeline['complete'] else '否'}；"
         f"有效计时 {timeline['timed_requests']}，缺失 {timeline['missing_requests']}，无效 {timeline['invalid_requests']}；"
         f"计划发起 {timeline['planned_seconds'] if timeline['planned_seconds'] is not None else '未知'} 秒，"
         f"调度至排空 {window_text} 秒；每窗 {timeline['bin_seconds'] if timeline['bin_seconds'] is not None else '未知'} 秒。"

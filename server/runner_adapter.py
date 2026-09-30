@@ -179,6 +179,7 @@ async def execute_job(
 
     output = HeadlessOutput()
     log_tee = _LogTee(job_dir / "logs.jsonl")
+    control = JobControl(store, job_id, worker_id)
     runner = BenchmarkRunner(
         placeholder=output,
         progress_bar=output,
@@ -205,10 +206,10 @@ async def execute_job(
         custom_params=run_config.get("custom_params"),
         report_environment=run_config.get("report_environment"),
         control_checkpoint=(
-            JobControl(store, job_id, worker_id).checkpoint
-            if job["test_type"] in PAUSABLE_TEST_TYPES
-            else None
+            control.checkpoint if job["test_type"] in PAUSABLE_TEST_TYPES else None
         ),
+        control_poll=control.pause_requested if job["test_type"] == "stability" else None,
+        persistence_owner=worker_id,
     )
     methods: dict[str, Callable[..., Awaitable[Any]]] = {
         "concurrency": runner.run_concurrency_test,

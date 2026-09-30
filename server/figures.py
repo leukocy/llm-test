@@ -247,6 +247,7 @@ def _timeline_view(figure: dict, summary: dict, metric: str, statistic: str) -> 
         [
             layout["annotations"][0]["text"].replace("柱顶 n 为", "悬停 n 为"),
             f"计时记录完整：{'是' if timeline['complete'] else '否'} · 有效计时 {timeline['timed_requests']} · 缺失 {timeline['missing_requests']} · 无效 {timeline['invalid_requests']}",
+            f"窗口状态：{timeline.get('window_state') or '历史记录'}；运行中的时间窗仅供诊断，尚未最终确认。",
             f"计划发起 {timeline['planned_seconds']} 秒 · 调度至排空 {timeline['window_seconds']:.3f} 秒 · 每窗 {timeline['bin_seconds']} 秒",
             *timeline["notes"],
             f"作业 {escape(summary['run']['test_id'])} · 完整来源见 HTML / JSON 报告",

@@ -2,6 +2,7 @@
 Test Results Repository
 """
 
+import sqlite3
 from typing import Any
 
 from core.database.connection import Database
@@ -39,7 +40,9 @@ class TestResultRepository(BaseRepository[TestResult]):
         cursor = self.db.execute(sql, tuple(values))
         return cursor.lastrowid
 
-    def insert_batch(self, results: list[TestResult]) -> int:
+    def insert_batch(
+        self, results: list[TestResult], *, connection: sqlite3.Connection | None = None
+    ) -> int:
         """
         批量InsertTest Results
 
@@ -113,15 +116,16 @@ class TestResultRepository(BaseRepository[TestResult]):
                 )
             )
 
+        if connection is not None:
+            connection.executemany(sql, params_list)
+            return len(results)
         return self.db.execute_many(sql, params_list)
 
     def find_by_run_id(self, run_id: int, limit: int = 1000) -> list[TestResult]:
         """based on运行 ID 查找所hasResult"""
         return self.find_by("run_id = ?", (run_id,), limit)
 
-    def find_errors(
-        self, run_id: int | None = None, limit: int = 100
-    ) -> list[TestResult]:
+    def find_errors(self, run_id: int | None = None, limit: int = 100) -> list[TestResult]:
         """查找ErrorResult"""
         if run_id:
             return self.find_by("run_id = ? AND error IS NOT NULL", (run_id,), limit)
@@ -198,9 +202,7 @@ class TestResultRepository(BaseRepository[TestResult]):
             FROM test_results
             WHERE run_id = ? AND {column} IS NOT NULL
         """
-        row = self.db.fetch_one(
-            sql, (run_id, run_id, run_id, run_id, run_id, run_id, run_id)
-        )
+        row = self.db.fetch_one(sql, (run_id, run_id, run_id, run_id, run_id, run_id, run_id))
         return row if row else {}
 
     def delete_by_run(self, run_id: int) -> int:

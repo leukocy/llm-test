@@ -5,7 +5,6 @@ import json
 import random
 import threading
 import time
-import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -21,6 +20,7 @@ from core.benchmark.metrics import (
     count_decode_intervals,
     empty_metrics,
 )
+from core.benchmark.stability import continuous_load
 from core.cancel_state import is_stop_requested
 from core.error_messages import get_error_info
 from core.measurement_protocol import measurement_plan
@@ -718,6 +718,8 @@ class BenchmarkRunner:
         external_test_id: str | None = None,
         enable_live_log_server: bool = True,
         control_checkpoint: Callable[[], Awaitable[None]] | None = None,
+        control_poll: Callable[[], bool] | None = None,
+        persistence_owner: str | None = None,
         report_environment: dict[str, str] | None = None,
     ):
         self.placeholder, self.progress_bar, self.status_text = (
@@ -735,6 +737,8 @@ class BenchmarkRunner:
         self.tokenizer = None
         self.csv_file = csv_filename
         self._control_checkpoint = control_checkpoint
+        self._control_poll = control_poll
+        self._persistence_owner = persistence_owner
         self.report_environment = dict(report_environment or {})
 
         self.api_key = api_key
@@ -2683,6 +2687,11 @@ class BenchmarkRunner:
         self.progress_bar.progress(
             self.completed_requests / self.total_requests if self.total_requests > 0 else 0
         )
+
+        if self.external_test_id and self.render_progress is None:
+            # The platform reads durable pages; do not rebuild the entire history into
+            # a discarded UI dataframe at every live flush.
+            return
 
         if not self.results_list:
             return
@@ -4997,167 +5006,106 @@ class BenchmarkRunner:
         concurrency,
         duration,
         session_id_start,
+        observation_callback=None,
     ):
-        """
-        Run requests continuously for a specific duration with fixed concurrency.
-        """
-        # Scheduling, request wrappers and drainage share one monotonic clock.
-        start_test_time = time.monotonic()
-        end_test_time = start_test_time + duration
-        timeline_id = uuid.uuid4().hex
-
-        # Shared counter for session IDs
-        session_counter = [session_id_start]
-
-        tasks = []
-        results = []
-
-        # Shared stats for real-time throughput calculation
+        """Continuous load with one clock, live observations and drained pause boundaries."""
+        await self._measurement_checkpoint()
+        origin = time.monotonic()
         stats = {
-            "completed_requests": 0,
-            "total_output_tokens": 0,
-            "total_input_tokens": 0,
-            "successful_requests": 0,
-            "min_start_time": float("inf"),
-            "max_end_time": 0.0,
-            "min_first_token_time": float("inf"),
-            "max_first_token_time": 0.0,
-            "total_cache_hit_tokens": 0,
+            "input": 0,
+            "output": 0,
+            "cache": 0,
+            "successful": 0,
+            "min_start": float("inf"),
+            "min_first": float("inf"),
+            "max_first": 0.0,
         }
+        last_window = {}
 
-        async def worker(worker_index):
-            while time.monotonic() < end_test_time:
-                # Check for stop signal
-                if is_stop_requested():
-                    break
-
-                # Get next session ID
-                session_id = session_counter[0]
-                session_counter[0] += 1
-
-                # Determine prompt
-                _worker_prompt_source = "generic"
-                if isinstance(prompt_func_or_str, list):
-                    prompt = prompt_func_or_str[session_id % len(prompt_func_or_str)]
-                elif callable(prompt_func_or_str):
-                    prompt = prompt_func_or_str(session_id)
-                else:
-                    prompt = prompt_func_or_str
-                # callable may return (prompt, source_id)
-                if isinstance(prompt, tuple) and len(prompt) == 2:
-                    prompt, _worker_prompt_source = prompt
-
-                req_start_time = time.monotonic()
-                try:
-                    res = await self.get_completion(client, session_id, prompt, max_tokens)
-                except asyncio.CancelledError:
-                    break
-                except Exception as e:
-                    self._update_log(f"Worker {worker_index} error: {e}", level=LogLevel.ERROR)
-                    res = {**self._get_empty_metrics(), "session_id": session_id, "error": str(e)}
-
-                req_end_time = time.monotonic()
-                if not res:
-                    res = {
-                        **self._get_empty_metrics(),
-                        "session_id": session_id,
-                        "error": "MissingCompletion",
-                    }
-                res["_prompt_source"] = _worker_prompt_source
-                extra = res.get("extra_metrics")
-                if not isinstance(extra, dict):
-                    extra = {}
-                    res["extra_metrics"] = extra
-                extra["timing_observation"] = {
-                    "version": "stability-clock-v1",
-                    "clock": "monotonic",
-                    "anchor": "scheduler_start",
-                    "id": timeline_id,
-                    "index": session_id - session_id_start,
-                    "start_seconds": req_start_time - start_test_time,
-                    "end_seconds": req_end_time - start_test_time,
+        async def request(session_id):
+            source = "generic"
+            if isinstance(prompt_func_or_str, list):
+                prompt = prompt_func_or_str[session_id % len(prompt_func_or_str)]
+            elif callable(prompt_func_or_str):
+                prompt = prompt_func_or_str(session_id)
+            else:
+                prompt = prompt_func_or_str
+            if isinstance(prompt, tuple) and len(prompt) == 2:
+                prompt, source = prompt
+            start = time.monotonic()
+            try:
+                res = await self.get_completion(client, session_id, prompt, max_tokens)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self._update_log(f"Request {session_id} error: {exc}", level=LogLevel.ERROR)
+                res = {**self._get_empty_metrics(), "session_id": session_id, "error": str(exc)}
+            if not res:
+                res = {
+                    **self._get_empty_metrics(),
+                    "session_id": session_id,
+                    "error": "MissingCompletion",
                 }
+            res["_prompt_source"] = source
+            if not isinstance(res.get("extra_metrics"), dict):
+                res["extra_metrics"] = {}
+            now = time.monotonic()
+            stats["min_start"] = min(stats["min_start"], res.get("start_time") or start)
+            first = res.get("first_token_time")
+            if first:
+                stats["min_first"] = min(stats["min_first"], first)
+                stats["max_first"] = max(stats["max_first"], first)
+            if not res.get("error"):
+                stats["successful"] += 1
+                stats["input"] += res.get("prefill_tokens", 0) or 0
+                stats["output"] += res.get("decode_tokens", 0) or 0
+                stats["cache"] += res.get("cache_hit_tokens", 0) or 0
+            elapsed = max(0.001, now - origin)
+            decode_elapsed = (
+                max(0.001, now - stats["min_first"])
+                if stats["min_first"] != float("inf")
+                else elapsed
+            )
+            prefill_elapsed = (
+                max(0.001, stats["max_first"] - stats["min_start"])
+                if stats["max_first"]
+                else elapsed
+            )
+            res["system_output_throughput"] = stats["output"] / decode_elapsed
+            res["system_input_throughput"] = (
+                max(0, stats["input"] - stats["cache"]) / prefill_elapsed
+            )
+            res["rps"] = stats["successful"] / elapsed
+            return res
 
-                # Update stats and results
-                if res:
-                    # Time bounds
-                    req_start = res.get("start_time") or req_start_time
-                    req_end = res.get("end_time") or req_end_time
+        def observe(rows, window):
+            last_window.update(window)
+            if observation_callback is not None:
+                observation_callback(rows, window)
 
-                    if req_start < stats["min_start_time"]:
-                        stats["min_start_time"] = req_start
-                    if req_end > stats["max_end_time"]:
-                        stats["max_end_time"] = req_end
-
-                    first_token_time = res.get("first_token_time")
-                    if first_token_time:
-                        if first_token_time < stats["min_first_token_time"]:
-                            stats["min_first_token_time"] = first_token_time
-                        if first_token_time > stats["max_first_token_time"]:
-                            stats["max_first_token_time"] = first_token_time
-
-                    # Calculate cumulative metrics
-                    current_time = time.monotonic()
-                    total_elapsed = max(0.001, current_time - start_test_time)
-
-                    # Output Throughput
-                    if stats["min_first_token_time"] != float("inf"):
-                        decode_elapsed = max(0.001, current_time - stats["min_first_token_time"])
-                    else:
-                        decode_elapsed = total_elapsed
-
-                    # Input Throughput
-                    if stats["max_first_token_time"] > 0 and stats["min_start_time"] != float(
-                        "inf"
-                    ):
-                        prefill_elapsed = max(
-                            0.001,
-                            stats["max_first_token_time"] - stats["min_start_time"],
-                        )
-                    else:
-                        prefill_elapsed = total_elapsed
-
-                    if res.get("error") != "UserCancelled" and res.get("error") is None:
-                        stats["total_output_tokens"] += res.get("decode_tokens", 0)
-                        stats["total_input_tokens"] += res.get("prefill_tokens", 0)
-                        stats["total_cache_hit_tokens"] += res.get("cache_hit_tokens", 0) or 0
-                        stats["successful_requests"] += 1
-
-                    stats["completed_requests"] += 1
-
-                    # Update result with system metrics
-                    # Input Throughput仅use未缓存 token 数
-                    uncached_input_tokens = max(
-                        0, stats["total_input_tokens"] - stats["total_cache_hit_tokens"]
-                    )
-                    res["system_output_throughput"] = stats["total_output_tokens"] / decode_elapsed
-                    res["system_input_throughput"] = uncached_input_tokens / prefill_elapsed
-                    res["rps"] = stats["successful_requests"] / total_elapsed
-
-                    results.append(res)
-
-                    # Update global progress
-                    self.completed_requests += 1
-                    if self.total_requests > 0:
-                        self.update_ui()
-
-        # Launch workers
-        tasks = [asyncio.create_task(worker(i)) for i in range(concurrency)]
-
-        await asyncio.gather(*tasks)
-
-        window_seconds = time.monotonic() - start_test_time
-        expected_requests = session_counter[0] - session_id_start
+        results = await continuous_load(
+            request,
+            concurrency=concurrency,
+            duration=duration,
+            session_id_start=session_id_start,
+            stopped=is_stop_requested,
+            pause_requested=self._control_poll,
+            checkpoint=self._control_checkpoint,
+            observe=observe,
+            clock=time.monotonic,
+        )
         for res in results:
             res["extra_metrics"]["timing_observation"].update(
-                window_seconds=window_seconds,
+                window_seconds=last_window["window_seconds"],
                 planned_seconds=duration,
-                expected_requests=expected_requests,
+                expected_requests=last_window["expected_requests"],
             )
         tag_batch_window(
-            results, elapsed_seconds=window_seconds, expected_requests=expected_requests
+            results,
+            elapsed_seconds=last_window["window_seconds"],
+            expected_requests=last_window["expected_requests"],
+            batch_id=last_window["id"],
         )
-
         return results
 
     async def run_stability_test(
@@ -5219,22 +5167,33 @@ class BenchmarkRunner:
                     self._prompt_generation_target(64), suffix=""
                 )
 
-        results = await self._run_time_based_batch(
+        def observe(rows, window):
+            for res in rows:
+                res["concurrency"] = concurrency
+                res["input_tokens_target"] = input_tokens_target
+                res["timestamp"] = res["extra_metrics"]["timing_observation"]["end_seconds"]
+                res["prompt_source"] = res.pop("_prompt_source", "generic")
+                self._append_metric_csv(res, csv_columns)
+                self.results_list.append(res)
+            if self._db_run is not None:
+                saved = self._get_db_manager().save_stability_snapshot(
+                    self._db_run, rows, window, worker_id=self._persistence_owner
+                )
+                if saved != len(rows):
+                    raise RuntimeError("Incomplete live observation flush")
+                self._persisted_result_ids.update(id(res) for res in rows)
+            self.completed_requests = len(self.results_list)
+            self.update_ui()
+
+        await self._run_time_based_batch(
             None,
             prompt_source,
             max_tokens,
             concurrency,
             duration_seconds,
             session_id_start=0,
+            observation_callback=observe,
         )
-
-        for res in results:
-            if res and res.get("error") != "UserCancelled":
-                res["concurrency"] = concurrency
-                res["timestamp"] = res.get("end_time")
-                res["prompt_source"] = res.pop("_prompt_source", "generic")
-                self._append_metric_csv(res, csv_columns)
-                self.results_list.append(res)
 
         # 批量SaveResult到Database并完成运行
         self._batch_save_results_to_db()

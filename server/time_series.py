@@ -9,6 +9,7 @@ from collections import defaultdict
 from html import escape
 from typing import Any
 
+from core.benchmark.batch_observations import BATCH_CONTRACT
 from server.observations import describe_values
 
 TIMING_FIELDS = (
@@ -22,6 +23,9 @@ TIMING_FIELDS = (
     "window_seconds",
     "planned_seconds",
     "expected_requests",
+    "window_state",
+    "paused_seconds",
+    "scheduling_seconds",
 )
 REQUEST_METRICS = ("ttft", "tpot", "tps", "prefill_speed", "total_time")
 TIMELINE_NOTES = [
@@ -30,6 +34,7 @@ TIMELINE_NOTES = [
     "指标仅统计成功且有限、大于零的观测；失败仍计入完成请求数和失败数。空窗与未采集指标保留空值，不连线。",
     "自动划分最多 60 个时间窗；每窗有效 n、完成数和失败数分别记录。分位数为描述性统计，小样本尾部不可视为稳定性或显著性证明。",
     "时间来源缺失或无效的请求不参与曲线；完整性未通过时，计数只代表已记录部分。未完成请求不归入完成时间窗。",
+    "连续测量的实时窗口与请求在同一事务保存；尚在发起或排空时不标为完整。暂停等待不消耗计划发起时长，但保留在时间轴和最终系统墙钟速率的分母中。",
 ]
 
 
@@ -73,7 +78,61 @@ def _valid(value: dict[str, Any]) -> bool:
     )
 
 
-def stability_time_series(rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _valid_window(window: Any) -> bool:
+    return bool(
+        isinstance(window, dict)
+        and window.get("version") == "stability-clock-v1"
+        and window.get("clock") == "monotonic"
+        and window.get("anchor") == "scheduler_start"
+        and isinstance(window.get("id"), str)
+        and re.fullmatch(r"[0-9a-f]{32}", window["id"])
+        and isinstance(window.get("state"), str)
+        and window["state"] in {"running", "paused", "completed", "interrupted"}
+        and all(
+            _finite(window.get(k))
+            for k in ["window_seconds", "planned_seconds", "paused_seconds", "scheduling_seconds"]
+        )
+        and 0 < window["window_seconds"] <= 86400
+        and 0 < window["planned_seconds"] <= 3600
+        and 0 <= window["paused_seconds"] <= window["window_seconds"]
+        and 0 <= window["scheduling_seconds"] <= window["window_seconds"]
+        and type(window.get("expected_requests")) is int
+        and type(window.get("recorded_requests")) is int
+        and 0 <= window["recorded_requests"] <= window["expected_requests"]
+    )
+
+
+def resolve_stability_row(row: dict[str, Any], window: Any) -> dict[str, Any]:
+    """Resolve live rows using only the window from the same database read transaction."""
+    if not _valid_window(window):
+        return row
+    value = timing_observation(row.get("extra_metrics"))
+    if value is None or any(value[k] != window[k] for k in ["id", "version", "clock", "anchor"]):
+        return row
+    for key in ["window_seconds", "planned_seconds", "expected_requests"]:
+        if value[key] is not None and value[key] != window[key]:
+            return row
+        value[key] = window[key]
+    value.update(
+        window_state=window["state"],
+        paused_seconds=window["paused_seconds"],
+        scheduling_seconds=window["scheduling_seconds"],
+    )
+    extra = json.loads(row.get("extra_metrics") or "{}")
+    extra["timing_observation"] = value
+    if window["state"] == "completed" and _valid(value):
+        extra["system_measurement"] = {
+            "version": BATCH_CONTRACT,
+            "id": window["id"],
+            "elapsed_seconds": window["window_seconds"],
+            "expected_requests": window["expected_requests"],
+            "recorded_requests": window["recorded_requests"],
+        }
+    return {**row, "extra_metrics": json.dumps(extra, ensure_ascii=False)}
+
+
+def stability_time_series(rows: list[dict[str, Any]], window: Any = None) -> dict[str, Any]:
+    rows = [resolve_stability_row(row, window) for row in rows]
     valid = []
     missing = invalid = 0
     for row in rows:
@@ -89,7 +148,12 @@ def stability_time_series(rows: list[dict[str, Any]]) -> dict[str, Any]:
         for _, v in valid
     }
     indices = [v["index"] for _, v in valid]
-    conflict = len(signatures) > 1 or len(set(indices)) != len(indices)
+    conflict = (
+        len(signatures) > 1
+        or len(set(indices)) != len(indices)
+        or (window is not None and not _valid_window(window))
+        or (_valid_window(window) and window["recorded_requests"] != len(rows))
+    )
     if conflict:
         invalid += len(valid)
         valid = []
@@ -105,13 +169,15 @@ def stability_time_series(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "bin_seconds": None,
         "bins": [],
         "notes": list(TIMELINE_NOTES),
+        "live": _valid_window(window) and window["state"] in {"running", "paused"},
+        "window_state": window["state"] if _valid_window(window) else None,
     }
     if not valid:
         result["notes"].append("没有可核验的单调时钟时间记录，无法绘制稳定性时间序列。")
         return result
-    _, window, planned, expected = next(iter(signatures))
-    width = max(1, math.ceil(window / 60))
-    count = max(1, math.ceil(window / width))
+    _, span, planned, expected = next(iter(signatures))
+    width = max(1, math.ceil(span / 60))
+    count = max(1, math.ceil(span / width))
     by_bin: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for row, value in valid:
         index = min(count - 1, math.floor(value["end_seconds"] / width))
@@ -133,7 +199,7 @@ def stability_time_series(rows: list[dict[str, Any]]) -> dict[str, Any]:
         bins.append(
             {
                 "start_seconds": index * width,
-                "end_seconds": min(window, (index + 1) * width),
+                "end_seconds": min(span, (index + 1) * width),
                 "requests": len(selected),
                 "successes": len(successful),
                 "failures": len(selected) - len(successful),
@@ -141,8 +207,9 @@ def stability_time_series(rows: list[dict[str, Any]]) -> dict[str, Any]:
             }
         )
     result.update(
-        complete=len(valid) == len(rows) == expected,
-        window_seconds=window,
+        complete=len(valid) == len(rows) == expected
+        and (not _valid_window(window) or window["state"] == "completed"),
+        window_seconds=span,
         planned_seconds=planned,
         bin_seconds=width,
         bins=bins,

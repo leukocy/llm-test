@@ -4,8 +4,10 @@ Database管理器
 统一Database访问入口，封装所has Repository and Service。
 """
 
+import json
 import logging
 import os
+import time
 from typing import Any, cast
 
 from core.database.backup import DatabaseBackup
@@ -181,6 +183,53 @@ class DatabaseManager:
         """
         results = [TestResult.from_api_result(cast(int, run.id), d) for d in results_data]
         return self._result_repo.insert_batch(results)
+
+    def save_stability_snapshot(
+        self, run: TestRun, results_data: list[dict], window: dict, *, worker_id: str | None = None
+    ) -> int:
+        """Commit new observations and their shared clock window as one read snapshot.
+
+        Read the stored configuration so concurrent control provenance is preserved.
+        When called by a platform worker, fence writes against its current lease.
+        Failure rolls back the entire flush and propagates to the worker.
+        """
+        if run.id is None:
+            raise RuntimeError("Live measurement has no persisted run")
+        with self._db.get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if worker_id is not None:
+                lease = conn.execute(
+                    """SELECT 1 FROM control_jobs WHERE job_id = ? AND lease_owner = ?
+                    AND lease_until >= ? AND status IN ('running','pausing','paused','cancelling')""",
+                    (run.test_id, worker_id, time.time()),
+                ).fetchone()
+                if lease is None:
+                    raise RuntimeError("Live measurement worker lease was lost")
+            stored = conn.execute(
+                "SELECT config_json FROM test_runs WHERE id = ? AND status = 'running'", (run.id,)
+            ).fetchone()
+            if stored is None:
+                raise RuntimeError("Live measurement is no longer running")
+            config = json.loads(stored[0] or "{}")
+            config["stability_window"] = dict(window)
+            results = [TestResult.from_api_result(run.id, d) for d in results_data]
+            count = self._result_repo.insert_batch(results, connection=conn)
+            conn.execute(
+                """UPDATE test_runs SET config_json = ?, total_requests = ?,
+                completed_requests = (SELECT COUNT(*) FROM test_results WHERE run_id = ? AND (error IS NULL OR error = '')),
+                failed_requests = (SELECT COUNT(*) FROM test_results WHERE run_id = ? AND error IS NOT NULL AND error != '')
+                WHERE id = ?""",
+                (
+                    json.dumps(config, ensure_ascii=False, allow_nan=False),
+                    window["expected_requests"],
+                    run.id,
+                    run.id,
+                    run.id,
+                ),
+            )
+            conn.commit()
+        run.config = config
+        return count
 
     def complete_test_run(
         self,

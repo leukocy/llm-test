@@ -20,7 +20,7 @@ from server.extended_analytics import extended_observations
 from server.observations import describe_values, percentile
 from server.scenario_reports import scenario_analysis
 from server.specs import describe_report_environment
-from server.time_series import stability_time_series, timing_observation
+from server.time_series import resolve_stability_row, stability_time_series, timing_observation
 
 NUMERIC_FIELDS = ("ttft", "tpot", "tps", "total_time", "prefill_speed")
 GROUP_FIELDS = {
@@ -156,6 +156,8 @@ def run_summary(
         conn.close()
     version = _run_contract_version(run["config_json"], rows)
     config = json.loads(run["config_json"] or "{}")
+    if run["test_type"] == "stability":
+        rows = [resolve_stability_row(row, config.get("stability_window")) for row in rows]
     try:
         report_environment = describe_report_environment(config.get("report_environment"))
     except ValidationError as exc:
@@ -360,7 +362,19 @@ def run_summary(
     }
     summary["scenario_analysis"] = scenario_analysis(summary)
     if run["test_type"] == "stability":
-        summary["time_series"] = stability_time_series(rows)
+        summary["time_series"] = stability_time_series(rows, config.get("stability_window"))
+        if summary["time_series"]["live"] and (
+            run["status"] != "running"
+            or (
+                job is not None
+                and job["status"] not in {"running", "pausing", "paused", "cancelling"}
+            )
+        ):
+            summary["time_series"]["live"] = False
+            summary["time_series"]["window_state"] = "interrupted"
+            summary["time_series"]["notes"].append(
+                "执行已结束，但时间窗口未最终关闭；曲线只展示最后一次成功保存的窗口，不能视为完整运行。"
+            )
     return summary
 
 
@@ -466,12 +480,22 @@ def run_results_csv(db_path: str, run_id: int) -> str:
                 "timing_observation_json",
             }
         )
+        conn.execute("BEGIN")
+        stored_run = conn.execute(
+            "SELECT config_json FROM test_runs WHERE id = ?", (run_id,)
+        ).fetchone()
+        try:
+            stored_config = json.loads(stored_run[0] or "{}") if stored_run else {}
+        except (ValueError, TypeError):
+            stored_config = {}
+        window = stored_config.get("stability_window") if isinstance(stored_config, dict) else None
         rows = conn.execute(
             f"SELECT {', '.join(stored_columns)}, extra_metrics, error "
             "FROM test_results WHERE run_id = ? ORDER BY id",
             (run_id,),
         )
         for row in rows:
+            row = resolve_stability_row(dict(row), window)
             values = []
             for field in columns:
                 value: Any

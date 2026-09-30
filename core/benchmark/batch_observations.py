@@ -35,6 +35,7 @@ def tag_batch_window(
     *,
     elapsed_seconds: float,
     expected_requests: int,
+    batch_id: str | None = None,
 ) -> None:
     """Attach one observation to each row; reports validate membership and deduplicate it.
 
@@ -47,7 +48,7 @@ def tag_batch_window(
     rows = [row for row in results if isinstance(row, dict)]
     observation = {
         "version": BATCH_CONTRACT,
-        "id": uuid.uuid4().hex,
+        "id": batch_id or uuid.uuid4().hex,
         "elapsed_seconds": elapsed_seconds,
         "expected_requests": expected_requests,
         "recorded_requests": len(rows),

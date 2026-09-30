@@ -180,7 +180,19 @@ export function Detail({
   useEffect(() => {
     if (!job.result_run_id || !activeStates.has(job.status)) return;
     let alive = true;
+    let summaryLoading = false;
     const timer = window.setInterval(() => {
+      if (job.test_type === "stability" && !summaryLoading) {
+        summaryLoading = true;
+        void api<Summary>(token, `/api/v1/jobs/${job.job_id}/summary`)
+          .then((data) => {
+            if (alive) setSummary(data);
+          })
+          .catch(() => {})
+          .finally(() => {
+            summaryLoading = false;
+          });
+      }
       const current = resultsRef.current;
       const lastId = current.length ? current[current.length - 1].id : 0;
       api<{ items: RequestResult[] }>(
@@ -201,7 +213,7 @@ export function Detail({
       alive = false;
       window.clearInterval(timer);
     };
-  }, [job.job_id, job.result_run_id, job.status, token]);
+  }, [job.job_id, job.result_run_id, job.status, job.test_type, token]);
 
   // 执行日志：行号游标增量轮询（活动任务每 2 秒, 完成的任务拉一次全量）
   useEffect(() => {
@@ -456,7 +468,9 @@ export function Detail({
                 : "本次运行包含暂停"}
           </strong>
           <p>
-            已完成的请求不会重跑。暂停在请求组之间生效，单请求计时不包含等待时间；暂停期间仍保留当前执行资源。
+            {job.test_type === "stability"
+              ? "先停止发起新请求，待在途请求结束后暂停；恢复后继续剩余有效测试时长。时间轴保留暂停间隔，系统墙钟速率包含暂停等待。"
+              : "已完成的请求不会重跑。暂停在请求组之间生效，单请求计时不包含等待时间；暂停期间仍保留当前执行资源。"}
           </p>
           <span>
             暂停 {job.pause_count} 次 · 已累计 {formatNumber(pausedSeconds, 1)}{" "}

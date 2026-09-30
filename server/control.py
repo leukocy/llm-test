@@ -18,6 +18,7 @@ PAUSABLE_TEST_TYPES = frozenset(
         "matrix",
         "custom_text",
         "dataset",
+        "stability",
     }
 )
 
@@ -47,3 +48,18 @@ class JobControl:
             elif job["status"] != RunStatus.PAUSED.value:
                 raise LeaseLost(self.job_id)
             await asyncio.sleep(0.2)
+
+    def pause_requested(self) -> bool:
+        """Stop continuous admission before acknowledging a drained pause."""
+        job = self.store.get(self.job_id)
+        if (
+            job["lease_owner"] != self.worker_id
+            or job["lease_until"] is None
+            or job["lease_until"] < time.time()
+        ):
+            raise LeaseLost(self.job_id)
+        if is_stop_requested() or job["status"] == RunStatus.CANCELLING.value:
+            raise asyncio.CancelledError
+        if job["status"] not in {"running", "pausing", "paused"}:
+            raise LeaseLost(self.job_id)
+        return job["status"] in {"pausing", "paused"}

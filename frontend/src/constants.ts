@@ -316,6 +316,7 @@ export const activeStates = new Set([
   "cancelling",
 ]);
 export const pausableTypes = new Set([
+  "stability",
   "concurrency",
   "prefill",
   "segmented_prefill",
