@@ -1216,13 +1216,18 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             raise HTTPException(409, str(exc)) from exc
 
     @app.get("/api/v1/jobs/{job_id}/figure", dependencies=[auth])
-    def job_figure(job_id: str):
+    def job_figure(
+        job_id: str,
+        metric: str = Query("ttft", pattern="^(ttft|tpot|tps|prefill_speed|total_time)$"),
+        view: str = Query("comparison", pattern="^(comparison|profile|heatmap)$"),
+        statistic: str = Query("median", pattern="^(median|mean|p95|p99|min|max)$"),
+    ):
         job = job_or_404(job_id)
         if job["result_run_id"] is None:
             raise HTTPException(409, "尚无性能观测可供绘图")
         summary = performance_summary(job)
         try:
-            return performance_report_figure(job, summary)
+            return performance_report_figure(job, summary, metric, view=view, statistic=statistic)
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
 

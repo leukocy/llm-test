@@ -6,6 +6,7 @@ import json
 from html import escape
 from typing import Any
 
+from server.scenario_reports import METRICS, profile_svg, scenario_analysis
 from server.specs import REPORT_ENVIRONMENT_FIELDS
 
 REPORT_ENVIRONMENT_SCOPES = {
@@ -48,7 +49,7 @@ def report_environment_markdown(environment: dict[str, Any] | None) -> str:
     for key, label in REPORT_ENVIRONMENT_FIELDS.items():
         value = environment["fields"].get(key)
         if value:
-            safe = escape(_md(value), quote=False)
+            safe = _md(value)
             for char in "`*_[]":
                 safe = safe.replace(char, f"\\{char}")
             lines.append(f"| {label} | {safe} |")
@@ -56,11 +57,14 @@ def report_environment_markdown(environment: dict[str, Any] | None) -> str:
 
 
 def _md(value: Any) -> str:
-    return (
-        str(value if value is not None else "—")
-        .replace("\\", "\\\\")
-        .replace("|", "\\|")
-        .replace("\n", " ")
+    return escape(
+        (
+            str(value if value is not None else "—")
+            .replace("\\", "\\\\")
+            .replace("|", "\\|")
+            .replace("\n", " ")
+        ),
+        quote=False,
     )
 
 
@@ -118,7 +122,7 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
         return "—" if value is None else f"{value * 100:.1f}%"
 
     def token_list(values: list[str]) -> str:
-        safe = escape(_md(", ".join(values)), quote=False)
+        safe = _md(", ".join(values))
         for char in "`*_[]":
             safe = safe.replace(char, f"\\{char}")
         return safe
@@ -188,6 +192,28 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
     lines.extend(
         f"- 数据质量：{_md(note)}" for note in summary.get("data_quality", {}).get("warnings", [])
     )
+    analysis = scenario_analysis(summary)
+    lines.extend(["", "## 场景分析：" + analysis["title"], ""])
+    lines.extend("- " + _md(item["text"]) for item in analysis["observations"])
+    lines.extend("- " + note for note in analysis["notes"])
+    lines.extend(
+        [
+            "",
+            "### 完整指标切片",
+            "",
+            "| 条件 | 指标 | 有效 n | 均值 | p50 | p95 | p99 | 最小 | 最大 | 单位 |",
+            "|---|---|---:|---:|---:|---:|---:|---:|---:|---|",
+        ]
+    )
+    for group in summary["groups"]:
+        for key, (_, abbreviation, unit) in METRICS.items():
+            value = group["metrics"][key]
+            stats = " | ".join(
+                number(value[stat]) for stat in ["mean", "median", "p95", "p99", "min", "max"]
+            )
+            lines.append(
+                f"| {_md(group['label'])} | {abbreviation} | {value['count']} | {stats} | {unit} |"
+            )
     return (
         "\n".join(lines)
         + "\n"
@@ -293,6 +319,14 @@ def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
         if expected is not None
         else f"{record_source}已记录 {integrity['recorded_requests']} 次请求；计划请求数未知"
     )
+    analysis = scenario_analysis(summary)
+    scenario_html = (
+        f"<h2>场景分析：{cell(analysis['title'])}</h2><ul>"
+        + "".join(f"<li>{cell(item['text'])}</li>" for item in analysis["observations"])
+        + "".join(f"<li>{cell(note)}</li>" for note in analysis["notes"])
+        + "</ul><h2>指标图形 · p50</h2>"
+        + "".join(profile_svg(summary, key) for key in METRICS)
+    )
     return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LLM Test 报告 · {cell(job["job_id"])}</title>
@@ -315,6 +349,8 @@ table {{ border-collapse:collapse; width:100%; margin:24px 0; }}
 th,td {{ text-align:left; border-bottom:1px solid #dce5f2; padding:13px 10px; }}
 th {{ color:#536780; font-size:13px; }}
 code {{ overflow-wrap:anywhere; }}
+figure {{ margin:24px 0; break-inside:avoid; }} figure svg {{ width:100%; height:auto; }}
+figcaption {{ font-size:13px; color:#536780; }}
 @media print {{ body {{ background:white; }} main {{ margin:0; box-shadow:none; padding:0; }} }}
 </style></head><body><main>
 <div class="eyebrow">LLM TEST / MEASUREMENT REPORT</div>
@@ -336,6 +372,7 @@ code {{ overflow-wrap:anywhere; }}
 {history_origin_html(summary)}
 {report_environment_html(summary.get("report_environment"))}
 {tokenizer_installation_html(summary.get("tokenizer_installation"))}
+{scenario_html}
 {"<h2>数据质量提示</h2><ul>" + quality_warnings + "</ul>" if quality_warnings else ""}
 <h2>方法与限制</h2><ul>{notes}</ul>
 <p>成功率区间：{cell(overall["success_rate_ci95"])}；指标契约：{cell(summary["metric_contract_version"])}。</p>

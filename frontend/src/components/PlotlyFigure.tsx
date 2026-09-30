@@ -100,8 +100,17 @@ export function PlotlyFigure({
     void plotly.react(el, figure).catch((exc) => {
       if (active) setError(exc instanceof Error ? exc.message : "图表渲染失败");
     });
+    const observer = new ResizeObserver(() => {
+      if (active && el.clientWidth > 0)
+        void plotly.Plots.resize(el).catch((exc) => {
+          if (active)
+            setError(exc instanceof Error ? exc.message : "图表缩放失败");
+        });
+    });
+    observer.observe(el);
     return () => {
       active = false;
+      observer.disconnect();
       plotly.purge(el);
     };
   }, [plotly, figure]);

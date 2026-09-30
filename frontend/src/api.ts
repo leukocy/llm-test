@@ -167,6 +167,12 @@ export type ReportEnvironment = {
   >;
 };
 export type Summary = {
+  scenario_analysis?: {
+    title: string;
+    axis: string;
+    notes: string[];
+    observations: { metric: string; text: string }[];
+  };
   metric_contract_version: string;
   integrity: {
     verified: boolean;

@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from config.tokenizer_paths import describe_tokenizer_installation
 from core.benchmark.metrics import METRIC_CONTRACT_VERSION
+from server.scenario_reports import scenario_analysis
 from server.specs import describe_report_environment
 
 NUMERIC_FIELDS = ("ttft", "tpot", "tps", "total_time", "prefill_speed")
@@ -258,6 +259,17 @@ def run_summary(
         for cell in (protocol or {}).get("cells", [])
         if isinstance(cell, dict) and isinstance(cell.get("label"), str)
     }
+    plan_fields = {
+        "concurrency_level": "concurrency",
+        "input_tokens_target": "input_tokens_target",
+        "context_length_target": "input_tokens_target",
+    }
+    planned_by_key = {
+        tuple(cell.get(plan_fields[field]) for field in fields): cell
+        for cell in planned_by_label.values()
+        if all(isinstance(cell.get(plan_fields[field]), int) for field in fields)
+    }
+    observed_plan_labels: set[str] = set()
     quality_warnings: list[str] = []
     if control.get("pause_count", 0):
         quality_warnings.append(
@@ -273,7 +285,9 @@ def run_summary(
         key=lambda pair: tuple((item is None, item if item is not None else 0) for item in pair[0]),
     ):
         label = group_label(key)
-        planned = planned_by_label.get(label)
+        planned = planned_by_key.get(key) or planned_by_label.get(label)
+        if planned:
+            observed_plan_labels.add(planned["label"])
         target = planned.get("input_tokens_target") if planned else None
         actual_tokens = [
             float(row["prefill_tokens"])
@@ -288,6 +302,7 @@ def run_summary(
         )
         slice_data = {
             "label": label,
+            "dimensions": dict(zip(fields, key, strict=True)),
             **describe_observations(group),
             "planned_requests": planned.get("measured_requests") if planned else None,
             "input_tokens": {
@@ -307,13 +322,13 @@ def run_summary(
         if len(group) < 20:
             quality_warnings.append(f"{label} 仅 {len(group)} 个样本，尾部分位数分辨率有限。")
     for label, planned in planned_by_label.items():
-        if not any(group["label"] == label for group in sliced):
+        if label not in observed_plan_labels:
             integrity_reasons.append(f"{label} 计划 {planned['measured_requests']} 次，实际 0 次。")
     token_sources = sorted({row["token_source"] for row in rows if row["token_source"]})
     token_methods = sorted({row["token_calc_method"] for row in rows if row["token_calc_method"]})
     if len(token_sources) > 1 or len(token_methods) > 1:
         quality_warnings.append("本次运行混用了不同的 token 来源或算法；比较前需核对口径。")
-    return {
+    summary = {
         "metric_contract_version": version,
         "integrity": {
             "verified": not integrity_reasons,
@@ -348,6 +363,8 @@ def run_summary(
             "跨运行对比仍须核对硬件、模型配置、工作负载和 token 来源。",
         ],
     }
+    summary["scenario_analysis"] = scenario_analysis(summary)
+    return summary
 
 
 def run_results(
