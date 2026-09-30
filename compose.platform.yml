@@ -22,6 +22,7 @@ services:
       XDG_CACHE_HOME: /app/cache
       TIKTOKEN_CACHE_DIR: /app/cache/tiktoken
       LLM_TEST_TOKENIZER_DOWNLOAD_ROOT: /app/cache/tokenizers
+      LLM_TEST_HISTORY_ROOT: /app/results/history
     volumes: &platform-volumes
     - platform-data:/app/data
     - platform-results:/app/results

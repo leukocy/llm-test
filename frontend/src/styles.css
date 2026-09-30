@@ -2608,6 +2608,120 @@ textarea:focus {
   justify-content: flex-end;
   padding: 6px 0;
 }
+
+.history-csv,
+.history-csv > *,
+.history-csv .surface {
+  min-width: 0;
+}
+.history-csv .section-head > div:first-child {
+  display: block;
+}
+.history-csv .section-head p,
+.history-csv .note {
+  color: #718298;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.history-csv label:not(.checkbox-label) {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  font-size: 12px;
+  color: #667a8e;
+}
+.history-csv input:not([type="checkbox"]),
+.history-csv select {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid #dbe4ee;
+  border-radius: 8px;
+  background: #fff;
+  color: #26394c;
+}
+.history-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+.history-file-name,
+.history-origin code {
+  overflow-wrap: anywhere;
+}
+.history-file-name {
+  font-size: 13px;
+  color: #536780;
+  line-height: 1.8;
+}
+.history-origin code {
+  display: block;
+  font-size: 11px;
+  color: #60748e;
+  margin: 8px 0;
+}
+.history-origin {
+  border-color: #efd6a4;
+  background: #fffcf5;
+}
+.history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+.history-actions .danger {
+  border-color: #edd3d4;
+  background: #fff7f7;
+}
+.history-message {
+  padding: 16px 20px;
+  border: 1px solid #c6e8df;
+  border-radius: 9px;
+  color: #217461;
+  background: #effaf6;
+  font-size: 13px;
+}
+.history-csv .table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.history-csv table {
+  min-width: 100%;
+  width: max-content;
+}
+.history-csv td {
+  max-width: 320px;
+  overflow-wrap: anywhere;
+}
+.history-csv details {
+  margin-top: 20px;
+  color: #60748e;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.history-csv pre {
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 18px;
+  border-radius: 8px;
+  background: #f7f9fc;
+}
+@media (max-width: 800px) {
+  .history-upload-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .history-csv .section-head {
+    flex-wrap: wrap;
+  }
+  .history-csv .section-head > label {
+    width: 100%;
+  }
+}
 @media (max-width: 800px) {
   .welcome-guide {
     align-items: flex-start;

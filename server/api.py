@@ -43,6 +43,8 @@ from server.figures import (
     run_detail_figures,
     trend_figure,
 )
+from server.history import MAX_CSV_BYTES
+from server.history_api import history_router
 from server.model_discovery import ModelDiscoveryError, discover_models, measure_reference_latency
 from server.quality_export import quality_errors_csv
 from server.reports import (
@@ -250,6 +252,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             )
 
     auth = Depends(authenticate)
+    app.include_router(history_router(settings), dependencies=[auth])
 
     def resolve_endpoint(endpoint_id: str) -> Endpoint:
         try:
@@ -261,7 +264,27 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
-        response = await call_next(request)
+        response = None
+        if request.method == "POST" and request.url.path == "/api/v1/history/uploads":
+            try:
+                authenticate(request.headers.get("authorization"))
+            except HTTPException as exc:
+                response = JSONResponse(
+                    {"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers
+                )
+            if response is None:
+                try:
+                    length = int(request.headers.get("content-length", "-1"))
+                except ValueError:
+                    length = -1
+                if length < 0 or request.headers.get("transfer-encoding"):
+                    response = JSONResponse(
+                        {"detail": "上传需提供有效 Content-Length"}, status_code=411
+                    )
+                elif length > MAX_CSV_BYTES + 1024 * 1024:
+                    response = JSONResponse({"detail": "上传请求超过 11 MiB 上限"}, status_code=413)
+        if response is None:
+            response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
