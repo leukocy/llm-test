@@ -19,6 +19,7 @@ from server.history import (
     SavedCsvHistory,
 )
 from server.reports import render_html, render_markdown
+from server.scenario_reports import METRICS
 from server.settings import Settings
 from server.specs import StrictSpec
 
@@ -100,11 +101,15 @@ def history_router(settings: Settings) -> APIRouter:
     def figure(
         identifier: str,
         revision: str | None = None,
-        metric: Literal["ttft", "tps", "tpot", "total_time", "prefill_speed"] = "ttft",
+        metric: str = Query("ttft", pattern="^(" + "|".join(METRICS) + ")$"),
+        view: str = Query("comparison", pattern="^(comparison|profile|heatmap)$"),
+        statistic: str = Query("median", pattern="^(median|mean|p95|p99|min|max)$"),
     ):
         data = call(history.load, identifier, revision=revision)
         try:
-            return performance_report_figure(data["job"], data["summary"], metric)
+            return performance_report_figure(
+                data["job"], data["summary"], metric, view=view, statistic=statistic
+            )
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
 

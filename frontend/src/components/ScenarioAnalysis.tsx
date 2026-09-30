@@ -13,6 +13,13 @@ export const metrics = {
   system_output_wall: "系统输出吞吐 · token/s",
   system_total_wall: "系统总吞吐 · token/s",
   system_qpm: "成功请求处理速率 QPM · req/min",
+  phase_input: "客户端输入阶段估计（含缓存）· token/s",
+  phase_input_uncached_api: "客户端未缓存输入阶段估计（API）· token/s",
+  phase_input_uncached_inferred:
+    "客户端未缓存输入阶段估计（含 TTFT 推断）· token/s",
+  phase_output: "客户端输出阶段估计 · token/s",
+  phase_total: "客户端请求窗口总吞吐 · token/s",
+  phase_qpm: "客户端请求窗口成功处理速率 · req/min",
   cache_tokens_api: "API 缓存命中 token · token",
   cache_rate_api: "API 缓存命中比例 · %",
   cache_tokens_inferred: "TTFT 推断缓存 token · token",
@@ -40,10 +47,14 @@ export function ScenarioAnalysis({
   job,
   summary,
   token,
+  figureEndpoint,
+  revision,
 }: {
-  job: Job;
+  job: Pick<Job, "job_id">;
   summary: Summary;
   token: string;
+  figureEndpoint?: string;
+  revision?: string;
 }) {
   const [metric, setMetric] = useState("ttft");
   const [view, setView] = useState("profile");
@@ -54,14 +65,20 @@ export function ScenarioAnalysis({
   const [error, setError] = useState<{ key: string; text: string } | null>(
     null,
   );
-  const key = `${job.job_id}:${metric}:${view}:${statistic}`;
+  const endpoint = figureEndpoint || `/api/v1/jobs/${job.job_id}/figure`;
+  const key = `${endpoint}:${revision || ""}:${metric}:${view}:${statistic}`;
+  useEffect(() => {
+    setMetric("ttft");
+    setView("profile");
+    setStatistic("median");
+  }, [endpoint]);
   useEffect(() => {
     const controller = new AbortController();
     setResult(null);
     setError(null);
     void api<Result>(
       token,
-      `/api/v1/jobs/${job.job_id}/figure?${new URLSearchParams({ metric, view, statistic })}`,
+      `${endpoint}?${new URLSearchParams({ metric, view, statistic, ...(revision ? { revision } : {}) })}`,
       { signal: controller.signal },
     )
       .then((data) => {
@@ -75,7 +92,7 @@ export function ScenarioAnalysis({
           });
       });
     return () => controller.abort();
-  }, [token, job.job_id, metric, view, statistic, key, summary]);
+  }, [token, endpoint, revision, metric, view, statistic, key, summary]);
   const current = result?.key === key ? result.data : null;
   const currentError = error?.key === key ? error.text : "";
   const analysis = summary.scenario_analysis || current?.analysis;
@@ -126,7 +143,7 @@ export function ScenarioAnalysis({
           >
             <option value="profile">条件曲线</option>
             <option value="comparison">p50 / p95 对照</option>
-            {job.test_type === "throughput_matrix" && (
+            {summary.run.test_type === "throughput_matrix" && (
               <option value="heatmap">矩阵热力图</option>
             )}
           </select>
@@ -157,6 +174,35 @@ export function ScenarioAnalysis({
             {summary.extended_observations.system.untagged_requests}
             。系统速率使用墙钟窗口，包含失败等待与客户端开销。
           </p>
+        ) : metric.startsWith("phase_") ? (
+          <p className="muted" role="status">
+            阶段时钟有效批次{" "}
+            {summary.extended_observations.phase?.valid_batches || 0}
+            ；缺少时钟{" "}
+            {summary.extended_observations.phase?.missing_clock_batches || 0}
+            ；无效时钟{" "}
+            {summary.extended_observations.phase?.invalid_clock_batches || 0}
+            ；首 Token 记录不齐{" "}
+            {summary.extended_observations.phase?.missing_first_token_batches ||
+              0}
+            ；无成功请求{" "}
+            {summary.extended_observations.phase?.no_success_batches || 0}
+            ；非正窗口（输入/输出/总计）{" "}
+            {summary.extended_observations.phase?.nonpositive_windows.input ||
+              0}
+            /
+            {summary.extended_observations.phase?.nonpositive_windows.output ||
+              0}
+            /
+            {summary.extended_observations.phase?.nonpositive_windows.total ||
+              0}
+            ；缺少批次来源的请求{" "}
+            {summary.extended_observations.system.untagged_requests}
+            ；排除不完整/冲突批次{" "}
+            {summary.extended_observations.system.invalid_batches}。
+            客户端成功请求窗口包含网络和排队，失败等待不进入；不是引擎内部阶段速率。
+            非正窗口留空；输入含缓存、API 未缓存与 TTFT 推断分别统计。
+          </p>
         ) : metric.startsWith("cache_") || metric.startsWith("ttft_") ? (
           <p className="muted">
             已采集 API 缓存记录{" "}
@@ -179,7 +225,9 @@ export function ScenarioAnalysis({
         ；n 为
         {metric.startsWith("system_")
           ? "测量批次数（batch-wall-v1）"
-          : "有效请求数"}
+          : metric.startsWith("phase_")
+            ? "测量批次数（client-phase-v1）"
+            : "有效请求数"}
         。PNG 保留样本数、完整性、指标口径与来源。
       </p>
       {currentError ? (

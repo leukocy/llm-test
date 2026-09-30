@@ -6,6 +6,7 @@ from html import escape
 from typing import Any
 
 from server.extended_analytics import CACHE_METRICS, SYSTEM_METRICS
+from server.phase_analytics import PHASE_METRICS
 
 METRICS = {
     "ttft": ("首字延迟", "TTFT", "s"),
@@ -14,12 +15,13 @@ METRICS = {
     "prefill_speed": ("逐请求输入处理速度", "Prefill speed", "token/s"),
     "total_time": ("请求总耗时", "Total time", "s"),
     **SYSTEM_METRICS,
+    **PHASE_METRICS,
     **CACHE_METRICS,
 }
 
 
 def sampling_unit(metric: str) -> str:
-    return "测量批次" if metric in SYSTEM_METRICS else "请求"
+    return "测量批次" if metric in SYSTEM_METRICS or metric in PHASE_METRICS else "请求"
 
 
 STATISTICS = {
@@ -91,6 +93,10 @@ def scenario_analysis(summary: dict[str, Any]) -> dict[str, Any]:
             "系统输入/输出/总吞吐与 QPM 使用 batch-wall-v1：成功 token / 完整批次墙钟窗口；n 为批次数，每批一次，不按请求重复加权。QPM = 成功请求数 / 窗口秒数 × 60。",
             "批次窗口包含调度、失败等待和客户端开销，不扣延迟校准；不含批次外的提示词准备、预热或暂停。输入吞吐包含缓存 token；这是墙钟吞吐，不是引擎阶段吞吐或峰值容量。",
             "缺少批次来源、成员不齐或成员元数据冲突时不推算系统吞吐。历史重复的 system_* 字段不能代替该口径。",
+            "client-phase-v1 按完整批次复算客户端阶段估计：输入窗口为最晚首 Token − 最早发送 − 延迟偏移；输出窗口为最晚成功结束 − 最早首 Token；总窗口为最晚成功结束 − 最早发送 − 延迟偏移。QPM = 成功请求数 / 总窗口 × 60。",
+            "阶段估计使用成功请求的客户端单调时钟，每批一次。包含网络和服务商排队，不是引擎内部 Prefill/Decode 计时；成功请求窗口不包含失败等待。偏移扣除后窗口非正时不钳位、不产生速率。",
+            "阶段输出分子为完整输出 token，含首 Token；逐请求 TPS 的跳过首 Token 选项不改变该分子。输入含缓存与未缓存分开；未缓存分子必须有全部成功请求的明确缓存来源和对应 token 分母，API 与含 TTFT 推断的估计分别统计。",
+            "阶段时钟缺失、首 Token 缺失或批次成员不完整时，相关指标为空；不从旧 system_* 字段或校准后的 TTFT 反推原时钟。恢复后的独立窗口分别采样，不合并跨中断阶段时间。",
             "API 与 TTFT 推断的缓存值分开；API 明确返回零才计零命中，缺字段为未知。API 比例只使用 API prompt token 分母，未采集分母不补零。",
             "缓存分层 TTFT 是 API 明确零命中 / 有命中的观测对照，不证明缓存因果收益。系统速率和明确缓存零值是有效观测。",
         ]
@@ -99,12 +105,17 @@ def scenario_analysis(summary: dict[str, Any]) -> dict[str, Any]:
     if extended:
         system = extended["system"]
         cache = extended["cache"]
+        phase = extended.get("phase")
         notes.extend(
             [
                 f"本报告完整测量批次 {system['valid_batches']}；排除不完整/冲突批次 {system['invalid_batches']}；缺少批次来源的请求 {system['untagged_requests']}。",
                 f"成功请求中，API 缓存记录 {cache['sources'].get('API', 0)}；TTFT 推断记录 {cache['sources'].get('TTFT_inferred', 0)}；缓存来源未知 {cache['unknown_successes']}；无效缓存观测 {cache['invalid_observations']}。",
             ]
         )
+        if phase:
+            notes.append(
+                f"阶段时钟有效批次 {phase['valid_batches']}；缺少时钟 {phase['missing_clock_batches']}；无效时钟 {phase['invalid_clock_batches']}；首 Token 记录不齐 {phase['missing_first_token_batches']}；无成功请求 {phase['no_success_batches']}。"
+            )
     return {"title": title, "axis": axis, "notes": notes, "observations": observations}
 
 

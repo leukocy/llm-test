@@ -259,7 +259,14 @@ class OpenAIProvider(LLMProvider):
         try:
             # 创建流式请求任务
             async def stream_request():
-                nonlocal first_token_time, usage_info, full_response_content, reasoning_content, raw_stream_chunks, token_timestamps, start_time
+                nonlocal \
+                    first_token_time, \
+                    usage_info, \
+                    full_response_content, \
+                    reasoning_content, \
+                    raw_stream_chunks, \
+                    token_timestamps, \
+                    start_time
 
                 # 等待同步屏障（如果存在），确保所有并发请求近乎同时发送
                 if barrier is not None:
@@ -401,6 +408,7 @@ class OpenAIProvider(LLMProvider):
 
             return {
                 "created_at": created_at,
+                "timing_clock": "client_monotonic",
                 "start_time": start_time,
                 "first_token_time": first_token_time,
                 "end_time": end_time,

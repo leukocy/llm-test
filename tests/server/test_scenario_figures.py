@@ -82,6 +82,9 @@ def test_profiles_have_numeric_scenario_axes(tmp_path, kind, field, axis):
         "title": {"text": axis},
         "type": "linear",
         "automargin": True,
+        "tickmode": "array",
+        "tickvals": [2, 10, 100],
+        "ticktext": ["2", "10", "100"],
     }
     notes = " ".join(result["analysis"]["notes"])
     if kind == "stability":

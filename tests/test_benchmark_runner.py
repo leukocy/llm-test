@@ -388,6 +388,7 @@ class TestBenchmarkRunner:
             async def get_completion(self, *args, **kwargs):
                 return {
                     "created_at": 1000.0,
+                    "timing_clock": "client_monotonic",
                     "start_time": 100.0,
                     "first_token_time": 100.4,
                     "end_time": 101.6,
@@ -408,6 +409,11 @@ class TestBenchmarkRunner:
         assert result["tpot"] == pytest.approx(0.8 / 2)
         assert result["metric_contract_version"] == METRIC_CONTRACT_VERSION
         assert result["token_source"] == "API"
+
+        phase = result["extra_metrics"]["request_phase"]
+        assert phase["first_token_seconds"] == 100.4
+        assert phase["end_seconds"] == 101.6
+        assert phase["latency_offset_seconds"] == 0
 
     @pytest.mark.asyncio
     async def test_segmented_prefill_keeps_decode_interval_contract(self, runner):

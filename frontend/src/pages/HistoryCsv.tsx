@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { Figure } from "plotly.js-dist-min";
 import { api, downloadFile, type Summary } from "../api";
 import { Empty, MetricCard } from "../components";
-import { PlotlyFigure } from "../components/PlotlyFigure";
+import { ScenarioAnalysis } from "../components/ScenarioAnalysis";
 import { date, formatNumber, formatPercent, labels } from "../constants";
 
 type Entry = {
@@ -19,6 +18,7 @@ type Entry = {
 };
 type Catalog = { items: Entry[]; truncated: boolean; skipped: number };
 type SavedReport = {
+  job: { job_id: string; test_type: string };
   entry: Entry;
   summary: Summary & {
     origin: {
@@ -36,23 +36,12 @@ type SavedReport = {
     limit: number;
   };
 };
-const METRICS = [
-  ["ttft", "首字延迟 · s"],
-  ["tps", "逐请求生成速度 · token/s"],
-  ["tpot", "每 token 延迟 · s"],
-  ["total_time", "请求总耗时 · s"],
-  ["prefill_speed", "输入处理速度 · token/s"],
-] as const;
-
 export function HistoryCsv({ token }: { token: string }) {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [report, setReport] = useState<SavedReport | null>(null);
   const [params, setParams] = useSearchParams();
   const [refresh, setRefresh] = useState(0);
   const [offset, setOffset] = useState(0);
-  const [metric, setMetric] = useState("ttft");
-  const [figure, setFigure] = useState<Figure | null>(null);
-  const [figureError, setFigureError] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -104,30 +93,6 @@ export function HistoryCsv({ token }: { token: string }) {
       active = false;
     };
   }, [token, identifier, loaded, offset, refresh]);
-
-  useEffect(() => {
-    setFigure(null);
-    setFigureError("");
-    if (!report) return;
-    let active = true;
-    const query = new URLSearchParams({
-      metric,
-      revision: report.entry.revision,
-    });
-    void api<{ figure: Figure }>(
-      token,
-      `/api/v1/history/${report.entry.id}/figure?${query}`,
-    )
-      .then((data) => {
-        if (active) setFigure(data.figure);
-      })
-      .catch((exc) => {
-        if (active) setFigureError(exc.message);
-      });
-    return () => {
-      active = false;
-    };
-  }, [token, metric, report]);
 
   async function upload() {
     if (!csvFile) return;
@@ -223,31 +188,6 @@ export function HistoryCsv({ token }: { token: string }) {
   }
 
   const overall = report?.summary.overall;
-  const inlineFigure = figure
-    ? {
-        ...figure,
-        layout: {
-          ...figure.layout,
-          width: undefined,
-          autosize: true,
-          height: 440,
-          title: {
-            text: `${METRICS.find(([value]) => value === metric)?.[1]}<br><sup>p50 / p95 · 柱顶 n 为有效样本数</sup>`,
-            x: 0.06,
-            xanchor: "left",
-            font: { size: 14 },
-          },
-          annotations: [],
-          legend: {
-            orientation: "h",
-            x: 0,
-            xanchor: "left",
-            y: -0.3,
-          },
-          margin: { l: 65, r: 25, t: 85, b: 100 },
-        },
-      }
-    : null;
   return (
     <div className="page-grid history-csv">
       <div className="page-head">
@@ -496,41 +436,13 @@ export function HistoryCsv({ token }: { token: string }) {
               note={`${overall.metrics.tps.count} 个有效成功样本`}
             />
           </section>
-          <section className="surface">
-            <div className="section-head">
-              <div>
-                <h2>重绘统计图</h2>
-                <p>成功且有限、正值的观测 · p50 / p95 与有效样本数</p>
-              </div>
-              <label>
-                绘图指标
-                <select
-                  aria-label="历史绘图指标"
-                  value={metric}
-                  onChange={(event) => setMetric(event.target.value)}
-                >
-                  {METRICS.map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            {figureError ? (
-              <Empty title="该指标没有可用图形" text={figureError} />
-            ) : (
-              <PlotlyFigure
-                figure={inlineFigure}
-                exportFigure={figure || undefined}
-                ariaLabel="历史 CSV 统计图"
-              />
-            )}
-            <p className="note">
-              仅使用已知成功且有限、正值的观测。各指标的有效样本数可能不同；PNG
-              报告包含源文件哈希与测量限制。
-            </p>
-          </section>
+          <ScenarioAnalysis
+            job={report.job}
+            summary={report.summary}
+            token={token}
+            figureEndpoint={`/api/v1/history/${report.entry.id}/figure`}
+            revision={report.entry.revision}
+          />
           <section className="surface">
             <div className="section-head">
               <div>

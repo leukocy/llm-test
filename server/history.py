@@ -18,7 +18,10 @@ from pathlib import Path
 from typing import Any
 
 from config.test_types import TEST_TYPE_SPECS
+from core.benchmark.phase_observations import PHASE_FIELDS
 from server.analytics import GROUP_AXIS, GROUP_FIELDS, NUMERIC_FIELDS, describe_observations
+from server.extended_analytics import extended_observations
+from server.scenario_reports import scenario_analysis
 
 MAX_CSV_BYTES = 10 * 1024 * 1024
 MAX_METADATA_BYTES = 65536
@@ -174,6 +177,10 @@ def _parse(
                 "input_tokens_target",
                 "context_length_target",
                 "concurrency_level",
+                "request_index",
+                "cache_hit_tokens",
+                "api_prefill",
+                "effective_prefill_tokens",
             ):
                 original = item.get(
                     name, item.get("concurrency", "") if name == "concurrency_level" else ""
@@ -191,8 +198,44 @@ def _parse(
                 except (ValueError, OverflowError):
                     row[name] = None
                     warnings.add(f"{name} 包含无效或非有限数值，已标为未采集；未以零填充。")
-            for name in ("token_source", "token_calc_method"):
+            for name in ("token_source", "token_calc_method", "cache_hit_source", "batch_id"):
                 row[name] = item.get(name, "")[:200] or None
+            evidence = {}
+            for name, fields in (
+                ("request_phase", PHASE_FIELDS),
+                (
+                    "system_measurement",
+                    (
+                        "version",
+                        "id",
+                        "elapsed_seconds",
+                        "expected_requests",
+                        "recorded_requests",
+                        "index_scope",
+                    ),
+                ),
+                (
+                    "timing_observation",
+                    (
+                        "version",
+                        "id",
+                        "index",
+                        "window_state",
+                        "expected_requests",
+                        "window_seconds",
+                    ),
+                ),
+            ):
+                explicit = json.loads(item[name + "_json"]) if item.get(name + "_json") else None
+                embedded = extra.get(name)
+                if explicit is not None and embedded is not None and explicit != embedded:
+                    raise HistoryError(f"CSV 第 {index} 行 {name} 来源互相冲突")
+                value = explicit if explicit is not None else embedded
+                if value is not None:
+                    if not isinstance(value, dict):
+                        raise HistoryError(f"CSV 第 {index} 行 {name} 必须是 JSON 对象")
+                    evidence[name] = {key: value.get(key) for key in fields}
+            row["extra_metrics"] = json.dumps(evidence)
             rows.append(row)
         if not rows:
             raise HistoryError("CSV 只有表头或没有请求记录")
@@ -204,6 +247,11 @@ def _parse(
 def _describe(rows: list[dict[str, Any]]) -> dict[str, Any]:
     known = [row for row in rows if row["outcome"] != "unknown"]
     result = describe_observations(known)
+    extended = extended_observations(known)
+    result["metrics"].update(extended["metrics"])
+    result["extended_observations"] = {
+        key: value for key, value in extended.items() if key != "metrics"
+    }
     result.update(requests=len(rows), unknown_outcomes=len(rows) - len(known))
     return result
 
@@ -362,6 +410,7 @@ class SavedCsvHistory:
                     else "未记录"
                     for field, value in zip(fields, key, strict=True)
                 ),
+                "dimensions": dict(zip(fields, key, strict=True)),
                 **_describe(group),
             }
             for key, group in grouped.items()
@@ -395,7 +444,7 @@ class SavedCsvHistory:
             "test_type": entry["test_type"],
             "status": "历史文件",
         }
-        summary = {
+        summary: dict[str, Any] = {
             "metric_contract_version": version,
             "integrity": {
                 "verified": False,
@@ -438,6 +487,8 @@ class SavedCsvHistory:
             {key: "[已隐去]" if _SECRET.search(key) else value[:2000] for key, value in row.items()}
             for row in raw_rows[offset : offset + limit]
         ]
+        summary["extended_observations"] = summary["overall"]["extended_observations"]
+        summary["scenario_analysis"] = scenario_analysis(summary)
         return {
             "entry": entry,
             "job": job,

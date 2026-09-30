@@ -1232,7 +1232,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         job_id: str,
         metric: str = Query(
             "ttft",
-            pattern="^(ttft|tpot|tps|prefill_speed|total_time|system_input_wall|system_output_wall|system_total_wall|system_qpm|cache_tokens_api|cache_rate_api|cache_tokens_inferred|cache_rate_inferred|ttft_zero_cache_api|ttft_cache_api)$",
+            pattern="^(ttft|tpot|tps|prefill_speed|total_time|system_input_wall|system_output_wall|system_total_wall|system_qpm|phase_input|phase_input_uncached_api|phase_input_uncached_inferred|phase_output|phase_total|phase_qpm|cache_tokens_api|cache_rate_api|cache_tokens_inferred|cache_rate_inferred|ttft_zero_cache_api|ttft_cache_api)$",
         ),
         view: str = Query("comparison", pattern="^(comparison|profile|heatmap|timeline)$"),
         statistic: str = Query("median", pattern="^(median|mean|p95|p99|min|max)$"),

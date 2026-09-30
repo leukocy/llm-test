@@ -298,6 +298,7 @@ export function profileParameters(
 export const labels: Record<string, string> = Object.fromEntries(
   scenarios.map((item) => [item.id, item.label]),
 );
+labels.throughput_matrix = labels.matrix;
 export const statusLabels: Record<string, string> = {
   queued: "排队中",
   running: "运行中",

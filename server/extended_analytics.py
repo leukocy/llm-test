@@ -10,6 +10,7 @@ from typing import Any
 
 from core.benchmark.batch_observations import BATCH_CONTRACT
 from server.observations import describe_values
+from server.phase_analytics import PHASE_METRICS, collect_phase_estimates, phase_diagnostics
 
 SYSTEM_METRICS = {
     "system_input_wall": ("系统输入吞吐（含缓存）", "Input wall throughput", "token/s"),
@@ -50,7 +51,10 @@ def _tokens(row: dict, field: str) -> float | None:
 
 
 def extended_observations(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    values: dict[str, list[float]] = {key: [] for key in SYSTEM_METRICS | CACHE_METRICS}
+    values: dict[str, list[float]] = {
+        key: [] for key in SYSTEM_METRICS | PHASE_METRICS | CACHE_METRICS
+    }
+    phase = phase_diagnostics()
     batches: dict[str, list[tuple[dict, dict]]] = defaultdict(list)
     untagged = 0
     cache_unknown = cache_invalid = 0
@@ -105,7 +109,7 @@ def extended_observations(rows: list[dict[str, Any]]) -> dict[str, Any]:
             or len(items) != expected
             or obs.get("recorded_requests") != expected
             or any(item[1] != obs for item in items)
-            or {row.get("request_index") for row, _ in items} != set(range(expected))
+            or {_batch_index(row, obs) for row, _ in items} != set(range(expected))
             or any(row.get("batch_id") != obs["id"] for row, _ in items)
             or len(
                 {
@@ -123,6 +127,7 @@ def extended_observations(rows: list[dict[str, Any]]) -> dict[str, Any]:
             continue
         valid_batches += 1
         successes = [row for row, _ in items if not row.get("error")]
+        collect_phase_estimates(successes, elapsed, values, phase, _tokens)
         qpm = len(successes) / elapsed * 60
         if math.isfinite(qpm):
             values["system_qpm"].append(qpm)
@@ -161,4 +166,24 @@ def extended_observations(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "unknown_successes": cache_unknown,
             "invalid_observations": cache_invalid,
         },
+        "phase": phase,
     }
+
+
+def _batch_index(row: dict, observation: dict) -> int | None:
+    if observation.get("index_scope") != "stability_window":
+        index = row.get("request_index")
+        return index if type(index) is int else None
+    timing = json.loads(row.get("extra_metrics") or "{}").get("timing_observation")
+    if (
+        not isinstance(timing, dict)
+        or timing.get("version") != "stability-clock-v1"
+        or timing.get("id") != observation["id"]
+        or timing.get("window_state") != "completed"
+        or timing.get("expected_requests") != observation["expected_requests"]
+        or timing.get("window_seconds") != observation["elapsed_seconds"]
+        or type(timing.get("index")) is not int
+    ):
+        return None
+    index = timing["index"]
+    return index if isinstance(index, int) else None

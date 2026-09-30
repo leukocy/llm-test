@@ -15,6 +15,7 @@ from core.warehouse.charts import (
     collect_distribution_values,
 )
 from server.extended_analytics import SYSTEM_METRICS
+from server.phase_analytics import PHASE_METRICS
 from server.reports import REPORT_ENVIRONMENT_SCOPES
 from server.scenario_reports import (
     METRICS,
@@ -82,6 +83,15 @@ def performance_report_figure(
         system = summary.get("extended_observations", {}).get("system", {})
         footer.append(
             f"batch-wall-v1 · 完整批次 {system.get('valid_batches', 0)} · 排除不完整/冲突批次 {system.get('invalid_batches', 0)} · 未标记请求 {system.get('untagged_requests', 0)}；窗口包含失败等待与客户端开销。输入包含缓存 token。"
+        )
+    elif metric in PHASE_METRICS:
+        phase = summary.get("extended_observations", {}).get("phase", {})
+        footer.extend(
+            [
+                f"client-phase-v1 · 阶段时钟有效批次 {phase.get('valid_batches', 0)} · 缺少时钟 {phase.get('missing_clock_batches', 0)} · 无效时钟 {phase.get('invalid_clock_batches', 0)}；每批一次，不按请求重复加权。",
+                "客户端成功请求阶段估计，含网络与排队；失败等待不进入窗口。含缓存 / API 未缓存 / TTFT 推断分开；不代表引擎内部阶段速率或容量。",
+                "输入与总窗口扣已记录延迟偏移，非正窗口留空；输出分子包含首 Token。精确公式与来源见 HTML / JSON 报告。",
+            ]
         )
     elif metric.startswith("cache_") or metric.startswith("ttft_"):
         footer.append(
@@ -280,7 +290,8 @@ def _scenario_view(figure: dict, summary: dict, metric: str, view: str, statisti
     stat = STATISTICS[statistic]
     layout = figure["layout"]
     layout["title"]["text"] = (
-        layout["title"]["text"].split("<br>")[0] + f"<br>{abbreviation} {stat} ({unit})"
+        layout["title"]["text"].split("<br>")[0]
+        + f"<br>{abbreviation} {stat} ({unit}) · n 的单位：{sampling_unit(metric)}"
     )
     layout["annotations"][0]["text"] = layout["annotations"][0]["text"].replace(
         "柱顶 n 为", "悬停 n 为"
@@ -292,6 +303,13 @@ def _scenario_view(figure: dict, summary: dict, metric: str, view: str, statisti
     }
     layout["height"] = 950
     layout["width"] = 1500
+    if numeric and view == "profile":
+        xs = series[0]["x"]
+        stride = max(1, (len(xs) + 7) // 8)
+        ticks = sorted(set(xs[::stride] + xs[-1:]))
+        layout["xaxis"].update(
+            tickmode="array", tickvals=ticks, ticktext=[f"{value:,}" for value in ticks]
+        )
     if not numeric:
         layout["annotations"][0]["text"] += "<br>结构化条件未记录，横轴使用分类标签。"
     if view == "heatmap":

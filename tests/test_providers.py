@@ -15,6 +15,7 @@ Test重点：
 """
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
@@ -835,10 +836,17 @@ class TestGeminiProvider:
         assert provider.platform == "gemini"
 
     @pytest.mark.asyncio
-    async def test_get_completion_basic_success(self, mock_httpx_client):
+    async def test_get_completion_basic_success(self, mock_httpx_client, monkeypatch):
         """Test基本成功响应"""
         provider = GeminiProvider(
             "https://generativelanguage.googleapis.com", "test-key", "gemini-pro"
+        )
+
+        # Streaming clocks remain monotonic even when the calendar clock has a different origin.
+        stamps = iter([100.0, 100.2, 100.8])
+        monkeypatch.setattr(
+            "core.providers.gemini.time",
+            SimpleNamespace(monotonic=lambda: next(stamps), time=lambda: 2_000_000_000.0),
         )
 
         # Mock streaming response
@@ -865,9 +873,11 @@ class TestGeminiProvider:
 
         assert result["error"] is None
         assert "Hello world!" in result["full_response_content"]
-        assert result["start_time"] is not None
-        assert result["end_time"] is not None
-        assert result["first_token_time"] is not None
+        assert result["start_time"] == 100.0
+        assert result["end_time"] == 100.8
+        assert result["first_token_time"] == 100.2
+        assert result["timing_clock"] == "client_monotonic"
+        assert result["created_at"] == 2_000_000_000.0
 
     @pytest.mark.asyncio
     async def test_get_completion_uses_longer_timeout_for_ultra_long_prompt(

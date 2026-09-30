@@ -157,7 +157,8 @@ class GeminiProvider(LLMProvider):
                 await barrier.wait()
 
             # 在实际发送 HTTP 请求之前记录开始时间，确保并发测试的时间准确性
-            start_time = time.time()
+            created_at = time.time()
+            start_time = time.monotonic()
 
             async with client.stream(
                 "POST",
@@ -202,7 +203,7 @@ class GeminiProvider(LLMProvider):
 
                                     if content:
                                         if first_token_time is None:
-                                            first_token_time = time.time()
+                                            first_token_time = time.monotonic()
                                             ttft_raw = first_token_time - start_time
                                             if log_callback:
                                                 log_callback(
@@ -215,7 +216,7 @@ class GeminiProvider(LLMProvider):
             # 取消注册
             unregister_stream(current_task)
 
-            end_time = time.time()
+            end_time = time.monotonic()
 
             if log_callback:
                 log_callback(
@@ -223,6 +224,8 @@ class GeminiProvider(LLMProvider):
                 )
 
             return {
+                "timing_clock": "client_monotonic",
+                "created_at": created_at,
                 "start_time": start_time,
                 "first_token_time": first_token_time,
                 "end_time": end_time,

@@ -16,6 +16,7 @@ from pydantic import ValidationError
 
 from config.tokenizer_paths import describe_tokenizer_installation
 from core.benchmark.metrics import METRIC_CONTRACT_VERSION
+from core.benchmark.phase_observations import phase_observation
 from server.extended_analytics import extended_observations
 from server.observations import describe_values, percentile
 from server.scenario_reports import scenario_analysis
@@ -485,6 +486,7 @@ def run_results_csv(db_path: str, run_id: int) -> str:
         "prompt_sha256",
         "system_measurement_json",
         "timing_observation_json",
+        "request_phase_json",
     )
     buffer = io.StringIO()
     writer = csv.writer(buffer)
@@ -501,6 +503,7 @@ def run_results_csv(db_path: str, run_id: int) -> str:
                 "prompt_sha256",
                 "system_measurement_json",
                 "timing_observation_json",
+                "request_phase_json",
             }
         )
         conn.execute("BEGIN")
@@ -533,6 +536,10 @@ def run_results_csv(db_path: str, run_id: int) -> str:
                 elif field == "timing_observation_json":
                     timing = timing_observation(row["extra_metrics"])
                     value = json.dumps(timing, ensure_ascii=False) if timing is not None else None
+                elif field == "request_phase_json":
+                    payload = json.loads(row["extra_metrics"] or "{}")
+                    phase = phase_observation(payload.get("request_phase"))
+                    value = json.dumps(phase, ensure_ascii=False) if phase is not None else None
                 elif field == "system_measurement_json":
                     payload = json.loads(row["extra_metrics"] or "{}")
                     observation = (
@@ -548,6 +555,7 @@ def run_results_csv(db_path: str, run_id: int) -> str:
                                     "elapsed_seconds",
                                     "expected_requests",
                                     "recorded_requests",
+                                    "index_scope",
                                 ]
                             },
                             ensure_ascii=False,

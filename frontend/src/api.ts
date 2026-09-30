@@ -215,6 +215,15 @@ export type Summary = {
       unknown_successes: number;
       invalid_observations: number;
     };
+    phase?: {
+      contract: string;
+      valid_batches: number;
+      missing_clock_batches: number;
+      invalid_clock_batches: number;
+      no_success_batches: number;
+      missing_first_token_batches: number;
+      nonpositive_windows: { input: number; output: number; total: number };
+    };
   };
   scenario_analysis?: {
     title: string;

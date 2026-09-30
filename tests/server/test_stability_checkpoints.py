@@ -151,6 +151,8 @@ async def test_real_adapter_recovers_requests_and_remaining_time_without_joining
     assert config["stability_windows"][0]["id"] != config["stability_windows"][1]["id"]
     report = client.get(f"/api/v1/jobs/{job_id}/report", headers=headers).json()["summary"]
     assert report["integrity"]["verified"], report["integrity"]
+    assert report["extended_observations"]["system"]["valid_batches"] == 1
+    assert report["overall"]["metrics"]["system_qpm"]["count"] == 1
     timeline = report["time_series"]
     assert timeline["cross_interruption"] and not timeline["complete"] and not timeline["bins"]
     assert not timeline["conflict"] and timeline["timed_requests"] == len(rows)

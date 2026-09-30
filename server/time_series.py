@@ -144,6 +144,7 @@ def resolve_stability_row(row: dict[str, Any], window: Any) -> dict[str, Any]:
     ):
         extra["system_measurement"] = {
             "version": BATCH_CONTRACT,
+            "index_scope": "stability_window",
             "id": window["id"],
             "elapsed_seconds": window["window_seconds"],
             "expected_requests": window["expected_requests"],

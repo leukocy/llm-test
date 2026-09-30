@@ -21,6 +21,7 @@ from core.benchmark.metrics import (
     count_decode_intervals,
     empty_metrics,
 )
+from core.benchmark.phase_observations import provider_phase_observation
 from core.benchmark.stability import continuous_load
 from core.cancel_state import is_stop_requested
 from core.error_messages import get_error_info
@@ -2711,6 +2712,9 @@ class BenchmarkRunner:
             "prompt_text": prompt,
             "output_text": full_response_content,
             "error": None,
+            "extra_metrics": {
+                "request_phase": provider_phase_observation(result, self.latency_offset)
+            },
         }
 
     def update_ui(self, force: bool = False):
@@ -3108,7 +3112,7 @@ class BenchmarkRunner:
         tasks = []
         results = []
 
-        start_test_time = time.time()
+        start_test_time = time.monotonic()
         wall_start = time.monotonic()
 
         # Shared stats for real-time throughput calculation
@@ -3143,13 +3147,13 @@ class BenchmarkRunner:
                 if is_stop_requested():
                     return None
 
-                req_start_time = time.time()
+                req_start_time = time.monotonic()
                 try:
                     res = await self.get_completion(client, session_id, prompt, max_tokens)
                 except asyncio.CancelledError:
                     return None
 
-                req_end_time = time.time()
+                req_end_time = time.monotonic()
 
                 # Update stats
                 if res:
@@ -3173,7 +3177,7 @@ class BenchmarkRunner:
                             stats["max_first_token_time"] = first_token_time
 
                     # Calculate cumulative metrics (approximate for real-time)
-                    current_time = time.time()
+                    current_time = time.monotonic()
                     total_elapsed = max(0.001, current_time - start_test_time)
 
                     # Output Throughput (Decode Phase Only)
@@ -3288,7 +3292,7 @@ class BenchmarkRunner:
             ) / effective_duration
 
         else:
-            effective_duration = max(0.001, time.time() - start_test_time)
+            effective_duration = max(0.001, time.monotonic() - start_test_time)
             final_system_throughput = stats["total_output_tokens"] / effective_duration  # Fallback
             final_system_input_throughput = 0
             final_system_output_throughput = 0
