@@ -370,7 +370,7 @@ def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
     if summary.get("origin", {}).get("kind") == "saved_csv":
         control_html = "<h2>执行条件</h2><p>原运行的暂停、批次并行与失败策略未经核验。</p>"
     integrity_label = (
-        "单次运行完整性核验通过" if integrity["verified"] else "仅供诊断 · 未通过完整性核验"
+        "请求记录完整性核验通过" if integrity["verified"] else "仅供诊断 · 未通过完整性核验"
     )
     expected = integrity["expected_requests"]
     record_source = "CSV" if summary.get("origin", {}).get("kind") == "saved_csv" else "数据库"

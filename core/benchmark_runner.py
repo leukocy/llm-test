@@ -741,6 +741,7 @@ class BenchmarkRunner:
         self._control_poll = control_poll
         self._persistence_owner = persistence_owner
         self._measurement_journal = measurement_journal
+        self._single_request_cursor = 0
         self.report_environment = dict(report_environment or {})
 
         self.api_key = api_key
@@ -1006,7 +1007,7 @@ class BenchmarkRunner:
                 full_config["report_environment"] = self.report_environment
             full_config["metric_contract_version"] = METRIC_CONTRACT_VERSION
             if self._control_checkpoint is not None:
-                full_config["pause_policy"] = "drained_request_group"
+                full_config.setdefault("pause_policy", "drained_request_group")
 
             start_run = self._measurement_journal.bind_run if self._measurement_journal else None
             self._db_run = (
@@ -3301,17 +3302,45 @@ class BenchmarkRunner:
         )
         return results
 
-    async def _run_prefill_request(self, client, prompt, max_tokens, session_id):
-        # REMOVED [Request ID] wrapper to ensure strict token calibration
-        # unique_long_prompt = f"[Request ID: {uuid.uuid4()}]\n\n{prompt}"
-        res = await self.get_completion(client, session_id, prompt, max_tokens)
-        return res
+    async def _run_single_measurement(self, client, prompt, max_tokens, session_id, prompt_source):
+        if self._measurement_journal is None:
+            return await self.get_completion(client, session_id, prompt, max_tokens)
+        await self._measurement_checkpoint()
+        session = self._single_request_cursor
+        self._single_request_cursor += 1
 
-    async def _run_long_context_request(self, client, prompt, max_tokens, session_id):
-        # REMOVED [Request ID] wrapper to ensure strict token calibration from _calibrate_prompt
-        # unique_long_prompt = f"[Request ID: {uuid.uuid4()}]\n\n{prompt}"
-        res = await self.get_completion(client, session_id, prompt, max_tokens)
-        return res
+        async def observe(frozen):
+            started = time.monotonic()
+            rows = [await self.get_completion(client, session, frozen[0], max_tokens)]
+            tag_batch_window(rows, elapsed_seconds=time.monotonic() - started, expected_requests=1)
+            return rows
+
+        results = await self._measurement_journal.measure(
+            self,
+            "single",
+            [prompt],
+            [prompt_source or "generic"],
+            concurrency=1,
+            max_tokens=max_tokens,
+            session_start=session,
+            warmup=False,
+            observe=observe,
+        )
+        return results[0]
+
+    async def _run_prefill_request(
+        self, client, prompt, max_tokens, session_id, prompt_source=None
+    ):
+        return await self._run_single_measurement(
+            client, prompt, max_tokens, session_id, prompt_source
+        )
+
+    async def _run_long_context_request(
+        self, client, prompt, max_tokens, session_id, prompt_source=None
+    ):
+        return await self._run_single_measurement(
+            client, prompt, max_tokens, session_id, prompt_source
+        )
 
     async def run_concurrency_test(
         self,
@@ -3671,7 +3700,13 @@ class BenchmarkRunner:
                             suffix=suffix_inst,
                         )
 
-                    res = await self.get_completion(None, i, raw_prompt, max_tokens)
+                    res = await self._run_prefill_request(
+                        None,
+                        raw_prompt,
+                        max_tokens,
+                        i,
+                        **({"prompt_source": _prompt_source} if self._measurement_journal else {}),
+                    )
 
                     if res and res.get("error") != "UserCancelled":
                         res["input_tokens_target"] = tokens_target
@@ -3751,7 +3786,17 @@ class BenchmarkRunner:
                     # Generate fresh prompt for each request
                     await self._measurement_checkpoint()
                     prompt_text = pregen_prompts[i]
-                    res = await self._run_prefill_request(None, prompt_text, max_tokens, i)
+                    res = await self._run_prefill_request(
+                        None,
+                        prompt_text,
+                        max_tokens,
+                        i,
+                        **(
+                            {"prompt_source": pregen_sources[i]}
+                            if self._measurement_journal
+                            else {}
+                        ),
+                    )
 
                     if res and res.get("error") != "UserCancelled":
                         res["input_tokens_target"] = tokens_target
@@ -3848,7 +3893,7 @@ class BenchmarkRunner:
 
         # InitializeBaseline prefill 速度追踪（用于 TTFT 推断 cache hit）
         # key: concurrency_index, value: prefill_speed (tokens/sec)
-        self._segmented_baseline_prefill_speed = {}
+        self._segmented_baseline_prefill_speed: dict[int, float] = {}
         self._segmented_baseline_segment = segment_levels[0]  # 最小分段作isBaseline来源
 
         # CalculateTotal Requests（分段数 × Requests Per Segment × 整体轮数 × Concurrency）
@@ -3891,6 +3936,8 @@ class BenchmarkRunner:
             "requests_per_segment": requests_per_segment,
             "max_tokens": max_tokens,
             "cumulative_mode": cumulative_mode,
+            "per_round_unique": per_round_unique,
+            "pause_policy": "complete_segmented_round",
             "total_rounds": total_rounds,
             "concurrency": concurrency,
         }
@@ -3902,160 +3949,113 @@ class BenchmarkRunner:
             self._show("error", "no法Load Tokenizer，Segmented Context Testneed精确 Token 控制")
             return pd.DataFrame()
 
-        # Generate基础 prompt（最大长度）- 每Concurrencywill话need独立 prompt
-        suffix_inst = (
-            "\n\n请先Statistics前文都多少字数然后尽你所能直接创作一越长越好超长篇科幻小说。"
-        )
+        from core.benchmark.segmented import build_round_prompts, observe_round
 
-        # base_prompts_list: 存储每Concurrencywill话 (base_prompt, base_tokens)
-        base_prompts_list = []
+        suffix = "\n\n请先Statistics前文都多少字数然后尽你所能直接创作一越长越好超长篇科幻小说。"
 
-        # ifnotis每轮Independent Mode，in循环外Generate base_prompts
+        def generate(length):
+            return self._calibrate_prompt(self._prompt_generation_target(length), suffix=suffix)
+
+        shared_bases = None
         if cumulative_mode and not per_round_unique:
-            self._update_log(
-                f"Cumulative Mode（共享 Prompt）：currentlyis {concurrency} Concurrencywill话Generate {max_segment} tokens 基础 Prompt...",
-                level=LogLevel.INFO,
-            )
-            for c_idx in range(concurrency):
-                base_prompt = self._calibrate_prompt(
-                    self._prompt_generation_target(max_segment), suffix=suffix_inst
-                )
-                if hasattr(tokenizer, "encode"):
-                    base_tokens = tokenizer.encode(base_prompt, add_special_tokens=False)
-                else:
-                    base_tokens = tokenizer.encode(base_prompt)
-                base_prompts_list.append((base_prompt, base_tokens))
-                self._update_log(
-                    f"  will话 {c_idx + 1}/{concurrency} Prompt Generate完成，实际长度: {len(base_tokens)} tokens",
-                    level=LogLevel.INFO,
-                )
-            self._update_log(
-                f"所has {concurrency} 基础 Prompt Generate完成", level=LogLevel.SUCCESS
-            )
 
-        # 整体轮次循环
+            def generate_shared():
+                return {"bases": [generate(max_segment) for _ in range(concurrency)]}, []
+
+            if self._measurement_journal:
+                metadata, _ = self._measurement_journal.prepare_scope(
+                    "segmented:shared_bases", generate_shared, allow_empty=True
+                )
+                shared_bases = metadata["bases"]
+            else:
+                shared_bases = generate_shared()[0]["bases"]
+
+        members = len(segment_levels) * requests_per_segment * concurrency
         for overall_round in range(total_rounds):
             await self._measurement_checkpoint()
             if is_stop_requested():
-                self._show("warning", "Test已停止。")
-                break
-
-            self._update_log(f"开始 {overall_round + 1}/{total_rounds} 轮Test", level=LogLevel.INFO)
-
-            # ifis每轮Independent Mode，每轮重新Generate base_prompts
-            if cumulative_mode and per_round_unique:
-                base_prompts_list = []
-                self._update_log(
-                    f"Cumulative Mode（Unique Prompt Per Round）：currentlyis {concurrency} Concurrencywill话Generate {max_segment} tokens 基础 Prompt...",
-                    level=LogLevel.INFO,
+                raise asyncio.CancelledError
+            bases = (
+                (
+                    [generate(max_segment) for _ in range(concurrency)]
+                    if per_round_unique
+                    else shared_bases
                 )
-                for c_idx in range(concurrency):
-                    base_prompt = self._calibrate_prompt(
-                        self._prompt_generation_target(max_segment), suffix=suffix_inst
-                    )
-                    if hasattr(tokenizer, "encode"):
-                        base_tokens = tokenizer.encode(base_prompt, add_special_tokens=False)
-                    else:
-                        base_tokens = tokenizer.encode(base_prompt)
-                    base_prompts_list.append((base_prompt, base_tokens))
-                self._update_log(
-                    f"轮次 {overall_round + 1} 所has {concurrency} 基础 Prompt Generate完成",
-                    level=LogLevel.SUCCESS,
+                if cumulative_mode
+                else None
+            )
+            prompts, sources = build_round_prompts(
+                levels=segment_levels,
+                requests_per_segment=requests_per_segment,
+                concurrency=concurrency,
+                tokenizer=tokenizer,
+                target=self._prompt_generation_target,
+                generate=generate,
+                bases=bases,
+            )
+            session_start = overall_round * members
+
+            async def before_batch():
+                if self._measurement_journal:
+                    self._measurement_journal.admit()
+
+            async def observe(frozen):
+                return await observe_round(
+                    self,
+                    frozen,
+                    levels=segment_levels,
+                    requests_per_segment=requests_per_segment,
+                    concurrency=concurrency,
+                    max_tokens=max_tokens,
+                    round_index=overall_round,
+                    session_start=session_start,
+                    cumulative_mode=cumulative_mode,
+                    before_batch=before_batch,
                 )
 
-            # 按Segment levels从小到大发送
-            for seg_idx, segment_length in enumerate(segment_levels):
-                await self._measurement_checkpoint()
-                if is_stop_requested():
-                    self._show("warning", "Test已停止。")
-                    break
+            def capture_state():
+                return {
+                    "baseline_speeds": {
+                        str(key): value
+                        for key, value in self._segmented_baseline_prefill_speed.items()
+                    },
+                    "baseline_segment": self._segmented_baseline_segment,
+                }
 
-                self.status_text.info(
-                    f"轮次 {overall_round + 1}/{total_rounds} - 分段 {seg_idx + 1}/{len(segment_levels)}: "
-                    f"{segment_length} tokens (Concurrency: {concurrency}, Cumulative Mode: {'is' if cumulative_mode else '否'})..."
+            def restore_state(state):
+                self._segmented_baseline_prefill_speed = {
+                    int(key): value for key, value in state["baseline_speeds"].items()
+                }
+                self._segmented_baseline_segment = state["baseline_segment"]
+
+            if self._measurement_journal:
+                results = await self._measurement_journal.measure(
+                    self,
+                    "segmented_round",
+                    prompts,
+                    sources,
+                    concurrency=concurrency,
+                    max_tokens=max_tokens,
+                    session_start=session_start,
+                    warmup=False,
+                    observe=observe,
+                    capture_state=capture_state,
+                    restore_state=restore_state,
                 )
-
-                # is每Concurrencywill话Generate对应 segment_prompt
-                if cumulative_mode:
-                    # Cumulative Mode：每Concurrencywill话从自己 base_prompt 截取
-                    segment_prompts = []
-                    for c_idx in range(concurrency):
-                        base_prompt, base_tokens = base_prompts_list[c_idx]
-                        segment_token_length = self._prompt_generation_target(segment_length)
-                        if segment_token_length >= len(base_tokens):
-                            segment_prompts.append(base_prompt)
-                        else:
-                            if hasattr(tokenizer, "decode"):
-                                segment_prompts.append(
-                                    tokenizer.decode(base_tokens[:segment_token_length])
-                                )
-                            else:
-                                # fallback: truncate by char estimate
-                                char_ratio = len(base_prompt) / len(base_tokens)
-                                segment_prompts.append(
-                                    base_prompt[: int(segment_token_length * char_ratio)]
-                                )
-                else:
-                    # Independent Mode：每分段独立Generate
-                    segment_prompts = []
-                    for _ in range(concurrency):
-                        segment_prompt = self._calibrate_prompt(
-                            self._prompt_generation_target(segment_length),
-                            suffix=suffix_inst,
-                        )
-                        segment_prompts.append(segment_prompt)
-
-                # 发送Concurrency请求
-                for req_idx in range(requests_per_segment):
-                    await self._measurement_checkpoint()
-                    if is_stop_requested():
-                        break
-
-                    # Concurrency执行
-                    tasks = []
-                    for c_idx in range(concurrency):
-                        segment_prompt = segment_prompts[c_idx]
-                        session_id = (
-                            f"R{overall_round + 1}_S{seg_idx + 1}_C{c_idx + 1}_R{req_idx + 1}"
-                        )
-
-                        task = self._run_segmented_request(
-                            segment_prompt,
-                            max_tokens,
-                            session_id,
-                            segment_length,
-                            concurrency,
-                            overall_round,
-                            cumulative_mode,
-                            seg_idx=seg_idx,
-                            c_idx=c_idx,
-                        )
-                        tasks.append(task)
-
-                    # 执行所hasConcurrency任务
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-                    # ProcessResult
-                    for result in results:
-                        if isinstance(result, BaseException):
-                            self._update_log(f"请求异常: {result}", level=LogLevel.ERROR)
-                        elif (
-                            isinstance(result, dict)
-                            and result
-                            and result.get("error") != "UserCancelled"
-                        ):
-                            self._append_metric_csv(result, csv_columns)
-                            self.results_list.append(result)
-
-                        self.completed_requests += 1
-                        self.update_ui()
+            else:
+                results = await observe(prompts)
+            for index, result in enumerate(results):
+                if result.get("error") == "UserCancelled":
+                    raise asyncio.CancelledError
+                result["prompt_source"] = sources[index]
+                self._append_metric_csv(result, csv_columns)
+                self.results_list.append(result)
+                self.completed_requests = len(self.results_list)
+                self.update_ui()
 
         self._update_log("分段 Prefill Test completed", level=LogLevel.SUCCESS)
-
-        # 批量SaveResult到Database并完成运行
         self._batch_save_results_to_db()
         self._complete_db_run(success=True)
-
         return pd.DataFrame(self.results_list)
 
     async def _run_segmented_request(
@@ -4072,7 +4072,7 @@ class BenchmarkRunner:
     ):
         """执行单分段请求"""
         try:
-            res = await self.get_completion(None, 0, prompt, max_tokens)
+            res = await self.get_completion(None, session_id, prompt, max_tokens)
 
             if res and res.get("error") != "UserCancelled":
                 # Add分段Test特定字段
@@ -4297,7 +4297,13 @@ class BenchmarkRunner:
                     raw_prompt, _, _, _prompt_source = self._get_text_for_token_count(
                         self._prompt_generation_target(length_target)
                     )
-                    res = await self.get_completion(None, 0, raw_prompt, max_tokens)
+                    res = await self._run_long_context_request(
+                        None,
+                        raw_prompt,
+                        max_tokens,
+                        0,
+                        **({"prompt_source": _prompt_source} if self._measurement_journal else {}),
+                    )
 
                     if res and res.get("error") != "UserCancelled":
                         actual_prompt_tokens = res.get("prefill_tokens", 0)
@@ -4381,7 +4387,13 @@ class BenchmarkRunner:
                             self._prompt_generation_target(length_target), suffix=""
                         )  # PREFILL_PROMPT_OVERHEAD removed
 
-                    res = await self._run_long_context_request(None, long_prompt, max_tokens, 0)
+                    res = await self._run_long_context_request(
+                        None,
+                        long_prompt,
+                        max_tokens,
+                        0,
+                        **({"prompt_source": _prompt_source} if self._measurement_journal else {}),
+                    )
 
                     if res and res.get("error") != "UserCancelled":
                         actual_prompt_tokens = res.get("prefill_tokens", 0)

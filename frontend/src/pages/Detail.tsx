@@ -78,6 +78,9 @@ export function Detail({
         "matrix",
         "custom_text",
         "dataset",
+        "prefill",
+        "long_context",
+        "segmented_prefill",
       ].includes(job.test_type)
     )
       return;
@@ -619,9 +622,11 @@ export function Detail({
           <p>
             {job.test_type === "stability"
               ? "先停止发起新请求，待在途请求结束后暂停；恢复后继续剩余有效测试时长。时间轴保留暂停间隔，系统墙钟速率包含暂停等待。"
-              : ["quality", "robustness"].includes(job.test_type)
-                ? "先停止发起新样本，待当前样本（鲁棒性含其全部扰动）提交检查点后暂停。继续时复用已提交结果；暂停期间仍保留 worker。"
-                : "已完成的请求不会重跑。暂停在请求组之间生效，单请求计时不包含等待时间；暂停期间仍保留当前执行资源。"}
+              : job.test_type === "segmented_prefill"
+                ? "分段测试等待当前整轮前缀序列完成并保存后暂停；继续时保留原顺序和基线。暂停或重启后的结果不能证明缓存连续性。"
+                : ["quality", "robustness"].includes(job.test_type)
+                  ? "先停止发起新样本，待当前样本（鲁棒性含其全部扰动）提交检查点后暂停。继续时复用已提交结果；暂停期间仍保留 worker。"
+                  : "已完成的请求不会重跑。暂停在请求组之间生效，单请求计时不包含等待时间；暂停期间仍保留当前执行资源。"}
           </p>
           <span>
             暂停 {job.pause_count} 次 · 已累计 {formatNumber(pausedSeconds, 1)}{" "}
@@ -698,7 +703,7 @@ export function Detail({
           >
             <strong>
               {summary.integrity.verified
-                ? "单次运行完整性核验通过"
+                ? "请求记录完整性核验通过"
                 : "仅供诊断 · 未通过完整性核验"}
             </strong>
             <span>

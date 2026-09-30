@@ -60,7 +60,17 @@ def lab(tmp_path, monkeypatch):
     monkeypatch.setattr(
         BenchmarkRunner,
         "_calibrate_prompt_with_source",
-        lambda *_: (f"original-{next(counter)}", "synthetic"),
+        lambda *_, **__: (f"original-{next(counter)}", "synthetic"),
+    )
+    monkeypatch.setattr(
+        BenchmarkRunner,
+        "_get_text_for_token_count",
+        lambda *_: (f"original-{next(counter)}", 0, 0, "synthetic"),
+    )
+    monkeypatch.setattr(
+        BenchmarkRunner,
+        "_calibrate_prompt",
+        lambda _, target, suffix="": (f"orig-{next(counter):03d}-" + "x" * max(0, target))[:target],
     )
     yield store, endpoint, settings, db
     isolated.close()
@@ -120,6 +130,91 @@ CASES = [
         4,
         1,
     ),
+    (
+        "prefill",
+        {
+            "token_levels": [8],
+            "requests_per_level": 2,
+            "max_tokens": 4,
+            "warmup_requests_per_level": 1,
+        },
+        1,
+        2,
+        2,
+    ),
+    (
+        "prefill",
+        {
+            "token_levels": [64],
+            "requests_per_level": 2,
+            "max_tokens": 4,
+            "warmup_requests_per_level": 1,
+        },
+        1,
+        2,
+        2,
+    ),
+    ("long_context", {"context_lengths": [8], "rounds_per_level": 2, "max_tokens": 4}, 1, 2, 1),
+    ("long_context", {"context_lengths": [64], "rounds_per_level": 2, "max_tokens": 4}, 1, 2, 1),
+    (
+        "prefill",
+        {"token_levels": [8, 64], "requests_per_level": 1, "max_tokens": 4},
+        1,
+        2,
+        1,
+    ),
+    (
+        "long_context",
+        {"context_lengths": [8, 64], "rounds_per_level": 1, "max_tokens": 4},
+        1,
+        2,
+        1,
+    ),
+    (
+        "segmented_prefill",
+        {
+            "segment_levels": [8, 16],
+            "requests_per_segment": 1,
+            "max_tokens": 4,
+            "cumulative_mode": True,
+            "total_rounds": 2,
+            "per_round_unique": False,
+            "concurrency": 2,
+        },
+        4,
+        8,
+        1,
+    ),
+    (
+        "segmented_prefill",
+        {
+            "segment_levels": [8, 16],
+            "requests_per_segment": 1,
+            "max_tokens": 4,
+            "cumulative_mode": True,
+            "total_rounds": 2,
+            "per_round_unique": True,
+            "concurrency": 2,
+        },
+        4,
+        8,
+        1,
+    ),
+    (
+        "segmented_prefill",
+        {
+            "segment_levels": [8, 16],
+            "requests_per_segment": 1,
+            "max_tokens": 4,
+            "cumulative_mode": False,
+            "total_rounds": 2,
+            "per_round_unique": False,
+            "concurrency": 2,
+        },
+        4,
+        8,
+        1,
+    ),
 ]
 
 
@@ -145,6 +240,31 @@ def result(session_id, prompt):
     }
 
 
+class ReferenceEncoding:
+    def encode(self, text):
+        return [ord(char) for char in text]
+
+    def decode(self, tokens):
+        return "".join(chr(token) for token in tokens)
+
+
+async def wait_during_execution(task, condition):
+    """Surface engine failures instead of hiding them behind an event timeout."""
+    waiting = asyncio.create_task(condition)
+    try:
+        done, _ = await asyncio.wait(
+            {task, waiting}, timeout=5, return_when=asyncio.FIRST_COMPLETED
+        )
+        if task in done:
+            await task
+            pytest.fail("Engine ended before the expected measurement boundary")
+        assert waiting in done, "Expected measurement boundary was not reached"
+        await waiting
+    finally:
+        waiting.cancel()
+        await asyncio.gather(waiting, return_exceptions=True)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("test_type,parameters,blocked_session,expected,committed", CASES)
 @pytest.mark.parametrize("termination", ["interruption", "stop"])
@@ -152,6 +272,8 @@ async def test_adapter_recovery_preserves_completed_groups_and_repeats_only_unkn
     lab, monkeypatch, test_type, parameters, blocked_session, expected, committed, termination
 ):
     store, endpoint, settings, db = lab
+    if test_type == "segmented_prefill":
+        monkeypatch.setattr(BenchmarkRunner, "_get_tokenizer", lambda _: ReferenceEncoding())
     entered = asyncio.Event()
     calls = []
 
@@ -162,7 +284,10 @@ async def test_adapter_recovery_preserves_completed_groups_and_repeats_only_unkn
         if session_id == blocked_session:
             entered.set()
             await asyncio.Event().wait()
-        return result(session_id, prompt)
+        value = result(session_id, prompt)
+        if test_type == "segmented_prefill":
+            value.update(prefill_tokens=len(prompt), api_prefill=len(prompt), api_decode=2)
+        return value
 
     monkeypatch.setattr(BenchmarkRunner, "get_completion", response)
     submitted = store.submit(
@@ -174,7 +299,7 @@ async def test_adapter_recovery_preserves_completed_groups_and_repeats_only_unkn
     )
     job = store.claim("w")
     task = asyncio.create_task(execute_job(job, endpoint, settings, store, "w"))
-    await asyncio.wait_for(entered.wait(), 5)
+    await wait_during_execution(task, entered.wait())
     if termination == "stop":
         store.request_cancel(job["job_id"])
     task.cancel()
@@ -215,13 +340,26 @@ async def test_adapter_recovery_preserves_completed_groups_and_repeats_only_unkn
         if barrier:
             await barrier.wait()
         restored_calls.append((session_id, prompt))
-        return result(session_id, prompt)
+        value = result(session_id, prompt)
+        if test_type == "segmented_prefill":
+            value.update(
+                prefill_tokens=len(prompt),
+                api_prefill=len(prompt),
+                api_decode=2,
+                ttft=0.001,
+                decode_time=0.019,
+                first_token_time=value["start_time"] + 0.001,
+            )
+        return value
 
     monkeypatch.setattr(BenchmarkRunner, "get_completion", restored)
     monkeypatch.setattr(
         BenchmarkRunner,
         "_calibrate_prompt_with_source",
-        lambda *_: ("changed-generator-output", "changed-source"),
+        lambda *_, **__: ("changed-generator-output", "changed-source"),
+    )
+    monkeypatch.setattr(
+        BenchmarkRunner, "_calibrate_prompt", lambda *_, **__: "changed-generator-output"
     )
     resumed = store.claim("w2")
     output = await execute_job(resumed, endpoint, settings, store, "w2")
@@ -264,13 +402,26 @@ async def test_adapter_recovery_preserves_completed_groups_and_repeats_only_unkn
             and "测量组检查点" in content.text
             and "跨中断" in content.text
         )
-    if test_type in {"matrix", "concurrency"}:
+    if test_type == "segmented_prefill":
+        assert config["pause_policy"] == "complete_segmented_round"
+        if parameters["cumulative_mode"]:
+            assert all(
+                row["cache_hit_source"] == "TTFT_inferred" for row in rows[len(original_rows) :]
+            )
+        assert all(
+            json.loads(row["extra_metrics"])["segmented_request"]["label"].startswith("R")
+            for row in rows
+        )
+    if test_type in {"matrix", "concurrency", "prefill"}:
         protocol = config["measurement_protocol"]
         assert protocol["warmup_recorded"] == protocol["warmup_requests"]
         import csv
 
-        with (settings.artifact_root / job["job_id"] / "attempt-2" / "warmup.csv").open() as handle:
-            assert len(list(csv.DictReader(handle))) == protocol["warmup_requests"]
+        if protocol["warmup_requests"]:
+            with (
+                settings.artifact_root / job["job_id"] / "attempt-2" / "warmup.csv"
+            ).open() as handle:
+                assert len(list(csv.DictReader(handle))) == protocol["warmup_requests"]
     assert all(
         row["concurrency_level"] is not None and row["request_index"] == row["session_id"]
         for row in rows
@@ -278,6 +429,162 @@ async def test_adapter_recovery_preserves_completed_groups_and_repeats_only_unkn
     for row in rows:
         checkpoint = json.loads(row["extra_metrics"])["measurement_checkpoint"]
         assert checkpoint["contract"] == MEASUREMENT_CONTRACT
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cumulative,unique", [(True, False), (True, True), (False, False)])
+async def test_segmented_pause_drains_whole_round_preserving_prefix_order_and_batch_clocks(
+    lab, monkeypatch, cumulative, unique
+):
+    store, endpoint, settings, _ = lab
+    monkeypatch.setattr(BenchmarkRunner, "_get_tokenizer", lambda _: ReferenceEncoding())
+    first_entered, second_entered = asyncio.Event(), asyncio.Event()
+    first_release, second_release = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    async def response(self, client, session_id, prompt, max_tokens, barrier=None):
+        calls.append((session_id, prompt))
+        if session_id == 0:
+            first_entered.set()
+            await first_release.wait()
+        if session_id == 2:
+            second_entered.set()
+            await second_release.wait()
+        value = result(session_id, prompt)
+        value.update(prefill_tokens=len(prompt), api_prefill=len(prompt), api_decode=2)
+        return value
+
+    monkeypatch.setattr(BenchmarkRunner, "get_completion", response)
+    store.submit(
+        test_type="segmented_prefill",
+        endpoint_id="lab",
+        model_id="m",
+        parameters={
+            "segment_levels": [16, 8],
+            "requests_per_segment": 2,
+            "concurrency": 2,
+            "max_tokens": 4,
+            "total_rounds": 2,
+            "cumulative_mode": cumulative,
+            "per_round_unique": unique,
+        },
+        progress_total=16,
+    )
+    job = store.claim("w")
+    task = asyncio.create_task(execute_job(job, endpoint, settings, store, "w"))
+    try:
+        await wait_during_execution(task, first_entered.wait())
+        store.request_pause(job["job_id"])
+        first_release.set()
+        await wait_during_execution(task, second_entered.wait())
+        # A pause inside the prefix sequence would change the cache experiment.
+        assert store.get(job["job_id"])["status"] == "pausing"
+        assert checkpoint_info(store, store.get(job["job_id"]))["committed_units"] == 0
+        with store._connection() as conn:
+            assert conn.execute("SELECT COUNT(*) FROM test_results").fetchone()[0] == 0
+        second_release.set()
+
+        async def paused():
+            while store.get(job["job_id"])["status"] != "paused":
+                await asyncio.sleep(0.01)
+
+        await wait_during_execution(task, paused())
+        assert [session for session, _ in calls] == list(range(8))
+        assert checkpoint_info(store, store.get(job["job_id"]))["committed_units"] == 1
+        with store._connection() as conn:
+            assert conn.execute("SELECT COUNT(*) FROM test_results").fetchone()[0] == 8
+        store.resume(job["job_id"])
+        output = await asyncio.wait_for(task, 5)
+        store.finish(
+            job["job_id"], "w", outcome=RunStatus.COMPLETED, result_run_id=output.result_run_id
+        )
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    assert output.completed == 16
+    prompts = dict(calls)
+    for start in (0, 8):
+        assert prompts[start] == prompts[start + 2]
+        assert prompts[start + 1] == prompts[start + 3]
+        assert prompts[start + 4] == prompts[start + 6]
+        if cumulative:
+            assert prompts[start + 4].startswith(prompts[start])
+            assert prompts[start + 5].startswith(prompts[start + 1])
+        else:
+            assert not prompts[start + 4].startswith(prompts[start])
+    assert (prompts[0] == prompts[8]) is (cumulative and not unique)
+    with store._connection() as conn:
+        rows = [dict(row) for row in conn.execute("SELECT * FROM test_results ORDER BY session_id")]
+    batches = {}
+    for row in rows:
+        extra = json.loads(row["extra_metrics"])
+        wall = extra["system_measurement"]
+        batches.setdefault(wall["id"], []).append(row)
+        assert wall["expected_requests"] == wall["recorded_requests"] == 2
+    assert len(batches) == 8
+    for members in batches.values():
+        assert len(members) == 2
+        assert len({row["context_length_target"] for row in members}) == 1
+    headers = {"Authorization": f"Bearer {settings.api_token}"}
+    report = (
+        TestClient(create_app(settings, store))
+        .get(f"/api/v1/jobs/{job['job_id']}/report", headers=headers)
+        .json()["summary"]
+    )
+    assert report["integrity"]["verified"], report["integrity"]
+    assert store.get(job["job_id"])["pause_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_segmented_cancel_between_batches_stops_admission_and_repeats_only_uncommitted_round(
+    lab, monkeypatch
+):
+    store, endpoint, settings, _ = lab
+    monkeypatch.setattr(BenchmarkRunner, "_get_tokenizer", lambda _: ReferenceEncoding())
+    calls = []
+    job_id = store.submit(
+        test_type="segmented_prefill",
+        endpoint_id="lab",
+        model_id="m",
+        parameters={
+            "segment_levels": [8, 16],
+            "requests_per_segment": 1,
+            "concurrency": 2,
+            "max_tokens": 4,
+            "total_rounds": 1,
+        },
+        progress_total=4,
+    )["job_id"]
+
+    async def response(self, client, session_id, prompt, max_tokens, barrier=None):
+        calls.append((session_id, prompt))
+        if session_id == 1:
+            store.request_cancel(job_id)
+        return result(session_id, prompt)
+
+    monkeypatch.setattr(BenchmarkRunner, "get_completion", response)
+    with pytest.raises(asyncio.CancelledError):
+        await execute_job(store.claim("w"), endpoint, settings, store, "w")
+    assert [session for session, _ in calls] == [0, 1]
+    info = checkpoint_info(store, store.get(job_id))
+    assert info["committed_units"] == 0 and info["planned_units"] == 1
+    with store._connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM test_results").fetchone()[0] == 0
+        frozen = json.loads(conn.execute("SELECT input_json FROM checkpoint_units").fetchone()[0])
+    store.finish(job_id, "w", outcome=RunStatus.CANCELLED)
+    recover_job(store, store.get(job_id), endpoint)
+    restored = []
+
+    async def complete(self, client, session_id, prompt, max_tokens, barrier=None):
+        restored.append((session_id, prompt))
+        return result(session_id, prompt)
+
+    monkeypatch.setattr(BenchmarkRunner, "get_completion", complete)
+    output = await execute_job(store.claim("w2"), endpoint, settings, store, "w2")
+    assert output.completed == 4
+    assert restored == list(enumerate(frozen["prompts"]))
+    assert checkpoint_info(store, store.get(job_id))["repeated_unit_attempts"] == 1
 
 
 @pytest.mark.asyncio

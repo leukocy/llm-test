@@ -15,7 +15,15 @@ from server.store import JobNotFound, JobStore, LeaseLost
 
 CONTRACT = "evaluation-checkpoint-v1"
 RECOVERABLE_ERRORS = {"WORKER_LOST", "INTERRUPTED"}
-MEASUREMENT_TYPES = {"concurrency", "matrix", "custom_text", "dataset"}
+MEASUREMENT_TYPES = {
+    "concurrency",
+    "matrix",
+    "custom_text",
+    "dataset",
+    "prefill",
+    "long_context",
+    "segmented_prefill",
+}
 MEASUREMENT_CONTRACT = "measurement-group-checkpoint-v1"
 SUPPORTED_TYPES = {"quality", "robustness"} | MEASUREMENT_TYPES
 
@@ -159,6 +167,24 @@ def checkpoint_info(store: JobStore, job: dict) -> dict[str, Any]:
     with store._connection() as conn:
         conn.execute("BEGIN")
         current, header, counts, revision = _read_checkpoint(conn, job["job_id"])
+    notes = (
+        [
+            "测量恢复按完整请求组复用原计时和观测；未提交组可能整组重发，预热复用不证明服务端缓存仍然有效。",
+            "每组实际提示词在请求前冻结；尚未生成的后续组将按原配置生成。",
+            "跨中断组仅可分别解释吞吐，合并样本不能证明连续负载能力。",
+        ]
+        if current["test_type"] in MEASUREMENT_TYPES
+        else [
+            "恢复会复用已提交样本，保留原始样本顺序、few-shot 和扰动计划，并核验模型、参数与执行代码。",
+            "中断时尚未提交的样本可能再次调用接口；已发起次数不是接口已返回响应数，也不能证明远端只执行一次。",
+            "含恢复样本的结果跨越执行中断；当前执行时长只描述本次尝试，不能作为连续吞吐或不中断稳定性的证明。",
+        ]
+    )
+    if current["test_type"] == "segmented_prefill":
+        notes.insert(
+            0,
+            "分段检查点以整轮有序前缀序列保存，恢复原提示词和缓存推断基线；未提交轮次整轮重发，不能证明服务端缓存跨中断连续。",
+        )
     return {
         "contract": checkpoint_contract(current["test_type"]),
         "unit_label": "测量组" if current["test_type"] in MEASUREMENT_TYPES else "样本",
@@ -179,17 +205,7 @@ def checkpoint_info(store: JobStore, job: dict) -> dict[str, Any]:
             and resumable_state(current)
             and current["test_type"] in SUPPORTED_TYPES
         ),
-        "notes": [
-            "测量恢复按完整请求组复用原计时和观测；未提交组可能整组重发，预热复用不证明服务端缓存仍然有效。",
-            "每组实际提示词在请求前冻结；尚未生成的后续组将按原配置生成。",
-            "跨中断组仅可分别解释吞吐，合并样本不能证明连续负载能力。",
-        ]
-        if current["test_type"] in MEASUREMENT_TYPES
-        else [
-            "恢复会复用已提交样本，保留原始样本顺序、few-shot 和扰动计划，并核验模型、参数与执行代码。",
-            "中断时尚未提交的样本可能再次调用接口；已发起次数不是接口已返回响应数，也不能证明远端只执行一次。",
-            "含恢复样本的结果跨越执行中断；当前执行时长只描述本次尝试，不能作为连续吞吐或不中断稳定性的证明。",
-        ],
+        "notes": notes,
     }
 
 

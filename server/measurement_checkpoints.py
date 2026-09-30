@@ -89,6 +89,8 @@ class MeasurementJournal(JobJournal):
         session_start: int,
         warmup: bool,
         observe,
+        capture_state=None,
+        restore_state=None,
     ):
         key = f"measurement:{self.ordinal}"
         self.ordinal += 1
@@ -126,6 +128,8 @@ class MeasurementJournal(JobJournal):
             results = saved["results"]
             if len(results) != len(prompts) or saved["warmup"] != warmup:
                 raise CheckpointConflict("Saved measurement group is incomplete")
+            if restore_state is not None:
+                restore_state(saved.get("state") or {})
             for result in results:
                 self.originals[id(result)] = copy.deepcopy(result)
                 if not warmup:
@@ -159,8 +163,26 @@ class MeasurementJournal(JobJournal):
                 "request_index": index,
                 "warmup": warmup,
             }
-        self.pending.append({"key": key, "results": results, "warmup": warmup})
+        self.pending.append(
+            {
+                "key": key,
+                "results": results,
+                "warmup": warmup,
+                "state": copy.deepcopy(capture_state()) if capture_state is not None else None,
+            }
+        )
         return results
+
+    def admit(self):
+        with self.store._connection() as conn:
+            self._lease(conn)
+            status = conn.execute(
+                "SELECT status FROM control_jobs WHERE job_id=?", (self.job["job_id"],)
+            ).fetchone()[0]
+            if status == "cancelling":
+                raise asyncio.CancelledError
+            if status != "running" and status != "pausing":
+                raise CheckpointConflict("Cannot admit a measurement batch in this state")
 
     def restore_fields(self, result):
         original = self.originals.get(id(result))
@@ -189,7 +211,12 @@ class MeasurementJournal(JobJournal):
                     conn,
                     group["key"],
                     0,
-                    {"results": results, "warmup": group["warmup"], "run_id": run.id},
+                    {
+                        "results": results,
+                        "warmup": group["warmup"],
+                        "run_id": run.id,
+                        "state": group["state"],
+                    },
                 )
                 if not group["warmup"]:
                     models = [TestResult.from_api_result(run.id, row) for row in results]
