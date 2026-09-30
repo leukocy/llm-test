@@ -9,7 +9,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from config.tokenizer_paths import MANIFEST_NAME, registered_tokenizer_path
+from config.tokenizer_paths import MANIFEST_NAME, installation_manifest, registered_tokenizer_path
 from core.benchmark.metrics import METRIC_CONTRACT_VERSION
 from core.run_lifecycle import RunStatus
 from core.tokenizer_utils import get_cached_tokenizer, tokenizer_provenance
@@ -149,6 +149,61 @@ def test_install_validates_atomically_and_is_shared_with_measurement(setup, fake
         == "completed"
     )
     assert queue.enqueue([NAME]) == {"items": [], "skipped_names": [NAME]}
+
+
+@pytest.mark.parametrize("target", ["directory", "manifest", "tokenizer.json"])
+def test_installed_paths_reject_symlinks_outside_their_directory(setup, fake_hub, target):
+    _, queue, root = setup
+    task = _claim(queue)
+    execute_install(task, queue, "installer")
+    installed = root / NAME
+    # The shared string prefix must not make a sibling directory a trusted child.
+    outside = root.with_name(root.name + "-outside")
+    outside.mkdir()
+    original = (
+        installed
+        if target == "directory"
+        else installed / (MANIFEST_NAME if target == "manifest" else target)
+    )
+    relocated = outside / original.name
+    original.rename(relocated)
+    original.symlink_to(relocated, target_is_directory=target == "directory")
+    assert registered_tokenizer_path(NAME) is None
+    if target in {"directory", "manifest"}:
+        assert installation_manifest(installed) is None
+    assert installation_manifest(outside) is None
+    with pytest.raises(ValueError, match="not installed"):
+        count_text("hello world", "local", NAME)
+
+
+def test_bundled_directory_cannot_escape_through_a_symlink(setup, fake_hub):
+    _, queue, root = setup
+    task = _claim(queue)
+    execute_install(task, queue, "installer")
+    outside = root.parent / "external-bundle"
+    (root / NAME).rename(outside)
+    bundle = root.parent / "tokenizers" / NAME
+    bundle.parent.mkdir()
+    bundle.symlink_to(outside, target_is_directory=True)
+    assert registered_tokenizer_path(NAME) is None
+    assert installation_manifest(bundle) is None
+    # A registered reference cannot fall back to loading the rejected bundle.
+    assert get_cached_tokenizer(f"./tokenizers/{NAME}") is None
+
+
+def test_installation_manifest_read_is_bounded(setup, fake_hub):
+    _, queue, root = setup
+    task = _claim(queue)
+    execute_install(task, queue, "installer")
+    installed = root / NAME
+    manifest = installed / MANIFEST_NAME
+    content = manifest.read_bytes()
+    manifest.write_bytes(content.ljust(65536, b" "))
+    assert installation_manifest(installed)["revision"] == REVISION
+    with manifest.open("ab") as destination:
+        destination.write(b" ")
+    assert installation_manifest(installed) is None
+    assert registered_tokenizer_path(NAME) is None
 
 
 def test_enqueue_deduplicates_across_process_connections(setup):
@@ -397,5 +452,6 @@ def test_presets_keep_description_and_upgrade_existing_database(tmp_path, monkey
             ).status_code
             == 422
         )
-    assert client.delete(f"/api/v1/presets/{identifier}", headers=headers).status_code == 204
+    deleted = client.delete(f"/api/v1/presets/{identifier}", headers=headers)
+    assert deleted.status_code == 204
     assert [item["preset_id"] for item in store.list_presets()] == ["old"]

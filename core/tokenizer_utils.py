@@ -49,9 +49,7 @@ def local_tokenizer_path(model_path: str) -> Path | None:
     source = TOKENIZER_SOURCES.get(name)
     repositories = [source] if isinstance(source, str) else list(source.values()) if source else []
     if model_path == name or path.as_posix() == f"tokenizers/{name}" or model_path in repositories:
-        registered = registered_tokenizer_path(name)
-        if registered is not None:
-            return registered
+        return registered_tokenizer_path(name)
     if path.is_dir():
         return path
     return None

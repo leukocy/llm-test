@@ -240,6 +240,7 @@ def execute_install(
         try:
             queue.fail(identifier, worker_id, message)
         except LeaseLost:
+            # The current owner records the outcome; this worker cannot overwrite it.
             pass
     finally:
         shutil.rmtree(stage, ignore_errors=True)

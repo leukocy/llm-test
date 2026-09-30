@@ -93,12 +93,35 @@ def tokenizer_download_root() -> Path:
     return cache / "llm-test" / "tokenizers"
 
 
+def _contained_path(root: Path, path: Path) -> Path | None:
+    """Resolve symlinks before requiring a child of the trusted directory."""
+    normalized = os.path.realpath(path)
+    prefix = os.path.realpath(root).rstrip(os.sep) + os.sep
+    if not normalized.startswith(prefix):
+        return None
+    return Path(normalized)
+
+
 def installation_manifest(path: Path) -> dict[str, Any] | None:
     try:
-        manifest = path / MANIFEST_NAME
-        if manifest.stat().st_size > 65536:
+        directory = next(
+            (
+                checked
+                for root in (tokenizer_download_root(), Path("tokenizers"))
+                if (checked := _contained_path(root, path)) is not None
+            ),
+            None,
+        )
+        if directory is None:
             return None
-        data = json.loads(manifest.read_text(encoding="utf-8"))
+        manifest = _contained_path(directory, directory / MANIFEST_NAME)
+        if manifest is None:
+            return None
+        with manifest.open("rb") as source:
+            raw = source.read(65537)
+        if len(raw) > 65536:
+            return None
+        data = json.loads(raw)
         return describe_tokenizer_installation(data)
     except (OSError, ValueError):
         return None
@@ -107,22 +130,26 @@ def installation_manifest(path: Path) -> dict[str, Any] | None:
 def registered_tokenizer_path(name: str) -> Path | None:
     if name not in TOKENIZER_SOURCES:
         return None
-    installed = tokenizer_download_root() / name
-    manifest = installation_manifest(installed)
     try:
-        if installed.is_dir() and manifest and manifest["name"] == name:
+        root = tokenizer_download_root()
+        installed = _contained_path(root, root / name)
+        manifest = installation_manifest(installed) if installed else None
+        if installed and installed.is_dir() and manifest and manifest["name"] == name:
             if all(
-                (installed / item["name"]).is_file()
-                and (installed / item["name"]).stat().st_size == item["size"]
+                (entry := _contained_path(installed, installed / item["name"])) is not None
+                and entry.is_file()
+                and entry.stat().st_size == item["size"]
                 for item in manifest["files"]
             ):
                 return installed
     except OSError:
+        # An inaccessible installation may still have a usable read-only bundle.
         pass
-    bundled = Path("tokenizers") / name
     try:
-        if bundled.is_dir() and any(bundled.iterdir()):
+        bundled = _contained_path(Path("tokenizers"), Path("tokenizers") / name)
+        if bundled and bundled.is_dir() and any(bundled.iterdir()):
             return bundled
     except OSError:
+        # Missing or inaccessible bundles are reported as unavailable.
         pass
     return None
