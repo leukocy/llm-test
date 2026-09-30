@@ -21,6 +21,7 @@ services:
       MODELSCOPE_CACHE: /app/cache/modelscope
       XDG_CACHE_HOME: /app/cache
       TIKTOKEN_CACHE_DIR: /app/cache/tiktoken
+      LLM_TEST_TOKENIZER_DOWNLOAD_ROOT: /app/cache/tokenizers
     volumes: &platform-volumes
     - platform-data:/app/data
     - platform-results:/app/results

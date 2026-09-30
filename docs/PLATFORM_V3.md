@@ -27,13 +27,13 @@ FastAPI 控制 API ── SQLite WAL（任务、状态、审计、逐请求结�
 
 ### 已迁移的工作流
 
-- **测试方案**：创建、更新、删除并复用参数方案。方案保存在 `control_presets`，包含测试参数和生成设置，沿用任务提交的严格参数校验；方案不含密钥。
+- **测试方案**：创建、更新、删除并复用参数方案。方案保存在 `control_presets`，包含名称、最多 500 字符的说明、测试参数和生成设置；说明可随方案应用、更新和另存为，旧方案的说明默认为空。沿用任务提交的严格参数校验；方案不含密钥。
 - **使用引导**：总览首次使用提示和常驻“帮助与引导”入口，六步引导支持上一步、下一步、完成、跳过与重新开始，另有快速参考、功能亮点和 FAQ。完成状态保存在当前浏览器 `localStorage`，跳过仅保留当前标签页；引导不会阻止创建任务。
 - **初版参数**：七种基础性能测试可一键载入首次提交的默认工作负载，保留现有标准与深入测量配置。旧版单样本设置适于复现操作，正式比较仍需增加样本和预热；并发与输入长度仍受当前 128 / 131,072 上限约束。切换自定义文本的测量强度会保留已填写或导入的正文。
 - **报告环境信息**：创建测量和批量子任务均可填写 Processor、Mainboard、Memory、GPU、System、Engine 六项，每项最多 240 字符。明确选择信息对应受测模型服务器、测试客户端或未明确对象，内容随方案与批量 JSON 保存，并进入性能、质量和鲁棒性的 JSON / HTML / Markdown 报告。字段固定标记为 `user_reported`，不会覆盖执行端自动采集的硬件快照和机器身份；“环境信息”页面展示的是当前 API 主机，远程受测模型可能位于其他机器。
 - **受测 API 设置**：内置常用服务商地址和初版模型快选，支持新增、编辑、删除、在线模型列表与一次低输出连接检测。参考网络耗时通过单独的 `/models` 响应首部测量，明确含服务商处理时间，不能视为纯网络 RTT。凭证经 Fernet 加密后存入 `control_endpoints`，列表和任务响应均不回传明文。待执行或运行中的任务引用端点时，禁止修改或删除该端点。
 - **基础三项与批量**：可一键载入并发、Prefill、长上下文三阶段；每个子任务可选不同端点和模型、单独启停，提交前分别校验启用项的工作负载和样本预算。批次名称、说明、执行策略和子任务在同一事务中落库，重复提交受幂等摘要约束；默认按序串行执行，可开启 2～8 项并行和失败即停。并行上限由数据库事务控制，即使多个 worker 同时领取任务也不会超限；实际并行数取决于可用 worker。批量配置可导入/导出本地 JSON；批次历史可查看元数据并停止尚未结束的子任务。
-- **Tokenizer 与文本**：创建测量可查看模型自动映射、本地安装状态，选择已登记的本地 tokenizer，或用本地、参考 tiktoken 编码及字符数对文本计数。自定义提示词可从 UTF-8 TXT 导入。计数工具不下载或执行远程代码。
+- **Tokenizer 与文本**：创建测量可查看模型自动映射、本地安装状态，选择已登记的本地 tokenizer，或用本地、参考 tiktoken 编码及字符数对文本计数。可下载匹配项、单项或全部缺失项，并查看排队、字节/文件进度、取消和失败重试；下载任务保存在 `tokenizer_installs`，浏览器刷新不会丢失。自定义提示词可从 UTF-8 TXT 导入。
 - **数据仓库**：按模型、硬件、类型、状态、对外等级和文本检索历史记录；复测链默认展示最新版本。历史表可展开完整测量字段，矩阵支持最新值或最大观测值，另有硬件盘点与扩展效率。`hwInventory` 和 `hmTest` 模板可导出 CSV/JSON。
 - **质量诊断**：按数据集查看准确率与 Wilson 区间、类别表现、评分方式、失败归因、数据指纹和逐样本输入/响应。全部错误样本可导出带有电子表格公式防护的 CSV。
 
@@ -57,7 +57,13 @@ FastAPI 控制 API ── SQLite WAL（任务、状态、审计、逐请求结�
 2. 从 `.env.platform.example` 复制为 `.env.platform`，设置长度至少 32 字符的随机 `LLM_TEST_API_TOKEN`。建议同时设置独立的 `LLM_TEST_ENDPOINT_ENCRYPTION_KEY`（至少 32 字符），并在备份和恢复后保持不变；未设置时端点加密密钥由控制令牌派生，轮换令牌会使已保存的端点凭证无法解密。自定义主机需加入 `LLM_TEST_TRUSTED_API_HOSTS` 精确主机名；私有网络端点还需显式设置 `LLM_TEST_ALLOW_PRIVATE_ENDPOINTS=1`。
 3. 运行 `docker compose -p llm-test-platform --env-file .env.platform -f compose.platform.yml up -d --build`。浏览器打开 `http://127.0.0.1:8000`，粘贴访问令牌，在“受测 API 设置”中保存地址、模型 ID 和 API key。默认仅监听本机；内网访问应通过企业反向代理提供 TLS 与访问控制。
 
-Compose 将 `${LLM_TEST_TOKENIZERS_DIR:-./tokenizers}` 只读挂入 API 和 worker；需要把 Tokenizer 放在项目外时，在 `.env.platform` 写入绝对目录，如 `/home/ai/llm-perf/tokenizers`。没有本地文件时，参考 tiktoken 和字符计数仍可用，本地精确计数不可用。
+Compose 将 `${LLM_TEST_TOKENIZERS_DIR:-./tokenizers}` 只读挂入 API 和 worker；需要把已有 Tokenizer 放在项目外时，在 `.env.platform` 写入绝对目录，如 `/home/ai/llm-perf/tokenizers`。新下载保存到共享 `platform-cache` 卷的 `/app/cache/tokenizers`，容器重建仍保留，不覆盖已有文件。直接启动 API / worker 时，可把 `LLM_TEST_TOKENIZER_DOWNLOAD_ROOT` 设为双方可读写的绝对路径；默认使用 `$XDG_CACHE_HOME/llm-test/tokenizers` 或 `~/.cache/llm-test/tokenizers`。
+
+下载只接受 `TOKENIZER_SOURCES` 登记的公开 Hugging Face 仓库，不接受任意 URL、仓库或路径，不使用受测 API 的凭证。需要 worker 能访问 `huggingface.co` 及其文件分发域名；需要授权的仓库会显示失败原因。当前入口不提供 ModelScope 下载切换。每项固定 Hub 提交版本，仅取明确允许的 Tokenizer / 配置文件，禁止 Python 和模型权重；文件清单最多 4 MiB，单文件最多 64 MiB、整项最多 128 MiB / 32 文件 / 20 分钟。校验实际大小、源清单中的 LFS SHA-256，并为所有文件记录 SHA-256；禁止远程代码、离线加载并成功编码后，在同一文件系统中原子启用。
+
+本地安装清单最多读取 64 KiB。已登记的目录、安装清单和清单文件在解析真实路径后检查所属目录；越界的软链接或仅有相似前缀的目录不作为有效安装。被拒绝的已登记目录不会回退为任意本地路径加载。
+
+全局同一时间只执行一个下载。数据库事务保证下载与所有性能/质量/鲁棒性作业互斥；排队的测量优先领取，已开始的下载完成或取消后才领取新测量。暂停的测量也会阻止下载。每两秒续约，worker 失联后任务标记为失败（取消中的任务标记为已取消），清理临时文件；重新下载会创建新任务。测量及本地 Tokenizer 计数只加载本地文件；tiktoken 参考计数首次使用可能下载其内置词表，不视为目标模型的精确计数。手动选择的 Tokenizer 加载失败会停止测量；自动匹配不可用时仍可能使用明确标注来源的参考编码。依赖仓库自定义 Python 的 Tokenizer 当前不启用。安装版本与文件清单随性能运行快照保存，并在详情和 JSON / HTML / Markdown 报告中显示；最终 Token 指标仍以逐请求来源为准。
 
 Compose 先运行一次 `migrate` 服务完成数据库迁移，再启动 API 与 worker，避免两个进程首次启动时同时修改 schema。
 
@@ -84,10 +90,10 @@ docker compose -p llm-test-platform --env-file .env.platform -f compose.platform
 - API 就绪检查：`GET /health/ready`；存活检查：`GET /health/live`。
 - 备份时同时保存 `platform-data` 和 `platform-results` 卷；SQLite 推荐在运行中使用 `sqlite3.Connection.backup()` 生成一致性快照。质量详细 JSON 与性能 CSV 位于结果卷。
 - 监控 worker 日志中的 `WORKER_LOST` 和 `EXECUTION_FAILED`；后者对客户端只显示通用信息，详细异常保留在受控日志。
-- 部署升级前备份数据库。schema 迁移至 1.10.0 是幂等的，`control_batches` 保存批次名称、说明、幂等摘要与执行策略，`control_jobs` 保存暂停计数和时长；旧测量数据保持可读。数据库备份应与端点加密密钥一起保管。
+- 部署升级前备份数据库。schema 迁移至 1.11.0 是幂等的：增加 `control_presets.description` 和 `tokenizer_installs`；保留批次执行策略、暂停计数和时长，旧测量和方案保持可读。数据库备份应与端点加密密钥一起保管；下载后的 Tokenizer 在独立缓存卷中，应随缓存卷备份。
 - 控制令牌保存在浏览器当前标签页的 `sessionStorage`，关闭标签页后清除；API 响应标记 `no-store`。反向代理必须强制 HTTPS 并限制内网访问。
 - HumanEval/MBPP 等代码评估继续使用既有隔离 sandbox 服务；需要时按原项目文档单独启用，不能让 API 或普通 worker 获得 Docker socket。
 
 ## 当前边界
 
-这是单机、单租户控制面。任务、租约和报告已经与 Streamlit 会话分离；底层 `BenchmarkRunner` 仍是较大的模块，且部分策略使用旧 token 校准逻辑。worker 重启后的断点恢复、本地 Tokenizer 下载、旧 CSV 回载和部分历史配置入口尚未迁移至新控制台。生产推广前应为目标模型准备本地 tokenizer，并用固定版本的数据集、预热条件和硬件指纹核验指标。跨主机调度、租户隔离、集中认证与 PostgreSQL 存储需要下一次架构扩展。
+这是单机、单租户控制面。任务、租约和报告已经与 Streamlit 会话分离；底层 `BenchmarkRunner` 仍是较大的模块，且部分策略使用旧 token 校准逻辑。worker 重启后的测量断点恢复、旧 CSV 回载和部分高级工具与历史图形尚未迁移至新控制台。生产推广前应为目标模型准备本地 tokenizer，并用固定版本的数据集、预热条件和硬件指纹核验指标。跨主机调度、租户隔离、集中认证与 PostgreSQL 存储需要下一次架构扩展。

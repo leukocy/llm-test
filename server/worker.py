@@ -16,6 +16,8 @@ from server.endpoints import EndpointRegistry
 from server.runner_adapter import execute_job
 from server.settings import Settings
 from server.store import JobStore, LeaseLost
+from server.tokenizer_install import execute_install
+from server.tokenizer_queue import TokenizerInstallQueue
 
 logger = logging.getLogger(__name__)
 
@@ -107,9 +109,31 @@ async def run_claimed_job(job: dict, settings: Settings, store: JobStore, worker
         reset_all()
 
 
+async def run_claimed_install(
+    task: dict, queue: TokenizerInstallQueue, worker_id: str, shutdown: asyncio.Event
+) -> None:
+    stop = threading.Event()
+
+    def monitor() -> None:
+        while not stop.wait(2):
+            if not queue.heartbeat(task["install_id"], worker_id):
+                return
+
+    heartbeat = threading.Thread(target=monitor, daemon=True)
+    heartbeat.start()
+    try:
+        await asyncio.to_thread(
+            execute_install, task, queue, worker_id, interrupted=shutdown.is_set
+        )
+    finally:
+        stop.set()
+        heartbeat.join(timeout=3)
+
+
 async def serve(settings: Settings | None = None) -> None:
     settings = settings or Settings.from_env()
     store = JobStore(settings.db_path)
+    tokenizer_queue = TokenizerInstallQueue(store)
     worker_id = f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:8]}"
     shutdown = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -126,8 +150,13 @@ async def serve(settings: Settings | None = None) -> None:
     logger.info("Worker started: %s", worker_id)
     while not shutdown.is_set():
         store.reap_expired()
+        tokenizer_queue.reap_expired()
         job = store.claim(worker_id)
         if job is None:
+            install = tokenizer_queue.claim(worker_id)
+            if install is not None:
+                await run_claimed_install(install, tokenizer_queue, worker_id, shutdown)
+                continue
             try:
                 await asyncio.wait_for(shutdown.wait(), timeout=settings.worker_poll_seconds)
             except asyncio.TimeoutError:

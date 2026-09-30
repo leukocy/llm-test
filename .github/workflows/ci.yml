@@ -78,7 +78,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -f Dockerfile.platform -t llm-test-platform:ci .
+      - run: docker build --build-arg PIP_INDEX_URL=https://pypi.org/simple -f Dockerfile.platform -t llm-test-platform:ci .
       - run: docker run --rm llm-test-platform:ci python -c "import server.api, server.worker"
 
   security-tests:
@@ -110,7 +110,7 @@ jobs:
         run: |
           docker compose config -q
           docker compose -f docker-compose.prod.yml config -q
-          docker build -f Dockerfile.platform -t llm-test-platform:ci .
+          docker build --build-arg PIP_INDEX_URL=https://pypi.org/simple -f Dockerfile.platform -t llm-test-platform:ci .
           docker build -f Dockerfile.sandbox-worker -t llm-benchmark-sandbox-worker:ci .
 
       - name: Verify real sandbox container isolation

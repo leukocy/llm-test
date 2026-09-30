@@ -324,6 +324,14 @@ class JobSubmission(StrictSpec):
 
 class PresetSubmission(JobSubmission):
     name: str = Field(min_length=1, max_length=80)
+    description: str = Field(default="", max_length=500)
+
+    @field_validator("description")
+    @classmethod
+    def clean_description(cls, value: str) -> str:
+        if any(ord(char) < 32 and char not in "\n\r\t" or ord(char) == 127 for char in value):
+            raise ValueError("Preset description contains control characters")
+        return value.strip()
 
     @field_validator("name")
     @classmethod

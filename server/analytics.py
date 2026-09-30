@@ -15,6 +15,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from config.tokenizer_paths import describe_tokenizer_installation
 from core.benchmark.metrics import METRIC_CONTRACT_VERSION
 from server.specs import describe_report_environment
 
@@ -173,6 +174,12 @@ def run_summary(
         report_environment = describe_report_environment(config.get("report_environment"))
     except ValidationError as exc:
         raise MetricContractConflict("Invalid user-reported report environment") from exc
+    try:
+        tokenizer_installation = describe_tokenizer_installation(
+            config.get("tokenizer_installation")
+        )
+    except ValueError as exc:
+        raise MetricContractConflict("Invalid tokenizer installation provenance") from exc
     stored_control = config.get("execution_control")
     control = dict(stored_control) if isinstance(stored_control, dict) else {}
     if job:
@@ -325,6 +332,7 @@ def run_summary(
         "measurement_protocol": protocol,
         "execution_control": control,
         "report_environment": report_environment,
+        "tokenizer_installation": tokenizer_installation,
         "data_quality": {"warnings": quality_warnings},
         "provenance": {
             "config_json": run["config_json"],

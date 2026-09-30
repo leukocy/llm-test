@@ -11,6 +11,7 @@ export type Endpoint = {
 export type Preset = {
   preset_id: string;
   name: string;
+  description: string;
   endpoint_id: string;
   test_type: string;
   parameters: Record<string, unknown>;
@@ -186,6 +187,12 @@ export type Summary = {
     stop_on_error?: boolean;
   };
   report_environment?: ReportEnvironment | null;
+  tokenizer_installation?: {
+    name: string;
+    repo_id: string;
+    revision: string;
+    files: { name: string; size: number; sha256: string }[];
+  } | null;
   data_quality: { warnings: string[] };
   provenance: { token_sources: string[]; token_methods: string[] };
   notes: string[];

@@ -69,6 +69,7 @@ export function NewRun({
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetId, setPresetId] = useState("");
   const [presetName, setPresetName] = useState("");
+  const [presetDescription, setPresetDescription] = useState("");
   const [presetError, setPresetError] = useState("");
   const [presetBusy, setPresetBusy] = useState(false);
   const [plan, setPlan] = useState<MeasurementPlan | null>(null);
@@ -307,6 +308,7 @@ export function NewRun({
           method: presetId ? "PUT" : "POST",
           body: JSON.stringify({
             name: presetName.trim(),
+            description: presetDescription.trim(),
             schema_version: 1,
             endpoint_id: endpoint,
             test_type: type,
@@ -321,6 +323,7 @@ export function NewRun({
       ]);
       setPresetId(saved.preset_id);
       setPresetName(saved.name);
+      setPresetDescription(saved.description);
     } catch (exc) {
       setPresetError(exc instanceof Error ? exc.message : "保存方案失败");
     } finally {
@@ -341,6 +344,7 @@ export function NewRun({
       );
       setPresetId("");
       setPresetName("");
+      setPresetDescription("");
     } catch (exc) {
       setPresetError(exc instanceof Error ? exc.message : "删除方案失败");
     } finally {
@@ -373,7 +377,11 @@ export function NewRun({
               const id = event.target.value;
               setPresetId(id);
               const preset = presets.find((item) => item.preset_id === id);
-              if (!preset) return;
+              if (!preset) {
+                setPresetName("");
+                setPresetDescription("");
+                return;
+              }
               if (
                 !scenarios.some((item) => item.id === preset.test_type) ||
                 !endpoints.some((item) => item.id === preset.endpoint_id)
@@ -383,6 +391,7 @@ export function NewRun({
               }
               setPresetError("");
               setPresetName(preset.name);
+              setPresetDescription(preset.description || "");
               setEndpoint(preset.endpoint_id);
               setType(preset.test_type as JobType);
               setParams(preset.parameters);
@@ -433,6 +442,18 @@ export function NewRun({
             </>
           )}
         </div>
+        <label className="input-label" htmlFor="preset-description">
+          方案说明（可选）
+        </label>
+        <textarea
+          id="preset-description"
+          className="preset-description"
+          value={presetDescription}
+          onChange={(event) => setPresetDescription(event.target.value)}
+          maxLength={500}
+          rows={2}
+          placeholder="记录测量目的、适用模型或复测条件，最多 500 字符"
+        />
         {presetError && (
           <p className="form-error" role="alert">
             {presetError}

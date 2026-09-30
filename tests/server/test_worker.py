@@ -2,6 +2,7 @@
 
 import asyncio
 import sqlite3
+import threading
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,46 @@ from server.control import JobControl
 from server.runner_adapter import RunOutput
 from server.settings import Endpoint, Settings
 from server.store import JobStore
-from server.worker import run_claimed_job
+from server.tokenizer_queue import TokenizerInstallQueue
+from server.worker import run_claimed_install, run_claimed_job
+
+
+@pytest.mark.asyncio
+async def test_install_worker_maintains_lease_until_thread_finishes(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LLM_TEST_TOKENIZER_DOWNLOAD_ROOT", str(tmp_path / "cache"))
+    store = JobStore(tmp_path / "install.db")
+    queue = TokenizerInstallQueue(store)
+    queue.enqueue(["DeepSeek-V3.2"])
+    task = queue.claim("installer")
+    with store._connection() as conn:
+        original = conn.execute("SELECT lease_until FROM tokenizer_installs").fetchone()[0]
+    finished = threading.Event()
+
+    def fake_execute(task, queue, worker_id, **_kwargs):
+        finished.wait(5)
+        queue.fail(task["install_id"], worker_id, "Finished by test", cancelled=True)
+
+    monkeypatch.setattr("server.worker.execute_install", fake_execute)
+    running = asyncio.create_task(run_claimed_install(task, queue, "installer", asyncio.Event()))
+    try:
+
+        async def wait_for_heartbeat():
+            while True:
+                with store._connection() as conn:
+                    lease = conn.execute("SELECT lease_until FROM tokenizer_installs").fetchone()[0]
+                if lease > original:
+                    return
+                await asyncio.sleep(0.02)
+
+        await asyncio.wait_for(wait_for_heartbeat(), timeout=4)
+        assert queue.get(task["install_id"])["status"] == "downloading"
+        finished.set()
+        await asyncio.wait_for(running, timeout=2)
+        assert queue.get(task["install_id"])["status"] == "cancelled"
+    finally:
+        finished.set()
+        await asyncio.gather(running, return_exceptions=True)
 
 
 @pytest.mark.asyncio

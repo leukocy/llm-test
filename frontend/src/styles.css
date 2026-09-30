@@ -1431,6 +1431,8 @@ textarea:focus {
 }
 .preset-controls select,
 .preset-controls input,
+.preset-description,
+.tokenizer-tools textarea,
 .warehouse-filters select,
 .warehouse-filters input,
 .warehouse-matrix-controls select,
@@ -2277,6 +2279,71 @@ textarea:focus {
 .tokenizer-tools textarea {
   width: 100%;
   margin: 5px 0 10px;
+}
+.preset-description {
+  width: 100%;
+  margin: 6px 0 2px;
+}
+.tokenizer-inventory {
+  margin: 12px 0;
+}
+.tokenizer-inventory summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.tokenizer-inventory ul {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  max-height: 460px;
+  overflow-y: auto;
+}
+.tokenizer-inventory li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 2px;
+  border-top: 1px solid #e2e8eb;
+}
+.tokenizer-item-info {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.tokenizer-item-info strong {
+  font-size: 12px;
+}
+.tokenizer-item-info small {
+  display: block;
+  color: #5c7280;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.tokenizer-item-info .form-error {
+  color: #b33836;
+}
+.tokenizer-item-info progress {
+  width: 100%;
+  height: 6px;
+  accent-color: #1d7c89;
+}
+.tokenizer-inventory .button {
+  flex-shrink: 0;
+}
+.tokenizer-provenance {
+  overflow-wrap: anywhere;
+}
+.tokenizer-provenance p,
+.tokenizer-provenance ul {
+  font-size: 13px;
+  line-height: 1.7;
+}
+.tokenizer-provenance details {
+  margin-top: 12px;
+}
+.tokenizer-provenance li {
+  margin: 12px 0;
 }
 .tokenizer-count-actions,
 .api-model-discovery,
