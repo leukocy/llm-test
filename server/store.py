@@ -455,7 +455,16 @@ class JobStore:
                 f"SELECT {projection} FROM control_jobs {where} ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?",
                 params + (limit, offset),
             ).fetchall()
-        return [self._as_job(row) for row in rows if row is not None], count  # type: ignore[misc]
+        items = [self._as_job(row) for row in rows if row is not None]
+        if saved_progress:
+            from server.checkpoints import MEASUREMENT_TYPES
+
+            for item in items:
+                if item is not None:
+                    item["saved_progress_unit"] = (
+                        "测量组" if item["test_type"] in MEASUREMENT_TYPES else "样本"
+                    )
+        return items, count  # type: ignore[return-value]
 
     def events(self, job_id: str, *, limit: int = 100) -> JobList:
         if not 1 <= limit <= 500:

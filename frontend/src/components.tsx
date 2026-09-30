@@ -190,7 +190,8 @@ export function JobTable({
                 <td>
                   <strong>
                     {job.saved_progress_committed ?? 0} /{" "}
-                    {job.saved_progress_planned ?? 0} 个样本
+                    {job.saved_progress_planned ?? 0} 个
+                    {job.saved_progress_unit || "样本"}
                   </strong>
                   <small>保存于 {date(job.saved_progress_at)}</small>
                 </td>

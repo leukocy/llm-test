@@ -15,7 +15,15 @@ from server.store import JobNotFound, JobStore, LeaseLost
 
 CONTRACT = "evaluation-checkpoint-v1"
 RECOVERABLE_ERRORS = {"WORKER_LOST", "INTERRUPTED"}
-SUPPORTED_TYPES = {"quality", "robustness"}
+MEASUREMENT_TYPES = {"concurrency", "matrix", "custom_text", "dataset"}
+MEASUREMENT_CONTRACT = "measurement-group-checkpoint-v1"
+SUPPORTED_TYPES = {"quality", "robustness"} | MEASUREMENT_TYPES
+
+
+def checkpoint_contract(test_type: str) -> str:
+    return MEASUREMENT_CONTRACT if test_type in MEASUREMENT_TYPES else CONTRACT
+
+
 MAX_BYTES = 16 * 1024 * 1024
 
 
@@ -23,6 +31,7 @@ def recovery_filter() -> tuple[str, tuple[str, ...]]:
     """Candidate eligibility only; recovery performs full provenance verification."""
     types = sorted(SUPPORTED_TYPES)
     errors = sorted(RECOVERABLE_ERRORS)
+    measurement_types = sorted(MEASUREMENT_TYPES)
     return (
         "test_type IN ("
         + ",".join("?" for _ in types)
@@ -30,9 +39,11 @@ def recovery_filter() -> tuple[str, tuple[str, ...]]:
         + " AND ((status = 'failed' AND error_code IN ("
         + ",".join("?" for _ in errors)
         + ")) OR (status = 'cancelled' AND error_code IS NULL))"
-        + " AND EXISTS (SELECT 1 FROM job_checkpoints h WHERE h.job_id = control_jobs.job_id AND h.contract = ?)"
+        + " AND EXISTS (SELECT 1 FROM job_checkpoints h WHERE h.job_id = control_jobs.job_id AND h.contract = CASE WHEN control_jobs.test_type IN ("
+        + ",".join("?" for _ in measurement_types)
+        + ") THEN ? ELSE ? END)"
         + " AND EXISTS (SELECT 1 FROM checkpoint_units u WHERE u.job_id = control_jobs.job_id)",
-        (*types, *errors, CONTRACT),
+        (*types, *errors, *measurement_types, MEASUREMENT_CONTRACT, CONTRACT),
     )
 
 
@@ -93,6 +104,7 @@ def execution_signature(job: dict, endpoint: Endpoint) -> str:
         *root.joinpath("task_configs").rglob("*.yml"),
         Path(__file__),
         root / "server/runner_adapter.py",
+        root / "server/measurement_checkpoints.py",
     ]
     for path in sorted(files):
         digest.update(path.relative_to(root).as_posix().encode("utf-8"))
@@ -100,7 +112,7 @@ def execution_signature(job: dict, endpoint: Endpoint) -> str:
     return _hash(
         _encode(
             {
-                "contract": CONTRACT,
+                "contract": checkpoint_contract(job["test_type"]),
                 "code_sha256": digest.hexdigest(),
                 "test_type": job["test_type"],
                 "parameters": job["parameters"],
@@ -148,7 +160,8 @@ def checkpoint_info(store: JobStore, job: dict) -> dict[str, Any]:
         conn.execute("BEGIN")
         current, header, counts, revision = _read_checkpoint(conn, job["job_id"])
     return {
-        "contract": CONTRACT,
+        "contract": checkpoint_contract(current["test_type"]),
+        "unit_label": "测量组" if current["test_type"] in MEASUREMENT_TYPES else "样本",
         "supported": current["test_type"] in SUPPORTED_TYPES,
         "available": bool(header),
         "revision": revision,
@@ -161,12 +174,18 @@ def checkpoint_info(store: JobStore, job: dict) -> dict[str, Any]:
         "can_delete": bool(header and current["status"] in {"failed", "cancelled", "completed"}),
         "can_recover": bool(
             header
-            and header["contract"] == CONTRACT
+            and header["contract"] == checkpoint_contract(current["test_type"])
             and counts["planned"]
             and resumable_state(current)
             and current["test_type"] in SUPPORTED_TYPES
         ),
         "notes": [
+            "测量恢复按完整请求组复用原计时和观测；未提交组可能整组重发，预热复用不证明服务端缓存仍然有效。",
+            "每组实际提示词在请求前冻结；尚未生成的后续组将按原配置生成。",
+            "跨中断组仅可分别解释吞吐，合并样本不能证明连续负载能力。",
+        ]
+        if current["test_type"] in MEASUREMENT_TYPES
+        else [
             "恢复会复用已提交样本，保留原始样本顺序、few-shot 和扰动计划，并核验模型、参数与执行代码。",
             "中断时尚未提交的样本可能再次调用接口；已发起次数不是接口已返回响应数，也不能证明远端只执行一次。",
             "含恢复样本的结果跨越执行中断；当前执行时长只描述本次尝试，不能作为连续吞吐或不中断稳定性的证明。",
@@ -218,7 +237,8 @@ class JobJournal:
                 "SELECT * FROM job_checkpoints WHERE job_id = ?", (job["job_id"],)
             ).fetchone()
             if previous and (
-                previous["contract"] != CONTRACT or previous["signature"] != self.signature
+                previous["contract"] != checkpoint_contract(job["test_type"])
+                or previous["signature"] != self.signature
             ):
                 raise CheckpointConflict(
                     "Model, parameters or execution code changed; checkpoint cannot be reused"
@@ -226,7 +246,7 @@ class JobJournal:
             now = time.time()
             conn.execute(
                 "INSERT OR IGNORE INTO job_checkpoints(job_id,contract,signature,created_at,updated_at) VALUES (?,?,?,?,?)",
-                (job["job_id"], CONTRACT, self.signature, now, now),
+                (job["job_id"], checkpoint_contract(job["test_type"]), self.signature, now, now),
             )
             self._touch(conn)
             conn.commit()
@@ -246,7 +266,7 @@ class JobJournal:
             raise LeaseLost(self.job["job_id"])
 
     def prepare_scope(
-        self, key: str, factory: Callable[[], tuple[dict, list[dict]]]
+        self, key: str, factory: Callable[[], tuple[dict, list[dict]]], *, allow_empty: bool = False
     ) -> tuple[dict, list[dict]]:
         with self.store._connection() as conn:
             conn.execute("BEGIN")
@@ -267,7 +287,7 @@ class JobJournal:
         metadata, inputs = factory()
         raw_metadata = _encode(metadata)
         encoded = [_encode(unit) for unit in inputs]
-        if not encoded:
+        if not encoded and not allow_empty:
             raise CheckpointConflict("Cannot checkpoint an empty sample plan")
         with self.store._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -308,29 +328,24 @@ class JobJournal:
             self._touch(conn)
             conn.commit()
 
-    def commit(self, key: str, index: int, result: dict[str, Any]) -> None:
+    def _commit(self, conn, key: str, index: int, result: dict[str, Any]) -> None:
         raw = _encode(result)
+        self._lease(conn)
+        updated = conn.execute(
+            """UPDATE checkpoint_units SET result_json=?,result_sha256=?,committed_at=?
+            WHERE job_id=? AND scope_key=? AND unit_index=? AND result_json IS NULL AND issued_by_attempt=?""",
+            (raw, _hash(raw), time.time(), self.job["job_id"], key, index, self.job["attempts"]),
+        )
+        if updated.rowcount != 1:
+            raise CheckpointConflict(
+                "Sample was not issued by this attempt or is already committed"
+            )
+        self._touch(conn)
+
+    def commit(self, key: str, index: int, result: dict[str, Any]) -> None:
         with self.store._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
-            self._lease(conn)
-            updated = conn.execute(
-                """UPDATE checkpoint_units SET result_json=?,result_sha256=?,committed_at=?
-                WHERE job_id=? AND scope_key=? AND unit_index=? AND result_json IS NULL AND issued_by_attempt=?""",
-                (
-                    raw,
-                    _hash(raw),
-                    time.time(),
-                    self.job["job_id"],
-                    key,
-                    index,
-                    self.job["attempts"],
-                ),
-            )
-            if updated.rowcount != 1:
-                raise CheckpointConflict(
-                    "Sample was not issued by this attempt or is already committed"
-                )
-            self._touch(conn)
+            self._commit(conn, key, index, result)
             conn.commit()
 
     def describe(self) -> dict[str, Any]:
@@ -347,7 +362,11 @@ def recover_job(store: JobStore, job: dict, endpoint: Endpoint) -> dict[str, Any
         saved = conn.execute(
             "SELECT * FROM job_checkpoints WHERE job_id=?", (job["job_id"],)
         ).fetchone()
-        if not saved or saved["contract"] != CONTRACT or saved["signature"] != signature:
+        if (
+            not saved
+            or saved["contract"] != checkpoint_contract(job["test_type"])
+            or saved["signature"] != signature
+        ):
             raise CheckpointConflict(
                 "Model, parameters or execution code changed; checkpoint cannot be recovered"
             )
@@ -375,6 +394,10 @@ def recover_job(store: JobStore, job: dict, endpoint: Endpoint) -> dict[str, Any
                 _decode(row["input_json"], row["input_sha256"])
                 if row["result_json"] is not None:
                     _decode(row["result_json"], row["result_sha256"])
+        if current["test_type"] in MEASUREMENT_TYPES:
+            from server.measurement_checkpoints import verify_measurement_observations
+
+            verify_measurement_observations(conn, current)
         now = time.time()
         before = RunStatus(current["status"])
         after = advance_run(before, RunEvent.RECOVER)
@@ -395,7 +418,7 @@ def recover_job(store: JobStore, job: dict, endpoint: Endpoint) -> dict[str, Any
             "recover",
             "api",
             now,
-            {"contract": CONTRACT},
+            {"contract": checkpoint_contract(current["test_type"])},
         )
         conn.commit()
     return store.get(job["job_id"])

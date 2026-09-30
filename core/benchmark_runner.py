@@ -721,6 +721,7 @@ class BenchmarkRunner:
         control_poll: Callable[[], bool] | None = None,
         persistence_owner: str | None = None,
         report_environment: dict[str, str] | None = None,
+        measurement_journal: Any = None,
     ):
         self.placeholder, self.progress_bar, self.status_text = (
             placeholder,
@@ -739,6 +740,7 @@ class BenchmarkRunner:
         self._control_checkpoint = control_checkpoint
         self._control_poll = control_poll
         self._persistence_owner = persistence_owner
+        self._measurement_journal = measurement_journal
         self.report_environment = dict(report_environment or {})
 
         self.api_key = api_key
@@ -1006,15 +1008,27 @@ class BenchmarkRunner:
             if self._control_checkpoint is not None:
                 full_config["pause_policy"] = "drained_request_group"
 
-            self._db_run = db.start_test_run(
-                test_type=test_type,
-                model_id=self.model_id,
-                provider=(
-                    getattr(self.provider, "name", "unknown") if self.provider else "unknown"
-                ),
-                config=full_config,
-                system_info=merged_sys_info,
-                test_id=self.external_test_id,
+            start_run = self._measurement_journal.bind_run if self._measurement_journal else None
+            self._db_run = (
+                start_run(
+                    db,
+                    test_type=test_type,
+                    model_id=self.model_id,
+                    provider=getattr(self.provider, "name", "unknown"),
+                    config=full_config,
+                    system_info=merged_sys_info,
+                )
+                if start_run
+                else db.start_test_run(
+                    test_type=test_type,
+                    model_id=self.model_id,
+                    provider=(
+                        getattr(self.provider, "name", "unknown") if self.provider else "unknown"
+                    ),
+                    config=full_config,
+                    system_info=merged_sys_info,
+                    test_id=self.external_test_id,
+                )
             )
             self._test_type_for_db = test_type
             self._last_system_info = merged_sys_info
@@ -1025,17 +1039,21 @@ class BenchmarkRunner:
             self._start_engine_poller()
             # 自适应测试：测试前一次性探测 KV 预算（超预算 cell 自动跳过，永不阻塞测试）
             self._probe_kv_budget()
+            if self._measurement_journal:
+                self._measurement_journal.restore_capacity(self)
 
             logger.info(f"DatabaseTest运行已Create: ID={self._db_run.id}")
             return self._db_run
 
         except Exception as e:
             logger.warning(f"CreateDatabaseTest运行失败: {e}")
+            if self._measurement_journal:
+                raise
             return None
 
     def _save_result_to_db(self, result: dict):
         """Save单Result到Database"""
-        if self._db_run is None:
+        if self._db_run is None or self._measurement_journal:
             return
 
         try:
@@ -1050,7 +1068,7 @@ class BenchmarkRunner:
 
     def _update_db_progress(self):
         """UpdateDatabasein进度"""
-        if self._db_run is None:
+        if self._db_run is None or self._measurement_journal:
             return
 
         try:
@@ -1080,22 +1098,27 @@ class BenchmarkRunner:
         try:
             db = self._get_db_manager()
             self._finalize_system_info()
-            protocol = self._db_run.config.get("measurement_protocol")
-            if isinstance(protocol, dict):
-                protocol["warmup_recorded"] = self._warmup_recorded
-                protocol["warmup_failures"] = self._warmup_failures
-                db.runs.update(self._db_run)
-            # 组装八维仓库字段并随完成写入
             extra_fields = self._build_warehouse_extra_fields(monitor_summary, engine_summary)
-            db.complete_test_run(
-                self._db_run,
-                success,
-                calculate_stats=True,
-                extra_fields=extra_fields,
-            )
+            if self._measurement_journal:
+                self._measurement_journal.finish_run(self, success, extra_fields)
+            else:
+                protocol = self._db_run.config.get("measurement_protocol")
+                if isinstance(protocol, dict):
+                    protocol["warmup_recorded"] = self._warmup_recorded
+                    protocol["warmup_failures"] = self._warmup_failures
+                    db.runs.update(self._db_run)
+                # 组装八维仓库字段并随完成写入
+                db.complete_test_run(
+                    self._db_run,
+                    success,
+                    calculate_stats=True,
+                    extra_fields=extra_fields,
+                )
             logger.info(f"DatabaseTest运行Completed: ID={self._db_run.id}, success={success}")
         except Exception as e:
             logger.warning(f"完成DatabaseTest运行失败: {e}")
+            if self._measurement_journal:
+                raise
         finally:
             self._last_run_id = self._db_run.id if self._db_run else None
             self._db_run = None
@@ -1559,6 +1582,8 @@ class BenchmarkRunner:
 
     def _append_metric_csv(self, result: dict, csv_columns: list):
         """Tag each exported row and its persisted DB metadata with the metric contract."""
+        if self._measurement_journal:
+            self._measurement_journal.restore_fields(result)
         result["metric_contract_version"] = METRIC_CONTRACT_VERSION
         extra_metrics = result.get("extra_metrics")
         if not isinstance(extra_metrics, dict):
@@ -1643,6 +1668,11 @@ class BenchmarkRunner:
             max_tokens,
             concurrency,
             -(self._warmup_recorded + concurrency),
+            **(
+                {"prompt_sources": [source for _, source in prompts]}
+                if self._measurement_journal
+                else {}
+            ),
         )
         if len(results) != concurrency:
             raise RuntimeError(
@@ -1677,6 +1707,9 @@ class BenchmarkRunner:
 
     def _batch_save_results_to_db(self):
         """批量Save所hasResult到Database"""
+        if self._measurement_journal and self._db_run is not None:
+            self._measurement_journal.flush(self)
+            return
         if self._db_run is None or not self.results_list:
             return
 
@@ -2851,6 +2884,34 @@ class BenchmarkRunner:
             await self._control_checkpoint()
 
     async def _run_concurrency_batch(
+        self, client, prompts, max_tokens, concurrency, session_id_start, prompt_sources=None
+    ):
+        if self._measurement_journal is None:
+            return await self._run_concurrency_batch_observe(
+                client, prompts, max_tokens, concurrency, session_id_start
+            )
+        await self._measurement_checkpoint()
+        request_prompts = (
+            (prompts * (concurrency // len(prompts) + 1))[:concurrency]
+            if isinstance(prompts, list)
+            else [prompts] * concurrency
+        )
+        sources = prompt_sources or ["generic"] * concurrency
+        return await self._measurement_journal.measure(
+            self,
+            "barrier",
+            request_prompts,
+            sources,
+            concurrency=concurrency,
+            max_tokens=max_tokens,
+            session_start=session_id_start,
+            warmup=session_id_start < 0,
+            observe=lambda frozen: self._run_concurrency_batch_observe(
+                client, frozen, max_tokens, concurrency, session_id_start
+            ),
+        )
+
+    async def _run_concurrency_batch_observe(
         self, client, prompts, max_tokens, concurrency, session_id_start
     ):
         await self._measurement_checkpoint()
@@ -2981,6 +3042,50 @@ class BenchmarkRunner:
         return results
 
     async def _run_continuous_batch(
+        self,
+        client,
+        prompt_func_or_str,
+        max_tokens,
+        concurrency,
+        total_requests,
+        session_id_start,
+        **kwargs,
+    ):
+        if self._measurement_journal is None:
+            return await self._run_continuous_batch_observe(
+                client,
+                prompt_func_or_str,
+                max_tokens,
+                concurrency,
+                total_requests,
+                session_id_start,
+                **kwargs,
+            )
+        await self._measurement_checkpoint()
+        prompts = [
+            prompt_func_or_str[i]
+            if isinstance(prompt_func_or_str, list)
+            else prompt_func_or_str(i)
+            if callable(prompt_func_or_str)
+            else prompt_func_or_str
+            for i in range(total_requests)
+        ]
+        sources = kwargs.pop("prompt_sources", None) or ["generic"] * total_requests
+        return await self._measurement_journal.measure(
+            self,
+            "continuous",
+            prompts,
+            sources,
+            concurrency=concurrency,
+            max_tokens=max_tokens,
+            session_start=session_id_start,
+            warmup=False,
+            observe=lambda frozen: self._run_continuous_batch_observe(
+                client, frozen, max_tokens, concurrency, total_requests, session_id_start, **kwargs
+            ),
+        )
+
+    async def _run_continuous_batch_observe(
         self,
         client,
         prompt_func_or_str,
@@ -3145,6 +3250,7 @@ class BenchmarkRunner:
                 if not t.done():
                     t.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
         # Recalculate final system throughput using precise request timestamps
         # This excludes framework overhead (like UI updates) that happens outside the request window
@@ -3434,7 +3540,12 @@ class BenchmarkRunner:
                 batch_sources = [s for _, s in batch_pairs]
 
                 results = await self._run_concurrency_batch(
-                    None, batch_prompts, max_tokens, concurrency, session_counter
+                    None,
+                    batch_prompts,
+                    max_tokens,
+                    concurrency,
+                    session_counter,
+                    **({"prompt_sources": batch_sources} if self._measurement_journal else {}),
                 )
 
                 session_counter += concurrency
@@ -4470,6 +4581,7 @@ class BenchmarkRunner:
                     concurrency,
                     total_reqs_for_level,
                     session_counter,
+                    **({"prompt_sources": pregen_sources} if self._measurement_journal else {}),
                 )
                 session_counter += total_reqs_for_level
 
@@ -4633,6 +4745,7 @@ class BenchmarkRunner:
                 concurrency,
                 total_reqs_for_level,
                 session_counter,
+                **({"prompt_sources": sources} if self._measurement_journal else {}),
             )
             session_counter += total_reqs_for_level
 

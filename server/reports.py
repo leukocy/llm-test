@@ -235,6 +235,7 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
         "\n".join(lines)
         + "\n"
         + history_origin_markdown(summary)
+        + checkpoint_markdown(summary)
         + report_environment_markdown(summary.get("report_environment"))
         + tokenizer_installation_markdown(summary.get("tokenizer_installation"))
     )
@@ -245,8 +246,8 @@ def checkpoint_markdown(report: dict[str, Any]) -> str:
     if not checkpoint:
         return ""
     return (
-        "\n## 样本检查点与执行中断\n\n"
-        f"- 已提交 {checkpoint['committed_units']} / {checkpoint['planned_units']} 个样本；"
+        f"\n## {_md(checkpoint.get('unit_label', '样本'))}检查点与执行中断\n\n"
+        f"- 已提交 {checkpoint['committed_units']} / {checkpoint['planned_units']} 个{_md(checkpoint.get('unit_label', '样本'))}；"
         f"恢复 {checkpoint['recoveries']} 次；重复发起 {checkpoint['repeated_unit_attempts']} 次。\n"
         + "\n".join("- " + _md(note) for note in checkpoint.get("notes", []))
         + "\n"
@@ -260,8 +261,8 @@ def checkpoint_html(report: dict[str, Any]) -> str:
     if not checkpoint:
         return ""
     return (
-        "<section><h2>样本检查点与执行中断</h2>"
-        f"<p>已提交 {int(checkpoint['committed_units'])} / {int(checkpoint['planned_units'])} 个样本；"
+        f"<section><h2>{escape(str(checkpoint.get('unit_label', '样本')))}检查点与执行中断</h2>"
+        f"<p>已提交 {int(checkpoint['committed_units'])} / {int(checkpoint['planned_units'])} 个{escape(str(checkpoint.get('unit_label', '样本')))}；"
         f"恢复 {int(checkpoint['recoveries'])} 次；重复发起 {int(checkpoint['repeated_unit_attempts'])} 次。</p>"
         + "<ul>"
         + "".join("<li>" + escape(str(note)) + "</li>" for note in checkpoint.get("notes", []))
@@ -360,7 +361,7 @@ def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
         else "<h2>测量协议</h2><p>历史运行未记录固定工作负载协议。</p>"
     )
     control = summary.get("execution_control") or {}
-    control_html = (
+    control_html = checkpoint_html(summary) + (
         f"<h2>执行条件</h2><p>暂停 {cell(control.get('pause_count', 0))} 次，"
         f"共 {fmt(control.get('paused_seconds', 0))} 秒；"
         f"批次并行上限 {cell(control.get('max_parallel', 1))}；"

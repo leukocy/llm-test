@@ -70,7 +70,17 @@ export function Detail({
 
   useEffect(() => {
     setCheckpoint(null);
-    if (!["quality", "robustness"].includes(job.test_type)) return;
+    if (
+      ![
+        "quality",
+        "robustness",
+        "concurrency",
+        "matrix",
+        "custom_text",
+        "dataset",
+      ].includes(job.test_type)
+    )
+      return;
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const controller = new AbortController();
@@ -552,9 +562,12 @@ export function Detail({
         </p>
       )}
       {checkpoint?.available && (
-        <section className="surface" aria-label="样本检查点">
+        <section
+          className="surface"
+          aria-label={`${checkpoint.unit_label || "样本"}检查点`}
+        >
           <div className="section-head">
-            <h2>样本检查点</h2>
+            <h2>{checkpoint.unit_label || "样本"}检查点</h2>
             {checkpoint.can_delete && (
               <button
                 className="button subtle danger"
@@ -567,11 +580,16 @@ export function Detail({
           </div>
           <p className="muted">最后保存于 {date(checkpoint.saved_at)}</p>
           <p>
-            已保存 {checkpoint.committed_units} / {checkpoint.planned_units}{" "}
-            个样本 · 恢复 {checkpoint.recoveries} 次 · 样本发起{" "}
-            {checkpoint.issued_unit_attempts} 次 · 重复发起{" "}
+            已保存 {checkpoint.committed_units} / {checkpoint.planned_units} 个
+            {checkpoint.unit_label || "样本"} · 恢复 {checkpoint.recoveries} 次
+            · 发起 {checkpoint.issued_unit_attempts} 次 · 重复发起{" "}
             {checkpoint.repeated_unit_attempts} 次
           </p>
+          {checkpoint.unit_label === "测量组" && (
+            <p className="muted">
+              分母为已生成的测量组，包含预热；后续组在执行前继续生成并冻结。
+            </p>
+          )}
           {job.status === "cancelled" && checkpoint.can_recover && (
             <p>
               测试已停止。点击“从检查点恢复”会继续这次测试，并保留此前样本和停止记录。

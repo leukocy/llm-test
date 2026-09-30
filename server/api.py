@@ -1204,11 +1204,14 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         except JobNotFound as exc:
             raise HTTPException(404, "Job not found") from exc
 
+    def warmup_artifact(job):
+        path = settings.artifact_root / job["job_id"] / f"attempt-{job['attempts']}" / "warmup.csv"
+        return path if path.is_file() else settings.artifact_root / job["job_id"] / "warmup.csv"
+
     @app.get("/api/v1/jobs/{job_id}/warmup.csv", dependencies=[auth])
     def warmup_csv(job_id: str):
         """Download warmup observations, which are excluded from result statistics."""
-        job_or_404(job_id)
-        path = settings.artifact_root / job_id / "warmup.csv"
+        path = warmup_artifact(job_or_404(job_id))
         if not path.is_file():
             raise HTTPException(404, "Warmup observations not available")
         return FileResponse(path, media_type="text/csv", filename=f"{job_id}-warmup.csv")
@@ -1219,7 +1222,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
                 str(settings.db_path),
                 job["result_run_id"],
                 job=job,
-                warmup_path=settings.artifact_root / job["job_id"] / "warmup.csv",
+                warmup_path=warmup_artifact(job),
             )
         except MetricContractConflict as exc:
             raise HTTPException(409, str(exc)) from exc

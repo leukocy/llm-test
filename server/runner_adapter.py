@@ -7,8 +7,9 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from server.checkpoints import JobJournal
+from server.checkpoints import MEASUREMENT_TYPES, JobJournal
 from server.control import PAUSABLE_TEST_TYPES, JobControl
+from server.measurement_checkpoints import MeasurementJournal
 from server.settings import Endpoint, Settings
 from server.specs import describe_report_environment
 from server.store import JobStore
@@ -86,6 +87,8 @@ async def execute_job(
     journal = (
         JobJournal(store, job, worker_id, endpoint)
         if job["test_type"] in {"quality", "robustness"}
+        else MeasurementJournal(store, job, worker_id, endpoint)
+        if job["test_type"] in MEASUREMENT_TYPES
         else None
     )
     artifact_name = (
@@ -213,6 +216,8 @@ async def execute_job(
 
     output = HeadlessOutput()
     log_tee = _LogTee(job_dir / "logs.jsonl")
+    measurement_dir = job_dir / f"attempt-{job['attempts']}" if journal else job_dir
+    measurement_dir.mkdir(parents=True, exist_ok=True)
     control = JobControl(store, job_id, worker_id)
     runner = BenchmarkRunner(
         placeholder=output,
@@ -221,7 +226,7 @@ async def execute_job(
         api_base_url=endpoint.api_base_url,
         model_id=endpoint.model_id,
         tokenizer_option=run_config.get("tokenizer_option") or endpoint.tokenizer_option,
-        csv_filename=str(job_dir / "requests.csv"),
+        csv_filename=str(measurement_dir / "requests.csv"),
         api_key=endpoint.api_key(),
         log_placeholder=None,
         provider=endpoint.provider,
@@ -244,6 +249,7 @@ async def execute_job(
         ),
         control_poll=control.pause_requested if job["test_type"] == "stability" else None,
         persistence_owner=worker_id,
+        measurement_journal=journal,
     )
     methods: dict[str, Callable[..., Awaitable[Any]]] = {
         "concurrency": runner.run_concurrency_test,
@@ -257,15 +263,25 @@ async def execute_job(
     try:
         if job["test_type"] == "dataset":
             # 行源: 内联 rows 或 dataset_loader 已存数据集; 预算按加载后实数复核
-            if params.get("rows"):
-                dataset_rows = params["rows"]
-            else:
-                from core.dataset_loader import DatasetLoader
+            def load_rows():
+                if params.get("rows"):
+                    rows = params["rows"]
+                else:
+                    from core.dataset_loader import DatasetLoader
 
-                frame = DatasetLoader().load_dataset(params["dataset"])
-                if frame is None:
-                    raise RuntimeError(f"数据集不存在或无法读取: {params['dataset']}")
-                dataset_rows = frame.to_dict("records")
+                    frame = DatasetLoader().load_dataset(params["dataset"])
+                    if frame is None:
+                        raise RuntimeError(f"数据集不存在或无法读取: {params['dataset']}")
+                    rows = frame.to_dict("records")
+                return {"rows": rows}, []
+
+            if journal:
+                metadata, _ = journal.prepare_scope(
+                    "measurement:dataset", load_rows, allow_empty=True
+                )
+                dataset_rows = metadata["rows"]
+            else:
+                dataset_rows = load_rows()[0]["rows"]
             rounds = params.get("rounds", 1)
             if len(dataset_rows) * rounds > 1000:
                 raise RuntimeError(

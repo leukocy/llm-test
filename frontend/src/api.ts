@@ -90,6 +90,7 @@ export type Job = {
   parent_job_id: string | null;
   parameters: Record<string, unknown>;
   saved_progress_planned?: number;
+  saved_progress_unit?: string;
   saved_progress_committed?: number;
   saved_progress_at?: number;
   progress_completed: number;
@@ -370,6 +371,7 @@ export async function downloadFile(
 }
 
 export type EvaluationCheckpoint = {
+  unit_label?: string;
   supported: boolean;
   available: boolean;
   planned_units: number;

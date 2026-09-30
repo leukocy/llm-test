@@ -277,7 +277,7 @@ async def test_adapter_passes_environment_to_performance_runner(platform, enviro
         model_id="m",
         parameters={"_run_config": {"report_environment": environment}},
     )
-    store.claim("w")
+    job = store.claim("w")
     await execute_job(job, endpoint, settings, store, "w")
     assert constructor.call_args.kwargs["report_environment"] == environment
     runner.run_concurrency_test.assert_awaited_once_with()

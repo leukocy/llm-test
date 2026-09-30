@@ -355,6 +355,18 @@ def run_summary(
             "跨运行对比仍须核对硬件、模型配置、工作负载和 token 来源。",
         ],
     }
+    recovery = config.get("measurement_recovery")
+    if isinstance(recovery, dict):
+        checkpoint = recovery.get("checkpoint")
+        summary["checkpoint"] = checkpoint
+        summary["measurement_recovery"] = {
+            key: value for key, value in recovery.items() if key != "checkpoint"
+        }
+        if isinstance(checkpoint, dict) and checkpoint.get("recoveries", 0):
+            summary["notes"].extend(checkpoint.get("notes", []))
+            summary["data_quality"]["warnings"].append(
+                "本次测量复用跨中断的完整请求组，不能作为连续负载或缓存连续性的证明；资源摘要仅属于当前尝试。"
+            )
     extended = extended_observations(rows)
     summary["overall"]["metrics"].update(extended["metrics"])
     summary["extended_observations"] = {
