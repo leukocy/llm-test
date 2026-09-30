@@ -3,7 +3,7 @@ import type { Figure } from "plotly.js-dist-min";
 import { api, type Job, type Summary, type Metric } from "../api";
 import { PlotlyFigure } from "./PlotlyFigure";
 
-const metrics = {
+export const metrics = {
   ttft: "首字延迟 TTFT · s",
   tpot: "每 token 延迟 TPOT · s",
   tps: "逐请求生成速度 TPS · token/s",
@@ -20,7 +20,7 @@ const metrics = {
   ttft_zero_cache_api: "API 明确零命中 TTFT · s",
   ttft_cache_api: "API 有命中 TTFT · s",
 };
-const statistics = {
+export const statistics = {
   median: "p50 · 中位数",
   mean: "均值",
   p95: "p95 · 尾部",

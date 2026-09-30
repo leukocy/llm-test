@@ -20,6 +20,7 @@ from server.extended_analytics import extended_observations
 from server.observations import describe_values, percentile
 from server.scenario_reports import scenario_analysis
 from server.specs import describe_report_environment
+from server.time_series import stability_time_series, timing_observation
 
 NUMERIC_FIELDS = ("ttft", "tpot", "tps", "total_time", "prefill_speed")
 GROUP_FIELDS = {
@@ -358,6 +359,8 @@ def run_summary(
         key: value for key, value in extended.items() if key != "metrics"
     }
     summary["scenario_analysis"] = scenario_analysis(summary)
+    if run["test_type"] == "stability":
+        summary["time_series"] = stability_time_series(rows)
     return summary
 
 
@@ -444,6 +447,7 @@ def run_results_csv(db_path: str, run_id: int) -> str:
         "metric_contract_version",
         "prompt_sha256",
         "system_measurement_json",
+        "timing_observation_json",
     )
     buffer = io.StringIO()
     writer = csv.writer(buffer)
@@ -454,7 +458,13 @@ def run_results_csv(db_path: str, run_id: int) -> str:
         stored_columns = tuple(
             field
             for field in columns
-            if field not in {"metric_contract_version", "prompt_sha256", "system_measurement_json"}
+            if field
+            not in {
+                "metric_contract_version",
+                "prompt_sha256",
+                "system_measurement_json",
+                "timing_observation_json",
+            }
         )
         rows = conn.execute(
             f"SELECT {', '.join(stored_columns)}, extra_metrics, error "
@@ -469,6 +479,9 @@ def run_results_csv(db_path: str, run_id: int) -> str:
                     value = _contract_version(row["extra_metrics"], f"request {row['id']}")
                 elif field == "prompt_sha256":
                     value = _prompt_sha256(row["extra_metrics"])
+                elif field == "timing_observation_json":
+                    timing = timing_observation(row["extra_metrics"])
+                    value = json.dumps(timing, ensure_ascii=False) if timing is not None else None
                 elif field == "system_measurement_json":
                     payload = json.loads(row["extra_metrics"] or "{}")
                     observation = (

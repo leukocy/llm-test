@@ -5,6 +5,7 @@ import json
 import random
 import threading
 import time
+import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -5000,8 +5001,10 @@ class BenchmarkRunner:
         """
         Run requests continuously for a specific duration with fixed concurrency.
         """
-        start_test_time = time.time()
+        # Scheduling, request wrappers and drainage share one monotonic clock.
+        start_test_time = time.monotonic()
         end_test_time = start_test_time + duration
+        timeline_id = uuid.uuid4().hex
 
         # Shared counter for session IDs
         session_counter = [session_id_start]
@@ -5023,7 +5026,7 @@ class BenchmarkRunner:
         }
 
         async def worker(worker_index):
-            while time.time() < end_test_time:
+            while time.monotonic() < end_test_time:
                 # Check for stop signal
                 if is_stop_requested():
                     break
@@ -5044,24 +5047,42 @@ class BenchmarkRunner:
                 if isinstance(prompt, tuple) and len(prompt) == 2:
                     prompt, _worker_prompt_source = prompt
 
-                req_start_time = time.time()
+                req_start_time = time.monotonic()
                 try:
                     res = await self.get_completion(client, session_id, prompt, max_tokens)
-                    if res:
-                        res["_prompt_source"] = _worker_prompt_source
                 except asyncio.CancelledError:
                     break
                 except Exception as e:
                     self._update_log(f"Worker {worker_index} error: {e}", level=LogLevel.ERROR)
-                    res = None
+                    res = {**self._get_empty_metrics(), "session_id": session_id, "error": str(e)}
 
-                req_end_time = time.time()
+                req_end_time = time.monotonic()
+                if not res:
+                    res = {
+                        **self._get_empty_metrics(),
+                        "session_id": session_id,
+                        "error": "MissingCompletion",
+                    }
+                res["_prompt_source"] = _worker_prompt_source
+                extra = res.get("extra_metrics")
+                if not isinstance(extra, dict):
+                    extra = {}
+                    res["extra_metrics"] = extra
+                extra["timing_observation"] = {
+                    "version": "stability-clock-v1",
+                    "clock": "monotonic",
+                    "anchor": "scheduler_start",
+                    "id": timeline_id,
+                    "index": session_id - session_id_start,
+                    "start_seconds": req_start_time - start_test_time,
+                    "end_seconds": req_end_time - start_test_time,
+                }
 
                 # Update stats and results
                 if res:
                     # Time bounds
-                    req_start = res.get("start_time", req_start_time)
-                    req_end = res.get("end_time", req_end_time)
+                    req_start = res.get("start_time") or req_start_time
+                    req_end = res.get("end_time") or req_end_time
 
                     if req_start < stats["min_start_time"]:
                         stats["min_start_time"] = req_start
@@ -5076,7 +5097,7 @@ class BenchmarkRunner:
                             stats["max_first_token_time"] = first_token_time
 
                     # Calculate cumulative metrics
-                    current_time = time.time()
+                    current_time = time.monotonic()
                     total_elapsed = max(0.001, current_time - start_test_time)
 
                     # Output Throughput
@@ -5124,6 +5145,18 @@ class BenchmarkRunner:
         tasks = [asyncio.create_task(worker(i)) for i in range(concurrency)]
 
         await asyncio.gather(*tasks)
+
+        window_seconds = time.monotonic() - start_test_time
+        expected_requests = session_counter[0] - session_id_start
+        for res in results:
+            res["extra_metrics"]["timing_observation"].update(
+                window_seconds=window_seconds,
+                planned_seconds=duration,
+                expected_requests=expected_requests,
+            )
+        tag_batch_window(
+            results, elapsed_seconds=window_seconds, expected_requests=expected_requests
+        )
 
         return results
 

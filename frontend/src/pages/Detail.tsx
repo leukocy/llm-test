@@ -12,6 +12,7 @@ import {
 } from "../api";
 import { Status, MetricCard, Empty } from "../components";
 import { ScenarioAnalysis } from "../components/ScenarioAnalysis";
+import { StabilityTimeline } from "../components/StabilityTimeline";
 import { QualityAnalysis } from "./QualityAnalysis";
 import { ReportEnvironmentCard } from "../components/ReportEnvironment";
 import { downloadFigurePng } from "../components/PlotlyFigure";
@@ -622,6 +623,14 @@ export function Detail({
               note="tokens/s · 成功请求"
             />
           </div>
+          {job.test_type === "stability" && (
+            <StabilityTimeline
+              key={job.job_id}
+              job={job}
+              summary={summary}
+              token={token}
+            />
+          )}
           <ScenarioAnalysis
             key={job.job_id}
             job={job}

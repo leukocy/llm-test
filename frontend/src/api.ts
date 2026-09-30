@@ -167,6 +167,25 @@ export type ReportEnvironment = {
   >;
 };
 export type Summary = {
+  time_series?: {
+    contract: string;
+    timed_requests: number;
+    missing_requests: number;
+    invalid_requests: number;
+    complete: boolean;
+    window_seconds: number | null;
+    planned_seconds: number | null;
+    bin_seconds: number | null;
+    notes: string[];
+    bins: {
+      start_seconds: number;
+      end_seconds: number;
+      requests: number;
+      failures: number;
+      successes: number;
+      metrics: Record<string, Metric>;
+    }[];
+  };
   extended_observations?: {
     system: {
       contract: string;

@@ -5,6 +5,7 @@ import json
 import sqlite3
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -19,6 +20,53 @@ from server.store import JobStore
 
 
 class TestBenchmarkRunner:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["timeout", "exception", "missing"])
+    async def test_stability_records_monotonic_success_and_failure_wrappers(
+        self, runner, monkeypatch, failure
+    ):
+        now = [1000.0]
+        calls = [0]
+
+        def wall_clock_forbidden():
+            raise AssertionError("stability scheduling must not use wall clock")
+
+        monkeypatch.setattr(
+            "core.benchmark_runner.time",
+            SimpleNamespace(monotonic=lambda: now[0], time=wall_clock_forbidden),
+        )
+        monkeypatch.setattr("core.benchmark_runner.is_stop_requested", lambda: False)
+        runner._update_log = MagicMock()
+        runner.update_ui = MagicMock()
+
+        async def completion(*args):
+            calls[0] += 1
+            now[0] += 0.6
+            if calls[0] == 1:
+                return {"ttft": 0.2, "prefill_tokens": 100, "decode_tokens": 20}
+            if failure == "exception":
+                raise RuntimeError("synthetic timeout")
+            return None if failure == "missing" else {"error": "timeout"}
+
+        runner.get_completion = completion
+        rows = await runner._run_time_based_batch(
+            None, lambda _: ("prompt", "synthetic-source"), 20, 1, 1, 7
+        )
+        assert len(rows) == 2 and rows[1]["error"]
+        assert all(row["_prompt_source"] == "synthetic-source" for row in rows)
+        observations = [row["extra_metrics"]["timing_observation"] for row in rows]
+        assert [v["index"] for v in observations] == [0, 1]
+        assert [v["end_seconds"] for v in observations] == [pytest.approx(0.6), pytest.approx(1.2)]
+        assert all(
+            v["window_seconds"] == pytest.approx(1.2) and v["expected_requests"] == 2
+            for v in observations
+        )
+        assert len({v["id"] for v in observations}) == 1
+        assert all(
+            row["extra_metrics"]["system_measurement"]["elapsed_seconds"] == pytest.approx(1.2)
+            for row in rows
+        )
+
     @pytest.mark.asyncio
     @pytest.mark.parametrize("continuous", [False, True])
     async def test_batch_window_provenance_is_attached_before_persistence(

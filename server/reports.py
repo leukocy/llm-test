@@ -8,6 +8,7 @@ from typing import Any
 
 from server.scenario_reports import METRICS, profile_svg, sampling_unit, scenario_analysis
 from server.specs import REPORT_ENVIRONMENT_FIELDS
+from server.time_series import REQUEST_METRICS, timeline_svg
 
 REPORT_ENVIRONMENT_SCOPES = {
     "model_server": "受测模型服务器",
@@ -216,6 +217,20 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
             lines.append(
                 f"| {_md(group['label'])} | {abbreviation} | {value['count']} | {sampling_unit(key)} | {stats} | {unit} |"
             )
+    timeline = summary.get("time_series")
+    if timeline:
+        lines.extend(["", "## 稳定性完成时间序列", "", _timeline_description(timeline), ""])
+        lines.extend("- " + _md(note) for note in timeline["notes"])
+        lines.extend(
+            [
+                "",
+                "| 时间窗 (s) | 完成 | 失败 | 指标 | 有效 n | 均值 | p50 | p95 | p99 | 最小 | 最大 |",
+                "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|",
+            ]
+        )
+        lines.extend(
+            "| " + " | ".join(_md(v) for v in row) + " |" for row in _timeline_rows(timeline)
+        )
     return (
         "\n".join(lines)
         + "\n"
@@ -329,6 +344,43 @@ def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
         + "</ul><h2>指标图形 · p50</h2>"
         + "".join(profile_svg(summary, key) for key in METRICS)
     )
+    timeline = summary.get("time_series")
+    if timeline:
+        timeline_rows = "".join(
+            "<tr>" + "".join(f"<td>{cell(value)}</td>" for value in row) + "</tr>"
+            for row in _timeline_rows(timeline)
+        )
+        scenario_html += (
+            "<section><h2>稳定性完成时间序列</h2><p>"
+            + cell(_timeline_description(timeline))
+            + "</p><ul>"
+            + "".join(f"<li>{cell(note)}</li>" for note in timeline["notes"])
+            + "</ul>"
+            + "".join(
+                timeline_svg(timeline, key, METRICS[key][1], METRICS[key][2])
+                for key in REQUEST_METRICS
+            )
+            + "<div style='overflow-x:auto'><table><thead><tr>"
+            + "".join(
+                f"<th>{label}</th>"
+                for label in [
+                    "时间窗 (s)",
+                    "完成",
+                    "失败",
+                    "指标",
+                    "有效 n",
+                    "均值",
+                    "p50",
+                    "p95",
+                    "p99",
+                    "最小",
+                    "最大",
+                ]
+            )
+            + "</tr></thead><tbody>"
+            + timeline_rows
+            + "</tbody></table></div></section>"
+        )
     return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LLM Test 报告 · {cell(job["job_id"])}</title>
@@ -383,6 +435,38 @@ figcaption {{ font-size:13px; color:#536780; }}
 <p>Token 算法：<code>{cell(summary["provenance"]["token_methods"])}</code></p>
 <p class="muted">由逐请求记录计算。空值表示样本不足或该指标未采集。</p>
 </main></body></html>"""
+
+
+def _timeline_description(timeline: dict[str, Any]) -> str:
+    window = timeline["window_seconds"]
+    window_text = f"{window:.3f}" if window is not None else "未知"
+    return (
+        f"stability-clock-v1 · 计时记录完整：{'是' if timeline['complete'] else '否'}；"
+        f"有效计时 {timeline['timed_requests']}，缺失 {timeline['missing_requests']}，无效 {timeline['invalid_requests']}；"
+        f"计划发起 {timeline['planned_seconds'] if timeline['planned_seconds'] is not None else '未知'} 秒，"
+        f"调度至排空 {window_text} 秒；每窗 {timeline['bin_seconds'] if timeline['bin_seconds'] is not None else '未知'} 秒。"
+    )
+
+
+def _timeline_rows(timeline: dict[str, Any]) -> list[list[Any]]:
+    rows = []
+    for b in timeline["bins"]:
+        for key in REQUEST_METRICS:
+            stats = b["metrics"][key]
+            rows.append(
+                [
+                    f"{b['start_seconds']:.3f}–{b['end_seconds']:.3f}",
+                    b["requests"],
+                    b["failures"],
+                    f"{METRICS[key][1]} ({METRICS[key][2]})",
+                    stats["count"],
+                    *(
+                        "—" if stats[s] is None else f"{stats[s]:.4g}"
+                        for s in ["mean", "median", "p95", "p99", "min", "max"]
+                    ),
+                ]
+            )
+    return rows
 
 
 def history_origin_html(summary: dict[str, Any]) -> str:

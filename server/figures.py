@@ -1,8 +1,4 @@
-"""Plotly 图表 JSON 端点：复用 ui/warehouse_charts 的纯构建器。
-
-后端出 fig.to_plotly_json()，前端 plotly.js 直接渲染——图表逻辑零重写。
-数据路径与 Streamlit 仓库页同口径（query_runs + project_run）。
-"""
+"""Plotly figure JSON for full performance reports and shared warehouse charts."""
 
 from __future__ import annotations
 
@@ -28,6 +24,7 @@ from server.scenario_reports import (
     scenario_analysis,
 )
 from server.specs import REPORT_ENVIRONMENT_FIELDS
+from server.time_series import REQUEST_METRICS
 
 
 def performance_report_figure(
@@ -42,12 +39,14 @@ def performance_report_figure(
     groups = summary["groups"]
     if (
         metric not in METRICS
-        or view not in {"comparison", "profile", "heatmap"}
+        or view not in {"comparison", "profile", "heatmap", "timeline"}
         or statistic not in STATISTICS
     ):
         raise ValueError("不支持的指标、图形或统计量")
     title, abbreviation, unit = METRICS[metric]
-    if not any(group["metrics"].get(metric, {}).get("count") for group in groups):
+    if view != "timeline" and not any(
+        group["metrics"].get(metric, {}).get("count") for group in groups
+    ):
         raise ValueError(f"没有有效的 {abbreviation} 样本，无法导出性能图")
     labels = [escape(group["label"]) for group in groups]
     counts = [group["metrics"].get(metric, {}).get("count", 0) for group in groups]
@@ -162,10 +161,97 @@ def performance_report_figure(
             },
         }
     }
-    if view != "comparison":
+    if view == "timeline":
+        _timeline_view(result["figure"], summary, metric, statistic)
+    elif view != "comparison":
         _scenario_view(result["figure"], summary, metric, view, statistic)
     result["analysis"] = scenario_analysis(summary)
     return result
+
+
+def _timeline_view(figure: dict, summary: dict, metric: str, statistic: str) -> None:
+    timeline = summary.get("time_series")
+    if summary["run"]["test_type"] != "stability" or metric not in REQUEST_METRICS:
+        raise ValueError("时间序列仅支持稳定性测试的五种逐请求指标")
+    if not timeline or not timeline["bins"]:
+        raise ValueError("缺少可核验的单调时钟记录，无法绘制时间序列")
+    bins = timeline["bins"]
+    _, label, unit = METRICS[metric]
+    x = [(b["start_seconds"] + b["end_seconds"]) / 2 for b in bins]
+    custom = [
+        [
+            b["start_seconds"],
+            b["end_seconds"],
+            b["metrics"][metric]["count"],
+            b["requests"],
+            b["failures"],
+        ]
+        for b in bins
+    ]
+    figure["data"] = [
+        {
+            "type": "scatter",
+            "mode": "lines+markers",
+            "name": f"{label} {STATISTICS[statistic]}",
+            "x": x,
+            "y": [b["metrics"][metric][statistic] for b in bins],
+            "connectgaps": False,
+            "customdata": custom,
+            "line": {"color": "#2463a6"},
+            "hovertemplate": "%{customdata[0]:.3f}–%{customdata[1]:.3f} s<br>%{y:.4g} "
+            + unit
+            + "<br>有效 n=%{customdata[2]} · 完成=%{customdata[3]} · 失败=%{customdata[4]}<extra></extra>",
+        },
+        {
+            "type": "bar",
+            "name": "完成请求",
+            "x": x,
+            "y": [b["requests"] for b in bins],
+            "yaxis": "y2",
+            "marker": {"color": "#97b8dc"},
+            "customdata": custom,
+            "hovertemplate": "%{customdata[0]:.3f}–%{customdata[1]:.3f} s<br>完成=%{y}<extra></extra>",
+        },
+        {
+            "type": "bar",
+            "name": "失败请求",
+            "x": x,
+            "y": [b["failures"] for b in bins],
+            "yaxis": "y2",
+            "marker": {"color": "#cf675c"},
+            "customdata": custom,
+            "hovertemplate": "%{customdata[0]:.3f}–%{customdata[1]:.3f} s<br>失败=%{y}<extra></extra>",
+        },
+    ]
+    layout = figure["layout"]
+    layout["height"] = 1250
+    layout["margin"]["b"] = 450
+    layout["annotations"][0]["y"] = -0.10
+    layout["title"]["text"] += (
+        f"<br><sup>稳定性完成时间序列 · {STATISTICS[statistic]} · stability-clock-v1</sup>"
+    )
+    layout["xaxis"] = {
+        "title": {"text": "距调度开始的时间（秒）· 时间窗中点"},
+        "type": "linear",
+        "range": [0, timeline["window_seconds"]],
+    }
+    layout["yaxis"]["domain"] = [0.38, 1]
+    layout["yaxis2"] = {
+        "title": {"text": "完成 / 失败请求数"},
+        "domain": [0, 0.22],
+        "anchor": "x",
+        "rangemode": "tozero",
+        "dtick": 1,
+    }
+    layout["annotations"][0]["text"] = "<br>".join(
+        [
+            layout["annotations"][0]["text"].replace("柱顶 n 为", "悬停 n 为"),
+            f"计时记录完整：{'是' if timeline['complete'] else '否'} · 有效计时 {timeline['timed_requests']} · 缺失 {timeline['missing_requests']} · 无效 {timeline['invalid_requests']}",
+            f"计划发起 {timeline['planned_seconds']} 秒 · 调度至排空 {timeline['window_seconds']:.3f} 秒 · 每窗 {timeline['bin_seconds']} 秒",
+            *timeline["notes"],
+            f"作业 {escape(summary['run']['test_id'])} · 完整来源见 HTML / JSON 报告",
+        ]
+    )
 
 
 def _scenario_view(figure: dict, summary: dict, metric: str, view: str, statistic: str) -> None:
