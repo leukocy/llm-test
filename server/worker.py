@@ -48,15 +48,24 @@ async def run_claimed_job(job: dict, settings: Settings, store: JobStore, worker
     )
     monitor.start()
     try:
-        endpoint = EndpointRegistry(settings, store).get(job["endpoint_id"])
-        output = await execute_job(job, endpoint, settings, store, worker_id)
+        if job["test_type"] == "dataset_prepare":
+            from server.dataset_preparation import execute_preparation
+
+            output = await asyncio.to_thread(execute_preparation, job, settings, store, worker_id)
+        else:
+            endpoint = EndpointRegistry(settings, store).get(job["endpoint_id"])
+            output = await execute_job(job, endpoint, settings, store, worker_id)
         current = store.get(job["job_id"])["status"]
         outcome = (
             RunStatus.CANCELLED if current == RunStatus.CANCELLING.value else RunStatus.COMPLETED
         )
         if outcome == RunStatus.COMPLETED and output.completed != output.total:
             raise RuntimeError("Measurement request count differs from the scheduled count")
-        if outcome == RunStatus.COMPLETED and job["test_type"] not in {"quality", "robustness"}:
+        if outcome == RunStatus.COMPLETED and job["test_type"] not in {
+            "quality",
+            "robustness",
+            "dataset_prepare",
+        }:
             if output.result_run_id is None:
                 raise RuntimeError("Measurement run was not persisted")
             planned = store.get(job["job_id"])["progress_total"]

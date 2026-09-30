@@ -21,12 +21,14 @@ use方式:
 
 import gzip
 import json
+import os
 import shutil
 import urllib.request
 import zipfile
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -173,7 +175,7 @@ DATASET_CONFIGS = {
     # C-Eval 中文知识评估
     "ceval": DatasetConfig(
         name="ceval",
-        hf_path="ceval/CEval",
+        hf_path="ceval/ceval-exam",
         local_path="datasets/ceval",
         split_mapping={"test": "test", "dev": "dev"},
         description="C-Eval - Chinese knowledge evaluation",
@@ -207,13 +209,20 @@ class DatasetManager:
             auto_download: is否自动under载缺失Dataset
             log_callback: LogCallback函数
         """
-        self.cache_dir = Path(cache_dir)
+        self.cache_dir = Path(os.getenv("LLM_TEST_DATASET_ROOT") or cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.auto_download = auto_download
         self.log_callback = log_callback
 
         # Data集Configure
         self.configs = DATASET_CONFIGS.copy()
+        if root := os.getenv("LLM_TEST_DATASET_ROOT"):
+            self.cache_dir = Path(root)
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            self.configs = {
+                name: replace(config, local_path=str(self.cache_dir / name))
+                for name, config in self.configs.items()
+            }
 
         # under载Status
         self._download_progress: dict[str, float] = {}
@@ -251,7 +260,7 @@ class DatasetManager:
 
         # Checkis否hasData文件
         data_files = list(local_path.glob("*.json")) + list(local_path.glob("*.jsonl"))
-        return len(data_files) > 0
+        return any(path.name not in {"metadata.json", "preparation.json"} for path in data_files)
 
     def download(
         self,
@@ -319,6 +328,10 @@ class DatasetManager:
 
         local_path = self.get_local_path(name)
         local_path.mkdir(parents=True, exist_ok=True)
+        if config.version != "latest":
+            load_dataset = partial(
+                load_dataset, revision=config.version, token=False, trust_remote_code=False
+            )
 
         try:
             if progress_callback:
@@ -326,6 +339,7 @@ class DatasetManager:
 
             # LoadDataset
             # Process特殊情况
+            standalone_split = None
             if name == "arc":
                 dataset = load_dataset(config.hf_path, "ARC-Challenge")
             elif name == "mmlu":
@@ -335,21 +349,26 @@ class DatasetManager:
             elif name == "truthfulqa":
                 dataset = load_dataset(config.hf_path, "generation")
             elif name == "aime2025" or name == "arena_hard":
+                standalone_split = "train"
                 dataset = load_dataset(config.hf_path, split="train")
             elif name == "swebench_lite":
-                dataset = load_dataset(config.hf_path, split="test", trust_remote_code=True)
+                standalone_split = "test"
+                dataset = load_dataset(config.hf_path, split="test", trust_remote_code=False)
             elif name == "ceval":
-                dataset = load_dataset(config.hf_path, "all")
+                return self._download_ceval(config, local_path, progress_callback)
             elif name == "longbench":
                 # LongBench has sub-datasets; download all and merge
                 return self._download_longbench(config, local_path, progress_callback)
             elif name == "global_piqa":
+                standalone_split = "test"
                 dataset = load_dataset(config.hf_path, split="test")
             else:
                 dataset = load_dataset(config.hf_path)
 
             if progress_callback:
                 progress_callback(0.5, "currentlySave到本地...")
+            if standalone_split is not None:
+                dataset = {standalone_split: dataset}
 
             # Save各 split
             splits_saved = 0
@@ -393,6 +412,51 @@ class DatasetManager:
             self._log(f"从 HuggingFace Download failed: {e}")
             return False
 
+    def _download_ceval(
+        self,
+        config: DatasetConfig,
+        local_path: Path,
+        progress_callback: Callable[[float, str], None] | None,
+    ) -> bool:
+        from datasets import (  # type: ignore[attr-defined, unused-ignore]
+            get_dataset_config_names,
+            load_dataset,
+        )
+
+        options = {"revision": config.version} if config.version != "latest" else {}
+        subjects = get_dataset_config_names(config.hf_path, token=False, **options)
+        load_dataset = partial(load_dataset, token=False, trust_remote_code=False, **options)
+        if not subjects or len(subjects) > 100:
+            raise ValueError("Invalid C-Eval subject catalog")
+        merged: dict[str, list[dict[str, Any]]] = {"test": [], "val": [], "dev": []}
+        for index, subject in enumerate(sorted(subjects)):
+            for split in merged:
+                records = load_dataset(config.hf_path, subject, split=split)
+                merged[split].extend({**dict(row), "subject": subject} for row in records)
+            if progress_callback:
+                progress_callback(
+                    0.1 + 0.8 * (index + 1) / len(subjects),
+                    f"C-Eval {subject} ({index + 1}/{len(subjects)})",
+                )
+        for split, records in merged.items():
+            (local_path / f"{split}.json").write_text(
+                json.dumps(records, ensure_ascii=False), encoding="utf-8"
+            )
+        (local_path / "metadata.json").write_text(
+            json.dumps(
+                {
+                    "name": "ceval",
+                    "hf_path": config.hf_path,
+                    "splits": list(merged),
+                    "subjects": subjects,
+                    "evaluation_split": "test",
+                    "few_shot_split": "dev",
+                }
+            ),
+            encoding="utf-8",
+        )
+        return True
+
     def _download_longbench(
         self,
         config: DatasetConfig,
@@ -407,6 +471,10 @@ class DatasetManager:
             self._log("请安装 datasets: pip install datasets")
             return False
 
+        if config.version != "latest":
+            load_dataset = partial(
+                load_dataset, revision=config.version, token=False, trust_remote_code=False
+            )
         try:
             sub_tasks = [
                 "narrativeqa",
@@ -446,6 +514,10 @@ class DatasetManager:
                     all_samples.extend(task_samples)
                     self._log(f"Loaded {task_name}: {len(task_samples)} samples")
                 except Exception as e:
+                    if config.version != "latest":
+                        raise ValueError(
+                            f"LongBench sub-task {task_name} failed; incomplete pinned datasets are not published"
+                        ) from e
                     self._log(f"Skipped LongBench sub-task {task_name}: {e}")
 
             if not all_samples:

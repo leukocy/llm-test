@@ -43,6 +43,10 @@ export function Detail({
 }) {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [quality, setQuality] = useState<QualityReport | null>(null);
+  const [prepared, setPrepared] = useState<{
+    jobId: string;
+    receipt: Record<string, unknown>;
+  } | null>(null);
   const [events, setEvents] = useState<JobEvent[]>([]);
   const [results, setResults] = useState<RequestResult[]>([]);
   const [error, setError] = useState("");
@@ -183,6 +187,7 @@ export function Detail({
       current?.run.test_id === job.job_id ? current : null,
     );
     setQuality((current) => (current?.job_id === job.job_id ? current : null));
+    setPrepared((current) => (current?.jobId === job.job_id ? current : null));
     setRobustness((current) =>
       current?.job_id === job.job_id ? current : null,
     );
@@ -216,7 +221,12 @@ export function Detail({
       )
         .then((data) => {
           if (!alive) return;
-          if ((data as RobustnessReport).robustness) {
+          if ("dataset_preparation" in data) {
+            setPrepared({
+              jobId: job.job_id,
+              receipt: data.dataset_preparation as Record<string, unknown>,
+            });
+          } else if ((data as RobustnessReport).robustness) {
             setRobustness(data as RobustnessReport);
           } else {
             setQuality(data as QualityReport);
@@ -453,6 +463,12 @@ export function Detail({
   const plannedRequests = reportCompleted
     ? summary.integrity.expected_requests
     : job.progress_total;
+  const progressUnit =
+    job.test_type === "dataset_prepare"
+      ? "数据集"
+      : ["quality", "robustness"].includes(job.test_type)
+        ? "样本"
+        : "请求";
   const schedulingBudget =
     job.test_type === "stability" ? summary?.stability_budget : null;
   const progressPercent =
@@ -679,7 +695,7 @@ export function Detail({
             {schedulingBudget
               ? `${schedulingBudget.saved_scheduling_seconds.toFixed(3)} / ${schedulingBudget.planned_seconds.toFixed(3)} 秒 · 已保存 ${savedRequests} 个请求`
               : plannedRequests
-                ? `${savedRequests} / ${plannedRequests} 请求`
+                ? `${savedRequests} / ${plannedRequests} ${progressUnit}`
                 : "等待测量引擎报告进度"}
           </span>
         </div>
@@ -949,6 +965,21 @@ export function Detail({
           </div>
         </>
       )}
+      {prepared && prepared.jobId === job.job_id && (
+        <section className="surface">
+          <h2>数据准备记录</h2>
+          <p>固定源版本与文件 SHA-256；数据集准备不产生模型性能成绩。</p>
+          <button
+            className="button subtle"
+            onClick={() => void download("json")}
+          >
+            下载准备记录 JSON ↓
+          </button>
+          <pre className="json-editor dataset-receipt">
+            {JSON.stringify(prepared.receipt, null, 2)}
+          </pre>
+        </section>
+      )}
       {quality && (
         <section className="surface">
           <div className="section-head">
@@ -975,7 +1006,21 @@ export function Detail({
                   。上方为最终评分；自评复核不构成独立验证。
                 </p>
                 <small>
-                  样本指纹：
+                  评分分区：
+                  {String(
+                    (
+                      value.config.dataset_provenance as
+                        Record<string, unknown> | undefined
+                    )?.evaluation_split || "未记录",
+                  )}
+                  ；few-shot 分区：
+                  {String(
+                    (
+                      value.config.dataset_provenance as
+                        Record<string, unknown> | undefined
+                    )?.few_shot_split || "未记录",
+                  )}
+                  。 样本指纹：
                   {String(
                     (
                       value.config.dataset_provenance as

@@ -229,6 +229,16 @@ class JobStore:
         status = advance_run(RunStatus.CREATED, RunEvent.ENQUEUE).value
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            if test_type == "dataset_prepare":
+                existing = conn.execute(
+                    "SELECT * FROM control_jobs WHERE test_type='dataset_prepare' AND model_id=? AND status IN ('queued','running','pausing','paused','cancelling') ORDER BY created_at LIMIT 1",
+                    (model_id,),
+                ).fetchone()
+                if existing is not None:
+                    conn.commit()
+                    existing_job = self._as_job(existing)
+                    assert existing_job is not None
+                    return existing_job
             if idempotency_key:
                 existing = conn.execute(
                     "SELECT * FROM control_jobs WHERE idempotency_key = ?", (idempotency_key,)
@@ -487,10 +497,17 @@ class JobStore:
             ).fetchone():
                 conn.commit()
                 return None
+            if conn.execute(
+                "SELECT 1 FROM control_jobs WHERE test_type='dataset_prepare' AND status IN ('running','pausing','paused','cancelling') LIMIT 1"
+            ).fetchone():
+                conn.commit()
+                return None
             queued = conn.execute(
                 """SELECT job.job_id FROM control_jobs AS job
                    LEFT JOIN control_batches AS batch ON batch.batch_id = job.parent_job_id
-                   WHERE job.status = ? AND (
+                   WHERE job.status = ? AND (job.test_type != 'dataset_prepare' OR NOT EXISTS (
+                       SELECT 1 FROM control_jobs WHERE status IN ('running','pausing','paused','cancelling')
+                   )) AND (
                        job.parent_job_id IS NULL OR (
                            SELECT COUNT(*) FROM control_jobs AS active
                            WHERE active.parent_job_id = job.parent_job_id

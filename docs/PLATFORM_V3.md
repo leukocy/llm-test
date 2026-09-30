@@ -169,3 +169,13 @@ CSV 最多 10 MiB / 20,000 行 / 80 列，JSON 元数据最多 64 KiB，条件�
 - `POST /api/v1/advanced/reasoning`：问题、推理文本、最终答案和可选参考，返回启发式五维分数与步骤；无法参考判定时正确性和综合分为空。
 
 四类结果附完整输入、工具版本、输入 SHA-256 和方法说明，页面可直接导出 JSON。修改输入会清除旧结果并使进行中的旧请求失效。完整对照与验收见 [首次提交功能账本](ui_parity/README.md)。
+
+## 质量数据准备与 C-Eval
+
+新建质量评估页面的“数据集状态与准备”提供单个下载、全部缺失下载、状态刷新与取消。`GET /api/v1/quality/datasets` 返回评测器、本地文件状态和最近准备任务；`POST /api/v1/quality/datasets/preparations` 接受 `{"names":["ceval"]}`，省略 names 时准备全部缺失的已注册公共源。任务类型为 `dataset_prepare`，无需配置模型端点；独立 worker 执行，沿用运行列表、取消和事件审计。准备记录从作业报告接口以 JSON 下载。
+
+数据准备与模型测量、tokenizer 安装互斥。下载固定公共 Hub 仓库版本，不执行远程脚本；校验后发布，同名任务去重。当前数据文件上限 2 GiB；失败或取消不发布半成品，取消可能等待当前网络/下载阶段结束。目录中仅 metadata 或准备记录不代表已存在数据；本地文件存在也不代替实际评测内容核验。
+
+本地开发可执行 `export LLM_TEST_DATASET_ROOT="$HOME/llm-perf/runtime/datasets"`，把数据和临时下载留在项目外；未设置时保留现有 `datasets/` 路径，容器使用已挂载的数据卷。API 与 worker 需使用相同设置。已准备数据记录固定源版本、文件哈希和实际分区；运行报告另外冻结有序样本与 few-shot 的内容哈希。
+
+C-Eval 默认评分 test，也可用 `ceval_split="val"`；few-shot 使用同科目的 dev。最新[官方数据卡](https://huggingface.co/datasets/ceval/ceval-exam/blob/main/README.md) 公告 test 已在 2025 年发布。缺答案标签的旧 test 文件拒绝评分，dev 不足时不借用评分题作示例。页面、JSON、Markdown 和离线 HTML 均记录实际评分及 few-shot 分区，跨分区成绩不能直接等同。

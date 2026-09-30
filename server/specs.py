@@ -209,6 +209,7 @@ class QualitySpec(StrictSpec):
     thinking_budget: int = Field(default=4096, ge=256, le=131072)
     reasoning_effort: Literal["low", "medium", "high"] = "medium"
     use_llm_judge: bool = False
+    ceval_split: Literal["test", "val"] = "test"
 
     @field_validator("datasets")
     @classmethod

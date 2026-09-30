@@ -210,6 +210,10 @@ class TokenizerInstallBody(StrictSpec):
     names: list[str] | None = Field(default=None, min_length=1, max_length=32)
 
 
+class DatasetPreparationBody(StrictSpec):
+    names: list[str] | None = Field(default=None, min_length=1, max_length=32)
+
+
 def create_app(settings: Settings | None = None, store: JobStore | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     store = store or JobStore(settings.db_path)
@@ -468,9 +472,68 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
 
     @app.get("/api/v1/quality/datasets", dependencies=[auth])
     def quality_dataset_catalog():
+        from core.dataset_manager import get_manager
+        from server.dataset_preparation import downloadable_names
         from server.quality_catalog import quality_catalog
 
-        return {"items": quality_catalog()}
+        manager = get_manager()
+        allowed = downloadable_names()
+        with store._connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM control_jobs WHERE test_type='dataset_prepare' ORDER BY created_at DESC LIMIT 200"
+            ).fetchall()
+        latest: dict[str, dict | None] = {}
+        for row in rows:
+            latest.setdefault(row["model_id"], store._as_job(row))
+        items = quality_catalog()
+        for item in items:
+            name = item["id"]
+            files = (
+                list(manager.get_local_path(name).glob("*.json")) if name in manager.configs else []
+            )
+            item.update(
+                local_available=manager.is_available(name) if name in manager.configs else None,
+                bytes=sum(path.stat().st_size for path in files if path.is_file()),
+                downloadable=name in allowed,
+                preparation=latest.get(name),
+            )
+            preparation = item["preparation"]
+            if preparation:
+                events = store.events(preparation["job_id"], limit=5)
+                stage = next(
+                    (
+                        json.loads(event["detail_json"])
+                        for event in reversed(events)
+                        if event["event"] == "DATASET_PREPARATION" and event["detail_json"]
+                    ),
+                    None,
+                )
+                item["preparation_stage"] = stage
+        return {"items": items}
+
+    @app.post("/api/v1/quality/datasets/preparations", dependencies=[auth], status_code=202)
+    def prepare_quality_datasets(body: DatasetPreparationBody):
+        from core.dataset_manager import get_manager
+        from server.dataset_preparation import downloadable_names
+
+        allowed = downloadable_names()
+        names = sorted(allowed) if body.names is None else body.names
+        if len(set(names)) != len(names) or any(name not in allowed for name in names):
+            raise HTTPException(422, "Select unique registered public datasets")
+        manager = get_manager()
+        skipped = [name for name in names if manager.is_available(name)]
+        tasks = [
+            store.submit(
+                test_type="dataset_prepare",
+                endpoint_id="dataset-manager",
+                model_id=name,
+                parameters={"name": name},
+                progress_total=1,
+            )
+            for name in names
+            if name not in skipped
+        ]
+        return {"items": tasks, "skipped_names": skipped}
 
     @app.get("/api/v1/datasets", dependencies=[auth])
     def datasets():
@@ -1388,6 +1451,10 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         if format not in {"json", "html", "markdown"}:
             raise HTTPException(422, "Format must be json, html or markdown")
         payload = artifact_payload(job)
+        if isinstance(payload.get("dataset_preparation"), dict):
+            if format != "json":
+                raise HTTPException(422, "Dataset preparation receipts use JSON")
+            return JSONResponse(payload)
         if isinstance(payload.get("datasets"), dict):
             if format == "html":
                 return HTMLResponse(render_quality_html(job, payload))

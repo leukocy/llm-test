@@ -1,8 +1,18 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { api, type Job } from "../api";
+import { statusLabels } from "../constants";
 import { SchemaForm, type JsonSchema } from "./SchemaForm";
 
-type Dataset = { id: string; group: string; available: boolean };
+type Dataset = {
+  id: string;
+  group: string;
+  available: boolean;
+  local_available?: boolean | null;
+  bytes?: number;
+  downloadable?: boolean;
+  preparation?: Job | null;
+  preparation_stage?: { fraction: number; message: string } | null;
+};
 
 export function QualityParameters({
   token,
@@ -18,20 +28,60 @@ export function QualityParameters({
   const [catalog, setCatalog] = useState<Dataset[]>([]);
   const [error, setError] = useState("");
   const [customSampling, setCustomSampling] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+  const [preparing, setPreparing] = useState(false);
+  const active = catalog.some(
+    (item) =>
+      item.preparation &&
+      ["queued", "running", "cancelling"].includes(item.preparation.status),
+  );
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(
+      () => setRefresh((current) => current + 1),
+      3000,
+    );
+    return () => window.clearInterval(timer);
+  }, [active]);
   useEffect(() => {
     const controller = new AbortController();
     void api<{ items: Dataset[] }>(token, "/api/v1/quality/datasets", {
       signal: controller.signal,
     })
       .then((result) => {
-        setCatalog(result.items);
-        setError("");
+        if (!controller.signal.aborted) {
+          setCatalog(result.items);
+          setError("");
+        }
       })
       .catch((exc) => {
         if (!controller.signal.aborted) setError(String(exc));
       });
     return () => controller.abort();
-  }, [token]);
+  }, [token, refresh]);
+  async function prepare(names?: string[]) {
+    setPreparing(true);
+    setError("");
+    try {
+      await api(token, "/api/v1/quality/datasets/preparations", {
+        method: "POST",
+        body: JSON.stringify({ names: names || null }),
+      });
+      setRefresh((current) => current + 1);
+    } catch (exc) {
+      setError(String(exc));
+    } finally {
+      setPreparing(false);
+    }
+  }
+  async function cancel(id: string) {
+    try {
+      await api(token, `/api/v1/jobs/${id}/cancel`, { method: "POST" });
+      setRefresh((current) => current + 1);
+    } catch (exc) {
+      setError(String(exc));
+    }
+  }
   const selected = Array.isArray(value.datasets)
     ? (value.datasets as string[])
     : [];
@@ -50,6 +100,7 @@ export function QualityParameters({
     Object.entries(schema.properties || {}).filter(
       ([name]) =>
         !["datasets", "max_samples", "model_type"].includes(name) &&
+        (name !== "ceval_split" || selected.includes("ceval")) &&
         (modelType === "thinking" ||
           !["thinking_enabled", "thinking_budget", "reasoning_effort"].includes(
             name,
@@ -61,7 +112,130 @@ export function QualityParameters({
   }
   return (
     <div className="quality-parameters">
+      <details className="dataset-status">
+        <summary>数据集状态与准备</summary>
+        <p className="field-help">
+          下载由 worker
+          在测量结束后执行。页面关闭不影响任务；取消在当前下载阶段结束后生效。文件校验后发布，本地文件存在不代表评测内容已经核验。
+        </p>
+        <div className="compare-actions">
+          <button
+            type="button"
+            className="button subtle"
+            onClick={() => setRefresh((current) => current + 1)}
+          >
+            刷新数据集状态
+          </button>
+          <button
+            type="button"
+            className="button primary"
+            disabled={
+              preparing ||
+              !catalog.some(
+                (item) => item.downloadable && !item.local_available,
+              )
+            }
+            onClick={() => void prepare()}
+          >
+            下载全部缺失数据集
+          </button>
+        </div>
+        <div className="table-scroll">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>数据集</th>
+                <th>本地文件</th>
+                <th>大小</th>
+                <th>准备状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {catalog.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.id}</td>
+                  <td>
+                    {item.local_available == null
+                      ? "本地或生成"
+                      : item.local_available
+                        ? "已存在"
+                        : "缺失"}
+                  </td>
+                  <td>
+                    {item.bytes
+                      ? `${(item.bytes / 1024 ** 2).toFixed(1)} MiB`
+                      : "—"}
+                  </td>
+                  <td>
+                    {item.preparation ? (
+                      <>
+                        <a href={`/runs/${item.preparation.job_id}`}>
+                          {statusLabels[item.preparation.status] ||
+                            item.preparation.status}
+                        </a>
+                        {item.preparation_stage && (
+                          <small>
+                            {" "}
+                            ·{" "}
+                            {(item.preparation_stage.fraction * 100).toFixed(0)}
+                            % · {item.preparation_stage.message}
+                          </small>
+                        )}
+                        {item.preparation.error_message && (
+                          <small> · {item.preparation.error_message}</small>
+                        )}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td>
+                    {item.downloadable && !item.local_available && (
+                      <button
+                        type="button"
+                        className="button subtle"
+                        disabled={
+                          preparing ||
+                          Boolean(
+                            item.preparation &&
+                            ["queued", "running", "cancelling"].includes(
+                              item.preparation.status,
+                            ),
+                          )
+                        }
+                        onClick={() => void prepare([item.id])}
+                      >
+                        下载 {item.id}
+                      </button>
+                    )}
+                    {item.preparation &&
+                      ["queued", "running"].includes(
+                        item.preparation.status,
+                      ) && (
+                        <button
+                          type="button"
+                          className="button subtle danger"
+                          onClick={() => void cancel(item.preparation!.job_id)}
+                        >
+                          取消 {item.id} 下载
+                        </button>
+                      )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
       <h3>评测数据集</h3>
+      {selected.includes("ceval") && (
+        <p className="field-help">
+          C-Eval 可选 test / val，默认使用已发布标签的
+          test；报告记录实际分区。few-shot 来自同科目的
+          dev，不借用评分题作示例。官方 dev 每科 5 题；缺标签或示例将报错。
+        </p>
+      )}
       <p className="field-help">
         使用本地真实数据；准备阶段冻结样本顺序、few-shot
         与内容指纹。全量模式使用全部实际样本。

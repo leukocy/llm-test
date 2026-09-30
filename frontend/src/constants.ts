@@ -299,6 +299,7 @@ export const labels: Record<string, string> = Object.fromEntries(
   scenarios.map((item) => [item.id, item.label]),
 );
 labels.throughput_matrix = labels.matrix;
+labels.dataset_prepare = "数据准备";
 export const statusLabels: Record<string, string> = {
   queued: "排队中",
   running: "运行中",
@@ -403,6 +404,7 @@ export const fieldLabels: Record<string, string> = {
   num_shots: "few-shot 数",
   model_type: "模型类型",
   use_llm_judge: "AI Judge 错题二次复核",
+  ceval_split: "C-Eval 评分分区",
   temperature: "温度",
   use_cache: "使用缓存",
   thinking_enabled: "启用思考模式",

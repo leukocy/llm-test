@@ -118,6 +118,7 @@ class QualityTestConfig:
 
     # 评判Configure
     use_llm_judge: bool = False  # is否启用Model自评 (针对误判进行二次Confirm)
+    ceval_split: str = "test"
 
     # 缓存Configure
     use_cache: bool = True  # is否启用响应缓存
@@ -145,6 +146,7 @@ class QualityTestConfig:
             "dataset_overrides": self.dataset_overrides,
             "use_cache": self.use_cache,
             "use_llm_judge": self.use_llm_judge,
+            "ceval_split": self.ceval_split,
             "cache_ttl_hours": self.cache_ttl_hours,
         }
 
@@ -536,7 +538,12 @@ class QualityEvaluator:
             test_filter = dataset_name.replace("custom_needle_", "")
             actual_dataset_name = "custom_needle"
 
-        if actual_dataset_name not in self.EVALUATOR_CLASSES:
+        from evaluators import get_evaluator as registered_evaluator
+
+        evaluator_class = self.EVALUATOR_CLASSES.get(actual_dataset_name) or registered_evaluator(
+            actual_dataset_name
+        )
+        if evaluator_class is None:
             self._log(f"Not foundDataset '{actual_dataset_name}' Evaluator", LogLevel.WARNING)
             return None
 
@@ -544,7 +551,10 @@ class QualityEvaluator:
             actual_dataset_name, f"datasets/{actual_dataset_name}"
         )
 
-        evaluator_class = self.EVALUATOR_CLASSES[actual_dataset_name]
+        from core.dataset_manager import DATASET_CONFIGS, get_manager
+
+        if actual_dataset_name in DATASET_CONFIGS:
+            dataset_path = str(get_manager().get_local_path(actual_dataset_name))
 
         # is CustomNeedleEvaluator 传递 test_filter 参数
         if actual_dataset_name == "custom_needle" and test_filter:
@@ -566,6 +576,8 @@ class QualityEvaluator:
             )
 
         # 注入 LLM Judge Configure
+        if actual_dataset_name == "ceval":
+            evaluator.evaluation_split = config.ceval_split
         use_judge = getattr(config, "use_llm_judge", False)
         cast("Any", evaluator).use_llm_judge = use_judge
         self._log(
@@ -592,6 +604,8 @@ class QualityEvaluator:
                 "dataset_source": evaluator.dataset_source,
                 "dataset_path": evaluator.dataset_path,
                 "seed": evaluator.seed,
+                "evaluation_split": getattr(evaluator, "evaluation_split", None),
+                "few_shot_split": getattr(evaluator, "few_shot_split", None),
             }, samples
 
         metadata, samples = self.journal.prepare_scope(scope_key, load) if self.journal else load()
@@ -600,6 +614,9 @@ class QualityEvaluator:
         evaluator.dataset_source = metadata["dataset_source"]
         evaluator.dataset_path = metadata["dataset_path"]
         evaluator.seed = metadata["seed"]
+        if metadata.get("evaluation_split"):
+            evaluator.evaluation_split = metadata["evaluation_split"]
+            evaluator.few_shot_split = metadata.get("few_shot_split")
         return samples
 
     async def evaluate_dataset(
@@ -789,6 +806,8 @@ class QualityEvaluator:
                 "few_shot_count": len(evaluator.few_shot_examples),
                 "few_shot_sha256": fingerprint_samples(evaluator.few_shot_examples),
                 "selection_seed": evaluator.seed,
+                "evaluation_split": getattr(evaluator, "evaluation_split", None),
+                "few_shot_split": getattr(evaluator, "few_shot_split", None),
             }
             if self.journal:
                 result_config["checkpoint"] = self.journal.describe()

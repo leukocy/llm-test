@@ -47,7 +47,7 @@ def test_initial_eighteen_dataset_controls_remain_distinct_from_registration():
     assert sum(map(len, GROUPS.values())) == 18
     catalog = quality_catalog()
     assert len({item["id"] for item in catalog}) == len(catalog)
-    assert next(item for item in catalog if item["id"] == "ceval")["available"] is False
+    assert next(item for item in catalog if item["id"] == "ceval")["available"] is True
 
 
 class SyntheticEvaluator(BaseEvaluator):

@@ -345,6 +345,38 @@ h3 {
   gap: 8px;
   overflow-wrap: anywhere;
 }
+.quality-parameters .field-help {
+  margin: 10px 0 16px;
+  line-height: 1.65;
+}
+.dataset-status {
+  border: 1px solid #e6ebf2;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 24px;
+  background: #f8fbfc;
+}
+.dataset-status > summary {
+  cursor: pointer;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.dataset-status .compare-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+.dataset-status small {
+  display: block;
+  margin-top: 5px;
+}
+.dataset-receipt {
+  overflow: auto;
+  max-height: 600px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .scenario-summary-cards .metric-card strong {
   font-size: 24px;
   letter-spacing: -0.02em;

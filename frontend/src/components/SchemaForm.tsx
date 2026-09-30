@@ -235,6 +235,7 @@ export function SchemaForm({
             ) : def.kind === "enum" ? (
               <select
                 id={id}
+                aria-label={label}
                 value={String(v ?? "")}
                 onChange={(event) => setField(def.name, event.target.value)}
               >

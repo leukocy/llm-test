@@ -273,6 +273,9 @@ class BaseEvaluator(ABC):
     All specific evaluators should inherit from this class.
     """
 
+    evaluation_split: str | None = None
+    few_shot_split: str | None = None
+
     def __init__(
         self,
         dataset_name: str,
