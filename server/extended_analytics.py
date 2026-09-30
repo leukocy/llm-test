@@ -59,6 +59,9 @@ def extended_observations(rows: list[dict[str, Any]]) -> dict[str, Any]:
     untagged = 0
     cache_unknown = cache_invalid = 0
     cache_sources: dict[str, int] = defaultdict(int)
+    weighted_cache = {
+        source: {"hits": 0, "tokens": 0, "count": 0} for source in ("API", "TTFT_inferred")
+    }
     for row in rows:
         extra = json.loads(row.get("extra_metrics") or "{}")
         obs = extra.get("system_measurement") if isinstance(extra, dict) else None
@@ -92,6 +95,9 @@ def extended_observations(rows: list[dict[str, Any]]) -> dict[str, Any]:
         values[f"cache_tokens_{suffix}"].append(hit)
         if denominator is not None and denominator > 0:
             values[f"cache_rate_{suffix}"].append(hit / denominator * 100)
+            weighted_cache[source]["hits"] += int(hit)
+            weighted_cache[source]["tokens"] += int(denominator)
+            weighted_cache[source]["count"] += 1
         ttft = _number(row.get("ttft"), positive=True)
         if source == "API" and ttft is not None:
             values["ttft_zero_cache_api" if hit == 0 else "ttft_cache_api"].append(ttft)
@@ -162,6 +168,13 @@ def extended_observations(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "untagged_requests": untagged,
         },
         "cache": {
+            "weighted": {
+                source: {
+                    **totals,
+                    "rate": totals["hits"] / totals["tokens"] * 100 if totals["tokens"] else None,
+                }
+                for source, totals in weighted_cache.items()
+            },
             "sources": dict(cache_sources),
             "unknown_successes": cache_unknown,
             "invalid_observations": cache_invalid,

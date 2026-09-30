@@ -195,6 +195,12 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
     )
     analysis = scenario_analysis(summary)
     lines.extend(["", "## 场景分析：" + analysis["title"], ""])
+    lines.extend(["### 专用汇总", "", "| 指标 | 结果 | 口径与条件 |", "|---|---|---|"])
+    lines.extend(
+        f"| {_md(card['label'])} | {_md(card['value'])} | {_md(card['note'])} |"
+        for card in analysis["cards"]
+    )
+    lines.append("")
     lines.extend("- " + _md(item["text"]) for item in analysis["observations"])
     lines.extend("- " + note for note in analysis["notes"])
     lines.extend(
@@ -394,6 +400,10 @@ def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
     analysis = scenario_analysis(summary)
     scenario_html = (
         f"<h2>场景分析：{cell(analysis['title'])}</h2><ul>"
+        + "".join(
+            f"<li><strong>{cell(card['label'])}：{cell(card['value'])}</strong><p>{cell(card['note'])}</p></li>"
+            for card in analysis["cards"]
+        )
         + "".join(f"<li>{cell(item['text'])}</li>" for item in analysis["observations"])
         + "".join(f"<li>{cell(note)}</li>" for note in analysis["notes"])
         + "</ul><h2>指标图形 · p50</h2>"

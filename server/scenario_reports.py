@@ -7,6 +7,7 @@ from typing import Any
 
 from server.extended_analytics import CACHE_METRICS, SYSTEM_METRICS
 from server.phase_analytics import PHASE_METRICS
+from server.scenario_summaries import summary_cards
 
 METRICS = {
     "ttft": ("首字延迟", "TTFT", "s"),
@@ -116,7 +117,13 @@ def scenario_analysis(summary: dict[str, Any]) -> dict[str, Any]:
             notes.append(
                 f"阶段时钟有效批次 {phase['valid_batches']}；缺少时钟 {phase['missing_clock_batches']}；无效时钟 {phase['invalid_clock_batches']}；首 Token 记录不齐 {phase['missing_first_token_batches']}；无成功请求 {phase['no_success_batches']}。"
             )
-    return {"title": title, "axis": axis, "notes": notes, "observations": observations}
+    return {
+        "title": title,
+        "axis": axis,
+        "notes": notes,
+        "observations": observations,
+        "cards": summary_cards(summary),
+    }
 
 
 def profile_series(summary: dict[str, Any]) -> tuple[str, bool, list[dict[str, Any]]]:

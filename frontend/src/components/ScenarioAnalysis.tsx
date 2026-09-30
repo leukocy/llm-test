@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Figure } from "plotly.js-dist-min";
 import { api, type Job, type Summary, type Metric } from "../api";
 import { PlotlyFigure } from "./PlotlyFigure";
+import { MetricCard } from "../components";
 
 export const metrics = {
   ttft: "首字延迟 TTFT · s",
@@ -36,6 +37,7 @@ export const statistics = {
   max: "观测最大值",
 };
 type Analysis = {
+  cards?: { key: string; label: string; value: string; note: string }[];
   title: string;
   axis: string;
   notes: string[];
@@ -117,6 +119,19 @@ export function ScenarioAnalysis({
           <h2>{analysis?.title || "场景指标分析"}</h2>
         </div>
         <span className="minor-tag">完整分组 · 非预览样本</span>
+      </div>
+      <div
+        className="metric-grid scenario-summary-cards"
+        aria-label="场景专用汇总"
+      >
+        {analysis?.cards?.map((card) => (
+          <MetricCard
+            key={card.key}
+            label={card.label}
+            value={card.value}
+            note={card.note}
+          />
+        ))}
       </div>
       <div className="scenario-controls">
         <label>

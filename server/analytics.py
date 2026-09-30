@@ -20,6 +20,7 @@ from core.benchmark.phase_observations import phase_observation
 from server.extended_analytics import extended_observations
 from server.observations import describe_values, percentile
 from server.scenario_reports import scenario_analysis
+from server.scenario_summaries import token_totals
 from server.specs import describe_report_environment
 from server.time_series import resolve_stability_row, stability_time_series, timing_observation
 
@@ -115,6 +116,7 @@ def describe_observations(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "success_rate": ok / n if n else None,
         "success_rate_ci95": wilson_interval(ok, n),
         "metrics": metrics,
+        "token_totals": token_totals(rows),
     }
 
 

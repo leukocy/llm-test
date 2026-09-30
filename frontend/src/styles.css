@@ -325,6 +325,14 @@ h3 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 15px;
 }
+.scenario-summary-cards {
+  margin: 20px 0;
+}
+.scenario-summary-cards .metric-card strong {
+  font-size: 24px;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
 .metric-card {
   min-height: 148px;
   background: white;

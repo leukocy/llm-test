@@ -226,6 +226,7 @@ export type Summary = {
     };
   };
   scenario_analysis?: {
+    cards?: { key: string; label: string; value: string; note: string }[];
     title: string;
     axis: string;
     notes: string[];
