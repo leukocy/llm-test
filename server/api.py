@@ -62,6 +62,7 @@ from server.settings import Endpoint, Settings
 from server.specs import (
     JobSubmission,
     PresetSubmission,
+    QualitySpec,
     RunConfig,
     StrictSpec,
     expected_requests,
@@ -136,6 +137,13 @@ class CompareQualityBody(StrictSpec):
     job_id_a: str = Field(min_length=1, max_length=64)
     job_id_b: str = Field(min_length=1, max_length=64)
     score_basis: Literal["standard", "final"] = "standard"
+
+
+class OnlineComparisonBody(StrictSpec):
+    endpoint_id_a: str = Field(min_length=1, max_length=64)
+    endpoint_id_b: str = Field(min_length=1, max_length=64)
+    parameters: QualitySpec
+    run_config: RunConfig | None = None
 
 
 class BatchItem(StrictSpec):
@@ -848,6 +856,71 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
     # ------------------------------------------------------------------
     # A/B 对比与高级评估（离线分析）
     # ------------------------------------------------------------------
+
+    @app.post("/api/v1/comparisons", dependencies=[auth], status_code=201)
+    def submit_comparison(
+        body: OnlineComparisonBody,
+        idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+    ):
+        import uuid
+
+        from server.shared_quality import PROTOCOL
+
+        if body.endpoint_id_a == body.endpoint_id_b:
+            raise HTTPException(422, "Choose two independently configured model endpoints")
+        if idempotency_key is not None and (
+            not _KEY.fullmatch(idempotency_key) or len(idempotency_key) > 64
+        ):
+            raise HTTPException(422, "Invalid idempotency key")
+        endpoints = [resolve_endpoint(body.endpoint_id_a), resolve_endpoint(body.endpoint_id_b)]
+        for endpoint in endpoints:
+            try:
+                endpoint.api_key()
+            except RuntimeError as exc:
+                raise HTTPException(503, "Endpoint credential unavailable") from exc
+        batch_id = idempotency_key or uuid.uuid4().hex[:16]
+        request_hash = hashlib.sha256(
+            json.dumps(
+                body.model_dump(), sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            ).encode()
+        ).hexdigest()
+        prepared = []
+        for role, endpoint in zip(("A", "B"), endpoints, strict=True):
+            parameters = body.parameters.model_dump()
+            parameters["_comparison"] = {
+                "protocol": PROTOCOL,
+                "role": role,
+                "endpoint_snapshot": {
+                    field: getattr(endpoint, field)
+                    for field in ("model_id", "provider", "api_base_url", "tokenizer_option")
+                },
+            }
+            if body.run_config:
+                parameters["_run_config"] = body.run_config.model_dump(exclude_none=True)
+            prepared.append(
+                {
+                    "test_type": "quality",
+                    "endpoint_id": endpoint.id,
+                    "model_id": endpoint.model_id,
+                    "parameters": parameters,
+                    "progress_total": expected_requests("quality", body.parameters.model_dump()),
+                }
+            )
+        try:
+            jobs = store.submit_batch(
+                batch_id=batch_id,
+                name="在线双模型对比",
+                description="A/B reuse a shared frozen sample and few-shot plan",
+                default_endpoint_id=body.endpoint_id_a,
+                request_hash=request_hash,
+                requested_items=2,
+                items=prepared,
+                max_parallel=1,
+                stop_on_error=False,
+            )
+        except IdempotencyConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {"batch_id": batch_id, "protocol": PROTOCOL, "jobs": jobs}
 
     @app.post("/api/v1/compare", dependencies=[auth])
     def compare_quality_jobs(body: CompareQualityBody):

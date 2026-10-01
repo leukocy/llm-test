@@ -82,6 +82,7 @@ async def execute_job(
     # （spec 校验在此前已完成, 方法实参不受污染）
     params = dict(job["parameters"])
     run_config = params.pop("_run_config", {}) or {}
+    comparison = params.pop("_comparison", None)
     report_environment = describe_report_environment(run_config.get("report_environment"))
 
     control = JobControl(store, job_id, worker_id)
@@ -94,6 +95,10 @@ async def execute_job(
         if job["test_type"] in MEASUREMENT_TYPES
         else None
     )
+    if comparison:
+        from server.shared_quality import SharedQualityJournal
+
+        journal = SharedQualityJournal(store, job, worker_id, endpoint)
     artifact_name = (
         "report.json" if job["attempts"] == 1 else f"report-attempt-{job['attempts']}.json"
     )
@@ -201,6 +206,7 @@ async def execute_job(
                 "job_id": job_id,
                 "model_id": endpoint.model_id,
                 "datasets": {name: item.to_dict() for name, item in result.items()},
+                "comparison": comparison,
                 "report_environment": report_environment,
                 "checkpoint": journal.describe() if journal else None,
                 "execution_control": {

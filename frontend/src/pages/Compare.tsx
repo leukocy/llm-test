@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Job } from "../api";
 import { Empty } from "../components";
 import { formatPercent, shortId } from "../constants";
+import { OnlineComparison } from "../components/OnlineComparison";
 
 type ComparePayload = {
   job_a: { job_id: string; model_id: string; endpoint_id: string };
@@ -49,6 +50,7 @@ export function Compare({ jobs, token }: { jobs: Job[]; token: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [basis, setBasis] = useState("standard");
+  const [autoCompare, setAutoCompare] = useState(false);
   const pending = useRef<AbortController | null>(null);
   useEffect(() => {
     pending.current?.abort();
@@ -57,6 +59,12 @@ export function Compare({ jobs, token }: { jobs: Job[]; token: string }) {
     setBusy(false);
     return () => pending.current?.abort();
   }, [idA, idB, basis]);
+  useEffect(() => {
+    if (autoCompare && idA && idB) {
+      setAutoCompare(false);
+      void run();
+    }
+  }, [autoCompare, idA, idB]);
 
   async function run() {
     setBusy(true);
@@ -112,6 +120,14 @@ export function Compare({ jobs, token }: { jobs: Job[]; token: string }) {
           </p>
         </div>
       </div>
+      <OnlineComparison
+        token={token}
+        onReady={(a, b) => {
+          setIdA(a);
+          setIdB(b);
+          setAutoCompare(true);
+        }}
+      />
       <section className="surface">
         <label className="compare-basis">
           评分口径

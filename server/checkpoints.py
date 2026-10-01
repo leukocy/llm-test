@@ -123,6 +123,7 @@ def execution_signature(job: dict, endpoint: Endpoint) -> str:
         *root.joinpath("task_configs").rglob("*.yml"),
         Path(__file__),
         root / "server/runner_adapter.py",
+        root / "server/shared_quality.py",
         root / "server/measurement_checkpoints.py",
         root / "server/stability_checkpoints.py",
     ]

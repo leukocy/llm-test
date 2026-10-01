@@ -625,7 +625,13 @@ class QualityEvaluator:
     def _load_plan(
         self, evaluator: BaseEvaluator, subset: str | None, scope_key: str
     ) -> list[dict]:
+        current_scoring = scoring_fingerprint(evaluator)
+
         def load() -> tuple[dict, list[dict]]:
+            if self.journal:
+                from core.dataset_manager import get_manager
+
+                get_manager().auto_download = False
             evaluator.dataset_source = "configured_dataset"
             samples = evaluator.load_dataset(subset=subset)
             if not samples:
@@ -637,16 +643,23 @@ class QualityEvaluator:
                 "seed": evaluator.seed,
                 "evaluation_split": getattr(evaluator, "evaluation_split", None),
                 "few_shot_split": getattr(evaluator, "few_shot_split", None),
-                "scoring_contract": scoring_fingerprint(evaluator),
+                "scoring_contract": current_scoring,
             }, samples
 
         metadata, samples = self.journal.prepare_scope(scope_key, load) if self.journal else load()
+        if getattr(self.journal, "requires_shared_source", False) and (
+            not current_scoring or metadata.get("scoring_contract") != current_scoring
+        ):
+            raise DatasetUnavailableError(
+                "Shared comparison scoring source changed; create a new comparison with consistent workers"
+            )
         evaluator.samples = samples
         evaluator.few_shot_examples = metadata["few_shot_examples"]
         evaluator.dataset_source = metadata["dataset_source"]
         evaluator.dataset_path = metadata["dataset_path"]
         evaluator.seed = metadata["seed"]
         evaluator.scoring_contract = metadata.get("scoring_contract")
+        evaluator.shared_plan = metadata.get("shared_plan")
         if metadata.get("evaluation_split"):
             evaluator.evaluation_split = metadata["evaluation_split"]
             evaluator.few_shot_split = metadata.get("few_shot_split")
@@ -831,6 +844,7 @@ class QualityEvaluator:
             # BuildResult
             result_config = config.to_dict()
             result_config["scoring_contract"] = evaluator.scoring_contract
+            result_config["shared_plan"] = evaluator.shared_plan
             result_config["requires_code_execution"] = bool(
                 getattr(evaluator, "requires_code_execution", False)
             )
@@ -1194,9 +1208,10 @@ class QualityEvaluator:
                 results_list,
                 model_info=model_info,
                 config={
-                    "num_shots": getattr(self, "num_shots", 0),
-                    "max_samples": getattr(self, "max_samples", None),
-                    "use_cache": getattr(self, "enable_cache", False),
+                    **results_list[0].config,
+                    "dataset_configs": {
+                        result.dataset_name: result.config for result in results_list
+                    },
                 },
             )
 

@@ -276,6 +276,7 @@ class BaseEvaluator(ABC):
     evaluation_split: str | None = None
     few_shot_split: str | None = None
     scoring_contract: str | None = None
+    shared_plan: dict | None = None
 
     def __init__(
         self,

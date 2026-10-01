@@ -282,10 +282,10 @@ class StandardReport:
                 if not detail.is_correct and not detail.error:
                     failure = FailureCase(
                         sample_id=detail.sample_id,
-                        question=detail.prompt[:500] if detail.prompt else "",
-                        expected_answer=detail.expected,
-                        predicted_answer=detail.predicted,
-                        model_response=detail.response[:500] if detail.response else "",
+                        question=(detail.question or detail.prompt)[:500],
+                        expected_answer=detail.correct_answer,
+                        predicted_answer=detail.predicted_answer,
+                        model_response=detail.model_response[:500] if detail.model_response else "",
                         category=detail.category if hasattr(detail, "category") else "",
                         failure_type=cls._classify_failure(detail),
                     )
@@ -329,9 +329,9 @@ class StandardReport:
     @staticmethod
     def _classify_failure(detail) -> str:
         """分类失败类型"""
-        if not detail.predicted:
+        if not detail.predicted_answer:
             return "empty_response"
-        if detail.predicted == "PARSE_ERROR" or detail.predicted == "ERROR":
+        if detail.predicted_answer == "PARSE_ERROR" or detail.predicted_answer == "ERROR":
             return "parse_error"
         return "wrong_answer"
 
@@ -453,7 +453,6 @@ class ReportExporter:
             json.dump(lm_eval_result, f, ensure_ascii=False, indent=2)
 
         return filepath
-
 
     def to_markdown(self, filepath: str) -> str:
         """Export as Markdown 格式报告"""
@@ -606,16 +605,6 @@ class ReportExporter:
 # ============================================
 
 
-
-
 # ============================================
 # 便捷函数
 # ============================================
-
-
-
-
-
-
-
-
