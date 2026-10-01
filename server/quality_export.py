@@ -68,6 +68,10 @@ def quality_samples_csv(report: dict[str, Any]) -> str:
         "tps",
         "total_time_ms",
         "measurement_provenance",
+        "latency_ms",
+        "reasoning_quality",
+        "reasoning_quality_overall",
+        "reasoning_content",
     )
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(fields)

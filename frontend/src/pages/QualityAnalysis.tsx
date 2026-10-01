@@ -31,7 +31,8 @@ export function QualityAnalysis({
   const [category, setCategory] = useState("");
   const [search, setSearch] = useState("");
   const [selectedError, setSelectedError] = useState<number | null>(null);
-  const [view, setView] = useState("failures");
+  const [view, setView] = useState("all");
+  const [sort, setSort] = useState("default");
   const [page, setPage] = useState(0);
   const name = report.datasets[selectedName] ? selectedName : names[0] || "";
   const dataset = report.datasets[name];
@@ -52,7 +53,13 @@ export function QualityAnalysis({
       ? failures
       : details
           .map((item, index) => ({ item, index }))
-          .filter(({ item }) => view !== "judge" || item.is_judge_corrected);
+          .filter(({ item }) =>
+            view === "judge"
+              ? item.is_judge_corrected
+              : view === "correct"
+                ? item.is_correct === true && !item.error
+                : true,
+          );
   const filtered = candidates.filter(
     ({ item }) =>
       (!category || (item.category || "未分类") === category) &&
@@ -61,6 +68,35 @@ export function QualityAnalysis({
           .toLowerCase()
           .includes(search.toLowerCase())),
   );
+  function score(item: (typeof details)[number]): number | null {
+    const value = item.reasoning_quality_overall ?? item.reasoning_quality;
+    // Legacy dataclass zero is indistinguishable from an unmeasured default.
+    return typeof value === "number" &&
+      Number.isFinite(value) &&
+      value > 0 &&
+      value <= 10
+      ? value
+      : null;
+  }
+  function latency(item: (typeof details)[number]): number | null {
+    return typeof item.latency_ms === "number" &&
+      Number.isFinite(item.latency_ms) &&
+      item.latency_ms > 0
+      ? item.latency_ms
+      : null;
+  }
+  if (sort !== "default")
+    filtered.sort((a, b) => {
+      const left = sort === "latency" ? latency(a.item) : score(a.item);
+      const right = sort === "latency" ? latency(b.item) : score(b.item);
+      return left === null
+        ? right === null
+          ? a.index - b.index
+          : 1
+        : right === null
+          ? -1
+          : right - left || a.index - b.index;
+    });
   const selected = selectedError === null ? null : details[selectedError];
   const pageCount = Math.max(1, Math.ceil(filtered.length / 50));
   const currentPage = Math.min(page, pageCount - 1);
@@ -332,7 +368,7 @@ export function QualityAnalysis({
           <div>
             <span className="eyebrow">ERROR REVIEW</span>
             <h2>
-              错误样本诊断 <span className="count-tag">{failures.length}</span>
+              逐样本诊断 <span className="count-tag">{details.length}</span>
             </h2>
           </div>
           <button className="button subtle" onClick={onExportErrors}>
@@ -372,7 +408,21 @@ export function QualityAnalysis({
           >
             <option value="failures">错误样本</option>
             <option value="all">全部样本</option>
+            <option value="correct">仅正确样本</option>
             <option value="judge">Judge 改判样本</option>
+          </select>
+          <select
+            aria-label="样本排序"
+            value={sort}
+            onChange={(event) => {
+              setSort(event.target.value);
+              setPage(0);
+              setSelectedError(null);
+            }}
+          >
+            <option value="default">默认顺序</option>
+            <option value="latency">按耗时（从高到低）</option>
+            <option value="reasoning">按推理质量（从高到低）</option>
           </select>
           <select
             aria-label="筛选错误类别"
@@ -402,6 +452,9 @@ export function QualityAnalysis({
             第 {currentPage + 1} / {pageCount} 页 · {filtered.length} 条
           </span>
         </div>
+        <p className="chart-caption">
+          耗时与推理评分来自已保存样本，缺失值排在最后；历史默认零无法证明已测量，不当作有效评分。推理评分为启发式分数，不代表经校准的推理能力。导出按钮下载全部样本，不受当前筛选和排序影响。
+        </p>
         {filtered.length ? (
           <div className="table-scroll">
             <table className="data-table stats-table">
@@ -444,7 +497,7 @@ export function QualityAnalysis({
             </table>
           </div>
         ) : (
-          <Empty title="当前筛选下没有错误样本" text="可调整类别或搜索条件。" />
+          <Empty title="当前筛选下没有样本" text="可调整类别或搜索条件。" />
         )}
         <div className="api-form-actions">
           <button
@@ -482,6 +535,28 @@ export function QualityAnalysis({
                 收起
               </button>
             </div>
+            <div className="metric-grid">
+              <MetricCard
+                label="样本调用耗时"
+                value={formatNumber(latency(selected), 1)}
+                note="ms · 已保存测量"
+              />
+              <MetricCard
+                label="推理质量评分"
+                value={
+                  score(selected) === null
+                    ? "未记录"
+                    : formatNumber(score(selected), 1)
+                }
+                note="/ 10 · 启发式评分"
+              />
+            </div>
+            {selected.reasoning_content && (
+              <details>
+                <summary>推理过程</summary>
+                <pre>{selected.reasoning_content}</pre>
+              </details>
+            )}
             <div className="quality-sample-columns">
               <div>
                 <strong>输入提示词</strong>

@@ -310,6 +310,10 @@ export type QualityReport = {
         correct_answer: string;
         predicted_answer: string;
         model_response: string;
+        latency_ms?: number | null;
+        reasoning_content?: string;
+        reasoning_quality?: number | null;
+        reasoning_quality_overall?: number | null;
         is_correct: boolean;
         is_judge_corrected?: boolean;
         judge_verdict?: string | null;
