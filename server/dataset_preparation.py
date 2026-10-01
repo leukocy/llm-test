@@ -109,17 +109,19 @@ def execute_preparation(job: dict, settings, store, worker_id: str) -> RunOutput
             # Published data must support the platform's default five exemplars.
             prepared = MBPPEvaluator(dataset_path=str(stage), num_shots=5)
             prepared.load_dataset()
-        if name == "ceval":
+        if name in {"ceval", "cmmlu"}:
             from evaluators.ceval_evaluator import CEvalEvaluator
+            from evaluators.cmmlu_evaluator import CMMLUEvaluator
 
-            CEvalEvaluator.normalize(samples, split)
-            dev = CEvalEvaluator.normalize(downloader.load(name, split="dev"), "dev")
+            evaluator_class = CEvalEvaluator if name == "ceval" else CMMLUEvaluator
+            samples = evaluator_class.normalize(samples, split)
+            dev = evaluator_class.normalize(downloader.load(name, split="dev"), "dev")
             if any(
                 sum(example["subject"] == sample["subject"] for example in dev) < 5
                 for sample in samples
             ):
                 raise ValueError(
-                    "C-Eval preparation requires five development exemplars per validation subject"
+                    f"{name} preparation requires five development exemplars per scoring subject"
                 )
         if sum(path.stat().st_size for path in stage.iterdir() if path.is_file()) > MAX_BYTES:
             raise ValueError("Prepared dataset exceeds 2 GiB")

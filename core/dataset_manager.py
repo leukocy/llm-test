@@ -180,6 +180,13 @@ DATASET_CONFIGS = {
         split_mapping={"test": "test", "dev": "dev"},
         description="C-Eval - Chinese knowledge evaluation",
     ),
+    "cmmlu": DatasetConfig(
+        name="cmmlu",
+        hf_path="haonan-li/cmmlu",
+        local_path="datasets/cmmlu",
+        split_mapping={"test": "test", "dev": "dev"},
+        description="CMMLU - Chinese multitask knowledge evaluation",
+    ),
 }
 
 
@@ -328,6 +335,21 @@ class DatasetManager:
 
         local_path = self.get_local_path(name)
         local_path.mkdir(parents=True, exist_ok=True)
+        if name == "cmmlu":
+            from huggingface_hub import hf_hub_download
+
+            from core.cmmlu_data import prepare_archive
+
+            assert config.hf_path is not None
+            archive = hf_hub_download(
+                repo_id=config.hf_path,
+                filename="cmmlu_v1_0_1.zip",
+                repo_type="dataset",
+                revision=config.version if config.version != "latest" else "main",
+                token=False,
+            )
+            prepare_archive(archive, local_path, progress_callback)
+            return True
         if config.version != "latest":
             load_dataset = partial(
                 load_dataset, revision=config.version, token=False, trust_remote_code=False

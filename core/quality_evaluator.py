@@ -200,6 +200,7 @@ class QualityEvaluator:
         "math500": "datasets/math500",
         "humaneval": "datasets/humaneval",
         "ceval": "datasets/ceval",
+        "cmmlu": "datasets/cmmlu",
         "arc": "datasets/arc",
         "truthfulqa": "datasets/truthfulqa",
         "gpqa": "datasets/gpqa",

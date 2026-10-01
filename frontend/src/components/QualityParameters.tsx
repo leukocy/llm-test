@@ -229,6 +229,12 @@ export function QualityParameters({
         </div>
       </details>
       <h3>评测数据集</h3>
+      {selected.includes("cmmlu") && (
+        <p className="field-help">
+          CMMLU 使用带标签的 test 评分，同科目的 dev 提供 few-shot 示例（每科 5
+          题）。缺少标签或示例时停止评测；报告保留实际样本及分区来源。
+        </p>
+      )}
       {selected.includes("ceval") && (
         <p className="field-help">
           C-Eval 可选 test / val，默认使用已发布标签的
