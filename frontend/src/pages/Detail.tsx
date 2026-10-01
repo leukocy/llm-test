@@ -1069,6 +1069,7 @@ export function Detail({
       )}
       {quality && (
         <QualityAnalysis
+          token={token}
           report={quality}
           onExportSamples={() => {
             void downloadFile(

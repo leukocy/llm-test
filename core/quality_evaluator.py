@@ -20,6 +20,7 @@ import pandas as pd
 from core.cancel_state import is_stop_requested
 from core.evaluation_control import EvaluationJournal
 from core.failure_analyzer import analyze_failures
+from core.provider_usage import openai_usage_counts
 from core.providers.factory import get_provider
 from core.safe_executor import SandboxUnavailableError, require_sandbox_available, sandbox_session
 from evaluators.base_evaluator import (
@@ -574,7 +575,8 @@ class QualityEvaluator:
                             "output_token_scope",
                             usage_info.get("output_token_scope", "provider_defined"),
                         ),
-                        "provider_usage": usage_info.get("provider_usage"),
+                        "provider_usage": usage_info.get("provider_usage")
+                        or openai_usage_counts(usage_info),
                         "finish_reason": result.get("finish_reason"),
                     },
                 }

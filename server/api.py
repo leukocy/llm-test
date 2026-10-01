@@ -1638,6 +1638,27 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             raise HTTPException(422, "Quality report is invalid")
         return payload
 
+    @app.get("/api/v1/jobs/{job_id}/report/sample-visuals", dependencies=[auth])
+    def quality_sample_visuals(
+        job_id: str,
+        dataset: Annotated[str, Query(max_length=120)],
+        index: Annotated[int, Query(ge=0, le=100000)],
+        format: Literal["json", "html"] = "json",
+    ):
+        from server.sample_visuals import sample_visuals, sample_visuals_html
+
+        payload = quality_payload(job_or_404(job_id))
+        result = payload["datasets"].get(dataset)
+        if not isinstance(result, dict) or not isinstance(result.get("details"), list):
+            raise HTTPException(404, "Sample dataset is unavailable")
+        rows = result["details"]
+        if index >= len(rows):
+            raise HTTPException(404, "Sample index is unavailable")
+        if not isinstance(rows[index], dict):
+            raise HTTPException(422, "Sample record is invalid")
+        visuals = {**sample_visuals(rows[index]), "dataset": dataset, "index": index}
+        return HTMLResponse(sample_visuals_html(visuals)) if format == "html" else visuals
+
     @app.get("/api/v1/jobs/{job_id}/report/errors.csv", dependencies=[auth])
     def quality_errors(job_id: str):
         payload = quality_payload(job_or_404(job_id))

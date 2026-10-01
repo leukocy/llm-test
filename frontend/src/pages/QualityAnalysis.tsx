@@ -1,3 +1,4 @@
+import { SampleVisuals } from "../components/SampleVisuals";
 import { ReasoningAnalysis } from "../components/ReasoningAnalysis";
 import { useMemo, useState } from "react";
 import type { QualityReport } from "../api";
@@ -20,10 +21,12 @@ function wilson(successes: number, trials: number): [number, number] | null {
 
 export function QualityAnalysis({
   report,
+  token,
   onExportErrors,
   onExportSamples,
 }: {
   report: QualityReport;
+  token: string;
   onExportErrors: () => void;
   onExportSamples: () => void;
 }) {
@@ -552,6 +555,12 @@ export function QualityAnalysis({
                 收起
               </button>
             </div>
+            <SampleVisuals
+              jobId={report.job_id}
+              dataset={name}
+              index={selectedError!}
+              token={token}
+            />
             <div className="metric-grid">
               <MetricCard
                 label="样本调用耗时"
