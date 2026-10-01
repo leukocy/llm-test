@@ -1895,6 +1895,53 @@ textarea:focus {
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
+.custom-parameters-editor,
+.custom-parameter-row {
+  min-width: 0;
+}
+.custom-parameter-row {
+  border: 1px solid #dce5f2;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 12px 0;
+}
+.custom-parameter-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.custom-parameter-fields label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+.custom-parameter-fields input:not([type="checkbox"]),
+.custom-parameter-fields select,
+.custom-parameter-fields textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #dce5f2;
+  border-radius: 8px;
+  background: #fff;
+  color: #23384b;
+  font: inherit;
+}
+.custom-parameter-fields textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+.custom-parameter-fields input:focus,
+.custom-parameter-fields textarea:focus {
+  outline: 2px solid #a5dbcd;
+  outline-offset: 1px;
+}
+@media (max-width: 700px) {
+  .custom-parameter-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .quality-error-controls {
   margin-bottom: 18px;
 }

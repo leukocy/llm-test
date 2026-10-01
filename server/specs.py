@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import json
+import math
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    TypeAdapter,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from core.measurement_protocol import measurement_plan as _measurement_plan
 
@@ -339,6 +350,85 @@ def describe_report_environment(raw: Any) -> dict[str, Any] | None:
     return {"source": "user_reported", "scope": environment["scope"], "fields": fields}
 
 
+class CustomParameter(StrictSpec):
+    name: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z][A-Za-z0-9_]*$")
+    location: Literal["top_level", "extra_body"] = "top_level"
+    value: JsonValue
+
+    @field_validator("name")
+    @classmethod
+    def dedicated_fields(cls, name: str) -> str:
+        if name.lower() in {
+            "client",
+            "session_id",
+            "prompt",
+            "messages",
+            "model",
+            "stream",
+            "stream_options",
+            "n",
+            "candidatecount",
+            "candidate_count",
+            "log_callback",
+            "max_tokens",
+            "max_completion_tokens",
+            "maxoutputtokens",
+            "temperature",
+            "request_timeout",
+            "input_tokens_hint",
+            "thinking_enabled",
+            "thinking_budget",
+            "reasoning_effort",
+            "random_seed",
+            "api_key",
+            "apikey",
+            "api_base_url",
+            "authorization",
+            "headers",
+            "password",
+            "secret",
+            "access_token",
+        }:
+            raise ValueError("此字段由专用设置管理，不能作为额外参数覆盖")
+        return name
+
+    @field_validator("value")
+    @classmethod
+    def bounded_json(cls, value: JsonValue) -> JsonValue:
+        def check(item, depth=0):
+            if depth > 8:
+                raise ValueError("额外参数嵌套最多 8 层")
+            if isinstance(item, float) and not math.isfinite(item):
+                raise ValueError("额外参数必须使用有限数字")
+            if isinstance(item, dict):
+                if any(
+                    key.lower().replace("_", "").replace("-", "")
+                    in {
+                        "apikey",
+                        "authorization",
+                        "password",
+                        "secret",
+                        "accesstoken",
+                        "xapikey",
+                        "xgoogapikey",
+                    }
+                    and isinstance(child, str)
+                    and bool(child)
+                    for key, child in item.items()
+                ):
+                    raise ValueError("凭据应保存到 API 设置，不能写入额外参数")
+                for child in item.values():
+                    check(child, depth + 1)
+            elif isinstance(item, list):
+                for child in item:
+                    check(child, depth + 1)
+
+        check(value)
+        if len(json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8")) > 16384:
+            raise ValueError("每个额外参数值最多 16 KiB")
+        return value
+
+
 class RunConfig(StrictSpec):
     """BenchmarkRunner 构造器级旋钮（全部可选；未设走端点/引擎默认）。
 
@@ -357,8 +447,20 @@ class RunConfig(StrictSpec):
     latency_offset: float = Field(default=0.0, ge=-10.0, le=10.0)
     tokenizer_option: str | None = Field(default=None, max_length=120)
     hf_tokenizer_model_id: str | None = Field(default=None, max_length=200)
-    custom_params: list[dict[str, str]] | None = Field(default=None, max_length=20)
+    custom_params: list[CustomParameter] | None = Field(default=None, max_length=20)
     report_environment: ReportEnvironment | None = None
+
+    @field_serializer("custom_params")
+    def serialize_custom_parameters(self, value):
+        # Keep required JSON null values even when optional run fields are omitted.
+        return [row.model_dump() for row in value] if value is not None else None
+
+    @field_validator("custom_params")
+    @classmethod
+    def unique_custom_parameters(cls, value):
+        if value and len({row.name for row in value}) != len(value):
+            raise ValueError("额外参数名不能重复，包括不同发送位置的同名参数")
+        return value
 
 
 class JobSubmission(StrictSpec):

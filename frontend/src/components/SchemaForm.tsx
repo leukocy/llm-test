@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fieldLabels } from "../constants";
+import { CustomParametersEditor } from "./CustomParametersEditor";
 
 /** 后端 pydantic JSON Schema 的最小可用子集。 */
 export type JsonSchema = {
@@ -209,6 +210,16 @@ export function SchemaForm({
         const id = `${idPrefix}-${def.name}`;
         const label = fieldLabels[def.name] || def.schema.title || def.name;
         const v = value[def.name];
+        if (def.name === "custom_params") {
+          return (
+            <div className="schema-field wide" key={def.name}>
+              <CustomParametersEditor
+                value={v}
+                onChange={(next) => setField(def.name, next)}
+              />
+            </div>
+          );
+        }
         return (
           <label
             key={def.name}

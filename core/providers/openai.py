@@ -167,17 +167,6 @@ class OpenAIProvider(LLMProvider):
             request_timeout=request_timeout,
         )
 
-        # 如果没有传入客户端，创建一个
-        own_client = False
-        if client is None:
-            client = httpx.AsyncClient(
-                transport=httpx.AsyncHTTPTransport(
-                    limits=httpx.Limits(max_connections=2048, max_keepalive_connections=256),
-                ),
-                timeout=request_timeout_seconds,
-            )
-            own_client = True
-
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             if self.platform == "mimo":
@@ -245,13 +234,25 @@ class OpenAIProvider(LLMProvider):
         # User-defined custom params destined for extra_body
         custom_extra_body = kwargs.pop("_custom_extra_body", None)
         if custom_extra_body:
-            if "extra_body" not in payload:
-                payload["extra_body"] = {}
-            payload["extra_body"].update(custom_extra_body)
+            if any(key in payload for key in custom_extra_body):
+                return {"error": "Extra parameters cannot override measured request fields"}
+            # extra_body is an SDK argument; its fields belong to the HTTP body.
+            payload.update(custom_extra_body)
 
         for k, v in kwargs.items():
             if v is not None:
                 payload[k] = v
+
+        # 如果没有传入客户端，创建一个
+        own_client = False
+        if client is None:
+            client = httpx.AsyncClient(
+                transport=httpx.AsyncHTTPTransport(
+                    limits=httpx.Limits(max_connections=2048, max_keepalive_connections=256),
+                ),
+                timeout=request_timeout_seconds,
+            )
+            own_client = True
 
         # 注册客户端以便可以强制关闭
         client_id = register_client(client)

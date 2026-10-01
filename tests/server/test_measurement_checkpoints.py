@@ -266,6 +266,64 @@ async def wait_during_execution(task, condition):
 
 
 @pytest.mark.asyncio
+async def test_warmup_identity_bindings_do_not_outlive_committed_or_replayed_objects(lab):
+    store, endpoint, _, db = lab
+    store.submit(test_type="concurrency", endpoint_id="lab", model_id="m", parameters={})
+    job = store.claim("w")
+    journal = MeasurementJournal(store, job, "w", endpoint)
+    run = journal.bind_run(
+        db, test_type="concurrency", model_id="m", provider="OpenAI", config={}, system_info={}
+    )
+    runner = SimpleNamespace(
+        _db_run=run,
+        _get_db_manager=lambda: db,
+        results_list=[],
+        total_requests=1,
+        completed_requests=0,
+        _persisted_result_ids=set(),
+    )
+
+    async def observe(prompts):
+        return [result(-1, prompts[0])]
+
+    await journal.measure(
+        runner,
+        "batch",
+        ["warmup"],
+        ["synthetic"],
+        concurrency=1,
+        max_tokens=4,
+        session_start=-1,
+        warmup=True,
+        observe=observe,
+    )
+    assert journal.sources
+    journal.flush(runner)
+    assert not journal.sources and not journal.originals
+    journal.ordinal = 0
+
+    async def forbidden(prompts):
+        pytest.fail("saved warmup must not issue another request")
+
+    replay = await journal.measure(
+        runner,
+        "batch",
+        ["changed"],
+        ["changed"],
+        concurrency=1,
+        max_tokens=4,
+        session_start=-1,
+        warmup=True,
+        observe=forbidden,
+    )
+    assert replay[0]["session_id"] == -1
+    assert not journal.sources and not journal.originals and not runner._persisted_result_ids
+    measured = result(0, "measured")
+    journal.restore_fields(measured)
+    assert measured["session_id"] == 0 and measured["prompt_text"] == "measured"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("test_type,parameters,blocked_session,expected,committed", CASES)
 @pytest.mark.parametrize("termination", ["interruption", "stop"])
 async def test_adapter_recovery_preserves_completed_groups_and_repeats_only_unknown_group(

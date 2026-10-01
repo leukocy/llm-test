@@ -131,8 +131,8 @@ class MeasurementJournal(JobJournal):
             if restore_state is not None:
                 restore_state(saved.get("state") or {})
             for result in results:
-                self.originals[id(result)] = copy.deepcopy(result)
                 if not warmup:
+                    self.originals[id(result)] = copy.deepcopy(result)
                     runner._persisted_result_ids.add(id(result))
             if kind == "continuous" and not warmup:
                 runner.completed_requests += len(results)
@@ -224,6 +224,11 @@ class MeasurementJournal(JobJournal):
                         raise CheckpointConflict("Incomplete atomic observation persistence")
                 conn.commit()
             runner._persisted_result_ids.update(id(row) for row in results if not group["warmup"])
+            if group["warmup"]:
+                # Warmup objects are discarded after this commit; their ids may be reused.
+                for row in results:
+                    self.originals.pop(id(row), None)
+                    self.sources.pop(id(row), None)
             self.pending.pop(0)
         # Adaptive skip rows have no API call; retain them transactionally as local evidence.
         extras = [row for row in runner.results_list if id(row) not in runner._persisted_result_ids]

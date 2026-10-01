@@ -2558,7 +2558,7 @@ class BenchmarkRunner:
             name = cp.get("name")
             if not name:
                 continue
-            if cp.get("location") == "extra_body":
+            if cp.get("location") == "extra_body" or cp.get("value") is None:
                 extra_body_params[name] = cp.get("value")
             else:
                 kwargs[name] = cp.get("value")
