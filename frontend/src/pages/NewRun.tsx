@@ -815,9 +815,15 @@ export function NewRun({
                 <p className="plan-model">
                   {plan.workload_model === "closed_loop_fixed_concurrency"
                     ? "闭环固定并发"
-                    : plan.workload_model === "sequential_fixed_input_targets"
-                      ? "顺序固定输入长度"
-                      : "按测试类型定义的负载"}
+                    : plan.workload_model ===
+                        "closed_loop_continuous_concurrency"
+                      ? "闭环持续并发"
+                      : plan.workload_model === "sequential_prefix_stages"
+                        ? "顺序前缀阶段"
+                        : plan.workload_model ===
+                            "sequential_fixed_input_targets"
+                          ? "顺序固定输入长度"
+                          : "按测试类型定义的负载"}
                   {plan.protocol_version ? ` · ${plan.protocol_version}` : ""}
                 </p>
                 <div className="plan-totals">

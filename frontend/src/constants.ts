@@ -386,7 +386,7 @@ export const fieldLabels: Record<string, string> = {
   requests_per_level: "每档请求数",
   warmup_requests_per_level: "每档预热请求数（不计入正式样本）",
   segment_levels: "分段长度档位",
-  requests_per_segment: "每段请求数",
+  requests_per_segment: "每段轮数（每轮请求数等于并发数）",
   cumulative_mode: "累积模式（前缀复用）",
   total_rounds: "总轮数",
   per_round_unique: "每轮独立内容",

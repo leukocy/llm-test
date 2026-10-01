@@ -266,6 +266,11 @@ def run_summary(
     }
     observed_plan_labels: set[str] = set()
     quality_warnings: list[str] = []
+    protocol_warnings = (protocol or {}).get("warnings")
+    if isinstance(protocol_warnings, list):
+        quality_warnings.extend(
+            warning for warning in protocol_warnings if isinstance(warning, str)
+        )
     if control.get("pause_count", 0):
         quality_warnings.append(
             "运行曾在请求组之间暂停；单请求计时不含暂停，缓存、温度与资源监控条件可能变化。"

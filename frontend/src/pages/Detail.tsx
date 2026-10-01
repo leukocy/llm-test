@@ -787,12 +787,24 @@ export function Detail({
                   {summary.measurement_protocol.workload_model ===
                   "closed_loop_fixed_concurrency"
                     ? "闭环固定并发负载"
-                    : "顺序固定输入长度负载"}
+                    : summary.measurement_protocol.workload_model ===
+                        "closed_loop_continuous_concurrency"
+                      ? "闭环持续并发负载"
+                      : summary.measurement_protocol.workload_model ===
+                          "sequential_prefix_stages"
+                        ? "顺序前缀阶段负载"
+                        : "顺序固定输入长度负载"}
                   ：正式 {summary.measurement_protocol.measured_requests}{" "}
                   次，预热已记录{" "}
                   {summary.measurement_protocol.warmup_recorded ?? "—"} /{" "}
                   {summary.measurement_protocol.warmup_requests}{" "}
-                  次。预热不进入统计。
+                  次。预热不进入统计。 配置输入目标累计{" "}
+                  {summary.measurement_protocol.configured_input_token_volume?.toLocaleString() ??
+                    "未设定"}{" "}
+                  token； 最大输出预算{" "}
+                  {summary.measurement_protocol.maximum_output_token_volume?.toLocaleString() ??
+                    "未计算"}{" "}
+                  token。 按配置计算，包含预热，非实测用量或账单。
                 </p>
               )}
               {summary.execution_control && (

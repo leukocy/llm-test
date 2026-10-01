@@ -1,5 +1,6 @@
 """Versioned, source-independent workload plans for performance measurements."""
 
+from collections import Counter
 from typing import Any
 
 MEASUREMENT_PROTOCOL_VERSION = "fixed-workload-v1"
@@ -15,14 +16,20 @@ def measurement_plan(
     """
     cells: list[dict[str, Any]] = []
     workload_model = "other"
-    if test_type == "concurrency":
-        workload_model = "closed_loop_fixed_concurrency"
+    if test_type in {"concurrency", "custom_text"}:
+        workload_model = (
+            "closed_loop_fixed_concurrency"
+            if test_type == "concurrency"
+            else "closed_loop_continuous_concurrency"
+        )
         for concurrency in parameters["selected_concurrencies"]:
             cells.append(
                 {
                     "label": f"{concurrency} 并发",
                     "concurrency": concurrency,
-                    "input_tokens_target": parameters.get("input_tokens_target", 0),
+                    "input_tokens_target": parameters.get("input_tokens_target", 0)
+                    if test_type == "concurrency"
+                    else None,
                     "measured_requests": concurrency * parameters["rounds_per_level"],
                     "warmup_requests": concurrency * parameters.get("warmup_rounds_per_level", 0),
                 }
@@ -52,6 +59,52 @@ def measurement_plan(
                         * int(parameters.get("enable_warmup", False)),
                     }
                 )
+    elif test_type in {"long_context", "segmented_prefill"}:
+        segmented = test_type == "segmented_prefill"
+        workload_model = (
+            "sequential_prefix_stages" if segmented else "sequential_fixed_input_targets"
+        )
+        targets = (
+            sorted(parameters["segment_levels"]) if segmented else parameters["context_lengths"]
+        )
+        per_target = (
+            parameters["requests_per_segment"]
+            * parameters.get("total_rounds", 1)
+            * parameters.get("concurrency", 1)
+            if segmented
+            else parameters["rounds_per_level"]
+        )
+        for target, occurrences in Counter(targets).items():
+            cells.append(
+                {
+                    "label": f"{target} tokens",
+                    "input_tokens_target": target,
+                    "measured_requests": per_target * occurrences,
+                    "warmup_requests": 0,
+                }
+            )
+    elif test_type == "dataset" and (
+        parameters.get("rows") is not None or parameters.get("dataset_rows_count") is not None
+    ):
+        workload_model = "closed_loop_fixed_concurrency"
+        count = (
+            len(parameters["rows"])
+            if parameters.get("rows") is not None
+            else parameters["dataset_rows_count"]
+        )
+        concurrency = parameters["concurrency"]
+        full, remainder = divmod(count, concurrency)
+        for size, batches in ((concurrency, full), (remainder, int(remainder > 0))):
+            if batches:
+                cells.append(
+                    {
+                        "label": f"{size} 并发",
+                        "concurrency": size,
+                        "input_tokens_target": None,
+                        "measured_requests": size * batches * parameters.get("rounds", 1),
+                        "warmup_requests": 0,
+                    }
+                )
     else:
         warning = (
             "此测试请求数随运行时长或数据集规模确定；提交前无法给出固定请求预算。"
@@ -77,12 +130,24 @@ def measurement_plan(
         warnings.append("p99 至少需要约 100 个样本才有单百分位观测分辨率；当前请勿过度解读。")
     if not warmup:
         warnings.append("未配置预热；冷启动、连接建立和缓存状态可能影响首批观测。")
+    if test_type == "segmented_prefill":
+        warnings.append(
+            "分段长度是各阶段的完整输入目标，不是逐段长度之和；请求顺序和共享前缀会影响缓存状态，阶段样本不能视为独立随机样本。"
+        )
+    if test_type in {"custom_text", "dataset"}:
+        warnings.append(
+            "文本内容决定实际输入长度；未设固定输入目标，不按字符数推算配置 token 总量。"
+        )
     configured_input_volume = (
         sum(
             cell["input_tokens_target"] * (cell["measured_requests"] + cell["warmup_requests"])
             for cell in cells
         )
-        if cells and all(cell.get("input_tokens_target", 0) > 0 for cell in cells)
+        if cells
+        and all(
+            isinstance(cell.get("input_tokens_target"), int) and cell["input_tokens_target"] > 0
+            for cell in cells
+        )
         else None
     )
     return {

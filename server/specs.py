@@ -101,7 +101,13 @@ class SegmentedPrefillSpec(StrictSpec):
 
     @model_validator(mode="after")
     def request_budget(self) -> SegmentedPrefillSpec:
-        if len(self.segment_levels) * self.requests_per_segment * self.total_rounds > 100000:
+        if (
+            len(self.segment_levels)
+            * self.requests_per_segment
+            * self.total_rounds
+            * self.concurrency
+            > 100000
+        ):
             raise ValueError("A job may issue at most 100000 requests")
         return self
 
@@ -411,6 +417,7 @@ def expected_requests(test_type: str, parameters: dict) -> int:
             len(parameters["segment_levels"])
             * parameters["requests_per_segment"]
             * parameters["total_rounds"]
+            * parameters.get("concurrency", 1)
         )
     if test_type == "long_context":
         return int(len(parameters["context_lengths"]) * parameters["rounds_per_level"])

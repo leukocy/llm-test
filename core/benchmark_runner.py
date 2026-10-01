@@ -3974,6 +3974,7 @@ class BenchmarkRunner:
             "total_rounds": total_rounds,
             "concurrency": concurrency,
         }
+        self._begin_measurement_protocol("segmented_prefill", config)
         self._start_db_run("segmented_prefill", config)
 
         # Get tokenizer
@@ -4313,6 +4314,7 @@ class BenchmarkRunner:
             "rounds_per_level": rounds_per_level,
             "max_tokens": max_tokens,
         }
+        self._begin_measurement_protocol("long_context", config)
         self._start_db_run("long_context", config)
 
         # No client needed - requests library creates connections per-request
@@ -4755,6 +4757,7 @@ class BenchmarkRunner:
             "context_length": context_length,
             "num_selected_problems": len(selected_problems) if selected_problems else 0,
         }
+        self._begin_measurement_protocol("custom_text", config)
         self._start_db_run("custom_text", config)
 
         # Normalize selected_problems (rotation pool). Each entry: (source_id, text).
@@ -4909,6 +4912,7 @@ class BenchmarkRunner:
             "max_tokens": max_tokens,
             "rounds": rounds,
         }
+        self._begin_measurement_protocol("dataset", config)
         self._start_db_run("dataset", config)
 
         # Add internal index to rows to track them
@@ -4934,6 +4938,7 @@ class BenchmarkRunner:
                 for res in results:
                     if res and res.get("error") != "UserCancelled":
                         res["dataset_filename"] = dataset_filename
+                        res["concurrency"] = current_concurrency
                         res["round"] = r + 1
                         self._append_metric_csv(res, csv_columns)
                         self.results_list.append(res)

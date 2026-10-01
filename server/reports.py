@@ -184,6 +184,7 @@ def render_markdown(job: dict[str, Any], summary: dict[str, Any]) -> str:
             f"- 协议版本：{_md(protocol.get('protocol_version'))}",
             f"- 负载模型：{_md(protocol.get('workload_model'))}",
             f"- 正式请求：{_md(protocol.get('measured_requests'))}；预热请求：{_md(protocol.get('warmup_requests'))}",
+            f"- 配置输入目标累计：{_md(protocol.get('configured_input_token_volume'))} token；最大输出预算：{_md(protocol.get('maximum_output_token_volume'))} token（均含预热，按配置计算，非实测用量或账单）。",
             f"- Token 来源：{token_list(summary['provenance']['token_sources'])}",
             f"- Token 算法：{token_list(summary['provenance']['token_methods'])}",
             "- 原运行的暂停、批次并行与失败策略未经核验。"
@@ -409,6 +410,9 @@ def render_html(job: dict[str, Any], summary: dict[str, Any]) -> str:
         f"正式请求：{cell(protocol.get('measured_requests'))}；"
         f"预热：{cell(protocol.get('warmup_recorded'))} / "
         f"{cell(protocol.get('warmup_requests'))} 次。</p>"
+        f"<p>配置输入目标累计：{cell(protocol.get('configured_input_token_volume'))} token；"
+        f"最大输出预算：{cell(protocol.get('maximum_output_token_volume'))} token；"
+        "均含预热，按配置计算，非实测用量或账单。</p>"
         if protocol
         else "<h2>测量协议</h2><p>历史运行未记录固定工作负载协议。</p>"
     )
