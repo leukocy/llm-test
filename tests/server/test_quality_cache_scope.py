@@ -167,3 +167,29 @@ async def test_cache_database_failure_does_not_become_a_model_score(lab, monkeyp
     with pytest.raises(ProviderRequestError, match="response-cache lookup unavailable"):
         await make()._get_response_with_metrics("Q")
     assert not calls
+
+
+def test_cache_connections_close_after_operations_and_transactions_commit(tmp_path, monkeypatch):
+    original = sqlite3.connect
+    opened = []
+
+    class Tracked(sqlite3.Connection):
+        closed = False
+
+        def close(self):
+            self.closed = True
+            return super().close()
+
+    def connect(*args, **kwargs):
+        conn = original(*args, **kwargs, factory=Tracked)
+        opened.append(conn)
+        return conn
+
+    monkeypatch.setattr("core.response_cache.sqlite3.connect", connect)
+    cache = ResponseCache(str(tmp_path / "cache"))
+    cache.set("prompt", "answer", model_id="model")
+    assert cache.get("prompt", model_id="model") == "answer"
+    cache.get_stats()
+    cache.delete("prompt", model_id="model")
+    cache.clear()
+    assert opened and all(conn.closed for conn in opened)

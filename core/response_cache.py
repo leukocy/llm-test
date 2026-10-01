@@ -36,6 +36,7 @@ import pickle
 import sqlite3
 import threading
 import time
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -154,7 +155,7 @@ class ResponseCache:
 
     def _init_db(self):
         """InitializeDatabase表"""
-        with sqlite3.connect(str(self.db_path)) as conn:
+        with closing(sqlite3.connect(str(self.db_path))) as conn, conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS cache (
@@ -187,7 +188,7 @@ class ResponseCache:
 
     def _load_stats(self):
         """Load缓存Statistics"""
-        with sqlite3.connect(str(self.db_path)) as conn:
+        with closing(sqlite3.connect(str(self.db_path))) as conn, conn:
             cursor = conn.execute(
                 """
                 SELECT
@@ -241,7 +242,7 @@ class ResponseCache:
         """
         prompt_hash = self._compute_hash(prompt, model_id)
 
-        with self._lock, sqlite3.connect(str(self.db_path)) as conn:
+        with self._lock, closing(sqlite3.connect(str(self.db_path))) as conn, conn:
             cursor = conn.execute(
                 """
                     SELECT response, timestamp, ttl_seconds
@@ -307,7 +308,7 @@ class ResponseCache:
             # Check容量
             self._ensure_capacity(len(response_data))
 
-            with sqlite3.connect(str(self.db_path)) as conn:
+            with closing(sqlite3.connect(str(self.db_path))) as conn, conn:
                 try:
                     conn.execute(
                         """
@@ -342,7 +343,7 @@ class ResponseCache:
         # needCleanup旧条目
         target_bytes = self.max_size_bytes * 0.8  # Cleanup到 80%
 
-        with sqlite3.connect(str(self.db_path)) as conn:
+        with closing(sqlite3.connect(str(self.db_path))) as conn, conn:
             # Delete过期条目
             conn.execute(
                 """
@@ -376,7 +377,7 @@ class ResponseCache:
         """Delete指定缓存"""
         prompt_hash = self._compute_hash(prompt, model_id)
 
-        with self._lock, sqlite3.connect(str(self.db_path)) as conn:
+        with self._lock, closing(sqlite3.connect(str(self.db_path))) as conn, conn:
             cursor = conn.execute(
                 """
                     SELECT size_bytes FROM cache
@@ -407,7 +408,7 @@ class ResponseCache:
             model_id: if指定，只清除该Model缓存
         """
         with self._lock:
-            with sqlite3.connect(str(self.db_path)) as conn:
+            with closing(sqlite3.connect(str(self.db_path))) as conn, conn:
                 if model_id:
                     conn.execute("DELETE FROM cache WHERE model_id = ?", (model_id,))
                 else:

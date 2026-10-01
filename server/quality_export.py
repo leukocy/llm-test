@@ -24,6 +24,9 @@ FIELDS = (
     "failure_analysis",
     "error",
     "execution_error",
+    "failure_confidence",
+    "failure_root_cause",
+    "failure_suggestions",
 )
 
 

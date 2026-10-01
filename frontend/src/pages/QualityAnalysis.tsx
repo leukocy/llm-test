@@ -3,6 +3,7 @@ import type { QualityReport } from "../api";
 import { Empty, MetricCard } from "../components";
 import { formatNumber, formatPercent } from "../constants";
 import { PlotlyFigure } from "../components/PlotlyFigure";
+import { FailureAnalysis } from "../components/FailureAnalysis";
 
 function wilson(successes: number, trials: number): [number, number] | null {
   if (!Number.isFinite(trials) || trials <= 0) return null;
@@ -307,6 +308,7 @@ export function QualityAnalysis({
           </p>
         </section>
       </div>
+      {analysis && <FailureAnalysis summary={analysis.failure_analysis} />}
       <section className="surface">
         <div className="section-head">
           <div>
@@ -482,6 +484,22 @@ export function QualityAnalysis({
               {selected.is_judge_corrected ? "是" : "否"} · 复核原始判定：
               {selected.judge_verdict || "未记录"}。自评复核不构成独立验证。
             </p>
+            {selected.failure_root_cause && (
+              <p>规则推测的根因：{selected.failure_root_cause}（待核验）</p>
+            )}
+            {typeof selected.failure_confidence === "number" && (
+              <p>
+                规则分类标记：{formatPercent(selected.failure_confidence)}
+                （规则给定，未校准；不是模型置信概率）
+              </p>
+            )}
+            {selected.failure_suggestions?.length ? (
+              <ul>
+                {selected.failure_suggestions.map((suggestion, index) => (
+                  <li key={index}>{suggestion}</li>
+                ))}
+              </ul>
+            ) : null}
             {(selected.failure_category ||
               selected.failure_analysis ||
               selected.execution_error ||

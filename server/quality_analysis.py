@@ -6,6 +6,7 @@ from html import escape
 from typing import Any
 
 from server.analytics import wilson_interval
+from server.failure_reports import failure_html, failure_markdown, failure_summary
 from server.observations import describe_values
 
 METRICS = {
@@ -155,6 +156,7 @@ def quality_analysis(report: dict) -> dict:
             yaxis={"autorange": "reversed"},
         )
         datasets[name] = {
+            "failure_analysis": failure_summary(result),
             "name": name,
             "total": n if valid_counts else None,
             "model": str(result.get("model_id") or report.get("model_id") or "未记录"),
@@ -313,6 +315,10 @@ def quality_analysis_markdown(analysis: dict) -> str:
             ]
         )
     lines.extend(method_lines)
+    lines.extend(
+        failure_markdown(name, dataset["failure_analysis"])
+        for name, dataset in analysis["datasets"].items()
+    )
     lines.extend(["", *[f"- {text(note)}" for note in analysis["notes"]]])
     return "\n".join(lines) + "\n"
 
@@ -406,6 +412,10 @@ def quality_analysis_html(analysis: dict) -> str:
     )
     return (
         charts
+        + "".join(
+            failure_html(name, dataset["failure_analysis"])
+            for name, dataset in analysis["datasets"].items()
+        )
         + '<section class="card"><h2>逐样本性能复算</h2><div style="overflow-x:auto"><table><thead><tr>'
         + "".join(
             f"<th>{label}</th>"

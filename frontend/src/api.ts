@@ -314,6 +314,9 @@ export type QualityReport = {
         category?: string;
         failure_category?: string;
         failure_analysis?: string;
+        failure_confidence?: number | null;
+        failure_root_cause?: string;
+        failure_suggestions?: string[];
         execution_error?: string | null;
         answer_parse_method?: string;
         answer_parse_confidence?: number;
@@ -346,6 +349,20 @@ export type QualityReportAnalysis = {
       name: string;
       model: string;
       timestamp: string;
+      failure_analysis: {
+        status: string;
+        source: string;
+        failed_samples: number;
+        response_samples: number;
+        request_errors: number;
+        failure_rate: number | null;
+        distribution: Record<string, number>;
+        top_issues: string[];
+        suggestions: string[];
+        warnings: string[];
+        note: string;
+        figure: import("plotly.js-dist-min").Figure | null;
+      };
       total: number | null;
       correct: number | null;
       accuracy: number | null;

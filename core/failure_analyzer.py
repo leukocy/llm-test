@@ -28,6 +28,7 @@ class FailureCategory(Enum):
     TIMEOUT = "timeout"  # 超时
     API_ERROR = "api_error"  # API Error
     UNKNOWN = "unknown"  # 未知Error
+    CODE_TEST_FAILURE = "code_test_failure"
 
 
 @dataclass
@@ -132,6 +133,7 @@ class FailureAnalyzer:
         model_response: str,
         reasoning_content: str = "",
         error: str | None = None,
+        execution_error: str | None = None,
     ) -> FailureCase:
         """
         分析单失败案例
@@ -156,6 +158,13 @@ class FailureAnalyzer:
             model_response=model_response,
             reasoning_content=reasoning_content,
         )
+        if execution_error:
+            case.category = FailureCategory.CODE_TEST_FAILURE
+            case.analysis = execution_error
+            case.root_cause = "代码未通过执行测试；具体错误根因尚未核验"
+            case.confidence = 1.0
+            case.suggestions = ["检查测试断言、边界条件与终止条件，再核验候选代码"]
+            return case
 
         # 1. Checkis否is系统Error
         if error:
@@ -290,9 +299,7 @@ class FailureAnalyzer:
         # 6. Check推理跳步
         if reasoning:
             step_count = len(
-                re.findall(
-                    r"(?:\bstep\b|\b\d+[\.)]|首先|然后|因此)", reasoning, re.IGNORECASE
-                )
+                re.findall(r"(?:\bstep\b|\b\d+[\.)]|首先|然后|因此)", reasoning, re.IGNORECASE)
             )
             if step_count <= 1 and len(question) > 100:
                 return (
@@ -348,9 +355,7 @@ class FailureAnalyzer:
 
         return False
 
-    def _generate_suggestions(
-        self, category: FailureCategory, analysis: str
-    ) -> list[str]:
+    def _generate_suggestions(self, category: FailureCategory, analysis: str) -> list[str]:
         """Generate改进Suggestion"""
         suggestions = {
             FailureCategory.CALCULATION_ERROR: [
@@ -416,24 +421,15 @@ class FailureAnalyzer:
         """检测问题类型"""
         q_lower = question.lower()
 
-        if any(
-            word in q_lower
-            for word in ["calculate", "compute", "solve", "Calculate", "求"]
-        ):
+        if any(word in q_lower for word in ["calculate", "compute", "solve", "Calculate", "求"]):
             return "math"
         elif any(
-            word in q_lower
-            for word in ["which", "choose", "select", "option", "选择", "Options"]
+            word in q_lower for word in ["which", "choose", "select", "option", "选择", "Options"]
         ):
             return "choice"
-        elif any(
-            word in q_lower
-            for word in ["why", "explain", "how", "is什么", "解释", "如何"]
-        ):
+        elif any(word in q_lower for word in ["why", "explain", "how", "is什么", "解释", "如何"]):
             return "reasoning"
-        elif any(
-            word in q_lower for word in ["true", "false", "yes", "no", "is否", "对错"]
-        ):
+        elif any(word in q_lower for word in ["true", "false", "yes", "no", "is否", "对错"]):
             return "boolean"
         else:
             return "general"
@@ -467,6 +463,7 @@ class FailureAnalyzer:
                 model_response=sample.get("model_response", ""),
                 reasoning_content=sample.get("reasoning_content", ""),
                 error=sample.get("error"),
+                execution_error=sample.get("execution_error"),
             )
             cases.append(case)
 
@@ -474,8 +471,7 @@ class FailureAnalyzer:
         category_counts = Counter(case.category.value for case in cases)
         category_distribution = dict(category_counts)
         category_percentage = {
-            k: v / len(cases) * 100 if cases else 0
-            for k, v in category_distribution.items()
+            k: v / len(cases) * 100 if cases else 0 for k, v in category_distribution.items()
         }
 
         # Generate顶级问题
@@ -490,9 +486,7 @@ class FailureAnalyzer:
             all_suggestions.extend(case.suggestions)
 
         suggestion_counts = Counter(all_suggestions)
-        improvement_suggestions = [
-            suggestion for suggestion, _ in suggestion_counts.most_common(5)
-        ]
+        improvement_suggestions = [suggestion for suggestion, _ in suggestion_counts.most_common(5)]
 
         return FailureAnalysisReport(
             total_samples=total_samples,
@@ -506,9 +500,7 @@ class FailureAnalyzer:
         )
 
 
-def analyze_failures(
-    failed_samples: list[dict], total: int | None = None
-) -> FailureAnalysisReport:
+def analyze_failures(failed_samples: list[dict], total: int | None = None) -> FailureAnalysisReport:
     """便捷函数：批量分析失败案例"""
     analyzer = FailureAnalyzer()
     return analyzer.analyze_batch(failed_samples, total)

@@ -95,6 +95,9 @@ class SampleResult:
     # Failure analysis
     failure_category: str = ""  # Category: calculation_error, concept_error, etc.
     failure_analysis: str = ""  # Explanation of failure
+    failure_confidence: float | None = None
+    failure_root_cause: str = ""
+    failure_suggestions: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

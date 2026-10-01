@@ -958,18 +958,30 @@ class QualityEvaluator:
             # --- 新增: 自动失败分析 ---
             try:
                 # 收集失败样本
-                failed_dicts = [
-                    s.to_dict()
+                failed_samples = [
+                    s
                     for s in sample_results
                     if not s.is_correct and not s.error  # 排除系统Error，只分析逻辑Error
                 ]
 
-                if failed_dicts:
-                    self._log(f"currently分析 {len(failed_dicts)} 失败案例...")
-                    failure_report = analyze_failures(failed_dicts, total=len(sample_results))
+                if failed_samples:
+                    self._log(f"currently分析 {len(failed_samples)} 失败案例...")
+                    failure_report = analyze_failures(
+                        [sample.to_dict() for sample in failed_samples], total=len(sample_results)
+                    )
+                    for sample, case in zip(failed_samples, failure_report.cases, strict=True):
+                        sample.failure_category = case.category.value
+                        sample.failure_analysis = case.analysis
+                        sample.failure_confidence = case.confidence
+                        sample.failure_root_cause = case.root_cause
+                        sample.failure_suggestions = case.suggestions
 
                     # will分析报告摘要存入 extended_metrics
                     result.extended_metrics["failure_analysis"] = {
+                        "version": "heuristic-failure-v1",
+                        "source": "rule_heuristics",
+                        "analyzed_samples": failure_report.failed_samples,
+                        "total_samples": failure_report.total_samples,
                         "failure_rate": failure_report.failure_rate,
                         "category_distribution": failure_report.category_distribution,
                         "top_issues": failure_report.top_issues,
