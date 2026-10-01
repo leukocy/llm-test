@@ -1601,7 +1601,9 @@ textarea:focus {
   margin-bottom: 0;
 }
 .advanced-tools .schema-field input,
-.advanced-tools .schema-field select {
+.advanced-tools .schema-field select,
+.online-comparison .schema-field input,
+.online-comparison .schema-field select {
   width: 100%;
   min-width: 0;
   min-height: 40px;

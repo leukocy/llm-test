@@ -38,6 +38,24 @@ def _platform(tmp_path: Path) -> tuple[TestClient, EndpointRegistry, JobStore]:
     return TestClient(create_app(settings, store)), EndpointRegistry(settings, store), store
 
 
+def test_native_anthropic_endpoint_retains_protocol_on_edit(tmp_path: Path):
+    client, registry, store = _platform(tmp_path)
+    config = {**CONFIG, "provider": "Anthropic", "api_base_url": "https://api.anthropic.com/v1"}
+    created = client.post("/api/v1/endpoints", json=config, headers=HEADERS)
+    assert created.status_code == 201
+    identity = created.json()["id"]
+    assert created.json()["provider"] == "Anthropic"
+    assert config["api_key"] not in created.text
+    updated = client.put(
+        f"/api/v1/endpoints/{identity}",
+        json={key: value for key, value in config.items() if key != "api_key"},
+        headers=HEADERS,
+    )
+    assert updated.status_code == 200
+    assert registry.get(identity).provider == "Anthropic"
+    assert registry.get(identity).api_key() == config["api_key"]
+
+
 def test_managed_endpoint_persists_secret_and_runs_without_static_config(tmp_path: Path):
     client, registry, store = _platform(tmp_path)
     assert client.get("/api/v1/endpoints").status_code == 401

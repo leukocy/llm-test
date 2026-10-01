@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from core.providers.anthropic import anthropic_headers, anthropic_url
 from server.settings import Endpoint, validate_endpoint
 
 _MODEL_ID = re.compile(r"[A-Za-z0-9._/@:+-]{1,200}")
@@ -18,6 +19,15 @@ _MAX_MODELS = 200
 
 class ModelDiscoveryError(RuntimeError):
     pass
+
+
+def _catalog_request(endpoint: Endpoint, key: str) -> tuple[str, dict[str, str]]:
+    base = endpoint.api_base_url.rstrip("/")
+    if endpoint.provider.lower() == "anthropic":
+        return anthropic_url(base, "models"), anthropic_headers(key)
+    if "gemini" in endpoint.provider.lower():
+        return f"{base}/v1beta/models", {"x-goog-api-key": key}
+    return f"{base}/models", {"Authorization": f"Bearer {key}"}
 
 
 async def measure_reference_latency(
@@ -30,13 +40,7 @@ async def measure_reference_latency(
     """
     validate_endpoint(endpoint)
     key = endpoint.api_key()
-    gemini = endpoint.provider == "Gemini"
-    url = (
-        f"{endpoint.api_base_url.rstrip('/')}/v1beta/models"
-        if gemini
-        else f"{endpoint.api_base_url.rstrip('/')}/models"
-    )
-    headers = {"x-goog-api-key": key} if gemini else {"Authorization": f"Bearer {key}"}
+    url, headers = _catalog_request(endpoint, key)
     try:
         async with httpx.AsyncClient(
             transport=transport,
@@ -68,10 +72,8 @@ async def discover_models(
     """
     validate_endpoint(endpoint)
     key = endpoint.api_key()
-    base = endpoint.api_base_url.rstrip("/")
-    gemini = endpoint.provider == "Gemini"
-    url = f"{base}/v1beta/models" if gemini else f"{base}/models"
-    headers = {"x-goog-api-key": key} if gemini else {"Authorization": f"Bearer {key}"}
+    gemini = "gemini" in endpoint.provider.lower()
+    url, headers = _catalog_request(endpoint, key)
     try:
         async with httpx.AsyncClient(
             transport=transport,
@@ -126,5 +128,7 @@ async def discover_models(
             break
     return {
         "items": sorted(ids, key=str.casefold),
-        "truncated": len(entries) > _MAX_MODELS or bool(payload.get("nextPageToken")),
+        "truncated": len(entries) > _MAX_MODELS
+        or bool(payload.get("nextPageToken"))
+        or payload.get("has_more") is True,
     }

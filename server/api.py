@@ -202,7 +202,7 @@ class BatchSubmission(StrictSpec):
 
 class EndpointConfigBody(StrictSpec):
     label: str = Field(min_length=1, max_length=80)
-    provider: Literal["OpenAI", "Gemini"] = "OpenAI"
+    provider: Literal["OpenAI", "Gemini", "Anthropic"] = "OpenAI"
     api_base_url: str = Field(min_length=1, max_length=500)
     model_id: str = Field(min_length=1, max_length=200)
     tokenizer_option: str = Field(default="auto", min_length=1, max_length=120)

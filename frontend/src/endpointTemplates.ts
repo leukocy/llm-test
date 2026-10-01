@@ -1,6 +1,12 @@
 export const templates = [
   { label: "OpenAI", provider: "OpenAI", url: "https://api.openai.com/v1" },
   {
+    label: "Anthropic 原生",
+    provider: "Anthropic",
+    url: "https://api.anthropic.com/v1",
+  },
+  { label: "Together", provider: "OpenAI", url: "https://api.together.ai/v1" },
+  {
     label: "火山引擎",
     provider: "OpenAI",
     url: "https://ark.cn-beijing.volces.com/api/v3",

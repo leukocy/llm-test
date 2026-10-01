@@ -10,6 +10,34 @@ from server.settings import Endpoint
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("base", ["https://api.anthropic.com", "https://api.anthropic.com/v1"])
+async def test_anthropic_catalog_and_latency_use_native_auth(base):
+    endpoint = Endpoint(
+        "lab",
+        "Lab",
+        "Anthropic",
+        base,
+        "claude-test",
+        "KEY",
+        api_key_value="synthetic",  # pragma: allowlist secret
+    )
+
+    def handler(request):
+        assert str(request.url) == "https://api.anthropic.com/v1/models"
+        assert request.headers["x-api-key"] == "synthetic"
+        assert request.headers["anthropic-version"] == "2023-06-01"
+        assert "authorization" not in request.headers
+        return httpx.Response(200, json={"data": [{"id": "claude-test"}], "has_more": True})
+
+    transport = httpx.MockTransport(handler)
+    assert await discover_models(endpoint, transport=transport) == {
+        "items": ["claude-test"],
+        "truncated": True,
+    }
+    assert (await measure_reference_latency(endpoint, transport=transport))["reference_ms"] >= 0
+
+
+@pytest.mark.asyncio
 async def test_openai_model_list_filters_invalid_ids_and_keeps_credential_private():
     key = "model-list-secret"  # pragma: allowlist secret
 

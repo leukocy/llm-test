@@ -5,7 +5,7 @@ import { api, type Endpoint } from "../api";
 
 type ApiForm = {
   label: string;
-  provider: "OpenAI" | "Gemini";
+  provider: "OpenAI" | "Gemini" | "Anthropic";
   api_base_url: string;
   model_id: string;
   tokenizer_option: string;
@@ -56,7 +56,12 @@ export function ApiSettings({
     setEditingId(item.id);
     setForm({
       label: item.label,
-      provider: item.provider === "Gemini" ? "Gemini" : "OpenAI",
+      provider:
+        item.provider === "Anthropic"
+          ? "Anthropic"
+          : item.provider === "Gemini"
+            ? "Gemini"
+            : "OpenAI",
       api_base_url: item.api_base_url,
       model_id: item.model_id,
       tokenizer_option: item.tokenizer_option,
@@ -374,7 +379,14 @@ export function ApiSettings({
           >
             <option value="OpenAI">OpenAI 兼容</option>
             <option value="Gemini">Gemini 原生</option>
+            <option value="Anthropic">Anthropic 原生</option>
           </select>
+          {form.provider === "Anthropic" && (
+            <p className="form-hint">
+              使用原生 Messages API。启用思考时将温度设为 1；手动思考预算至少
+              1024，且必须小于最大输出 Token。模型支持范围以服务商返回为准。
+            </p>
+          )}
           <label htmlFor="api-base-url">API Base URL</label>
           <input
             id="api-base-url"

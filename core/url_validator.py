@@ -16,6 +16,9 @@ class SSRFError(Exception):
 # Default allowlist of known safe API providers
 DEFAULT_SAFE_DOMAINS = {
     "api.openai.com",
+    "api.anthropic.com",
+    "api.together.ai",
+    "api.together.xyz",
     "api.deepseek.com",
     "open.bigmodel.cn",
     "dashscope.aliyuncs.com",

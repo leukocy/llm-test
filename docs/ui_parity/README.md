@@ -278,3 +278,13 @@ Custom Text Test、All Tests、Stability Test、Batch Test。若对应模块能�
 - 验证：11 项在线专项与 69 项原有恢复/配对/准备专项通过；一次全量回归 1505 passed / 4 skipped。末轮报告修正经 12 项专项复验，178 个 Python 文件类型检查和前端构建通过。四项隔离浏览器验收包括直接 B API/加密凭证/密码清空、共同全量参数、刷新与实时执行、源数据变化后的 B 复用、自动统计、JSON、再次刷新、整组取消及窄屏；使用真实 API/worker/SQLite/评测器与合成模型响应，无外部模型调用或生产数据访问。证据保存在项目外 `~/llm-perf/evaluation/online-comparison-2026-10-01/`。
 
 原始 provider 选择、完整质量/对比输出、隔离评分环境身份以及全部控件/输出逐项验收仍需继续。完整目标保持未完成；继续本地累积，不部署、不推送、不触发远程 CI。
+
+### 本批恢复范围（原生 Anthropic 与服务商选项）
+
+- 初版 `IC-0033` 的六个服务商现有对应选择：OpenAI、Anthropic、Gemini、硅基流动、Together、DeepSeek。API 设置与在线 B 共用模板，增加 Anthropic 原生协议和 Together 地址；重新编辑 Anthropic 端点保留协议，凭证仍加密保存、输入清空。Together 使用[官方当前兼容地址](https://docs.together.ai/docs/inference/openai-compatibility)。
+- Anthropic 使用原生 Messages 请求、系统消息转换、版本与认证头；模型目录及参考响应头耗时也使用原生认证。根地址与 `/v1` 地址均可，不重复拼版本路径；目录分页未读完明确标记。
+- 采集遵循[官方流式协议](https://platform.claude.com/docs/en/build-with-claude/streaming)：输出计数按累计值覆盖，答案与推理分开保留；[输入用量](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)为未缓存输入、缓存创建与缓存读取之和。缺缓存字段不补零；单调时钟与首内容片段记录进入已有阶段统计，片段时间不声称逐 Token 时间。
+- 流内错误、无完整结束事件、无答案、无效计数均失败，不将部分答案记为成功；取消向上传播。思考模式温度必须为默认值 1，手动预算至少 1024 且小于最大输出；不兼容参数在请求前报错，不静默改变两侧共同条件。模型是否支持具体思考模式/采样参数由服务商校验，本批不声称所有 Claude 型号参数相同。
+- 验证：82 项提供方/目录/端点专项通过，一次全量回归 1523 passed / 4 skipped；末轮缺失字段处理与端点编辑专项 26 项通过，179 个 Python 文件类型检查及前端生产构建通过。隔离浏览器核验服务商保存、重新编辑、A/B 模板同步与 390px 布局；仅合成 HTTP 响应，无真实模型请求或生产数据访问，记录在项目外 `~/llm-perf/evaluation/native-providers-2026-10-01/`。
+
+完整质量/对比输出、隔离评分环境身份及全部控件/输出逐项验收仍需继续。完整目标保持未完成；继续本地累积，不部署、不推送、不触发远程 CI。

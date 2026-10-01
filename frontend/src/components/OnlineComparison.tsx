@@ -255,7 +255,14 @@ export function OnlineComparison({
             >
               <option value="OpenAI">OpenAI 兼容</option>
               <option value="Gemini">Gemini 原生</option>
+              <option value="Anthropic">Anthropic 原生</option>
             </select>
+            {direct.provider === "Anthropic" && (
+              <small>
+                思考模式要求温度 1；手动预算至少 1024 且小于最大输出
+                Token。两侧共同参数不会自动改写。
+              </small>
+            )}
           </label>
           <label className="schema-field">
             Base URL
