@@ -1928,6 +1928,32 @@ textarea:focus {
   color: #23384b;
   font: inherit;
 }
+.robustness-samples-editor,
+.robustness-sample-row {
+  min-width: 0;
+}
+.robustness-sample-row {
+  margin: 12px 0;
+  padding: 16px;
+  border: 1px solid #dce5f2;
+  border-radius: 10px;
+}
+.robustness-sample-row label {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.robustness-sample-row textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #dce5f2;
+  border-radius: 8px;
+  background: #fff;
+  color: #23384b;
+  font: inherit;
+  resize: vertical;
+}
 .custom-parameter-fields textarea {
   min-height: 100px;
   resize: vertical;

@@ -16,6 +16,7 @@ import {
 import { TokenizerTools } from "../components/TokenizerTools";
 import { ReportEnvironmentEditor } from "../components/ReportEnvironment";
 import { QualityParameters } from "../components/QualityParameters";
+import { RobustnessSamplesEditor } from "../components/RobustnessSamplesEditor";
 
 type SpecCatalog = {
   items: Record<string, { label: string; schema: JsonSchema }>;
@@ -1027,7 +1028,7 @@ function DatasetParams({
   );
 }
 
-/** robustness 场景专用面板: samples JSON 编辑 + 扰动类型多选 + max_tokens。 */
+/** robustness 场景专用面板: 样本表单/JSON 编辑 + 扰动类型多选 + max_tokens。 */
 const PERTURBATION_OPTIONS: [string, string][] = [
   ["synonym", "同义词替换"],
   ["typo", "拼写错误"],
@@ -1048,46 +1049,7 @@ function RobustnessParams({
   value: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
 }) {
-  const [rawSamples, setRawSamples] = useState(() =>
-    JSON.stringify(
-      value.samples ?? [{ question: "", correct_answer: "" }],
-      null,
-      2,
-    ),
-  );
-  const [samplesError, setSamplesError] = useState("");
-  useEffect(
-    () =>
-      setRawSamples(
-        JSON.stringify(
-          value.samples ?? [{ question: "", correct_answer: "" }],
-          null,
-          2,
-        ),
-      ),
-    [value.samples],
-  );
-
   const pickedTypes = (value.perturbation_types as string[] | undefined) ?? [];
-
-  function commitSamples(text: string) {
-    setRawSamples(text);
-    try {
-      const parsed = JSON.parse(text) as {
-        question?: string;
-        correct_answer?: string;
-      }[];
-      if (!Array.isArray(parsed) || !parsed.length) throw new Error("bad");
-      if (parsed.some((row) => !(row.question || "").trim()))
-        throw new Error("bad");
-      setSamplesError("");
-      onChange({ ...value, samples: parsed });
-    } catch {
-      setSamplesError(
-        'samples 必须是 JSON 数组，如 [{"question": "…", "correct_answer": "…"}]',
-      );
-    }
-  }
 
   function toggleType(id: string) {
     const next = pickedTypes.includes(id)
@@ -1098,20 +1060,10 @@ function RobustnessParams({
 
   return (
     <div className="dataset-params">
-      <label className="schema-field case-form-wide">
-        <span className="input-label">
-          samples（JSON 数组，含 question 与 correct_answer）
-          <em className="required-mark">*</em>
-        </span>
-        <textarea
-          className="json-editor"
-          spellCheck={false}
-          value={rawSamples}
-          onChange={(event) => commitSamples(event.target.value)}
-          aria-label="鲁棒性 samples JSON"
-        />
-        {samplesError && <small className="form-error">{samplesError}</small>}
-      </label>
+      <RobustnessSamplesEditor
+        value={value.samples}
+        onChange={(samples) => onChange({ ...value, samples })}
+      />
       <div className="schema-field case-form-wide">
         <span className="input-label">扰动类型（不选 = 默认 5 类）</span>
         <div className="perturbation-grid">

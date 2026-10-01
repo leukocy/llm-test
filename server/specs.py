@@ -251,8 +251,12 @@ class RobustnessSpec(StrictSpec):
         for i, row in enumerate(self.samples):
             if not (row.get("question") or "").strip():
                 raise ValueError(f"第 {i + 1} 个样本缺少非空 question")
+            if len(row["question"]) > 50000 or len(row.get("correct_answer", "")) > 5000:
+                raise ValueError(f"第 {i + 1} 个样本超过问题/标准答案长度限制")
         n_types = 5
         if self.perturbation_types:
+            if len(set(self.perturbation_types)) != len(self.perturbation_types):
+                raise ValueError("扰动类型不能重复")
             from core.robustness_tester import PerturbationType
 
             valid = {p.value for p in PerturbationType}
