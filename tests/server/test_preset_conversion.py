@@ -64,7 +64,8 @@ def test_all_original_builtin_files_convert_with_explicit_defaults():
 def test_credentials_excluded_before_fingerprint_and_response():
     plain = legacy()
     secret = legacy(
-        API_KEY="synthetic-sensitive",  # pragma: allowlist secret api_base_url="http://credential@localhost"
+        API_KEY="synthetic-sensitive",  # pragma: allowlist secret
+        api_base_url="http://credential@localhost",
     )
     safe = convert_legacy_preset(LegacyPresetInput.model_validate(plain))
     result = convert_legacy_preset(LegacyPresetInput.model_validate(secret))
