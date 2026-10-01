@@ -1,5 +1,4 @@
 import asyncio
-import json
 import time
 from typing import Any
 
@@ -10,6 +9,7 @@ from utils.log_sanitizer import sanitize_api_key
 from ..error_messages import get_error_info
 from ..thinking_params import build_thinking_params, detect_platform
 from .base import LLMProvider, get_request_timeout_seconds
+from .gemini_stream import normalize_usage, split_parts, stream_chunks
 from .openai import (
     is_stop_requested,
     register_client,
@@ -40,7 +40,7 @@ class GeminiProvider(LLMProvider):
             role = msg.get("role", "user")
             content = msg.get("content", "")
             if role == "system":
-                system_instruction = content
+                system_instruction = "\n\n".join(filter(None, [system_instruction, content]))
             elif role == "assistant":
                 contents.append({"role": "model", "parts": [{"text": content}]})
             else:
@@ -68,6 +68,10 @@ class GeminiProvider(LLMProvider):
         start_time = None
         first_token_time = None
         full_response_content = ""
+        reasoning_content = ""
+        first_reasoning_time = None
+        usage_info = None
+        finish_reason = None
         request_timeout = kwargs.pop("request_timeout", None)
         input_tokens_hint = kwargs.pop("input_tokens_hint", None)
         request_timeout_seconds = get_request_timeout_seconds(
@@ -77,9 +81,13 @@ class GeminiProvider(LLMProvider):
             request_timeout=request_timeout,
         )
 
-        url = f"{self.api_base_url}/v1beta/models/{self.model_id}:streamGenerateContent?key={self.api_key}&alt=sse"
+        base = self.api_base_url.rstrip("/")
+        if not base.endswith(("/v1", "/v1beta")):
+            base += "/v1beta"
+        model = self.model_id.removeprefix("models/")
+        url = f"{base}/models/{model}:streamGenerateContent?alt=sse"
 
-        generation_config = {
+        generation_config: dict[str, Any] = {
             "maxOutputTokens": max_tokens,
         }
 
@@ -95,6 +103,16 @@ class GeminiProvider(LLMProvider):
         thinking_enabled = kwargs.pop("thinking_enabled", None)
         thinking_budget = kwargs.pop("thinking_budget", None)
         reasoning_effort = kwargs.pop("reasoning_effort", None)
+        if thinking_enabled is False and (thinking_budget not in (None, 0) or reasoning_effort):
+            return {"error": "Gemini thinking-off conflicts with a positive budget/effort"}
+        if thinking_enabled is False and model.startswith(("gemini-3", "gemini-2.5-pro")):
+            return {
+                "error": "This Gemini model cannot disable thinking; select an effort/budget instead"
+            }
+        if model.startswith("gemini-2.5") and reasoning_effort:
+            return {
+                "error": "Gemini 2.5 requires thinkingBudget, not reasoning_effort/thinkingLevel"
+            }
 
         # 构建推理参数
         if thinking_enabled is not None or thinking_budget or reasoning_effort:
@@ -105,6 +123,11 @@ class GeminiProvider(LLMProvider):
             # Gemini: thinkingConfig 放在 generationConfig 中
             if "_generation_config_gemini" in thinking_params:
                 generation_config.update(thinking_params["_generation_config_gemini"])
+                if model.startswith("gemini-2.5"):
+                    config = generation_config["thinkingConfig"]
+                    if "thinkingLevel" in config:
+                        config.pop("thinkingLevel")
+                        config["thinkingBudget"] = -1
 
         # 允许其他 Gemini 特定参数传递
         # (Gemini has no extra_body concept; custom params merge into generationConfig)
@@ -116,6 +139,9 @@ class GeminiProvider(LLMProvider):
         for k, v in kwargs.items():
             if k not in generation_config and k != "temperature":
                 generation_config[k] = v
+        count = generation_config.get("candidateCount", 1)
+        if type(count) is not int or count != 1:
+            return {"error": "Gemini benchmark requires a single response candidate"}
 
         # Build payload: use structured messages if provided, otherwise flat prompt
         if messages:
@@ -131,7 +157,7 @@ class GeminiProvider(LLMProvider):
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": generation_config,
             }
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json", "x-goog-api-key": self.api_key}
 
         # 如果没有传入客户端，创建一个
         own_client = False
@@ -185,33 +211,47 @@ class GeminiProvider(LLMProvider):
                     else:
                         raise
 
-                async for line in response.aiter_lines():
+                async for chunk in stream_chunks(response):
                     # 每次迭代检查停止标志
                     if is_stop_requested():
                         raise asyncio.CancelledError("Test stopped by user.")
 
-                    if line.strip().startswith("data: "):
-                        line_data = line[len("data: ") :].strip()
-                        try:
-                            chunk = json.loads(line_data)
-                            if "candidates" in chunk and len(chunk["candidates"]) > 0:
-                                parts = chunk["candidates"][0].get("content", {}).get("parts", [])
-                                for part in parts:
-                                    text = part.get("text") or ""
-                                    thought = part.get("thought") or ""
-                                    content = thought + text
+                    if not isinstance(chunk, dict) or "error" in chunk:
+                        raise ValueError("Gemini stream returned an invalid/error event")
+                    if chunk.get("promptFeedback", {}).get("blockReason"):
+                        raise ValueError("Gemini prompt was blocked")
+                    if "usageMetadata" in chunk:
+                        usage_info = normalize_usage(chunk["usageMetadata"])
+                    candidates = chunk.get("candidates", [])
+                    if len(candidates) > 1:
+                        raise ValueError("Gemini stream returned multiple candidates")
+                    if not candidates:
+                        continue
+                    candidate = candidates[0]
+                    content, thought = split_parts(candidate.get("content", {}).get("parts", []))
+                    if finish_reason and (content or thought):
+                        raise ValueError("Gemini stream returned text after termination")
+                    if thought:
+                        if first_reasoning_time is None:
+                            first_reasoning_time = time.monotonic()
+                        reasoning_content += thought
+                    if content:
+                        if first_token_time is None:
+                            first_token_time = time.monotonic()
+                            if log_callback:
+                                log_callback(
+                                    f"Session {session_id} (Gemini): FIRST_TOKEN (TTFT: {first_token_time - start_time:.3f}s)"
+                                )
+                        full_response_content += content
+                    if candidate.get("finishReason"):
+                        finish_reason = candidate["finishReason"]
+                        if finish_reason not in {"STOP", "MAX_TOKENS"}:
+                            raise ValueError(
+                                "Gemini generation did not finish with a usable answer"
+                            )
 
-                                    if content:
-                                        if first_token_time is None:
-                                            first_token_time = time.monotonic()
-                                            ttft_raw = first_token_time - start_time
-                                            if log_callback:
-                                                log_callback(
-                                                    f"Session {session_id} (Gemini): FIRST_TOKEN (TTFT: {ttft_raw:.3f}s)"
-                                                )
-                                        full_response_content += content
-                        except json.JSONDecodeError:
-                            continue
+            if not finish_reason or not full_response_content.strip():
+                raise ValueError("Gemini stream ended without a terminal answer")
 
             # 取消注册
             unregister_stream(current_task)
@@ -223,6 +263,30 @@ class GeminiProvider(LLMProvider):
                     f"Session {session_id} (Gemini): RECV: {full_response_content[:100]}..."
                 )
 
+            from ..request_logger import get_request_logger
+
+            logger = get_request_logger()
+            if logger:
+                logger.log_request(
+                    session_id=str(session_id),
+                    provider="Gemini",
+                    model_id=self.model_id,
+                    platform="gemini",
+                    api_base_url=self.api_base_url,
+                    headers=headers,
+                    payload=payload,
+                    thinking_enabled=thinking_enabled,
+                    thinking_budget=thinking_budget,
+                    reasoning_effort=reasoning_effort,
+                    full_response_content=full_response_content,
+                    reasoning_content=reasoning_content,
+                    usage_info=usage_info,
+                    created_at=created_at,
+                    start_time=start_time,
+                    first_token_time=first_token_time,
+                    end_time=end_time,
+                )
+
             return {
                 "timing_clock": "client_monotonic",
                 "created_at": created_at,
@@ -230,7 +294,13 @@ class GeminiProvider(LLMProvider):
                 "first_token_time": first_token_time,
                 "end_time": end_time,
                 "full_response_content": full_response_content,
-                "usage_info": None,  # Gemini doesn't return usage in stream
+                "reasoning_content": reasoning_content,
+                "first_reasoning_time": first_reasoning_time,
+                "first_content_time": first_token_time,
+                "ttft_scope": "first_answer_text",
+                "output_token_scope": "response_candidates_excluding_thoughts",
+                "finish_reason": finish_reason,
+                "usage_info": usage_info,
                 "error": None,
             }
 
@@ -278,6 +348,7 @@ class GeminiProvider(LLMProvider):
                 "error_info": error_info,
             }
         finally:
+            unregister_stream(asyncio.current_task())
             # 取消注册客户端
             unregister_client(client_id)
             # 关闭自己创建的客户端

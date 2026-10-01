@@ -93,6 +93,15 @@ def quality_analysis(report: dict) -> dict:
                 f"{unknown_cache} 条记录未保存本地缓存来源；正值性能统计可能含缓存读取。"
             )
         stats = {}
+        if any(
+            (row.get("measurement_provenance") or {}).get("output_token_scope")
+            == "response_candidates_excluding_thoughts"
+            for row in usable
+        ):
+            warnings.append(
+                "Gemini 原生测量：首内容延迟从请求到首个答案文本，输出 token/速度只含答案；"
+                "思考 token 与缓存 token 保存在逐样本用量记录，不能把该速度当作含思考的生成速度。"
+            )
         for key in METRICS:
             values = []
             sources: Counter[str] = Counter()

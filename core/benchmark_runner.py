@@ -2422,10 +2422,25 @@ class BenchmarkRunner:
             "prompt_tokens": usage_info.get("prompt_tokens") if usage_info else None,
             "completion_tokens": (usage_info.get("completion_tokens") if usage_info else None),
         }
+        valid_input = type(api_usage["prompt_tokens"]) is int and api_usage["prompt_tokens"] >= 0
+        valid_output = (
+            type(api_usage["completion_tokens"]) is int and api_usage["completion_tokens"] >= 0
+        )
+        if valid_input != valid_output:
+            estimated_input, estimated_output, method, _, _ = self._calculate_tokens(
+                prompt, full_response_content, None
+            )
+            return (
+                api_usage["prompt_tokens"] if valid_input else estimated_input,
+                api_usage["completion_tokens"] if valid_output else estimated_output,
+                f"{'API' if valid_input else method} input / {'API' if valid_output else method} output",
+                self._get_cache_hit_tokens(usage_info),
+                api_usage,
+            )
 
         # Priority 1: API Usage (最准确，包含 Chat Template 开销)
         # if API Returnhas效 usage 信息，直接采用，not再use本地 tokenizer
-        if usage_info and usage_info.get("prompt_tokens") is not None:
+        if valid_input and valid_output:
             prompt_tokens = usage_info.get("prompt_tokens", 0)
             completion_tokens = usage_info.get("completion_tokens", 0)
             cache_hit_tokens = self._get_cache_hit_tokens(usage_info)
@@ -2713,7 +2728,16 @@ class BenchmarkRunner:
             "output_text": full_response_content,
             "error": None,
             "extra_metrics": {
-                "request_phase": provider_phase_observation(result, self.latency_offset)
+                "request_phase": provider_phase_observation(result, self.latency_offset),
+                "provider_measurement": {
+                    "ttft_scope": result.get("ttft_scope", "first_stream_text"),
+                    "output_token_scope": result.get(
+                        "output_token_scope",
+                        (usage_info or {}).get("output_token_scope", "provider_defined"),
+                    ),
+                    "provider_usage": (usage_info or {}).get("provider_usage"),
+                    "finish_reason": result.get("finish_reason"),
+                },
             },
         }
 

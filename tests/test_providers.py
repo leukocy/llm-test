@@ -856,7 +856,11 @@ class TestGeminiProvider:
         # Create async iterator for lines
         async def mock_aiter_lines():
             yield 'data: {"candidates":[{"content":{"parts":[{"text":"Hello "}]}}]}'
+            yield ""
             yield 'data: {"candidates":[{"content":{"parts":[{"text":"world!"}]}}]}'
+            yield ""
+            yield 'data: {"candidates":[{"finishReason":"STOP"}]}'
+            yield ""
 
         mock_stream_response.aiter_lines = mock_aiter_lines
 
@@ -892,6 +896,9 @@ class TestGeminiProvider:
 
         async def mock_aiter_lines():
             yield 'data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}'
+            yield ""
+            yield 'data: {"candidates":[{"finishReason":"STOP"}]}'
+            yield ""
 
         mock_stream_response.aiter_lines = mock_aiter_lines
 
@@ -921,6 +928,9 @@ class TestGeminiProvider:
 
         async def mock_aiter_lines():
             yield 'data: {"candidates":[{"content":{"parts":[{"text":"Response"}]}}]}'
+            yield ""
+            yield 'data: {"candidates":[{"finishReason":"STOP"}]}'
+            yield ""
 
         mock_stream_response.aiter_lines = mock_aiter_lines
 
@@ -959,6 +969,9 @@ class TestGeminiProvider:
 
         async def mock_aiter_lines():
             yield 'data: {"candidates":[{"content":{"parts":[{"text":"Response"}]}}]}'
+            yield ""
+            yield 'data: {"candidates":[{"finishReason":"STOP"}]}'
+            yield ""
 
         mock_stream_response.aiter_lines = mock_aiter_lines
 
@@ -995,6 +1008,9 @@ class TestGeminiProvider:
 
         async def mock_aiter_lines():
             yield 'data: {"candidates":[{"content":{"parts":[{"text":"Response"}]}}]}'
+            yield ""
+            yield 'data: {"candidates":[{"finishReason":"STOP"}]}'
+            yield ""
 
         mock_stream_response.aiter_lines = mock_aiter_lines
 
@@ -1030,8 +1046,12 @@ class TestGeminiProvider:
         mock_stream_response.raise_for_status = MagicMock()
 
         async def mock_aiter_lines():
-            yield 'data: {"candidates":[{"content":{"parts":[{"thought":"Thinking process"}]}}]}'
+            yield 'data: {"candidates":[{"content":{"parts":[{"thought":true,"text":"Thinking process"}]}}]}'
+            yield ""
             yield 'data: {"candidates":[{"content":{"parts":[{"text":"Final answer"}]}}]}'
+            yield ""
+            yield 'data: {"candidates":[{"finishReason":"STOP"}]}'
+            yield ""
 
         mock_stream_response.aiter_lines = mock_aiter_lines
 
@@ -1045,7 +1065,8 @@ class TestGeminiProvider:
             mock_httpx_client, session_id=1, prompt="Think", max_tokens=100
         )
 
-        assert "Thinking process" in result["full_response_content"]
+        assert result["reasoning_content"] == "Thinking process"
+        assert "Thinking process" not in result["full_response_content"]
         assert "Final answer" in result["full_response_content"]
 
     @pytest.mark.asyncio
@@ -1100,6 +1121,9 @@ class TestGeminiProvider:
 
         async def mock_aiter_lines():
             yield 'data: {"candidates":[{"content":{"parts":[{"text":"Response"}]}}]}'
+            yield ""
+            yield 'data: {"candidates":[{"finishReason":"STOP"}]}'
+            yield ""
 
         mock_stream_response.aiter_lines = mock_aiter_lines
 

@@ -479,6 +479,45 @@ export function QualityAnalysis({
               {selected.answer_parse_method || "未记录"} · 解析置信度：
               {formatPercent(selected.answer_parse_confidence)}
             </p>
+            {selected.measurement_provenance?.output_token_scope ===
+              "response_candidates_excluding_thoughts" && (
+              <section className="gemini-sample-usage">
+                <h3>Gemini 本次用量</h3>
+                <p className="chart-caption">
+                  首内容延迟计至首个答案文本；输出 token 和速度仅含答案。
+                  思考摘要不参与答案评分，缺失用量保持“未记录”。
+                </p>
+                <dl>
+                  {[
+                    ["promptTokenCount", "输入 token"],
+                    ["candidatesTokenCount", "答案 token"],
+                    ["thoughtsTokenCount", "思考 token"],
+                    ["cachedContentTokenCount", "服务端缓存 token"],
+                    ["totalTokenCount", "接口报告总 token"],
+                  ].map(([field, label]) => {
+                    const count =
+                      selected.measurement_provenance?.provider_usage?.[field];
+                    return (
+                      <div key={field}>
+                        <dt>{label}</dt>
+                        <dd>
+                          {typeof count === "number"
+                            ? formatNumber(count, 0)
+                            : "未记录"}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                  <div>
+                    <dt>完成原因</dt>
+                    <dd>
+                      {selected.measurement_provenance.finish_reason ||
+                        "未记录"}
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+            )}
             <p>
               最终判定：{selected.is_correct ? "正确" : "错误"} · Judge 改判：
               {selected.is_judge_corrected ? "是" : "否"} · 复核原始判定：

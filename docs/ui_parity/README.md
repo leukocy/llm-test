@@ -346,3 +346,14 @@ Custom Text Test、All Tests、Stability Test、Batch Test。若对应模块能�
 - 验证：初轮 41 项专项，修正官方附件处理后 79 项数据准备/参数/配对/报告专项通过；185 个 Python 文件类型检查、前端生产构建及三项隔离浏览器验收通过（启用选择、分区提示、准备/取消、390px 布局）。另在项目外实际读取公开发布包 revision efcc940752ea4a1ea94d2727f11f83858d64fc8e，校验 67 科目、11,582 道 test 与 335 道 dev；计数是该发布包实测，不替代论文中不同版本的计数。证据在 `~/llm-perf/evaluation/cmmlu-2026-10-01/`。本批未重跑已知挂起的全量测试，上一批 SQLite 并发问题仍未解决，不能宣称整体验收通过。
 
 全部控件/输出的逐项验收、原生 Gemini 数据采集和 SQLite 并发挂起仍待继续。完整目标保持未完成；本地累积，不部署、不推送、不触发远程 CI。
+
+### 本批恢复范围（Gemini 原生答案与用量采集）
+
+- 按 [Google GenerateContent 响应定义](https://ai.google.dev/api/generate-content#UsageMetadata)修正 native parts：thought 是布尔标记，text 是文本；思考摘要与答案分开，评分只使用答案。旧的字符串 thought 测试夹具改为官方结构，统一解析器也支持 native candidates、finishReason 和 usageMetadata。
+- 流式 SSE 支持无空格 data 字段、多行数据与 EOF 帧；异常 JSON、错误事件、阻断、非法用量、缺少终止原因、只有思考而没有答案及终止后的文本均不会被记为成功。STOP 或 MAX_TOKENS 有答案时保存完成原因；不把截断或受阻空流当作正确生成。基准限定单候选，避免首候选答案配上多候选 token 总数。
+- 保存最后一次报告的累计用量，不逐块相加；输入、答案、思考、缓存和总 token 分别保留，缺字段保持未知而非默认零。Gemini 输出计数仅含候选答案，首内容延迟计至首个答案文本；性能观测 extra_metrics、质量样本来源、JSON/CSV 与请求日志保存具体口径及原用量。补修性能引擎收到单侧 token 计数时的空值故障：保留已报告的一侧，另一侧按已标注的本地方式估算，不声称两侧都由 API 报告。
+- 页面逐样本展示五类用量和完成原因；汇总、独立 HTML/Markdown 明示答案速度不含思考。请求使用 x-goog-api-key，不把凭据放在 URL；实际日志写入验证密钥脱敏并保留用量/摘要。根地址及 /v1beta 地址均可用，models/ 模型名前缀不重复，多个 system 文本合并保留。
+- 根据[官方思考配置](https://ai.google.dev/gemini-api/docs/generate-content/thinking)区分 Gemini 2.5 的 thinkingBudget 与较新模型的 thinkingLevel；2.5 Flash 关闭发送零预算、启用未给预算时发送动态预算。Gemini 3 与 2.5 Pro 显式关闭、不支持的 2.5 effort，以及关闭与正预算冲突，在网络调用前给出错误，避免声称已关闭思考却继续启用。各型号更细的可用档位仍须继续核验。
+- 验证：最终 198 项提供方/解析/性能/质量/报告回归通过，186 个 Python 文件类型检查、前端构建、三项隔离浏览器验收通过（报告口径、五类用量、明确零与缺失、认证导出、390px 布局）。新增采集夹具初次未接入模拟客户端，已终止并保留记录；仅合成凭据，无法排除该次尝试发起出站连接，不把它宣称为已证明零网络请求。修正后的采集测试禁止创建真实客户端，最终回归使用模拟 HTTP，浏览器无外部请求。证据在项目外 `~/llm-perf/evaluation/gemini-collection-2026-10-01/`。已知 SQLite 并发挂起的全量测试本批未重复运行，仍不能宣称整体验收通过。
+
+全部控件/输出逐项验收、SQLite 并发挂起及统一部署验证仍待继续。完整目标保持未完成；本地累积，不部署、不推送、不触发远程 CI。

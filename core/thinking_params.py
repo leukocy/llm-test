@@ -40,9 +40,7 @@ PLATFORM_FEATURES = {
         "supports_effort": False,  # is否支持 reasoning_effort
         "reasoning_output_field": "reasoning_content",  # 响应in推理内容字段名
         "content_output_field": "content",  # 响应in正文内容字段名
-        "special_headers": {
-            "api-key": True
-        },  # 特殊请求头 (MiMo 用 api-key 而非 Authorization)
+        "special_headers": {"api-key": True},  # 特殊请求头 (MiMo 用 api-key 而非 Authorization)
         "special_params": {"max_completion_tokens": True},  # 特殊参数名
         "notes": "thinking mustis顶级参数，not能放 extra_body",
     },
@@ -233,12 +231,6 @@ def get_content_field(platform: str) -> str:
     return str(features.get("content_output_field", "content"))
 
 
-
-
-
-
-
-
 def detect_platform(api_base_url: str, model_id: str = "") -> str:
     """
     based on API URL orModelID检测平台
@@ -273,9 +265,7 @@ def detect_platform(api_base_url: str, model_id: str = "") -> str:
 
     # Pass 2: Local IP/Host Detection
     # ifis本地部署，typicallyuse standard OpenAI/vLLM 格式，returunknown以避免注入平台特定参数
-    is_local = any(
-        p in url_lower for p in ["127.0.0.1", "localhost", "10.", "192.168.", "::1"]
-    )
+    is_local = any(p in url_lower for p in ["127.0.0.1", "localhost", "10.", "192.168.", "::1"])
     if is_local:
         return "unknown"
 
@@ -326,13 +316,15 @@ def build_thinking_params(
                 thinking_level = level_map.get(reasoning_effort, "HIGH")
 
             t_config: dict[str, Any] = {
-                "includeThoughts": True if thinking_enabled is not None else True,
+                "includeThoughts": thinking_enabled is not False,
             }
 
             # if启用Thinking modebut没has指定预算，canuse -1 (由Model自行决定)
             # or者直接透传用户 thinking_budget
             if thinking_budget is not None:
                 t_config["thinkingBudget"] = thinking_budget
+            elif thinking_enabled is False:
+                t_config["thinkingBudget"] = 0
             elif thinking_enabled:
                 t_config["thinkingLevel"] = thinking_level
 
@@ -411,8 +403,6 @@ def build_thinking_params(
         pass
 
     return params
-
-
 
 
 # 支持混合推理Model列表（部分示例，实际应该更完整）

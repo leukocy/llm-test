@@ -569,6 +569,13 @@ class QualityEvaluator:
                         "input_token_source": "api" if input_api else "tokenizer",
                         "output_token_source": "api" if output_api else "tokenizer",
                         "timing_clock": result.get("timing_clock", "unknown"),
+                        "ttft_scope": result.get("ttft_scope", "first_stream_text"),
+                        "output_token_scope": result.get(
+                            "output_token_scope",
+                            usage_info.get("output_token_scope", "provider_defined"),
+                        ),
+                        "provider_usage": usage_info.get("provider_usage"),
+                        "finish_reason": result.get("finish_reason"),
                     },
                 }
 

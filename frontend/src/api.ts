@@ -321,6 +321,12 @@ export type QualityReport = {
         answer_parse_method?: string;
         answer_parse_confidence?: number;
         evaluation_method?: string;
+        measurement_provenance?: {
+          ttft_scope?: string;
+          output_token_scope?: string;
+          provider_usage?: Record<string, unknown> | null;
+          finish_reason?: string | null;
+        };
         error?: string | null;
       }[];
     }

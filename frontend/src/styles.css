@@ -1884,6 +1884,17 @@ textarea:focus {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 10px;
 }
+.gemini-sample-usage dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid #dce5f2;
+}
+.gemini-sample-usage dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
 .quality-error-controls {
   margin-bottom: 18px;
 }

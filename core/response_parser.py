@@ -75,7 +75,7 @@ class UnifiedResponseParser:
         self._total_chunks = 0
         self._reasoning_chunks = 0
         self._content_chunks = 0
-        self._usage = None
+        self._usage: dict[str, Any] | None = None
         self._finish_reason = None
         self._first_reasoning_idx: int | None = None
         self._first_content_idx: int | None = None
@@ -103,12 +103,23 @@ class UnifiedResponseParser:
         if "usage" in chunk and chunk["usage"]:
             result.usage = chunk["usage"]
             self._usage = chunk["usage"]
+        if self.platform == "gemini" and "usageMetadata" in chunk:
+            from core.providers.gemini_stream import normalize_usage
+
+            result.usage = normalize_usage(chunk["usageMetadata"])
+            self._usage = result.usage
 
         # Process choices
-        if "choices" not in chunk or not chunk["choices"]:
+        if self.platform == "gemini" and chunk.get("candidates"):
+            candidate = chunk["candidates"][0]
+            choice = {
+                "delta": candidate.get("content", {}),
+                "finish_reason": candidate.get("finishReason"),
+            }
+        elif chunk.get("choices"):
+            choice = chunk["choices"][0]
+        else:
             return result
-
-        choice = chunk["choices"][0]
         delta = choice.get("delta", {})
 
         # 提取 finish_reason
@@ -157,13 +168,9 @@ class UnifiedResponseParser:
         parts = delta.get("parts", [])
 
         if parts:
-            for part in parts:
-                # Gemini 用 text 表示正文，thought 表示推理
-                text = part.get("text", "") or ""
-                thought = part.get("thought", "") or ""
+            from core.providers.gemini_stream import split_parts
 
-                result.content += text
-                result.reasoning += thought
+            result.content, result.reasoning = split_parts(parts)
         else:
             # if没has parts，尝试标准格式
             result = self._parse_standard_chunk(delta, result)
