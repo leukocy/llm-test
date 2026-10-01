@@ -3,6 +3,7 @@ import { api, type Job } from "../api";
 import { Empty } from "../components";
 import { formatPercent, shortId } from "../constants";
 import { OnlineComparison } from "../components/OnlineComparison";
+import { MultiQualityCompare } from "../components/MultiQualityCompare";
 
 type ComparePayload = {
   job_a: { job_id: string; model_id: string; endpoint_id: string };
@@ -128,6 +129,7 @@ export function Compare({ jobs, token }: { jobs: Job[]; token: string }) {
           setAutoCompare(true);
         }}
       />
+      <MultiQualityCompare jobs={candidates} token={token} />
       <section className="surface">
         <label className="compare-basis">
           评分口径

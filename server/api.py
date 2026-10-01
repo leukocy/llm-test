@@ -139,6 +139,13 @@ class CompareQualityBody(StrictSpec):
     score_basis: Literal["standard", "final"] = "standard"
 
 
+class QualityMatrixBody(StrictSpec):
+    job_ids: list[Annotated[str, Field(min_length=1, max_length=64)]] = Field(
+        min_length=2, max_length=8
+    )
+    score_basis: Literal["standard", "final"] = "final"
+
+
 class OnlineComparisonBody(StrictSpec):
     endpoint_id_a: str = Field(min_length=1, max_length=64)
     endpoint_id_b: str = Field(min_length=1, max_length=64)
@@ -968,6 +975,23 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             "datasets": datasets,
             "skipped_datasets": sorted((names_a | names_b) - set(common)),
         }
+
+    @app.post("/api/v1/compare/matrix", dependencies=[auth])
+    def compare_quality_matrix(body: QualityMatrixBody):
+        from server.quality_matrix import quality_matrix
+
+        if len(set(body.job_ids)) != len(body.job_ids):
+            raise HTTPException(422, "不能重复选择同一作业")
+        entries = []
+        for identity in body.job_ids:
+            job = job_or_404(identity)
+            if job["test_type"] != "quality" or job["status"] != "completed":
+                raise HTTPException(409, "多模型对照需要已完成质量作业")
+            entries.append((job, quality_payload(job)))
+        try:
+            return quality_matrix(entries, body.score_basis)
+        except (ValueError, TypeError, AttributeError, KeyError) as exc:
+            raise HTTPException(422, "Quality comparison observations are invalid") from exc
 
     # ------------------------------------------------------------------
     # 数据管理（导入 / 备份 / 健康）
