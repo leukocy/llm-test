@@ -70,6 +70,30 @@ export function PresetLibrary({
             <p className="preset-library-description">
               {preset.description || "暂无说明"}
             </p>
+            {preset.source_metadata && (
+              <details>
+                <summary>导入来源说明</summary>
+                <p className="preset-library-description">
+                  旧文件创建时间：
+                  {String(preset.source_metadata.created_at || "未记录")}
+                  。这是导入声明，不是测量证据。
+                </p>
+                {Array.isArray(preset.source_metadata.notes) &&
+                  preset.source_metadata.notes
+                    .filter((note): note is string => typeof note === "string")
+                    .map((note) => (
+                      <p className="preset-library-description" key={note}>
+                        {note}
+                      </p>
+                    ))}
+                <p className="preset-library-description">
+                  去除凭证后的配置指纹：
+                  {String(
+                    preset.source_metadata.sanitized_config_sha256 || "未记录",
+                  )}
+                </p>
+              </details>
+            )}
             <p className="chart-caption">
               测试类型：{preset.test_type} · 端点：{preset.endpoint_id}
             </p>

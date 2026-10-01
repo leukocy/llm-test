@@ -317,6 +317,9 @@ export function NewRun({
           method: presetId ? "PUT" : "POST",
           body: JSON.stringify({
             name: presetName.trim(),
+            source_metadata:
+              presets.find((item) => item.preset_id === presetId)
+                ?.source_metadata || null,
             description: presetDescription.trim(),
             tags: presetTags
               .split(",")

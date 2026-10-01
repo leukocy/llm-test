@@ -18,6 +18,11 @@ export function PresetTransfer({
   onImported: (preset: Preset) => void;
 }) {
   const [draft, setDraft] = useState<Envelope | null>(null);
+  const [conversion, setConversion] = useState<Record<string, unknown> | null>(
+    null,
+  );
+  const [parametersText, setParametersText] = useState("");
+  const [parametersError, setParametersError] = useState("");
   const [name, setName] = useState("");
   const [endpoint, setEndpoint] = useState("");
   const [exportId, setExportId] = useState("");
@@ -28,6 +33,8 @@ export function PresetTransfer({
   async function read(file?: File) {
     const request = ++generation.current;
     setDraft(null);
+    setConversion(null);
+    setParametersError("");
     setError("");
     setNotice("");
     if (!file) return;
@@ -38,7 +45,61 @@ export function PresetTransfer({
       );
       if (!decoded || typeof decoded !== "object" || Array.isArray(decoded))
         throw new Error("配置必须是 JSON 对象");
-      const envelope = decoded as Envelope;
+      let envelope = decoded as Envelope;
+      let convertedLegacy = false;
+      const legacy = decoded as Record<string, unknown>;
+      if (
+        legacy.config &&
+        typeof legacy.config === "object" &&
+        !Array.isArray(legacy.config) &&
+        typeof legacy.name === "string" &&
+        !("format" in legacy)
+      ) {
+        const excluded = new Set([
+          "api_key",
+          "apiKey",
+          "token",
+          "access_token",
+          "authorization",
+          "password",
+          "secret",
+          "provider",
+          "model_id",
+          "api_base_url",
+        ]);
+        const isExcluded = (field: string) =>
+          excluded.has(field) ||
+          /^(api[_-]?key|access[_-]?token|token|authorization|password|secret)$/i.test(
+            field,
+          );
+        const config = Object.fromEntries(
+          Object.entries(legacy.config).filter(([field]) => !isExcluded(field)),
+        );
+        const fields = Object.keys(legacy.config).filter(isExcluded);
+        const sanitized = {
+          name: legacy.name,
+          description: legacy.description || "",
+          tags: legacy.tags || [],
+          created_at: legacy.created_at || null,
+          config,
+          excluded_fields: fields,
+        };
+        const converted = await api<
+          Envelope & { conversion: Record<string, unknown> }
+        >(token, "/api/v1/presets/convert", {
+          method: "POST",
+          body: JSON.stringify(sanitized),
+        });
+        if (request !== generation.current) return;
+        convertedLegacy = true;
+        envelope = {
+          format: converted.format,
+          version: converted.version,
+          preset: converted.preset,
+        };
+        setConversion(converted.conversion);
+        setParametersText(JSON.stringify(converted.preset.parameters, null, 2));
+      }
       if (
         envelope.format !== "llm-test-preset" ||
         envelope.version !== 1 ||
@@ -57,7 +118,8 @@ export function PresetTransfer({
       setDraft(envelope);
       setName(envelope.preset.name);
       setEndpoint(
-        endpoints.some((item) => item.id === envelope.preset.endpoint_id)
+        !convertedLegacy &&
+          endpoints.some((item) => item.id === envelope.preset.endpoint_id)
           ? envelope.preset.endpoint_id
           : "",
       );
@@ -80,6 +142,7 @@ export function PresetTransfer({
       });
       onImported(saved);
       setDraft(null);
+      setConversion(null);
       setNotice(`已导入 ${saved.name}，选择方案以应用。`);
     } catch (exc) {
       setError(String(exc));
@@ -91,7 +154,7 @@ export function PresetTransfer({
     <details className="preset-transfer">
       <summary>配置导入／导出</summary>
       <p className="chart-caption">
-        文件格式 llm-test-preset v1，最多 1
+        支持新版 llm-test-preset v1 与首次提交的 ConfigPreset 文件，最多 1
         MiB。导出含端点引用，不含端点凭证；跨平台导入可重新选择端点。导入只创建新方案，重名不会覆盖。
       </p>
       <label className="input-label">
@@ -137,10 +200,67 @@ export function PresetTransfer({
             测试类型：{String(draft.preset.test_type)}
             。参数、标签与说明将在导入时进行服务端完整校验。
           </p>
+          {conversion && (
+            <section className="case-form-wide legacy-preset-preview">
+              <h3>旧版配置转换预览</h3>
+              {(conversion.notes as string[]).map((note) => (
+                <p className="chart-caption" key={note}>
+                  {note}
+                </p>
+              ))}
+              <p className="chart-caption">
+                原创建时间：{String(conversion.source_created_at || "未记录")} ·
+                排除字段：
+                {(conversion.excluded_fields as string[]).join(", ") || "无"}
+              </p>
+              <p className="chart-caption">
+                原校验问题：{JSON.stringify(conversion.errors)}
+                。编辑后以保存时的完整校验为准。
+              </p>
+              <label className="schema-field">
+                转换后的测试参数
+                <textarea
+                  className="json-editor"
+                  aria-label="转换后的测试参数"
+                  maxLength={1024 * 1024}
+                  value={parametersText}
+                  onChange={(event) => {
+                    const text = event.target.value;
+                    setParametersText(text);
+                    try {
+                      const parsed: unknown = JSON.parse(text);
+                      if (
+                        !parsed ||
+                        typeof parsed !== "object" ||
+                        Array.isArray(parsed)
+                      )
+                        throw new Error("参数必须是对象");
+                      setParametersError("");
+                      setDraft((current) =>
+                        current
+                          ? {
+                              ...current,
+                              preset: { ...current.preset, parameters: parsed },
+                            }
+                          : current,
+                      );
+                    } catch (exc) {
+                      setParametersError(String(exc));
+                    }
+                  }}
+                />
+              </label>
+              {parametersError && (
+                <p role="alert" className="form-error">
+                  {parametersError}；不能提交旧的有效参数。
+                </p>
+              )}
+            </section>
+          )}
           <button
             className="button subtle"
             type="button"
-            disabled={busy || !name.trim() || !endpoint}
+            disabled={busy || !name.trim() || !endpoint || !!parametersError}
             onClick={() => void importPreset()}
           >
             导入为新方案

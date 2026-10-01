@@ -48,6 +48,7 @@ from server.figures import (
 from server.history import MAX_CSV_BYTES
 from server.history_api import history_router
 from server.model_discovery import ModelDiscoveryError, discover_models, measure_reference_latency
+from server.preset_conversion import LegacyPresetInput, convert_legacy_preset
 from server.quality_export import quality_errors_csv
 from server.reports import (
     checkpoint_html,
@@ -590,6 +591,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
                 name=body.name,
                 description=body.description,
                 tags=body.tags,
+                source_metadata=body.source_metadata.model_dump() if body.source_metadata else None,
                 endpoint_id=body.endpoint_id,
                 test_type=body.test_type,
                 parameters=body.parameters,
@@ -599,6 +601,13 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             )
         except PresetConflict as exc:
             raise HTTPException(409, str(exc)) from exc
+
+    @app.post("/api/v1/presets/convert", dependencies=[auth])
+    def convert_preset(body: LegacyPresetInput):
+        try:
+            return convert_legacy_preset(body)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
     @app.post("/api/v1/presets/import", dependencies=[auth], status_code=201)
     def import_preset(body: PresetImport):
@@ -618,6 +627,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             "test_type",
             "parameters",
             "run_config",
+            "source_metadata",
         )
         try:
             preset = PresetSubmission.model_validate({key: saved[key] for key in fields})
@@ -640,6 +650,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
                 name=body.name,
                 description=body.description,
                 tags=body.tags,
+                source_metadata=body.source_metadata.model_dump() if body.source_metadata else None,
                 endpoint_id=body.endpoint_id,
                 test_type=body.test_type,
                 parameters=body.parameters,

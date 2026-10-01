@@ -10,6 +10,7 @@ export type Endpoint = {
 };
 export type Preset = {
   tags: string[];
+  source_metadata?: Record<string, unknown> | null;
   preset_id: string;
   name: string;
   description: string;

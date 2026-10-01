@@ -83,6 +83,7 @@ class JobStore:
         preset["parameters"] = json.loads(preset.pop("parameters_json"))
         preset["run_config"] = json.loads(preset.pop("run_config_json") or "{}")
         preset["tags"] = json.loads(preset.pop("tags_json") or "[]")
+        preset["source_metadata"] = json.loads(preset.pop("source_json") or "null")
         return preset
 
     def list_presets(self, *, limit: int = 200) -> JobList:
@@ -115,10 +116,12 @@ class JobStore:
         run_config: dict[str, Any] | None = None,
         preset_id: str | None = None,
         tags: list[str] | None = None,
+        source_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         now = time.time()
         identifier = preset_id or str(uuid.uuid4())
         tags_json = json.dumps(tags or [], ensure_ascii=False)
+        source_json = json.dumps(source_metadata, ensure_ascii=False, allow_nan=False)
         parameters_json = json.dumps(
             parameters, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
         )
@@ -143,7 +146,7 @@ class JobStore:
                 if preset_id:
                     conn.execute(
                         """UPDATE control_presets SET name = ?, description = ?, endpoint_id = ?, test_type = ?,
-                           parameters_json = ?, run_config_json = ?, tags_json = ?, updated_at = ? WHERE preset_id = ?""",
+                           parameters_json = ?, run_config_json = ?, tags_json = ?, source_json = ?, updated_at = ? WHERE preset_id = ?""",
                         (
                             name,
                             description,
@@ -152,6 +155,7 @@ class JobStore:
                             parameters_json,
                             run_config_json,
                             tags_json,
+                            source_json,
                             now,
                             identifier,
                         ),
@@ -160,8 +164,8 @@ class JobStore:
                     conn.execute(
                         """INSERT INTO control_presets
                            (preset_id, name, description, endpoint_id, test_type, parameters_json,
-                            run_config_json, tags_json, created_at, updated_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            run_config_json, tags_json, source_json, created_at, updated_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             identifier,
                             name,
@@ -171,6 +175,7 @@ class JobStore:
                             parameters_json,
                             run_config_json,
                             tags_json,
+                            source_json,
                             now,
                             now,
                         ),

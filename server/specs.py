@@ -492,7 +492,24 @@ class JobSubmission(StrictSpec):
         return self
 
 
+class PresetOrigin(StrictSpec):
+    format: Literal["first-commit-configpreset"]
+    created_at: str | None = Field(default=None, max_length=64)
+    sanitized_config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    excluded_fields: list[str] = Field(default_factory=list, max_length=20)
+    unapplied_fields: list[str] = Field(default_factory=list, max_length=20)
+    notes: list[str] = Field(default_factory=list, max_length=10)
+
+    @field_validator("excluded_fields", "unapplied_fields", "notes")
+    @classmethod
+    def bounded_metadata(cls, values: list[str]) -> list[str]:
+        if any(len(value) > 500 or any(ord(char) < 32 for char in value) for value in values):
+            raise ValueError("Invalid preset source metadata")
+        return values
+
+
 class PresetSubmission(JobSubmission):
+    source_metadata: PresetOrigin | None = None
     tags: list[str] = Field(default_factory=list, max_length=20)
 
     @field_validator("tags")
