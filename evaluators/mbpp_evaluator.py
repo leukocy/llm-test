@@ -14,11 +14,12 @@ from typing import Any
 
 from . import register_evaluator
 from .answer_parser import CodeAnswerParser
-from .base_evaluator import BaseEvaluator
+from .base_evaluator import DatasetUnavailableError, SampleResult
+from .humaneval_evaluator import HumanEvalEvaluator
 
 
 @register_evaluator("mbpp")
-class MBPPEvaluator(BaseEvaluator):
+class MBPPEvaluator(HumanEvalEvaluator):
     """
     MBPP DatasetEvaluator
 
@@ -55,8 +56,9 @@ class MBPPEvaluator(BaseEvaluator):
         samples = []
 
         possible_files = [
-            os.path.join(self.dataset_path, "mbpp.jsonl"),
+            os.path.join(self.dataset_path, "test.json"),
             os.path.join(self.dataset_path, "test.jsonl"),
+            os.path.join(self.dataset_path, "mbpp.jsonl"),
             os.path.join(self.dataset_path, "mbpp.json"),
             os.path.join(self.dataset_path, "sanitized-mbpp.json"),
         ]
@@ -84,15 +86,34 @@ class MBPPEvaluator(BaseEvaluator):
             samples = self._fallback_to_demo_samples(self._create_sample_data)
 
         samples = self._normalize_samples(samples)
-        random.shuffle(samples)
-
-        total_needed = self.num_shots + (self.max_samples if self.max_samples else len(samples))
-        if len(samples) > total_needed:
-            samples = samples[:total_needed]
-
-        if self.num_shots > 0:
-            self.few_shot_examples = samples[: self.num_shots]
-            samples = samples[self.num_shots :]
+        if any(
+            not sample["test_list"]
+            or any(not isinstance(test, str) or not test.strip() for test in sample["test_list"])
+            for sample in samples
+        ):
+            raise DatasetUnavailableError(
+                "MBPP dataset contains samples without usable execution tests"
+            )
+        prompt_samples = [sample for sample in samples if 1 <= sample["task_id"] <= 10]
+        prompt_file = os.path.join(self.dataset_path, "prompt.json")
+        if self.num_shots and os.path.exists(prompt_file):
+            with open(prompt_file, encoding="utf-8") as stream:
+                prompt_samples = self._normalize_samples(json.load(stream))
+            prompt_samples = [sample for sample in prompt_samples if 1 <= sample["task_id"] <= 10]
+        prompt_samples.sort(
+            key=lambda sample: [2, 3, 4, 1, 5, 6, 7, 8, 9, 10].index(sample["task_id"])
+        )
+        if len({sample["task_id"] for sample in prompt_samples}) < self.num_shots:
+            raise DatasetUnavailableError(
+                "MBPP few-shot requires enough distinct task IDs 1–10 from prompt split"
+            )
+        self.few_shot_examples = prompt_samples[: self.num_shots]
+        samples = [sample for sample in samples if 11 <= sample["task_id"] <= 510]
+        if not samples or len({sample["task_id"] for sample in samples}) != len(samples):
+            raise DatasetUnavailableError("MBPP test split requires distinct task IDs 11–510")
+        random.Random(self.seed).shuffle(samples)
+        self.evaluation_split = "test"
+        self.few_shot_split = "prompt" if self.num_shots else None
 
         if self.max_samples and len(samples) > self.max_samples:
             samples = samples[: self.max_samples]
@@ -107,6 +128,8 @@ class MBPPEvaluator(BaseEvaluator):
         for sample in samples:
             try:
                 task_id = sample.get("task_id", 0)
+                if not isinstance(task_id, int) or isinstance(task_id, bool):
+                    raise DatasetUnavailableError("Invalid MBPP task ID")
                 text = sample.get("text", sample.get("prompt", ""))
                 code = sample.get("code", sample.get("canonical_solution", ""))
 
@@ -114,6 +137,14 @@ class MBPPEvaluator(BaseEvaluator):
                 test_list = sample.get("test_list", [])
                 if isinstance(test_list, str):
                     test_list = [test_list]
+                imports = sample.get("test_imports", [])
+                if not isinstance(imports, list) or any(
+                    not isinstance(item, str) for item in imports
+                ):
+                    raise DatasetUnavailableError("Invalid MBPP test imports")
+                setup = sample.get("test_setup_code") or "\n".join(imports)
+                if not isinstance(setup, str) or not isinstance(test_list, list):
+                    raise DatasetUnavailableError("Invalid MBPP test setup/cases")
 
                 # 提取函数签名
                 func_name = self._extract_function_name(code)
@@ -124,11 +155,12 @@ class MBPPEvaluator(BaseEvaluator):
                         "text": text,
                         "code": code,
                         "test_list": test_list,
+                        "test_setup_code": setup,
                         "func_name": func_name,
                     }
                 )
             except Exception as e:
-                continue
+                raise DatasetUnavailableError("Invalid MBPP sample; no score was issued") from e
 
         return normalized
 
@@ -229,7 +261,7 @@ class MBPPEvaluator(BaseEvaluator):
         """Build chat messages for the MBPP evaluator."""
         messages: list[dict[str, str]] = []
         system_instruction = (
-            "You are a Python programming expert. " "Write a function to solve the given problem."
+            "You are a Python programming expert. Write a function to solve the given problem."
         )
         messages.append({"role": "system", "content": system_instruction})
 
@@ -277,19 +309,41 @@ class MBPPEvaluator(BaseEvaluator):
         return response.strip()
 
     def check_answer(self, predicted: str, correct: str) -> bool:
-        """Check代码is否正确 - via执行Test case"""
-        if not predicted:
-            return False
+        """Correctness requires sample tests; source shape is not a score."""
+        raise ValueError("MBPP grading requires evaluate_single with sample test cases")
 
-        # 简单语法Check
-        try:
-            compile(predicted, "<string>", "exec")
-        except SyntaxError:
-            return False
+    async def evaluate_single(
+        self, sample: dict[str, Any], get_response_func, sample_index: int = 0
+    ) -> SampleResult:
+        tests = sample.get("test_list")
+        setup = sample.get("test_setup_code", "")
+        if (
+            not isinstance(tests, list)
+            or not tests
+            or any(not isinstance(test, str) or not test.strip() for test in tests)
+            or not isinstance(setup, str)
+        ):
+            raise DatasetUnavailableError("MBPP sample has no usable execution tests")
+        adapted = {
+            **sample,
+            "task_id": str(sample.get("task_id", sample_index)),
+            "prompt": setup + "\n" if setup else "",
+            "canonical_solution": sample.get("code", ""),
+            "test": "\n".join(tests),
+            "entry_point": "",
+        }
+        # Reuse response/metric collection while keeping native MBPP prompts.
+        result = await super().evaluate_single(adapted, get_response_func, sample_index)
+        result.question = str(sample.get("text", ""))
+        result.category = "programming"
+        return result
 
-        # 对于简单Validate，我们Check预测代码is否包含关键函数定义
-        # 完整Validateneed沙箱执行Test case
-        return "def " in predicted
+    def _execute_code(
+        self, code: str, test_code: str, entry_point: str
+    ) -> tuple[bool, str | None, str | None]:
+        from core.safe_executor import run_untrusted_code
+
+        return run_untrusted_code(code + "\n" + test_code, timeout_seconds=10.0)
 
     def get_correct_answer(self, sample: dict[str, Any]) -> str:
         """GetCorrect answer（代码）"""

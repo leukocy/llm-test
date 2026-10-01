@@ -311,6 +311,7 @@ export type QualityReport = {
         category?: string;
         failure_category?: string;
         failure_analysis?: string;
+        execution_error?: string | null;
         answer_parse_method?: string;
         answer_parse_confidence?: number;
         evaluation_method?: string;

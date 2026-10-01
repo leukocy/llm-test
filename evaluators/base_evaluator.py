@@ -63,6 +63,7 @@ class SampleResult:
     latency_ms: float = 0.0
     tokens_used: int = 0
     error: str | None = None
+    execution_error: str | None = None  # Generated code failure is a scored outcome.
     is_judge_corrected: bool = False  # Whether it was corrected by an AI judge
     judge_verdict: str | None = None
     evaluation_method: str = "regex"  # Evaluation method: regex, llm_judge, smart_parser
@@ -277,6 +278,7 @@ class BaseEvaluator(ABC):
     few_shot_split: str | None = None
     scoring_contract: str | None = None
     shared_plan: dict | None = None
+    sandbox_identity: dict | None = None
 
     def __init__(
         self,

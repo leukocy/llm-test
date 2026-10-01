@@ -60,6 +60,10 @@ export function QualityAnalysis({
     string,
     unknown
   >;
+  const sandbox = (dataset.config.sandbox_identity || {}) as Record<
+    string,
+    unknown
+  >;
   const categoryRows = Object.entries(dataset.by_category || {}).sort(
     (a, b) => (b[1].count || 0) - (a[1].count || 0),
   );
@@ -73,8 +77,9 @@ export function QualityAnalysis({
   );
   const failureCounts = failures.reduce<Record<string, number>>(
     (counts, { item }) => {
-      const reason =
-        item.failure_category || (item.error ? "请求错误" : "未分类");
+      const reason = item.execution_error
+        ? "代码测试未通过"
+        : item.failure_category || (item.error ? "请求错误" : "未分类");
       counts[reason] = (counts[reason] || 0) + 1;
       return counts;
     },
@@ -175,6 +180,18 @@ export function QualityAnalysis({
           <dl>
             <dt>数据集来源</dt>
             <dd>{String(provenance.source || "未记录")}</dd>
+            {dataset.config.requires_code_execution === true && (
+              <>
+                <dt>代码评分环境</dt>
+                <dd>{String(sandbox.version || "旧报告未记录")}</dd>
+                <dt>实际执行镜像</dt>
+                <dd className="mono">{String(sandbox.image_id || "未记录")}</dd>
+                <dt>环境 SHA-256</dt>
+                <dd className="mono">
+                  {String(dataset.config.sandbox_contract || "未记录")}
+                </dd>
+              </>
+            )}
             <dt>样本 SHA-256</dt>
             <dd className="mono">
               {String(provenance.sample_sha256 || "未记录")}
@@ -353,10 +370,13 @@ export function QualityAnalysis({
             </p>
             {(selected.failure_category ||
               selected.failure_analysis ||
+              selected.execution_error ||
               selected.error) && (
               <p>
                 失败归因：{selected.failure_category || "未分类"} ·{" "}
-                {selected.failure_analysis || selected.error}
+                {selected.execution_error ||
+                  selected.failure_analysis ||
+                  selected.error}
               </p>
             )}
           </div>

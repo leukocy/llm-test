@@ -312,6 +312,25 @@ def render_quality_markdown(job: dict[str, Any], report: dict[str, Any]) -> str:
         split_notes.append(
             f"{_md(name)}：评分分区 {_md(provenance.get('evaluation_split'))}；few-shot 分区 {_md(provenance.get('few_shot_split'))}。"
         )
+        config = result.get("config") or {}
+        if config.get("requires_code_execution"):
+            sandbox = config.get("sandbox_identity") or {}
+            split_notes.extend(
+                [
+                    f"{_md(name)} 代码评分环境：{_md(sandbox.get('version') or '旧报告未记录')}。",
+                    f"- 实际执行镜像：`{_md(sandbox.get('image_id') or '未记录')}`",
+                    f"- 环境 SHA-256：`{_md(config.get('sandbox_contract') or '未记录')}`",
+                ]
+            )
+            failures = [row for row in result.get("details", []) if row.get("execution_error")]
+            if failures:
+                split_notes.extend(
+                    ["", "| 样本 | 代码测试诊断（最多 50 项，完整诊断见错误 CSV） |", "|---|---|"]
+                )
+                split_notes.extend(
+                    f"| {_md(row.get('sample_id'))} | {_md(row['execution_error'])} |"
+                    for row in failures[:50]
+                )
     lines.extend(["", *split_notes])
     lines.append(
         "\nAI Judge 为同一模型的错题二次复核，不构成独立验证；未记录的旧报告不推算规则成绩。"
@@ -610,6 +629,15 @@ def render_quality_html(job: dict[str, Any], report: dict[str, Any]) -> str:
     for name, result in report.get("datasets", {}).items():
         metrics = result.get("extended_metrics") or {}
         provenance = (result.get("config") or {}).get("dataset_provenance") or {}
+        config = result.get("config") or {}
+        sandbox = config.get("sandbox_identity") or {}
+        sandbox_html = ""
+        if config.get("requires_code_execution"):
+            sandbox_html = (
+                f"<dt>代码评分环境</dt><dd>{safe(sandbox.get('version') or '旧报告未记录')}</dd>"
+                f"<dt>实际执行镜像</dt><dd><code>{safe(sandbox.get('image_id') or '未记录')}</code></dd>"
+                f"<dt>环境 SHA-256</dt><dd><code>{safe(config.get('sandbox_contract') or '未记录')}</code></dd>"
+            )
         accuracy = float(result.get("accuracy") or 0)
         lower = metrics.get("wilson_ci_lower")
         upper = metrics.get("wilson_ci_upper")
@@ -628,7 +656,7 @@ def render_quality_html(job: dict[str, Any], report: dict[str, Any]) -> str:
             f"<dt>评分 / few-shot 分区</dt><dd>{safe(provenance.get('evaluation_split') or '未记录')} / {safe(provenance.get('few_shot_split') or '未记录')}</dd>"
             f"<dt>样本 SHA-256</dt><dd><code>{safe(provenance.get('sample_sha256', '未记录'))}</code></dd>"
             f"<dt>Few-shot SHA-256</dt><dd><code>{safe(provenance.get('few_shot_sha256', '未记录'))}</code></dd>"
-            f"</dl></section>"
+            f"{sandbox_html}</dl></section>"
         )
     return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">

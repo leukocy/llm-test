@@ -6,7 +6,9 @@ without network access, host mounts, inherited credentials, or writable rootfs.
 
 from __future__ import annotations
 
+import hashlib
 import hmac
+import inspect
 import json
 import os
 import secrets
@@ -16,9 +18,11 @@ import threading
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any, BinaryIO, cast
 
 from core.sandbox_child import CHILD_TEMPLATE
+from core.sandbox_identity import VERSION, identity_digest, validate_identity
 
 MAX_CODE_BYTES = 256_000
 MAX_REQUEST_BYTES = 300_000
@@ -179,6 +183,60 @@ class SandboxServer(ThreadingHTTPServer):
         self.token = token
         self.image = image
         self.slots = threading.BoundedSemaphore(MAX_CONCURRENT)
+        self.identity_lock = threading.Lock()
+        self.pinned_image: str | None = None
+
+    def execution_identity(self) -> dict[str, Any]:
+        """Resolve a tag once, then execute only that immutable image ID."""
+        try:
+            with self.identity_lock:
+                if self.pinned_image is None:
+                    result = subprocess.run(
+                        ["docker", "image", "inspect", self.image, "--format", "{{.Id}}"],
+                        capture_output=True,
+                        timeout=5,
+                        check=True,
+                        text=True,
+                    )
+                    self.pinned_image = result.stdout.strip()
+            runtime_result = subprocess.run(
+                ["docker", "info", "--format", "{{json .}}"],
+                capture_output=True,
+                timeout=5,
+                check=True,
+                text=True,
+            )
+            info = json.loads(runtime_result.stdout)
+            runtime = {
+                key: info[key]
+                for key in ("ServerVersion", "KernelVersion", "Architecture", "OperatingSystem")
+            }
+            cpu_text = Path("/proc/cpuinfo").read_text()
+            cpu_models = sorted(
+                {
+                    line.strip()
+                    for line in cpu_text.splitlines()
+                    if line.startswith(("model name", "Hardware", "CPU implementer", "CPU part"))
+                }
+            )
+            if not cpu_models:
+                raise ValueError("CPU identity unavailable")
+            evidence = {
+                "version": VERSION,
+                "image_id": self.pinned_image,
+                "runtime": runtime,
+                "cpu_sha256": hashlib.sha256("\n".join(cpu_models).encode()).hexdigest(),
+                "policy_sha256": hashlib.sha256(
+                    (
+                        inspect.getsource(container_command)
+                        + CHILD_TEMPLATE
+                        + Path(__file__).read_text()
+                    ).encode()
+                ).hexdigest(),
+            }
+            return validate_identity({**evidence, "sha256": identity_digest(evidence)})
+        except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+            raise WorkerInfrastructureError("Sandbox environment identity unavailable") from exc
 
 
 class SandboxHandler(BaseHTTPRequestHandler):
@@ -203,7 +261,14 @@ class SandboxHandler(BaseHTTPRequestHandler):
         elif not self._authorized():
             self._reply(HTTPStatus.UNAUTHORIZED, {"error": "Unauthorized"})
         else:
-            self._reply(HTTPStatus.OK, {"status": "ok"})
+            try:
+                identity = self.server.execution_identity()
+                self._reply(HTTPStatus.OK, {"status": "ok", "sandbox_identity": identity})
+            except WorkerInfrastructureError:
+                self._reply(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"error": "Sandbox environment identity unavailable"},
+                )
 
     def do_POST(self) -> None:
         if self.path != "/execute":
@@ -234,8 +299,23 @@ class SandboxHandler(BaseHTTPRequestHandler):
             self._reply(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Sandbox is busy"})
             return
         try:
-            success, error, output = execute_in_container(code, timeout, memory, self.server.image)
-            self._reply(HTTPStatus.OK, {"success": success, "error": error, "output": output})
+            identity = self.server.execution_identity()
+            expected = request.get("sandbox_contract")
+            if expected is not None and expected != identity["sha256"]:
+                self._reply(HTTPStatus.CONFLICT, {"error": "Sandbox environment changed"})
+                return
+            success, error, output = execute_in_container(
+                code, timeout, memory, identity["image_id"]
+            )
+            self._reply(
+                HTTPStatus.OK,
+                {
+                    "success": success,
+                    "error": error,
+                    "output": output,
+                    "sandbox_identity": identity,
+                },
+            )
         except WorkerInfrastructureError:
             self._reply(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Sandbox runtime unavailable"})
         finally:

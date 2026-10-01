@@ -4,7 +4,9 @@ Evaluator for the OpenAI HumanEval dataset.
 HumanEval is a benchmark for code generation containing 164 Python programming problems.
 """
 
+import ast
 import json
+import keyword
 import os
 import random
 import re
@@ -13,7 +15,7 @@ from typing import Any
 
 from . import register_evaluator
 from .answer_parser import CodeAnswerParser
-from .base_evaluator import BaseEvaluator, SampleResult
+from .base_evaluator import BaseEvaluator, DatasetUnavailableError, SampleResult
 
 
 @register_evaluator("humaneval")
@@ -95,6 +97,31 @@ class HumanEvalEvaluator(BaseEvaluator):
 
         if not samples:
             samples = self._fallback_to_demo_samples(self._create_sample_data)
+        identifiers = set()
+        for sample in samples:
+            identifier, entry, tests = (
+                sample.get("task_id"),
+                sample.get("entry_point"),
+                sample.get("test"),
+            )
+            if not isinstance(identifier, str) or not identifier or identifier in identifiers:
+                raise DatasetUnavailableError("HumanEval requires distinct task IDs")
+            identifiers.add(identifier)
+            if (
+                not isinstance(entry, str)
+                or not entry.isidentifier()
+                or keyword.iskeyword(entry)
+                or not isinstance(tests, str)
+            ):
+                raise DatasetUnavailableError("Invalid HumanEval entry point or tests")
+            try:
+                tree = ast.parse(tests)
+            except SyntaxError as exc:
+                raise DatasetUnavailableError("Invalid HumanEval test syntax") from exc
+            if not any(
+                isinstance(node, ast.FunctionDef) and node.name == "check" for node in tree.body
+            ):
+                raise DatasetUnavailableError("HumanEval tests must define check(candidate)")
 
         if self.max_samples and len(samples) > self.max_samples:
             random.shuffle(samples)
@@ -226,7 +253,8 @@ class HumanEvalEvaluator(BaseEvaluator):
                 ttft_ms=ttft_ms,
                 tps=tps,
                 total_time_ms=total_time_ms,
-                error=error_msg if not is_correct else None,
+                execution_error=error_msg if not is_correct else None,
+                evaluation_method="code_execution",
             )
 
         except Exception as e:
@@ -248,7 +276,9 @@ class HumanEvalEvaluator(BaseEvaluator):
         """Run generated code through the isolated sandbox worker."""
         from core.safe_executor import run_untrusted_code
 
-        full_code = code + "\n" + test_code
+        if not test_code.strip() or not entry_point.isidentifier():
+            return False, "Invalid HumanEval test or entry point", None
+        full_code = code + "\n" + test_code + f"\ncheck({entry_point})\n"
         # Code and tests are sent to the container worker; the app never executes them.
         return run_untrusted_code(full_code, timeout_seconds=10.0)
 

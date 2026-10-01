@@ -20,7 +20,7 @@ from core.cancel_state import is_stop_requested
 from core.evaluation_control import EvaluationJournal
 from core.failure_analyzer import analyze_failures
 from core.providers.factory import get_provider
-from core.safe_executor import SandboxUnavailableError, require_sandbox_available
+from core.safe_executor import SandboxUnavailableError, require_sandbox_available, sandbox_session
 from evaluators.base_evaluator import (
     BaseEvaluator,
     DatasetUnavailableError,
@@ -626,6 +626,11 @@ class QualityEvaluator:
         self, evaluator: BaseEvaluator, subset: str | None, scope_key: str
     ) -> list[dict]:
         current_scoring = scoring_fingerprint(evaluator)
+        current_sandbox = (
+            require_sandbox_available()
+            if getattr(evaluator, "requires_code_execution", False)
+            else None
+        )
 
         def load() -> tuple[dict, list[dict]]:
             if self.journal:
@@ -644,6 +649,7 @@ class QualityEvaluator:
                 "evaluation_split": getattr(evaluator, "evaluation_split", None),
                 "few_shot_split": getattr(evaluator, "few_shot_split", None),
                 "scoring_contract": current_scoring,
+                "sandbox_identity": current_sandbox,
             }, samples
 
         metadata, samples = self.journal.prepare_scope(scope_key, load) if self.journal else load()
@@ -660,6 +666,11 @@ class QualityEvaluator:
         evaluator.seed = metadata["seed"]
         evaluator.scoring_contract = metadata.get("scoring_contract")
         evaluator.shared_plan = metadata.get("shared_plan")
+        evaluator.sandbox_identity = metadata.get("sandbox_identity")
+        if current_sandbox is not None and evaluator.sandbox_identity != current_sandbox:
+            raise SandboxUnavailableError(
+                "Sandbox unavailable: frozen grading environment changed; create a new job"
+            )
         if metadata.get("evaluation_split"):
             evaluator.evaluation_split = metadata["evaluation_split"]
             evaluator.few_shot_split = metadata.get("few_shot_split")
@@ -695,9 +706,6 @@ class QualityEvaluator:
             samples = self._load_plan(evaluator, subset, scope_key)
 
             sample_hash = fingerprint_samples(samples)
-
-            if getattr(evaluator, "requires_code_execution", False):
-                require_sandbox_available()
 
             self._log(f"已Load {len(samples)}  samples")
 
@@ -807,14 +815,15 @@ class QualityEvaluator:
                     commit_callback=commit_sample,
                 )
             start_time = time.monotonic()
-            sample_results = await evaluator.evaluate_batch(
-                samples=samples,
-                get_response_func=get_response_func,
-                concurrency=config.concurrency,
-                progress_callback=internal_progress,
-                result_callback=on_result_complete,
-                **batch_control,
-            )
+            with sandbox_session(evaluator.sandbox_identity):
+                sample_results = await evaluator.evaluate_batch(
+                    samples=samples,
+                    get_response_func=get_response_func,
+                    concurrency=config.concurrency,
+                    progress_callback=internal_progress,
+                    result_callback=on_result_complete,
+                    **batch_control,
+                )
             duration = time.monotonic() - start_time
 
             if len(sample_results) != len(samples):
@@ -845,6 +854,10 @@ class QualityEvaluator:
             result_config = config.to_dict()
             result_config["scoring_contract"] = evaluator.scoring_contract
             result_config["shared_plan"] = evaluator.shared_plan
+            result_config["sandbox_identity"] = evaluator.sandbox_identity
+            result_config["sandbox_contract"] = (
+                evaluator.sandbox_identity["sha256"] if evaluator.sandbox_identity else None
+            )
             result_config["requires_code_execution"] = bool(
                 getattr(evaluator, "requires_code_execution", False)
             )

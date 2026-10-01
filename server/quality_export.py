@@ -23,6 +23,7 @@ FIELDS = (
     "answer_parse_confidence",
     "failure_analysis",
     "error",
+    "execution_error",
 )
 
 

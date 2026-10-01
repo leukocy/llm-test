@@ -4,6 +4,7 @@ WORKDIR /srv
 COPY sandbox_worker.py /srv/sandbox_worker.py
 COPY core/__init__.py /srv/core/__init__.py
 COPY core/sandbox_child.py /srv/core/sandbox_child.py
+COPY core/sandbox_identity.py /srv/core/sandbox_identity.py
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 EXPOSE 8765

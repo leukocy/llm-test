@@ -288,6 +288,7 @@ class StandardReport:
                         model_response=detail.model_response[:500] if detail.model_response else "",
                         category=detail.category if hasattr(detail, "category") else "",
                         failure_type=cls._classify_failure(detail),
+                        analysis=detail.execution_error or detail.failure_analysis,
                     )
                     failures.append(failure)
 

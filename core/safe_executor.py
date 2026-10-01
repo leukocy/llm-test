@@ -9,9 +9,26 @@ import ast
 import math
 import os
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from urllib.parse import urlparse
 
 import httpx
+
+from core.sandbox_identity import validate_identity
+
+_expected_sandbox: ContextVar[str | None] = ContextVar("expected_sandbox_contract", default=None)
+
+
+@contextmanager
+def sandbox_session(identity: dict | None):
+    expected = validate_identity(identity)["sha256"] if identity is not None else None
+    token = _expected_sandbox.set(expected)
+    try:
+        yield
+    finally:
+        _expected_sandbox.reset(token)
+
 
 DEFAULT_TIMEOUT_SECONDS = 10.0
 DEFAULT_MEM_LIMIT_MB = 1024
@@ -198,11 +215,11 @@ def _worker_request(method: str, url: str, token: str, timeout: float, **kwargs)
         return client.request(method, url, headers={"Authorization": f"Bearer {token}"}, **kwargs)
 
 
-def require_sandbox_available() -> None:
+def require_sandbox_available() -> dict:
     """Check the worker before model requests are sent for code benchmarks."""
     url, token = _worker_settings()
     try:
-        response = _worker_request("GET", f"{url}/health", token, 3.0)
+        response = _worker_request("GET", f"{url}/health", token, 12.0)
         payload = response.json() if response.status_code == 200 else None
         if (
             response.status_code != 200
@@ -212,6 +229,7 @@ def require_sandbox_available() -> None:
             raise SandboxUnavailableError(
                 f"Sandbox unavailable: worker health check returned HTTP {response.status_code}."
             )
+        return validate_identity(payload.get("sandbox_identity"))
     except (httpx.HTTPError, ValueError) as exc:
         raise SandboxUnavailableError(
             f"Sandbox unavailable: worker health check failed: {exc}"
@@ -239,6 +257,9 @@ def run_untrusted_code(
                 "code": full_code,
                 "timeout_seconds": timeout_seconds,
                 "mem_limit_mb": mem_limit_mb,
+                **(
+                    {"sandbox_contract": _expected_sandbox.get()} if _expected_sandbox.get() else {}
+                ),
             },
         )
         if response.status_code != 200:
@@ -248,6 +269,10 @@ def run_untrusted_code(
         result = response.json()
         if not isinstance(result, dict) or not isinstance(result.get("success"), bool):
             raise ValueError("missing success status")
+        if _expected_sandbox.get():
+            identity = validate_identity(result.get("sandbox_identity"))
+            if identity["sha256"] != _expected_sandbox.get():
+                raise SandboxUnavailableError("Sandbox unavailable: grading environment changed")
         error = result.get("error")
         output = result.get("output")
         if error is not None and not isinstance(error, str):

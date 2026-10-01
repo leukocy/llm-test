@@ -103,6 +103,12 @@ def execute_preparation(job: dict, settings, store, worker_id: str) -> RunOutput
         samples = downloader.load(name, split=split)
         if not samples:
             raise ValueError("Downloaded dataset has no evaluation samples")
+        if name == "mbpp":
+            from evaluators.mbpp_evaluator import MBPPEvaluator
+
+            # Published data must support the platform's default five exemplars.
+            prepared = MBPPEvaluator(dataset_path=str(stage), num_shots=5)
+            prepared.load_dataset()
         if name == "ceval":
             from evaluators.ceval_evaluator import CEvalEvaluator
 

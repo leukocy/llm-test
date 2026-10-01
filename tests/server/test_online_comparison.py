@@ -3,6 +3,7 @@
 import json
 from dataclasses import replace
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -87,6 +88,90 @@ def submit(lab, **headers):
 
 def report(settings, job):
     return json.loads((settings.artifact_root / job["result_artifact"]).read_text())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change_environment", [False, True])
+async def test_code_comparison_freezes_actual_environment_and_scores_test_failures(
+    lab, monkeypatch, change_environment
+):
+    from tests.sandbox_fixtures import sandbox_identity
+
+    store, settings, manager, client, auth, body, calls = lab
+    body["parameters"]["datasets"] = ["mbpp"]
+    path = manager.get_local_path("mbpp")
+    path.mkdir(parents=True)
+    (path / "test.json").write_text(
+        json.dumps(
+            [
+                {
+                    "task_id": 11 + index,
+                    "text": f"Return one {index}",
+                    "code": "def f(): return 1",
+                    "test_list": ["assert f() == 1"],
+                }
+                for index in range(6)
+            ]
+        )
+    )
+    monkeypatch.setenv("LLM_TEST_SANDBOX_URL", "http://synthetic-worker:8765")
+    monkeypatch.setenv("LLM_TEST_SANDBOX_TOKEN", "x" * 40)
+    proof = sandbox_identity()
+
+    def worker_request(method, url, token, timeout, **kwargs):
+        if method == "GET":
+            return httpx.Response(200, json={"status": "ok", "sandbox_identity": proof})
+        assert kwargs["json"]["sandbox_contract"] == proof["sha256"]
+        correct = "return 999" not in kwargs["json"]["code"]
+        return httpx.Response(
+            200,
+            json={
+                "success": correct,
+                "error": None if correct else "AssertionError",
+                "sandbox_identity": proof,
+            },
+        )
+
+    monkeypatch.setattr("core.safe_executor._worker_request", worker_request)
+
+    async def respond(self, prompt="", **kwargs):
+        calls.append(self.model_id)
+        return {
+            "content": "def f():\n    return " + ("999" if self.model_id == "synthetic-a" else "1")
+        }
+
+    monkeypatch.setattr(QualityEvaluator, "_get_response_with_metrics", respond)
+    group = submit(lab)
+    a, b = group["jobs"]
+    await run_claimed_job(store.claim("fixture"), settings, store, "fixture")
+    final_a = store.get(a["job_id"])
+    assert final_a["status"] == "completed"
+    left = report(settings, final_a)["datasets"]["mbpp"]
+    assert left["config"]["sandbox_identity"] == proof
+    assert left["correct_samples"] == 0 and left["total_samples"] == 6
+    assert all(
+        row["error"] is None and row["execution_error"] == "AssertionError"
+        for row in left["details"]
+    )
+    if change_environment:
+        proof = sandbox_identity("d")
+    await run_claimed_job(store.claim("fixture"), settings, store, "fixture")
+    final_b = store.get(b["job_id"])
+    if change_environment:
+        assert final_b["status"] == "failed" and len(calls) == 6
+    else:
+        assert final_b["status"] == "completed" and len(calls) == 12
+        right = report(settings, final_b)["datasets"]["mbpp"]
+        assert right["correct_samples"] == 6 and right["config"]["sandbox_identity"] == proof
+        result = client.post(
+            "/api/v1/compare", json={"job_id_a": a["job_id"], "job_id_b": b["job_id"]}, headers=auth
+        )
+        entry = result.json()["datasets"]["mbpp"]
+        assert (
+            entry["verified"]
+            and entry["samples"] == 6
+            and entry["p_value"] == pytest.approx(0.03125)
+        )
 
 
 @pytest.mark.asyncio

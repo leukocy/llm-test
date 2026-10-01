@@ -288,3 +288,14 @@ Custom Text Test、All Tests、Stability Test、Batch Test。若对应模块能�
 - 验证：82 项提供方/目录/端点专项通过，一次全量回归 1523 passed / 4 skipped；末轮缺失字段处理与端点编辑专项 26 项通过，179 个 Python 文件类型检查及前端生产构建通过。隔离浏览器核验服务商保存、重新编辑、A/B 模板同步与 390px 布局；仅合成 HTTP 响应，无真实模型请求或生产数据访问，记录在项目外 `~/llm-perf/evaluation/native-providers-2026-10-01/`。
 
 完整质量/对比输出、隔离评分环境身份及全部控件/输出逐项验收仍需继续。完整目标保持未完成；继续本地累积，不部署、不推送、不触发远程 CI。
+
+### 本批恢复范围（代码评分与隔离环境来源）
+
+- 修正两个实质评分缺口：HumanEval 现按[官方执行流程](https://github.com/openai/human-eval/blob/master/human_eval/execution.py)调用 `check(entry_point)`；MBPP 不再把包含函数定义视为正确，改为将生成代码、测试前置代码和题目测试送入隔离服务。错误代码、断言失败和超时作为错误答案计入分母，诊断保存在 `execution_error`；基础设施错误仍终止评分。旧评分来源不与新来源混用。
+- MBPP 按[官方分区](https://github.com/google-research/google-research/blob/master/mbpp/README.md)保留 task ID 11–510 评分，ID 1–10 用于 few-shot，优先使用论文中的 2、3、4。完整评分不扣掉 few-shot 题；支持准备后的 test.json/prompt.json 和测试 imports。缺示例、缺测试、重复/无效 ID 不生成分数，准备发布验证默认五个独立示例。HumanEval 的无效测试入口、语法或缺少 check 函数在加载阶段拒绝。
+- 冻结计划记录 `sandbox-environment-v1`：实际不可变镜像 ID、执行策略/子程序来源、Docker 服务版本、内核/架构/系统、CPU 型号摘要和整体 SHA-256。执行服务将镜像 tag 固定为实际 ID，每次执行核对预期身份并回传证据；应用核验响应，身份改变或缺失不能变成正确答案。恢复及在线 B 在模型请求前核对冻结身份。哈希为可复核来源记录，不宣称外部硬件认证或无环境噪声。
+- 配对统计要求两侧共同、内容自洽的环境证据，单个 64 位字符串不足以启用检验。页面展示执行镜像/环境，代码测试诊断独立于请求错误；CSV、标准失败分析与 JSON 保留诊断，Markdown/HTML 保留环境来源，Markdown 显示最多 50 项代码诊断并指向完整错误 CSV。
+- 新平台增加可选 `compose.platform.sandbox.yml`：隔离服务只接内部网络、不暴露宿主端口；API 和普通 worker 不挂 Docker socket。它是待统一部署的可选配置，本轮只在空环境隔离目录验证合并结果，不启动容器、不读取生产凭据；原 `compose.platform.yml` 的用户修改保留。
+- 验证：118 项评分/安全/配对专项（3 项容器集成跳过）；53 项实际队列/共同计划专项；一次全量回归 1536 passed / 4 skipped；末轮报告及准备相关 119 项专项通过；最终测试数据加载、评分与在线计划经 60 项定向复验。类型检查、前端生产构建、隔离 Compose 配置核验通过；三项浏览器验收覆盖代码失败诊断、CSV、同源 JSON/Markdown/HTML、刷新和 390px 布局。所有模型、容器响应为合成输入，无实际模型/容器执行；现有 Docker 集成测试保留为后续统一部署验收门槛。证据在项目外 `~/llm-perf/evaluation/code-grading-identity-2026-10-01/`。
+
+完整质量/对比输出及全部控件/输出逐项验收仍需继续。完整目标保持未完成；继续本地累积，不部署、不推送、不触发远程 CI。

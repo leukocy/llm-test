@@ -9,6 +9,7 @@ import re
 from typing import Any
 
 from core.model_comparator import mcnemar_test
+from core.sandbox_identity import validate_identity
 
 CONDITIONS = (
     "num_shots",
@@ -147,6 +148,14 @@ def compare_dataset(
             or environment_a != environment_b
         ):
             warnings.append("代码评分的隔离执行环境缺少共同身份凭证；只描述配对，不检验模型差异。")
+        else:
+            try:
+                proof_a = validate_identity(config_a.get("sandbox_identity"))
+                proof_b = validate_identity(config_b.get("sandbox_identity"))
+                if proof_a != proof_b or proof_a["sha256"] != environment_a:
+                    raise ValueError("sandbox environment mismatch")
+            except ValueError:
+                warnings.append("代码评分环境身份未通过内容核验；只描述配对，不检验模型差异。")
     for field in ("evaluation_split", "few_shot_split", "selection_seed"):
         pa = (config_a.get("dataset_provenance") or {}).get(field)
         pb = (config_b.get("dataset_provenance") or {}).get(field)

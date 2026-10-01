@@ -195,3 +195,18 @@ C-Eval 默认评分 test，也可用 `ceval_split="val"`；few-shot 使用同科
 两侧固定顺序执行。A 在首个模型请求前保存全部有序样本、few-shot 与评分代码身份；B 核验哈希后复用原计划，并建立独立结果检查点。源文件之后改变不会重新抽样；原计划、端点身份或评分代码变化会阻止请求。平台质量计划准备时关闭 DatasetManager 隐式下载，缺数据应先通过准备入口处理。
 
 页面在刷新后还原对比组、端点与参数，完成后自动做配对分析，并可取消整组或进入单侧报告/恢复。采样数量是上限，加载后用实际数量；顺序对比不证明并发公平性、环境独立性或连续吞吐。编辑参数不会修改已经提交的计划。
+
+### 可选代码评分服务
+
+HumanEval 与 MBPP 需要独立代码执行服务。为新平台提供的配置叠加文件为 `compose.platform.sandbox.yml`，在最终统一部署时使用；日常功能补齐不必重建或重启服务。
+
+部署前在专用 Docker 主机预加载执行镜像，配置 `LLM_TEST_SANDBOX_TOKEN`（至少 32 字符）、`DOCKER_GID`（宿主 socket 的组 ID）和可选 `LLM_TEST_SANDBOX_IMAGE`。宿主 `/usr/bin/docker` 须为可在 broker 镜像中运行的 CLI；保持 Docker socket 为同一主机的本地 socket。
+
+```bash
+docker compose -p llm-test-platform --env-file .env.platform \
+  -f compose.platform.yml -f compose.platform.sandbox.yml up -d --build
+```
+
+只有执行服务挂载 Docker socket/CLI，它只接入内部网络。普通 worker 等待服务健康后再接任务，API 不获得执行权限。健康响应须携带环境来源记录；旧版只有 `status=ok` 的服务须随统一部署更新，否则代码评测在模型请求前失败。运行时将镜像 tag 固定到实际 image ID，记录执行策略、Docker/内核/CPU 信息，并在每次执行响应和冻结计划间核验。环境改变后应创建新评测；旧报告仅保留原有描述性信息。
+
+MBPP 使用评分 ID 11–510，few-shot 从 ID 1–10 中取独立示例。HumanEval 调用题目 check 函数。代码断言失败、运行错误和超时是错误答案；服务不可用或环境不一致是基础设施失败，不能生成质量成绩。正式发布时须在隔离 Docker 主机运行现有 sandbox 集成测试，再核验新镜像下的代码评测端到端流程。

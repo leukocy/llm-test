@@ -178,10 +178,16 @@ def test_core_statistics_do_not_coerce_boolean_strings():
 
 
 def test_code_grading_needs_shared_sandbox_identity_for_inference():
+    from tests.sandbox_fixtures import sandbox_identity
+
     a, b = dataset(), dataset()
     a["config"]["requires_code_execution"] = b["config"]["requires_code_execution"] = True
     assert compare_dataset(a, b)["p_value"] is None
     a["config"]["sandbox_contract"] = b["config"]["sandbox_contract"] = "d" * 64
+    assert not compare_dataset(a, b)["verified"]
+    proof = sandbox_identity()
+    for side in (a, b):
+        side["config"].update(sandbox_identity=proof, sandbox_contract=proof["sha256"])
     assert compare_dataset(a, b)["verified"]
 
 
