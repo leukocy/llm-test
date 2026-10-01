@@ -8,6 +8,7 @@ import hashlib
 import inspect
 import json
 import os
+import sqlite3
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -409,10 +410,43 @@ class QualityEvaluator:
             cache_key = _json.dumps(messages, ensure_ascii=False)
         else:
             cache_key = prompt
+        lookup_key = cache_key
+        cache_active = bool(use_cache and self.cache and self._cache_enabled)
+        if cache_active:
+            assert self.cache is not None
+            try:
+                lookup_key = self.cache.request_key(
+                    {
+                        "provider": self.provider_name,
+                        "api_base_url": self.api_base_url.rstrip("/"),
+                        "model_id": self.model_id,
+                        "input_kind": "messages" if messages else "prompt",
+                        "input": messages if messages else prompt,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                        "parameters": {
+                            key: value
+                            for key, value in kwargs.items()
+                            if key
+                            not in {"retries", "request_timeout", "input_tokens_hint", "_barrier"}
+                        },
+                    },
+                    self.api_key,
+                )
+            except (OSError, ValueError, TypeError) as exc:
+                raise ProviderRequestError(
+                    "Provider request failed: response-cache scope unavailable; repair the cache or disable it"
+                ) from exc
 
         # Check缓存
-        if use_cache and self.cache and self._cache_enabled:
-            cached_response = self.cache.get(cache_key, model_id=self.model_id)
+        if cache_active:
+            assert self.cache is not None
+            try:
+                cached_response = self.cache.get(lookup_key, model_id=self.model_id)
+            except (OSError, ValueError, TypeError, sqlite3.Error) as exc:
+                raise ProviderRequestError(
+                    "Provider request failed: response-cache lookup unavailable; repair the cache or disable it"
+                ) from exc
             if cached_response:
                 self._cache_stats["hits"] += 1
                 return {
@@ -430,13 +464,14 @@ class QualityEvaluator:
                         "input_token_source": "tokenizer",
                         "output_token_source": "tokenizer",
                         "timing_clock": "local_cache",
+                        "cache_context_version": "quality-cache-v2",
                     },
                 }
             else:
                 self._cache_stats["misses"] += 1
 
         # Add重试机制
-        retries = kwargs.get("retries", 3)
+        retries = kwargs.pop("retries", 3)
         backoff = 1.0
 
         for attempt in range(retries + 1):
@@ -504,10 +539,10 @@ class QualityEvaluator:
                     tps = output_tokens / (decode_time_ms / 1000)
 
                 # 缓存succeeded响应
-                if use_cache and self.cache and self._cache_enabled and content:
+                if cache_active and self.cache and content:
                     try:
                         self.cache.set(
-                            cache_key,
+                            lookup_key,
                             content,
                             model_id=self.model_id,
                             metadata={

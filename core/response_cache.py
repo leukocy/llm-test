@@ -29,7 +29,9 @@ use方式：
 
 import gzip
 import hashlib
+import hmac
 import json
+import os
 import pickle
 import sqlite3
 import threading
@@ -48,8 +50,6 @@ def hashlib_sha256():  # noqa: ANN201 - 返回 hashlib._Hash 类型(无公共存
 def cache_dir_default_key_path() -> str:
     """默认 HMAC 密钥文件路径(与 cache 目录同级)。"""
     return "cache/.checkpoint_hmac_key"
-
-
 
 
 @dataclass
@@ -112,10 +112,45 @@ class ResponseCache:
         # Statistics
         self._stats = CacheStats()
         self._lock = threading.Lock()
+        self._request_scope_key: bytes | None = None
 
         # InitializeDatabase
         self._init_db()
         self._load_stats()
+
+    def request_key(self, context: dict[str, Any], credential: str) -> str:
+        """Isolate responses without persisting prompts, credentials or their bare hashes."""
+        encoded = json.dumps(
+            {"context": context, "credential": credential},
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        ).encode()
+        with self._lock:
+            if self._request_scope_key is None:
+                path = self.cache_dir / ".request_scope_key"
+                try:
+                    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                except FileExistsError:
+                    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+                    with os.fdopen(descriptor, "rb") as stream:
+                        if os.fstat(stream.fileno()).st_mode & 0o077:
+                            raise ValueError(
+                                "Cache scope key permissions are not private"
+                            ) from None
+                        key = stream.read(33)
+                else:
+                    key = os.urandom(32)
+                    with os.fdopen(descriptor, "wb") as stream:
+                        stream.write(key)
+                if len(key) != 32:
+                    raise ValueError("Cache scope key is invalid or not ready")
+                self._request_scope_key = key
+            return (
+                "quality-cache-v2:"
+                + hmac.new(self._request_scope_key, encoded, hashlib.sha256).hexdigest()
+            )
 
     def _init_db(self):
         """InitializeDatabase表"""
@@ -381,7 +416,6 @@ class ResponseCache:
 
             self._load_stats()
 
-
     def get_stats(self) -> CacheStats:
         """Get缓存Statistics"""
         self._load_stats()
@@ -493,8 +527,6 @@ class ResponseCache:
             return None
 
 
-
-
 # ========== 全局缓存实例 ==========
 
 _global_cache: ResponseCache | None = None
@@ -506,8 +538,6 @@ def get_cache(cache_dir: str = "cache", max_size_mb: int = 500, **kwargs) -> Res
     if _global_cache is None:
         _global_cache = ResponseCache(cache_dir=cache_dir, max_size_mb=max_size_mb, **kwargs)
     return _global_cache
-
-
 
 
 # ========== Decorator ==========

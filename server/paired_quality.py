@@ -111,6 +111,18 @@ def compare_dataset(
         ):
             raise PairingConflict("Dataset override must be an object")
     for config, rows in ((config_a, rows_a), (config_b, rows_b)):
+        for row in rows.values():
+            provenance = row.get("measurement_provenance") or {}
+            cache_flag = provenance.get("from_cache") if isinstance(provenance, dict) else None
+            if config.get("use_cache") is True and type(cache_flag) is not bool:
+                warnings.append("响应缓存启用但未记录主响应来源；只描述成绩，不检验差异。")
+            elif cache_flag is True and (
+                config.get("use_cache") is False
+                or provenance.get("cache_context_version") != "quality-cache-v2"
+            ):
+                warnings.append(
+                    "缓存响应未核验端点、凭证与生成参数隔离，或与配置冲突；不检验差异。"
+                )
         corrected = [row for row in rows.values() if row.get("is_judge_corrected")]
         if corrected and config.get("use_llm_judge") is False:
             warnings.append("Judge 改判标记与关闭复核的配置冲突。")
