@@ -208,6 +208,24 @@ export function QualityAnalysis({
           <dl>
             <dt>数据集来源</dt>
             <dd>{String(provenance.source || "未记录")}</dd>
+            <dt>评分 / few-shot 分区</dt>
+            <dd>
+              {String(provenance.evaluation_split || "未记录")} /{" "}
+              {String(provenance.few_shot_split || "未使用或未记录")}
+            </dd>
+            {provenance.few_shot_policy === "same_subject_dev" && (
+              <>
+                <dt>示例策略</dt>
+                <dd>
+                  同科目 dev；每题{" "}
+                  {String(provenance.few_shot_per_sample ?? "未记录")}{" "}
+                  个示例，冻结示例池{" "}
+                  {String(provenance.few_shot_count ?? "未记录")} 条。
+                </dd>
+                <dt>答案评分口径</dt>
+                <dd>生成文本的答案字母，不是选项概率评分。</dd>
+              </>
+            )}
             {dataset.config.requires_code_execution === true && (
               <>
                 <dt>代码评分环境</dt>

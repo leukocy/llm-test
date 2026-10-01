@@ -109,6 +109,12 @@ def execute_preparation(job: dict, settings, store, worker_id: str) -> RunOutput
             # Published data must support the platform's default five exemplars.
             prepared = MBPPEvaluator(dataset_path=str(stage), num_shots=5)
             prepared.load_dataset()
+        if name == "mmlu":
+            from evaluators.mmlu_evaluator import MMLUEvaluator
+
+            samples = MMLUEvaluator.normalize(samples, "test")
+            examples = MMLUEvaluator.normalize(downloader.load(name, split="dev"), "dev")
+            MMLUEvaluator.validate_dev(samples, examples, 5)
         if name in {"ceval", "cmmlu"}:
             from evaluators.ceval_evaluator import CEvalEvaluator
             from evaluators.cmmlu_evaluator import CMMLUEvaluator

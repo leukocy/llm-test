@@ -65,7 +65,7 @@ DATASET_CONFIGS = {
         name="mmlu",
         hf_path="cais/mmlu",
         local_path="datasets/mmlu",
-        split_mapping={"test": "test", "dev": "validation", "train": "dev"},
+        split_mapping={"test": "test", "dev": "dev", "train": "auxiliary_train"},
         description="Massive Multitask Language Understanding",
     ),
     # 高级数学

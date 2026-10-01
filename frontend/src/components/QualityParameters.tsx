@@ -229,6 +229,12 @@ export function QualityParameters({
         </div>
       </details>
       <h3>评测数据集</h3>
+      {selected.includes("mmlu") && (
+        <p className="field-help">
+          MMLU 使用 test 评分、同科目 dev 示例（每科 5 题）；示例不足或与评分题
+          重叠时停止评测。当前按生成的答案字母评分，不等同于原实现的选项概率评分。
+        </p>
+      )}
       {selected.includes("cmmlu") && (
         <p className="field-help">
           CMMLU 使用带标签的 test 评分，同科目的 dev 提供 few-shot 示例（每科 5

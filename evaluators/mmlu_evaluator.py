@@ -8,7 +8,7 @@ import random
 from typing import Any
 
 from . import register_evaluator
-from .base_evaluator import BaseEvaluator, extract_choice_answer
+from .base_evaluator import BaseEvaluator, DatasetUnavailableError, extract_choice_answer
 
 
 @register_evaluator("mmlu")
@@ -24,6 +24,11 @@ class MMLUEvaluator(BaseEvaluator):
         "subject": "geography"
     }
     """
+
+    evaluation_split = "test"
+    few_shot_split: str | None = "dev"
+    few_shot_policy = "same_subject_dev"
+    answer_protocol = "generated_text_choice"
 
     # MMLU subject classification
     SUBJECTS = {
@@ -109,68 +114,94 @@ class MMLUEvaluator(BaseEvaluator):
             max_samples=max_samples,
             seed=seed,
         )
-        random.seed(seed)
+        self.few_shot_split = "dev" if num_shots else None
+
+    @staticmethod
+    def normalize(rows: list[dict[str, Any]], split: str) -> list[dict[str, Any]]:
+        normalized = []
+        seen = set()
+        for index, row in enumerate(rows):
+            subject, question, choices, answer = (
+                row.get(key) for key in ("subject", "question", "choices", "answer")
+            )
+            if (
+                not isinstance(subject, str)
+                or not subject.strip()
+                or not isinstance(question, str)
+                or not question.strip()
+                or not isinstance(choices, list)
+                or len(choices) != 4
+                or any(not isinstance(choice, str) or not choice.strip() for choice in choices)
+            ):
+                raise DatasetUnavailableError(
+                    "MMLU requires subject, question and four nonempty choices"
+                )
+            if type(answer) is int and 0 <= answer < 4:
+                answer = "ABCD"[answer]
+            elif isinstance(answer, str) and answer in ("0", "1", "2", "3"):
+                answer = "ABCD"[int(answer)]
+            if answer not in tuple("ABCD"):
+                raise DatasetUnavailableError("MMLU requires a valid labeled answer")
+            raw_id = row.get("id", index)
+            if type(raw_id) not in (str, int) or not str(raw_id).strip():
+                raise DatasetUnavailableError("MMLU requires nonempty sample IDs")
+            identifier = f"{split}:{subject}:{raw_id}"
+            if identifier in seen:
+                raise DatasetUnavailableError("MMLU sample IDs must be unique per split/subject")
+            seen.add(identifier)
+            normalized.append({**row, "id": identifier, "choices": list(choices), "answer": answer})
+        return normalized
 
     def load_dataset(self, subset: str | None = None) -> list[dict[str, Any]]:
-        """Load MMLU dataset with subset filtering."""
-        try:
-            from core.dataset_manager import get_dataset
+        from core.dataset_manager import get_dataset
 
-            # Load "test" split via DatasetManager
-            all_samples = get_dataset(
-                name=self.dataset_name, split="test", max_samples=None, seed=self.seed
-            )
-
-            if subset and subset != "all":
-                subjects_to_keep = self.SUBJECTS.get(subset, [subset])
-
-                if all_samples:
-                    if "subject" in all_samples[0]:
-                        samples = [s for s in all_samples if s.get("subject") in subjects_to_keep]
-                    else:
-                        print("[WARNING] MMLU samples lack 'subject' field, cannot filter.")
-                        samples = all_samples
-                else:
-                    samples = []
-            else:
-                samples = all_samples
-
-        except Exception as e:
-            print(f"[WARNING] DatasetManager failed: {e}")
-            samples = []
-
-        # Fallback to sample data if empty
+        raw = get_dataset(name=self.dataset_name, split="test", max_samples=None, seed=self.seed)
+        self.dataset_source = "mmlu_test"
+        self.evaluation_split = "test"
+        if not raw:
+            raw = self._fallback_to_demo_samples(self._create_sample_data)
+            self.evaluation_split = "demo"
+        samples = self.normalize(raw, self.evaluation_split)
+        if subset and subset != "all":
+            subjects_to_keep = self.SUBJECTS.get(subset, [subset])
+            samples = [sample for sample in samples if sample["subject"] in subjects_to_keep]
         if not samples:
-            samples = self._fallback_to_demo_samples(self._create_sample_data)
+            raise DatasetUnavailableError("MMLU has no scoring samples for the selected subject")
+        random.Random(self.seed).shuffle(samples)
+        self.samples = samples[: self.max_samples] if self.max_samples is not None else samples
+        subjects = {sample["subject"] for sample in self.samples}
+        self.few_shot_split = "dev" if self.num_shots else None
+        self.few_shot_examples = (
+            self.normalize(get_dataset(name=self.dataset_name, split="dev"), "dev")
+            if self.num_shots
+            else []
+        )
+        self.few_shot_examples = [
+            example for example in self.few_shot_examples if example["subject"] in subjects
+        ]
+        self.validate_dev(self.samples, self.few_shot_examples, self.num_shots)
+        return self.samples
 
-        random.shuffle(samples)
+    @staticmethod
+    def validate_dev(samples, examples, num_shots):
+        for subject in {sample["subject"] for sample in samples}:
+            if sum(example["subject"] == subject for example in examples) < num_shots:
+                raise DatasetUnavailableError(
+                    "MMLU has insufficient same-subject dev examples; never borrow scoring rows"
+                )
+        scoring_content = {
+            (row["subject"], row["question"], tuple(row["choices"])) for row in samples
+        }
+        if any(
+            (row["subject"], row["question"], tuple(row["choices"])) in scoring_content
+            for row in examples
+        ):
+            raise DatasetUnavailableError("MMLU scoring/dev content overlaps")
 
-        # Set few-shot examples from dev set
-        if self.num_shots > 0:
-            dev_samples = self._load_dev_samples()
-            if dev_samples:
-                self.few_shot_examples = dev_samples[: self.num_shots]
-            else:
-                # Fallback: steal from test set
-                total_needed = self.num_shots + (self.max_samples or 0)
-                if len(samples) > total_needed:
-                    self.few_shot_examples = samples[: self.num_shots]
-                    samples = samples[self.num_shots :]
-
-        if self.max_samples and len(samples) > self.max_samples:
-            samples = samples[: self.max_samples]
-
-        self.samples = samples
-        return samples
-
-    def _load_dev_samples(self) -> list[dict[str, Any]]:
-        """Load development set for few-shot examples."""
-        try:
-            from core.dataset_manager import get_dataset
-
-            return get_dataset(name="mmlu", split="train")
-        except Exception:
-            return []
+    def _examples_for(self, sample):
+        return [
+            example for example in self.few_shot_examples if example["subject"] == sample["subject"]
+        ][: self.num_shots]
 
     def _create_sample_data(self) -> list[dict[str, Any]]:
         """Mock data for testing."""
@@ -200,7 +231,7 @@ class MMLUEvaluator(BaseEvaluator):
         )
         messages.append({"role": "system", "content": system_instruction})
 
-        for ex in self.few_shot_examples[: self.num_shots]:
+        for ex in self._examples_for(sample):
             messages.append(
                 {
                     "role": "user",
@@ -220,7 +251,7 @@ class MMLUEvaluator(BaseEvaluator):
     def format_prompt(self, sample: dict[str, Any], include_answer: bool = False) -> str:
         """Format MMLU question and choices."""
         question = sample.get("question", "")
-        choices = sample.get("choices", [])
+        choices = list(sample.get("choices", []))
 
         while len(choices) < 4:
             choices.append("")
@@ -253,7 +284,7 @@ class MMLUEvaluator(BaseEvaluator):
         instruction = f"The following are multiple choice questions (with answers) about {subject_display}.\n\n"
 
         examples = []
-        for example in self.few_shot_examples[: self.num_shots]:
+        for example in self._examples_for(sample):
             examples.append(self.format_prompt(example, include_answer=True))
 
         question = self.format_prompt(sample, include_answer=False)

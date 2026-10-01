@@ -719,6 +719,8 @@ class QualityEvaluator:
                 "seed": evaluator.seed,
                 "evaluation_split": getattr(evaluator, "evaluation_split", None),
                 "few_shot_split": getattr(evaluator, "few_shot_split", None),
+                "few_shot_policy": getattr(evaluator, "few_shot_policy", None),
+                "answer_protocol": getattr(evaluator, "answer_protocol", None),
                 "scoring_contract": current_scoring,
                 "sandbox_identity": current_sandbox,
             }, samples
@@ -940,6 +942,11 @@ class QualityEvaluator:
                 "sample_sha256": sample_hash,
                 "few_shot_count": len(evaluator.few_shot_examples),
                 "few_shot_sha256": fingerprint_samples(evaluator.few_shot_examples),
+                "few_shot_policy": getattr(evaluator, "few_shot_policy", None),
+                "few_shot_per_sample": evaluator.num_shots
+                if getattr(evaluator, "few_shot_policy", None) == "same_subject_dev"
+                else None,
+                "answer_protocol": getattr(evaluator, "answer_protocol", None),
                 "selection_seed": evaluator.seed,
                 "evaluation_split": getattr(evaluator, "evaluation_split", None),
                 "few_shot_split": getattr(evaluator, "few_shot_split", None),
