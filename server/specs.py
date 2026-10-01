@@ -493,6 +493,20 @@ class JobSubmission(StrictSpec):
 
 
 class PresetSubmission(JobSubmission):
+    tags: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("tags")
+    @classmethod
+    def clean_tags(cls, values: list[str]) -> list[str]:
+        result = []
+        for value in values:
+            tag = value.strip()
+            if not tag or len(tag) > 32 or any(ord(char) < 32 or ord(char) == 127 for char in tag):
+                raise ValueError("Tags must be nonempty text up to 32 characters")
+            if tag not in result:
+                result.append(tag)
+        return result
+
     name: str = Field(min_length=1, max_length=80)
     description: str = Field(default="", max_length=500)
 
@@ -573,3 +587,9 @@ def spec_catalog() -> dict[str, dict[str, Any]]:
                 pass
         items[test_type] = {"label": label, "schema": model.model_json_schema()}
     return items
+
+
+class PresetImport(StrictSpec):
+    format: Literal["llm-test-preset"]
+    version: Literal[1]
+    preset: PresetSubmission

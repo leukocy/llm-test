@@ -409,7 +409,7 @@ def test_presets_keep_description_and_upgrade_existing_database(tmp_path, monkey
     with sqlite3.connect(path) as conn:
         assert (
             conn.execute("SELECT value FROM db_meta WHERE key='schema_version'").fetchone()[0]
-            == "1.12.0"
+            == "1.13.0"
         )
         assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     monkeypatch.setenv("LAB_KEY", "synthetic-key")

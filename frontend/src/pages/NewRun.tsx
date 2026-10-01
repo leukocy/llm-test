@@ -1,3 +1,4 @@
+import { PresetTransfer } from "../components/PresetTransfer";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type Endpoint, type MeasurementPlan, type Preset } from "../api";
@@ -72,6 +73,8 @@ export function NewRun({
   const [presetId, setPresetId] = useState("");
   const [presetName, setPresetName] = useState("");
   const [presetDescription, setPresetDescription] = useState("");
+  const [presetTags, setPresetTags] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
   const [presetError, setPresetError] = useState("");
   const [presetBusy, setPresetBusy] = useState(false);
   const [plan, setPlan] = useState<MeasurementPlan | null>(null);
@@ -311,6 +314,10 @@ export function NewRun({
           body: JSON.stringify({
             name: presetName.trim(),
             description: presetDescription.trim(),
+            tags: presetTags
+              .split(",")
+              .map((tag) => tag.trim())
+              .filter(Boolean),
             schema_version: 1,
             endpoint_id: endpoint,
             test_type: type,
@@ -326,11 +333,33 @@ export function NewRun({
       setPresetId(saved.preset_id);
       setPresetName(saved.name);
       setPresetDescription(saved.description);
+      setPresetTags((saved.tags || []).join(", "));
     } catch (exc) {
       setPresetError(exc instanceof Error ? exc.message : "保存方案失败");
     } finally {
       setPresetBusy(false);
     }
+  }
+
+  function applyPreset(preset: Preset) {
+    if (
+      !scenarios.some((item) => item.id === preset.test_type) ||
+      !endpoints.some((item) => item.id === preset.endpoint_id)
+    ) {
+      setPresetError("方案引用的测试类型或端点已不可用");
+      return;
+    }
+    setPresetError("");
+    setPresetName(preset.name);
+    setPresetDescription(preset.description || "");
+    setEndpoint(preset.endpoint_id);
+    setType(preset.test_type as JobType);
+    setParams(preset.parameters);
+    setRaw(JSON.stringify(preset.parameters, null, 2));
+    setRunConfig({ ...knobDefaults, ...preset.run_config });
+    setProfile("custom");
+    setPresetId(preset.preset_id);
+    setPresetTags((preset.tags || []).join(", "));
   }
 
   async function deletePreset() {
@@ -347,6 +376,7 @@ export function NewRun({
       setPresetId("");
       setPresetName("");
       setPresetDescription("");
+      setPresetTags("");
     } catch (exc) {
       setPresetError(exc instanceof Error ? exc.message : "删除方案失败");
     } finally {
@@ -377,29 +407,15 @@ export function NewRun({
             value={presetId}
             onChange={(event) => {
               const id = event.target.value;
-              setPresetId(id);
               const preset = presets.find((item) => item.preset_id === id);
               if (!preset) {
+                setPresetId("");
                 setPresetName("");
                 setPresetDescription("");
+                setPresetTags("");
                 return;
               }
-              if (
-                !scenarios.some((item) => item.id === preset.test_type) ||
-                !endpoints.some((item) => item.id === preset.endpoint_id)
-              ) {
-                setPresetError("方案引用的测试类型或端点已不可用");
-                return;
-              }
-              setPresetError("");
-              setPresetName(preset.name);
-              setPresetDescription(preset.description || "");
-              setEndpoint(preset.endpoint_id);
-              setType(preset.test_type as JobType);
-              setParams(preset.parameters);
-              setRaw(JSON.stringify(preset.parameters, null, 2));
-              setRunConfig({ ...knobDefaults, ...preset.run_config });
-              setProfile("custom");
+              applyPreset(preset);
             }}
           >
             <option value="">选择已保存方案</option>
@@ -425,6 +441,18 @@ export function NewRun({
           </button>
           {presetId && (
             <>
+              <button
+                className="button subtle"
+                disabled={presetBusy}
+                onClick={() => {
+                  const saved = presets.find(
+                    (item) => item.preset_id === presetId,
+                  );
+                  if (saved) applyPreset(saved);
+                }}
+              >
+                应用方案
+              </button>
               <button
                 className="button subtle"
                 onClick={() => {
@@ -455,6 +483,55 @@ export function NewRun({
           maxLength={500}
           rows={2}
           placeholder="记录测量目的、适用模型或复测条件，最多 500 字符"
+        />
+        <label className="input-label">
+          标签（逗号分隔，最多 20 个）
+          <input
+            className="preset-description"
+            aria-label="方案标签"
+            value={presetTags}
+            maxLength={680}
+            onChange={(event) => setPresetTags(event.target.value)}
+          />
+        </label>
+        <details>
+          <summary>按标签浏览方案</summary>
+          <select
+            aria-label="方案标签筛选"
+            value={tagFilter}
+            onChange={(event) => setTagFilter(event.target.value)}
+          >
+            <option value="">全部标签</option>
+            {[...new Set(presets.flatMap((item) => item.tags || []))]
+              .sort()
+              .map((tag) => (
+                <option key={tag}>{tag}</option>
+              ))}
+          </select>
+          <div className="api-form-actions">
+            {presets
+              .filter((item) => !tagFilter || item.tags?.includes(tagFilter))
+              .map((item) => (
+                <button
+                  key={item.preset_id}
+                  className="button subtle"
+                  onClick={() => applyPreset(item)}
+                >
+                  {item.name}
+                </button>
+              ))}
+          </div>
+        </details>
+        <PresetTransfer
+          token={token}
+          presets={presets}
+          endpoints={endpoints}
+          onImported={(saved) =>
+            setPresets((current) => [
+              saved,
+              ...current.filter((item) => item.preset_id !== saved.preset_id),
+            ])
+          }
         />
         {presetError && (
           <p className="form-error" role="alert">

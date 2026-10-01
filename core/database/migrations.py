@@ -187,6 +187,7 @@ MIGRATIONS: dict[str, list[MigrationFunc]] = {
         _exec(CREATE_TOKENIZER_INSTALLS),
         _exec(CREATE_TOKENIZER_INSTALL_INDEX),
     ],
+    "1.13.0": [_add_column("control_presets", "tags_json", "TEXT NOT NULL DEFAULT '[]'")],
     "1.12.0": [
         _exec(CREATE_JOB_CHECKPOINTS),
         _exec(CREATE_CHECKPOINT_SCOPES),

@@ -4,7 +4,7 @@ Database Schema 定义
 包含所has表 SQL 定义andMigration语句。
 """
 
-SCHEMA_VERSION = "1.12.0"
+SCHEMA_VERSION = "1.13.0"
 
 CREATE_JOB_CHECKPOINTS = """
 CREATE TABLE IF NOT EXISTS job_checkpoints (
@@ -431,6 +431,7 @@ CREATE TABLE IF NOT EXISTS control_presets (
     test_type TEXT NOT NULL,
     parameters_json TEXT NOT NULL,
     run_config_json TEXT,
+    tags_json TEXT NOT NULL DEFAULT '[]',
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );

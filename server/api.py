@@ -62,6 +62,7 @@ from server.robustness_figures import sensitivity_svg
 from server.settings import Endpoint, Settings
 from server.specs import (
     JobSubmission,
+    PresetImport,
     PresetSubmission,
     QualitySpec,
     RunConfig,
@@ -582,6 +583,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             return store.save_preset(
                 name=body.name,
                 description=body.description,
+                tags=body.tags,
                 endpoint_id=body.endpoint_id,
                 test_type=body.test_type,
                 parameters=body.parameters,
@@ -592,6 +594,37 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         except PresetConflict as exc:
             raise HTTPException(409, str(exc)) from exc
 
+    @app.post("/api/v1/presets/import", dependencies=[auth], status_code=201)
+    def import_preset(body: PresetImport):
+        return create_preset(body.preset)
+
+    @app.get("/api/v1/presets/{preset_id}/export", dependencies=[auth])
+    def export_preset(preset_id: str):
+        try:
+            saved = store.get_preset(preset_id)
+        except PresetNotFound as exc:
+            raise HTTPException(404, "Preset not found") from exc
+        fields = (
+            "name",
+            "description",
+            "tags",
+            "endpoint_id",
+            "test_type",
+            "parameters",
+            "run_config",
+        )
+        try:
+            preset = PresetSubmission.model_validate({key: saved[key] for key in fields})
+        except ValueError as exc:
+            raise HTTPException(
+                422, "Saved preset is incompatible with the current schema"
+            ) from exc
+        return {
+            "format": "llm-test-preset",
+            "version": 1,
+            "preset": preset.model_dump(mode="json", exclude_none=True),
+        }
+
     @app.put("/api/v1/presets/{preset_id}", dependencies=[auth])
     def update_preset(preset_id: str, body: PresetSubmission):
         validate_preset_endpoint(body)
@@ -600,6 +633,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
                 preset_id=preset_id,
                 name=body.name,
                 description=body.description,
+                tags=body.tags,
                 endpoint_id=body.endpoint_id,
                 test_type=body.test_type,
                 parameters=body.parameters,

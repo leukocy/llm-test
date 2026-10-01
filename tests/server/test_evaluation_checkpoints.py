@@ -411,7 +411,7 @@ def test_schema_upgrade_preserves_jobs_and_checkpoint_foreign_keys(lab):
         assert not conn.execute("PRAGMA foreign_key_check").fetchall()
         assert (
             conn.execute("SELECT value FROM db_meta WHERE key='schema_version'").fetchone()[0]
-            == "1.12.0"
+            == "1.13.0"
         )
 
 

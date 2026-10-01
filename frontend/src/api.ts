@@ -9,6 +9,7 @@ export type Endpoint = {
   source: "managed" | "file";
 };
 export type Preset = {
+  tags: string[];
   preset_id: string;
   name: string;
   description: string;
