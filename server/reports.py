@@ -356,15 +356,21 @@ def render_quality_markdown(job: dict[str, Any], report: dict[str, Any]) -> str:
 
 def render_robustness_markdown(job: dict[str, Any], report: dict[str, Any]) -> str:
     robustness = report["robustness"]
+
+    def percent(value):
+        return "未评分" if value is None else f"{value * 100:.1f}%"
+
     lines = [
         f"# LLM Test 鲁棒性报告 · {_md(job['model_id'])}",
         "",
         f"- 作业 ID：`{_md(job['job_id'])}`",
-        f"- 原始准确率：{float(robustness.get('original_accuracy') or 0) * 100:.1f}%",
-        f"- 扰动后准确率：{float(robustness.get('perturbed_accuracy') or 0) * 100:.1f}%",
+        f"- 原始准确率：{percent(robustness.get('original_accuracy'))}",
+        f"- 扰动后准确率：{percent(robustness.get('perturbed_accuracy'))}",
         f"- 指标契约：{_md(robustness.get('metric_contract_version') or '未记录，可能使用旧公式；对比前请重新评测')}",
-        f"- 总体鲁棒性：{float(robustness.get('overall_robustness') or 0):.3f}",
+        f"- 总体鲁棒性：{percent(robustness.get('overall_robustness'))}",
         "",
+        f"- 评分样本：{robustness.get('scored_samples', '未记录')}；未评分：{robustness.get('unscored_samples', '未记录')}；评分扰动：{robustness.get('scored_perturbations', '未记录')}；文本未改变：{robustness.get('unchanged_perturbations', '未记录')}",
+        "缺少标准答案不计入准确率；一致性包含全部完成样本。未改变文本的扰动保留在统计中，不能证明抗扰动能力；同一样本的扰动并非独立观测。",
         "| 扰动类型 | 错误率（越高越敏感） |",
         "|---|---:|",
     ]

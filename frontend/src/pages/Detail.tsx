@@ -164,18 +164,22 @@ export function Detail({
     robustness: {
       total_samples: number;
       perturbations_per_sample: number;
-      original_accuracy: number;
-      perturbed_accuracy: number;
-      accuracy_drop: number;
-      overall_robustness: number;
+      original_accuracy: number | null;
+      perturbed_accuracy: number | null;
+      accuracy_drop: number | null;
+      overall_robustness: number | null;
       overall_consistency: number;
       sensitivity_by_type: Record<string, number>;
+      scored_samples?: number;
+      unscored_samples?: number;
+      scored_perturbations?: number;
+      unchanged_perturbations?: number;
       metric_contract_version?: string;
       most_sensitive_perturbation: string;
       results: {
         sample_id: string;
-        original_correct: boolean;
-        robustness_score: number;
+        original_correct: boolean | null;
+        robustness_score: number | null;
         consistency_score: number;
         perturbed_results: { type?: string; correct?: boolean }[];
       }[];
@@ -1083,7 +1087,7 @@ export function Detail({
           }}
         />
       )}
-      {!summary && !quality && (
+      {!summary && !quality && !robustness && (
         <section className="surface">
           <Empty
             title={
@@ -1134,6 +1138,14 @@ export function Detail({
               note="扰动后答案一致比例"
             />
           </div>
+          <p className="chart-caption">
+            评分样本 {robustness.robustness.scored_samples ?? "未记录"} · 未评分{" "}
+            {robustness.robustness.unscored_samples ?? "未记录"} · 评分扰动{" "}
+            {robustness.robustness.scored_perturbations ?? "未记录"} ·
+            文本未改变{" "}
+            {robustness.robustness.unchanged_perturbations ?? "未记录"}。
+            缺少标准答案不计入准确率；一致性包含全部完成样本。未改变文本的扰动保留在统计中，不能证明抗扰动能力；同一样本的扰动并非独立观测。
+          </p>
           {!robustness.robustness.metric_contract_version && (
             <p className="alert">
               历史报告未记录准确率统计契约，扰动后准确率可能使用旧公式；对比前请重新评测。
@@ -1185,10 +1197,18 @@ export function Detail({
                     <td>#{row.sample_id}</td>
                     <td
                       className={
-                        row.original_correct ? "text-good" : "text-danger"
+                        row.original_correct === null
+                          ? ""
+                          : row.original_correct
+                            ? "text-good"
+                            : "text-danger"
                       }
                     >
-                      {row.original_correct ? "正确" : "错误"}
+                      {row.original_correct === null
+                        ? "未评分"
+                        : row.original_correct
+                          ? "正确"
+                          : "错误"}
                     </td>
                     <td>{formatPercent(row.robustness_score)}</td>
                     <td>{formatPercent(row.consistency_score)}</td>

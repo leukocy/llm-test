@@ -52,13 +52,13 @@ class RobustnessResult:
 
     # 原始Result
     original_answer: str = ""
-    original_correct: bool = False
+    original_correct: bool | None = None
 
     # 扰动Result
     perturbed_results: list[dict[str, Any]] = field(default_factory=list)
 
     # 鲁棒性指标
-    robustness_score: float = 0.0  # 扰动后保持正确比例
+    robustness_score: float | None = None  # 扰动后保持正确比例
     consistency_score: float = 0.0  # 扰动后Answer一致比例
     sensitivity_by_type: dict[str, float] = field(default_factory=dict)
 
@@ -71,14 +71,19 @@ class RobustnessReport:
     total_samples: int
     perturbations_per_sample: int
     perturbation_generator_version: str = PERTURBATION_GENERATOR_VERSION
-    metric_contract_version: str = "robustness-accuracy-v2"
+    metric_contract_version: str = "robustness-accuracy-v3"
+
+    scored_samples: int = 0
+    unscored_samples: int = 0
+    scored_perturbations: int = 0
+    unchanged_perturbations: int = 0
 
     # 总体指标
-    original_accuracy: float = 0.0
-    perturbed_accuracy: float = 0.0
-    accuracy_drop: float = 0.0
+    original_accuracy: float | None = None
+    perturbed_accuracy: float | None = None
+    accuracy_drop: float | None = None
 
-    overall_robustness: float = 0.0
+    overall_robustness: float | None = None
     overall_consistency: float = 0.0
 
     # 按扰动类型敏感性
@@ -400,7 +405,11 @@ class RobustnessTester:
         try:
             original_response = await get_response_func(question)
             result.original_answer = self._extract_answer(original_response, answer_parser)
-            result.original_correct = self._check_answer(result.original_answer, correct_answer)
+            result.original_correct = (
+                self._check_answer(result.original_answer, correct_answer)
+                if correct_answer.strip()
+                else None
+            )
         except Exception as e:
             raise ProviderRequestError(f"Provider request failed: {e}") from e
 
@@ -422,7 +431,9 @@ class RobustnessTester:
             try:
                 response = await get_response_func(perturbed.perturbed_question)
                 answer = self._extract_answer(response, answer_parser)
-                is_correct = self._check_answer(answer, correct_answer)
+                is_correct = (
+                    self._check_answer(answer, correct_answer) if correct_answer.strip() else None
+                )
                 is_consistent = answer == result.original_answer
 
                 result.perturbed_results.append(
@@ -433,10 +444,12 @@ class RobustnessTester:
                         "answer": answer,
                         "is_correct": is_correct,
                         "is_consistent": is_consistent,
+                        "text_changed": perturbed.perturbed_question != question,
                     }
                 )
 
-                type_results[ptype.value].append(is_correct)
+                if is_correct is not None:
+                    type_results[ptype.value].append(is_correct)
 
                 if is_consistent:
                     consistent_count += 1
@@ -448,7 +461,11 @@ class RobustnessTester:
 
         # 3. Calculated metrics
         if self.perturbation_types:
-            result.robustness_score = correct_after_perturbation / len(self.perturbation_types)
+            result.robustness_score = (
+                correct_after_perturbation / len(self.perturbation_types)
+                if correct_answer.strip()
+                else None
+            )
             result.consistency_score = consistent_count / len(self.perturbation_types)
 
         # 按类型敏感性
@@ -567,25 +584,31 @@ class RobustnessTester:
         if not report.results:
             return
 
-        # 原始Accuracy
-        original_correct = sum(1 for r in report.results if r.original_correct)
-        report.original_accuracy = original_correct / len(report.results)
-
-        # 扰动后Average指标
-        robustness_scores = [r.robustness_score for r in report.results]
-        consistency_scores = [r.consistency_score for r in report.results]
-
-        report.overall_robustness = sum(robustness_scores) / len(robustness_scores)
-        report.overall_consistency = sum(consistency_scores) / len(consistency_scores)
-
-        # 扰动后Accuracy
-        perturbations = [p for result in report.results for p in result.perturbed_results]
-        report.perturbed_accuracy = (
-            sum(bool(p.get("is_correct")) for p in perturbations) / len(perturbations)
-            if perturbations
-            else 0.0
+        scored = [r for r in report.results if r.original_correct is not None]
+        report.scored_samples = len(scored)
+        report.unscored_samples = len(report.results) - len(scored)
+        report.original_accuracy = (
+            sum(r.original_correct is True for r in scored) / len(scored) if scored else None
         )
-        report.accuracy_drop = report.original_accuracy - report.perturbed_accuracy
+        scores = [r.robustness_score for r in scored if r.robustness_score is not None]
+        report.overall_robustness = sum(scores) / len(scores) if scores else None
+        report.overall_consistency = sum(r.consistency_score for r in report.results) / len(
+            report.results
+        )
+        perturbations = [p for r in report.results for p in r.perturbed_results]
+        scored_perturbations = [p for p in perturbations if isinstance(p.get("is_correct"), bool)]
+        report.scored_perturbations = len(scored_perturbations)
+        report.unchanged_perturbations = sum(p.get("text_changed") is False for p in perturbations)
+        report.perturbed_accuracy = (
+            sum(p["is_correct"] is True for p in scored_perturbations) / len(scored_perturbations)
+            if scored_perturbations
+            else None
+        )
+        report.accuracy_drop = (
+            report.original_accuracy - report.perturbed_accuracy
+            if report.original_accuracy is not None and report.perturbed_accuracy is not None
+            else None
+        )
 
         # 按类型敏感性
         type_sensitivity: dict[str, list[float]] = {}
@@ -611,7 +634,7 @@ class RobustnessTester:
         """Generate改进Suggestion"""
         recommendations = []
 
-        if report.accuracy_drop > 0.1:
+        if report.accuracy_drop is not None and report.accuracy_drop > 0.1:
             recommendations.append(
                 f"Accuracyin扰动后under降 {report.accuracy_drop * 100:.1f}%，Model鲁棒性need改进"
             )
@@ -628,7 +651,15 @@ class RobustnessTester:
                     f"Model对 {report.most_sensitive_perturbation} 类型扰动最敏感 ({sens * 100:.0f}%)"
                 )
 
+        if report.unscored_samples:
+            recommendations.append(
+                f"{report.unscored_samples} 条样本缺少标准答案，仅统计一致性，不计入准确率。"
+            )
+        if report.unchanged_perturbations:
+            recommendations.append(
+                f"{report.unchanged_perturbations} 次扰动未改变文本，不能据此证明抗扰动能力。"
+            )
         if not recommendations:
-            recommendations.append("Model鲁棒性表现Good")
+            recommendations.append("本次样本未触发上述提示，不代表已证明模型鲁棒性。")
 
         return recommendations

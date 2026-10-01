@@ -1574,6 +1574,13 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
 
         rob = payload["robustness"]
         esc = _html.escape
+
+        def percent(value):
+            return "未评分" if value is None else f"{value:.1%}"
+
+        def score(value):
+            return "未评分" if value is None else f"{value:.2f}"
+
         rows = "".join(
             f"<tr><td>{esc(name)}</td><td>{value:.2f}</td></tr>"
             for name, value in (rob.get("sensitivity_by_type") or {}).items()
@@ -1581,8 +1588,8 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
         sample_rows = "".join(
             "<tr>"
             f"<td>{esc(str(r.get('sample_id', '')))}</td>"
-            f"<td>{'✓' if r.get('original_correct') else '✗'}</td>"
-            f"<td>{r.get('robustness_score', 0):.2f}</td>"
+            f"<td>{'未评分' if r.get('original_correct') is None else ('✓' if r.get('original_correct') else '✗')}</td>"
+            f"<td>{score(r.get('robustness_score'))}</td>"
             f"<td>{r.get('consistency_score', 0):.2f}</td>"
             "</tr>"
             for r in (rob.get("results") or [])
@@ -1595,12 +1602,14 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
 {checkpoint_html(payload)}
 {report_environment_html(payload.get("report_environment"))}
 <p>作业 <code>{esc(job["job_id"])}</code> · {rob.get("total_samples", 0)} 样本 × {rob.get("perturbations_per_sample", 0)} 扰动</p>
-<div class="card">原始准确率<br><strong>{rob.get("original_accuracy", 0):.1%}</strong></div>
-<div class="card">扰动后准确率<br><strong>{rob.get("perturbed_accuracy", 0):.1%}</strong></div>
-<div class="card">准确率落差<br><strong>{rob.get("accuracy_drop", 0):.1%}</strong></div>
-<div class="card">鲁棒性<br><strong>{rob.get("overall_robustness", 0):.1%}</strong></div>
+<div class="card">原始准确率<br><strong>{percent(rob.get("original_accuracy"))}</strong></div>
+<div class="card">扰动后准确率<br><strong>{percent(rob.get("perturbed_accuracy"))}</strong></div>
+<div class="card">准确率落差<br><strong>{percent(rob.get("accuracy_drop"))}</strong></div>
+<div class="card">鲁棒性<br><strong>{percent(rob.get("overall_robustness"))}</strong></div>
 <div class="card">一致性<br><strong>{rob.get("overall_consistency", 0):.1%}</strong></div>
 <p>指标契约：{esc(str(rob.get("metric_contract_version") or "未记录，可能使用旧公式；对比前请重新评测"))}</p>
+<p>评分样本：{rob.get("scored_samples", "未记录")} · 未评分：{rob.get("unscored_samples", "未记录")} · 评分扰动：{rob.get("scored_perturbations", "未记录")} · 文本未改变：{rob.get("unchanged_perturbations", "未记录")}</p>
+<p>缺少标准答案不计入准确率；一致性包含全部完成样本。未改变文本的扰动保留在统计中，不能证明抗扰动能力；同一样本的扰动并非独立观测。</p>
 <h2>按扰动类型错误率（越高越敏感）</h2>
 <table><tr><th>扰动类型</th><th>错误率</th></tr>{rows}</table>
 <h2>逐样本</h2>
