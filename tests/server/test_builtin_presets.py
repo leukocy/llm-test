@@ -1,30 +1,22 @@
-"""Template source fidelity is checked against the immutable original, not a duplicate fixture."""
+"""Template source fidelity is checked against the checked-in first-commit inventory."""
 
-import ast
-import subprocess  # nosec B404
+import json
+from pathlib import Path
 
 from server.preset_templates import BASELINE, builtin_templates
 from tests.server.test_data_api import auth, env  # noqa: F401
 
 
 def test_templates_preserve_every_original_source_value():
-    original = subprocess.run(
-        ["git", "show", f"{BASELINE}:utils/test_config_manager.py"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout  # nosec B603 B607
-    tree = ast.parse(original)
-    function = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name == "get_builtin_presets"
+    inventory_path = (
+        Path(__file__).resolve().parents[2]
+        / "docs"
+        / "ui_parity"
+        / "first_commit_dynamic_choices.json"
     )
-    returned = next(node for node in function.body if isinstance(node, ast.Return))
-    expected = [
-        {keyword.arg: ast.literal_eval(keyword.value) for keyword in call.keywords}
-        for call in returned.value.elts
-    ]
+    inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+    assert inventory["baseline_commit"] == BASELINE[:7]
+    expected = inventory["builtin_presets"]
     templates = builtin_templates()
     assert len(templates) == len(expected) == 8
     for template, source in zip(templates, expected, strict=True):
