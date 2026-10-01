@@ -16,6 +16,8 @@
 | [`first_commit_dynamic_choices.json`](first_commit_dynamic_choices.json) | 从首次提交源码展开的服务商、模型、Tokenizer、测试类型、数据集组、分段策略、扰动类型与日志级别 | — |
 | [`first_commit_outputs.csv`](first_commit_outputs.csv) | 每个图表、表格、指标、代码/JSON 输出调用点一行 | 202 |
 | [`first_commit_html_actions.csv`](first_commit_html_actions.csv) | `st.*` 控件之外的 HTML 下载/帮助链接 | 12 |
+| [`acceptance.csv`](acceptance.csv) | 511 个原始 ID 的逐项验收状态、候选入口、验收条件和冻结运行证据 | 511 |
+| [`check_acceptance.py`](check_acceptance.py) | 核验 ID 覆盖、证据指纹、被测提交与实现文件的新鲜度；不执行模型或部署 | — |
 | [`extract_legacy_controls.py`](extract_legacy_controls.py) | 从上述固定提交重新生成四份机器可读文件 | — |
 
 运行 `python docs/ui_parity/extract_legacy_controls.py` 可重新生成账本。所有 CSV
@@ -448,3 +450,20 @@ Custom Text Test、All Tests、Stability Test、Batch Test。若对应模块能�
 - 三项诊断/执行检查点测试通过，相关工具、报告和恢复测试此前 95 项通过；189 个 Python 文件类型检查与前端构建通过。四项隔离浏览器验收覆盖共同样本与不同分母、真实 PNG、同源导出、移动端、缺参考/有参考的离线工具。证据在 `~/llm-perf/evaluation/reasoning-dimensions-2026-10-02/`。
 - 一次本地全量回归：1676 passed / 4 skipped（272.50 秒）；跳过项为真实 Judge 凭证与三项 Docker 沙箱集成，未视为已验证。未推送、远程 CI 或部署。
 - 本批只证明上述图形与诊断链路，不宣称启发式分数达到外部校准标准。其他评测器分区/示例策略、资源政策、全部控件/输出逐项证据与集成发布门禁仍未完成。
+
+## 逐项验收台账（2026-10-02）
+
+`acceptance.csv` 对控件、输出及 HTML 操作的所有 511 个原始 ID 一一建行，保留原始来源和当时可达性。候选页面/源码只是后续核验入口，不证明对应项已实现。`pending` 表示尚未完成逐项核验；`gap` 表示已识别的实现缺口；`verified` 仅证明该行列出的验收条件，不替代全项目完成审计。原始完整选项/默认值/边界仍以原始 CSV 与动态选项 JSON 为准。
+
+首次台账：502 pending、7 verified、2 gap。**502 项待核验不等于 502 项未实现**；已实现的其他模块还需把运行证据对应到具体 ID。IC-0089～IC-0091 和 IO-0053～IO-0056 绑定当前被测提交与对应浏览器检查；本轮重跑逐样本浏览器验收以确认最新代码下仍成立。IO-0199/IO-0200 是延迟仪表图与思考/答案 Token 分布图，当前尚缺对应展示，列为下一批实现项。
+
+每个已验证项记录项目外 JSON 证据路径、所需检查列表、证据 SHA-256 和被测提交。工具拒绝遗漏/重复/未知 ID、来源篡改、缺失或被替换的证据；实现文件在被测提交后变化时标记证据过期。它只核验台账一致性和证据新鲜度，验收条件是否覆盖原版全部行为仍须逐项审核；动态选项、实际测量科学性和发布集成门禁也仍属于总体目标，不能用此工具替代。
+
+```bash
+python docs/ui_parity/check_acceptance.py
+python docs/ui_parity/check_acceptance.py --require-complete
+```
+
+证据默认在 `~/llm-perf/evaluation/`，可用 `--evidence-root` 指定已归档证据目录。第一条核验台账结构与证据；第二条要求全部 ID 均有有效且未过期的证据，当前预期退出 1。未知、缺失或过期项不能被绿灯吞掉。导出的审计 JSON 应保存在项目外，例如使用 `--output ~/llm-perf/evaluation/parity-ledger-2026-10-02/audit.json`。
+
+本轮 7 项验收门禁测试通过，最新代码下五项逐样本浏览器验收通过。完整台账校验无遗漏、重复、未知 ID 或过期证据，但 `all_verified=false`；完成门禁明确失败。未改运行引擎或页面、未重复全量测试/构建、未推送、远程 CI 或部署。
