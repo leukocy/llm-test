@@ -58,6 +58,7 @@ from server.reports import (
     render_robustness_markdown,
     report_environment_html,
 )
+from server.robustness_figures import sensitivity_svg
 from server.settings import Endpoint, Settings
 from server.specs import (
     JobSubmission,
@@ -1611,6 +1612,7 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
 <p>评分样本：{rob.get("scored_samples", "未记录")} · 未评分：{rob.get("unscored_samples", "未记录")} · 评分扰动：{rob.get("scored_perturbations", "未记录")} · 文本未改变：{rob.get("unchanged_perturbations", "未记录")}</p>
 <p>缺少标准答案不计入准确率；一致性包含全部完成样本。未改变文本的扰动保留在统计中，不能证明抗扰动能力；同一样本的扰动并非独立观测。</p>
 <h2>按扰动类型错误率（越高越敏感）</h2>
+{sensitivity_svg(rob.get("sensitivity_by_type") or {})}
 <table><tr><th>扰动类型</th><th>错误率</th></tr>{rows}</table>
 <h2>逐样本</h2>
 <table><tr><th>样本</th><th>原始正确</th><th>鲁棒性</th><th>一致性</th></tr>{sample_rows}</table>

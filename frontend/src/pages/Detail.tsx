@@ -1,3 +1,4 @@
+import { RobustnessSensitivity } from "../components/RobustnessSensitivity";
 import { useEffect, useRef, useState } from "react";
 import type { Figure } from "plotly.js-dist-min";
 import {
@@ -1151,6 +1152,9 @@ export function Detail({
               历史报告未记录准确率统计契约，扰动后准确率可能使用旧公式；对比前请重新评测。
             </p>
           )}
+          <RobustnessSensitivity
+            sensitivity={robustness.robustness.sensitivity_by_type}
+          />
           {Object.keys(robustness.robustness.sensitivity_by_type).length >
             0 && (
             <div className="table-scroll">
