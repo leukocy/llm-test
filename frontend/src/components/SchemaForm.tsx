@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fieldLabels } from "../constants";
 
 /** 后端 pydantic JSON Schema 的最小可用子集。 */
@@ -17,6 +17,7 @@ export type JsonSchema = {
   items?: JsonSchema;
   properties?: Record<string, JsonSchema>;
   required?: string[];
+  "x-presets"?: number[];
 };
 
 type FieldDef = {
@@ -93,12 +94,14 @@ function ListField({
   const display = Array.isArray(value) ? value.join(", ") : "";
   const [text, setText] = useState(display);
   const [invalid, setInvalid] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const choices = numeric ? numericChoices[def.name] || [] : [];
+  const focused = useRef(false);
+  const choices = numeric
+    ? def.schema["x-presets"] || numericChoices[def.name] || []
+    : [];
   const selected = Array.isArray(value) ? value.map(Number) : [];
   useEffect(() => {
-    if (!focused) setText(Array.isArray(value) ? value.join(", ") : "");
-  }, [value, focused]);
+    if (!focused.current) setText(Array.isArray(value) ? value.join(", ") : "");
+  }, [value]);
 
   function commit(raw: string) {
     setText(raw);
@@ -132,8 +135,12 @@ function ListField({
         className={invalid ? "input-invalid" : ""}
         value={text}
         placeholder="逗号分隔，如 1, 4, 8"
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        onFocus={() => {
+          focused.current = true;
+        }}
+        onBlur={() => {
+          focused.current = false;
+        }}
         onChange={(event) => commit(event.target.value)}
         aria-label={def.name}
       />

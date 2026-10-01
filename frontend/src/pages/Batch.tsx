@@ -158,13 +158,15 @@ export function Batch({
         warmup_rounds_per_level: 0,
       }),
       makeItem("prefill", {
-        token_levels: [4096, 8192],
+        token_levels: [20000, 40000],
         requests_per_level: 1,
         max_tokens: 1,
         warmup_requests_per_level: 0,
       }),
       makeItem("long_context", {
-        context_lengths: [4096, 8192, 16384, 32768, 65536],
+        context_lengths: [
+          4096, 8192, 16384, 32768, 65536, 130000, 260000, 520000, 1000000,
+        ],
         rounds_per_level: 1,
         max_tokens: 512,
       }),
@@ -390,7 +392,8 @@ export function Batch({
         </div>
         <p>
           对应初版 All Tests 的三阶段顺序。Prefill 默认只生成 1 token
-          以隔离输入处理；上下文长度遵守当前 131,072 token 上限，可在下方调整。
+          以隔离输入处理，输入长度为 20,000 / 40,000；长上下文包含初版全部九档，
+          最高 1,000,000 token。下方可逐项调整并核对请求计划。
         </p>
       </section>
       <section className="surface">

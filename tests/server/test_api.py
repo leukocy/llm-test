@@ -73,7 +73,7 @@ def test_run_spec_rejects_unbounded_and_unknown_parameters():
             endpoint_id="lab",
             test_type="concurrency",
             parameters={
-                "selected_concurrencies": [128],
+                "selected_concurrencies": [1025],
                 "rounds_per_level": 20,
                 "max_tokens": 1024,
             },
@@ -107,13 +107,13 @@ def test_measurement_plan_counts_warmup_separately_and_enforces_total_budget():
     assert plan["warmup_requests"] == 5
     assert [cell["measured_requests"] for cell in plan["cells"]] == [3, 12]
 
-    with pytest.raises(ValueError, match="1000 requests"):
+    with pytest.raises(ValueError, match="100000 requests"):
         JobSubmission(
             endpoint_id="lab",
             test_type="matrix",
             parameters={
-                "concurrencies": [50],
-                "context_lengths": [512],
+                "concurrencies": [1024],
+                "context_lengths": [512, 1024, 2048, 4096, 8192],
                 "rounds": 20,
                 "max_tokens": 32,
                 "enable_warmup": True,

@@ -619,7 +619,8 @@ export function NewRun({
           {profile === "original" && (
             <p className="profile-note">
               已载入首次提交的默认参数。单样本配置用于复现操作，正式性能对比应增加样本与预热；可选值仍遵守当前
-              128 并发 / 131,072 输入 token 上限。
+              1,024 并发 / 1,000,000 输入 token 上限。有限测量单作业最多 100,000
+              次请求（含预热），执行前请查看计划请求数。
             </p>
           )}
           {mode === "form" && type === "segmented_prefill" && (
@@ -841,6 +842,17 @@ export function NewRun({
                     <span>总请求预算</span>
                   </div>
                 </div>
+                {plan.cells.length > 0 && (
+                  <p className="chart-caption">
+                    配置输入目标累计：
+                    {plan.configured_input_token_volume?.toLocaleString() ??
+                      "未设定"}{" "}
+                    token · 最大输出预算：
+                    {plan.maximum_output_token_volume?.toLocaleString() ??
+                      "未计算"}{" "}
+                    token。 均包含预热，仅按配置计算，不是实测用量或账单。
+                  </p>
+                )}
                 {plan.cells.length > 0 && (
                   <div className="plan-cells">
                     {plan.cells.map((cell) => (

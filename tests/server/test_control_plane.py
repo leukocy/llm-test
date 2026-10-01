@@ -162,7 +162,7 @@ def test_api_auth_validation_and_report_boundary(client: TestClient):
         == "cancelled"
     )
 
-    invalid = {**body, "parameters": {**PARAMS, "selected_concurrencies": [500]}}
+    invalid = {**body, "parameters": {**PARAMS, "selected_concurrencies": [1025]}}
     assert client.post(path, json=invalid, headers=headers).status_code == 422
     assert (
         client.post(path, json={**body, "endpoint_id": "unlisted"}, headers=headers).status_code

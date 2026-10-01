@@ -14,17 +14,21 @@ class StrictSpec(BaseModel):
 
 
 class ConcurrencySpec(StrictSpec):
-    selected_concurrencies: list[int] = Field(min_length=1, max_length=8)
+    selected_concurrencies: list[int] = Field(
+        min_length=1,
+        max_length=16,
+        json_schema_extra={"x-presets": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]},
+    )
     rounds_per_level: int = Field(ge=1, le=20)
     max_tokens: int = Field(ge=1, le=8192)
-    input_tokens_target: int = Field(default=0, ge=0, le=131072)
+    input_tokens_target: int = Field(default=0, ge=0, le=1000000)
     warmup_rounds_per_level: int = Field(default=0, ge=0, le=3)
 
     @field_validator("selected_concurrencies")
     @classmethod
     def concurrency_levels(cls, value: list[int]) -> list[int]:
-        if any(level < 1 or level > 128 for level in value) or len(set(value)) != len(value):
-            raise ValueError("Concurrency levels must be unique and between 1 and 128")
+        if any(level < 1 or level > 1024 for level in value) or len(set(value)) != len(value):
+            raise ValueError("Concurrency levels must be unique and between 1 and 1024")
         return value
 
     @model_validator(mode="after")
@@ -32,14 +36,32 @@ class ConcurrencySpec(StrictSpec):
         if (
             sum(self.selected_concurrencies)
             * (self.rounds_per_level + self.warmup_rounds_per_level)
-            > 1000
+            > 100000
         ):
-            raise ValueError("A job may issue at most 1000 requests")
+            raise ValueError("A job may issue at most 100000 requests")
         return self
 
 
 class PrefillSpec(StrictSpec):
-    token_levels: list[int] = Field(min_length=1, max_length=12)
+    token_levels: list[int] = Field(
+        min_length=1,
+        max_length=12,
+        json_schema_extra={
+            "x-presets": [
+                1024,
+                2048,
+                4096,
+                8192,
+                16384,
+                32768,
+                65536,
+                130000,
+                260000,
+                520000,
+                1000000,
+            ]
+        },
+    )
     requests_per_level: int = Field(ge=1, le=50)
     max_tokens: int = Field(ge=1, le=8192)
     warmup_requests_per_level: int = Field(default=0, ge=0, le=5)
@@ -47,17 +69,17 @@ class PrefillSpec(StrictSpec):
     @field_validator("token_levels")
     @classmethod
     def tokens(cls, value: list[int]) -> list[int]:
-        if any(level < 1 or level > 131072 for level in value) or len(set(value)) != len(value):
-            raise ValueError("Token levels must be unique and between 1 and 131072")
+        if any(level < 1 or level > 1000000 for level in value) or len(set(value)) != len(value):
+            raise ValueError("Token levels must be unique and between 1 and 1000000")
         return value
 
     @model_validator(mode="after")
     def request_budget(self) -> PrefillSpec:
         if (
             len(self.token_levels) * (self.requests_per_level + self.warmup_requests_per_level)
-            > 1000
+            > 100000
         ):
-            raise ValueError("A job may issue at most 1000 requests")
+            raise ValueError("A job may issue at most 100000 requests")
         return self
 
 
@@ -68,71 +90,101 @@ class SegmentedPrefillSpec(StrictSpec):
     cumulative_mode: bool = True
     total_rounds: int = Field(default=1, ge=1, le=20)
     per_round_unique: bool = False
-    concurrency: int = Field(default=1, ge=1, le=128)
+    concurrency: int = Field(default=1, ge=1, le=1024)
 
     @field_validator("segment_levels")
     @classmethod
     def tokens(cls, value: list[int]) -> list[int]:
-        if any(level < 1 or level > 131072 for level in value):
-            raise ValueError("Segment levels must be between 1 and 131072")
+        if any(level < 1 or level > 1000000 for level in value):
+            raise ValueError("Segment levels must be between 1 and 1000000")
         return value
 
     @model_validator(mode="after")
     def request_budget(self) -> SegmentedPrefillSpec:
-        if len(self.segment_levels) * self.requests_per_segment * self.total_rounds > 1000:
-            raise ValueError("A job may issue at most 1000 requests")
+        if len(self.segment_levels) * self.requests_per_segment * self.total_rounds > 100000:
+            raise ValueError("A job may issue at most 100000 requests")
         return self
 
 
 class LongContextSpec(StrictSpec):
-    context_lengths: list[int] = Field(min_length=1, max_length=12)
+    context_lengths: list[int] = Field(
+        min_length=1,
+        max_length=12,
+        json_schema_extra={
+            "x-presets": [
+                1024,
+                2048,
+                4096,
+                8192,
+                16384,
+                32768,
+                65536,
+                130000,
+                260000,
+                520000,
+                1000000,
+            ]
+        },
+    )
     rounds_per_level: int = Field(ge=1, le=20)
     max_tokens: int = Field(ge=1, le=8192)
 
     @field_validator("context_lengths")
     @classmethod
     def lengths(cls, value: list[int]) -> list[int]:
-        if any(level < 1 or level > 131072 for level in value):
-            raise ValueError("Context length must be between 1 and 131072")
+        if any(level < 1 or level > 1000000 for level in value):
+            raise ValueError("Context length must be between 1 and 1000000")
         return value
 
 
 class MatrixSpec(StrictSpec):
-    concurrencies: list[int] = Field(min_length=1, max_length=8)
-    context_lengths: list[int] = Field(min_length=1, max_length=8)
+    concurrencies: list[int] = Field(
+        min_length=1,
+        max_length=16,
+        json_schema_extra={"x-presets": [1, 2, 4, 8, 16, 64, 128, 256, 512, 1024]},
+    )
+    context_lengths: list[int] = Field(
+        min_length=1,
+        max_length=16,
+        json_schema_extra={
+            "x-presets": [1024, 2048, 4096, 8192, 16384, 32768, 65536, 260000, 520000, 1000000]
+        },
+    )
     rounds: int = Field(ge=1, le=20)
     max_tokens: int = Field(ge=1, le=8192)
     enable_warmup: bool = False
 
     @model_validator(mode="after")
     def request_budget(self) -> MatrixSpec:
-        if any(c < 1 or c > 128 for c in self.concurrencies) or len(set(self.concurrencies)) != len(
-            self.concurrencies
-        ):
-            raise ValueError("Concurrency levels must be unique and between 1 and 128")
-        if any(length < 1 or length > 131072 for length in self.context_lengths) or len(
+        if any(c < 1 or c > 1024 for c in self.concurrencies) or len(
+            set(self.concurrencies)
+        ) != len(self.concurrencies):
+            raise ValueError("Concurrency levels must be unique and between 1 and 1024")
+        if any(length < 1 or length > 1000000 for length in self.context_lengths) or len(
             set(self.context_lengths)
         ) != len(self.context_lengths):
-            raise ValueError("Context lengths must be unique and between 1 and 131072")
+            raise ValueError("Context lengths must be unique and between 1 and 1000000")
         if (
             sum(self.concurrencies)
             * len(self.context_lengths)
             * (self.rounds + int(self.enable_warmup))
-            > 1000
+            > 100000
         ):
-            raise ValueError("A job may issue at most 1000 requests")
+            raise ValueError("A job may issue at most 100000 requests")
         return self
 
 
 class StabilitySpec(StrictSpec):
-    concurrency: int = Field(ge=1, le=128)
+    concurrency: int = Field(ge=1, le=1024)
     duration_seconds: int = Field(ge=5, le=3600)
     max_tokens: int = Field(ge=1, le=8192)
-    input_tokens_target: int = Field(default=0, ge=0, le=131072)
+    input_tokens_target: int = Field(default=0, ge=0, le=1000000)
 
 
 class CustomTextSpec(StrictSpec):
-    selected_concurrencies: list[int] = Field(min_length=1, max_length=8)
+    selected_concurrencies: list[int] = Field(
+        min_length=1, max_length=16, json_schema_extra={"x-presets": [1, 2, 4, 6, 8, 16]}
+    )
     rounds_per_level: int = Field(ge=1, le=20)
     base_prompt: str = Field(min_length=1, max_length=50000)
     suffix_instruction: str = Field(default="", max_length=5000)
@@ -141,10 +193,10 @@ class CustomTextSpec(StrictSpec):
 
     @model_validator(mode="after")
     def request_budget(self) -> CustomTextSpec:
-        if any(c < 1 or c > 128 for c in self.selected_concurrencies):
-            raise ValueError("Concurrency must be between 1 and 128")
-        if sum(self.selected_concurrencies) * self.rounds_per_level > 1000:
-            raise ValueError("A job may issue at most 1000 requests")
+        if any(c < 1 or c > 1024 for c in self.selected_concurrencies):
+            raise ValueError("Concurrency must be between 1 and 1024")
+        if sum(self.selected_concurrencies) * self.rounds_per_level > 100000:
+            raise ValueError("A job may issue at most 100000 requests")
         return self
 
 

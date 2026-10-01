@@ -140,7 +140,7 @@ export const scenarios: {
 export type MeasurementProfile =
   "quick" | "standard" | "thorough" | "original" | "custom";
 
-// First-commit defaults that remain inside the current workload bounds.
+// Defaults transcribed from the first repository revision.
 export const firstCommitParameters: Partial<
   Record<JobType, Record<string, unknown>>
 > = {

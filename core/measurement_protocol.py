@@ -77,12 +77,24 @@ def measurement_plan(
         warnings.append("p99 至少需要约 100 个样本才有单百分位观测分辨率；当前请勿过度解读。")
     if not warmup:
         warnings.append("未配置预热；冷启动、连接建立和缓存状态可能影响首批观测。")
+    configured_input_volume = (
+        sum(
+            cell["input_tokens_target"] * (cell["measured_requests"] + cell["warmup_requests"])
+            for cell in cells
+        )
+        if cells and all(cell.get("input_tokens_target", 0) > 0 for cell in cells)
+        else None
+    )
     return {
         "protocol_version": MEASUREMENT_PROTOCOL_VERSION,
         "workload_model": workload_model,
         "measured_requests": measured,
         "warmup_requests": warmup,
         "total_requests": measured + warmup,
+        "configured_input_token_volume": configured_input_volume,
+        "maximum_output_token_volume": (measured + warmup) * parameters["max_tokens"]
+        if type(parameters.get("max_tokens")) is int and parameters["max_tokens"] > 0
+        else None,
         "cells": cells,
         "warnings": warnings,
     }

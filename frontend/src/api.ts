@@ -152,6 +152,8 @@ export type MeasurementPlan = {
   warmup_recorded?: number;
   warmup_failures?: number;
   total_requests: number;
+  configured_input_token_volume?: number | null;
+  maximum_output_token_volume?: number | null;
   cells: {
     label: string;
     measured_requests: number;
