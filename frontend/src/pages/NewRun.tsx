@@ -1,3 +1,4 @@
+import { PresetLibrary } from "../components/PresetLibrary";
 import { PresetTransfer } from "../components/PresetTransfer";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -74,7 +75,6 @@ export function NewRun({
   const [presetName, setPresetName] = useState("");
   const [presetDescription, setPresetDescription] = useState("");
   const [presetTags, setPresetTags] = useState("");
-  const [tagFilter, setTagFilter] = useState("");
   const [presetError, setPresetError] = useState("");
   const [presetBusy, setPresetBusy] = useState(false);
   const [plan, setPlan] = useState<MeasurementPlan | null>(null);
@@ -362,21 +362,23 @@ export function NewRun({
     setPresetTags((preset.tags || []).join(", "));
   }
 
-  async function deletePreset() {
-    if (!presetId) return;
+  async function deletePreset(identifier = presetId) {
+    if (!identifier) return;
     setPresetError("");
     setPresetBusy(true);
     try {
-      await api<void>(token, `/api/v1/presets/${presetId}`, {
+      await api<void>(token, `/api/v1/presets/${identifier}`, {
         method: "DELETE",
       });
       setPresets((current) =>
-        current.filter((item) => item.preset_id !== presetId),
+        current.filter((item) => item.preset_id !== identifier),
       );
-      setPresetId("");
-      setPresetName("");
-      setPresetDescription("");
-      setPresetTags("");
+      if (identifier === presetId) {
+        setPresetId("");
+        setPresetName("");
+        setPresetDescription("");
+        setPresetTags("");
+      }
     } catch (exc) {
       setPresetError(exc instanceof Error ? exc.message : "删除方案失败");
     } finally {
@@ -405,6 +407,7 @@ export function NewRun({
           <select
             aria-label="已保存方案"
             value={presetId}
+            disabled={presetBusy}
             onChange={(event) => {
               const id = event.target.value;
               const preset = presets.find((item) => item.preset_id === id);
@@ -494,34 +497,12 @@ export function NewRun({
             onChange={(event) => setPresetTags(event.target.value)}
           />
         </label>
-        <details>
-          <summary>按标签浏览方案</summary>
-          <select
-            aria-label="方案标签筛选"
-            value={tagFilter}
-            onChange={(event) => setTagFilter(event.target.value)}
-          >
-            <option value="">全部标签</option>
-            {[...new Set(presets.flatMap((item) => item.tags || []))]
-              .sort()
-              .map((tag) => (
-                <option key={tag}>{tag}</option>
-              ))}
-          </select>
-          <div className="api-form-actions">
-            {presets
-              .filter((item) => !tagFilter || item.tags?.includes(tagFilter))
-              .map((item) => (
-                <button
-                  key={item.preset_id}
-                  className="button subtle"
-                  onClick={() => applyPreset(item)}
-                >
-                  {item.name}
-                </button>
-              ))}
-          </div>
-        </details>
+        <PresetLibrary
+          presets={presets}
+          busy={presetBusy}
+          onApply={applyPreset}
+          onDelete={(id) => void deletePreset(id)}
+        />
         <PresetTransfer
           token={token}
           presets={presets}

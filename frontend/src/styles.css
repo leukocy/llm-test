@@ -3127,3 +3127,35 @@ textarea:focus {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.preset-library {
+  margin: 16px 0;
+  min-width: 0;
+}
+.preset-library-card {
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid #dbe4ee;
+  border-radius: 10px;
+  min-width: 0;
+}
+.preset-library-card summary {
+  overflow-wrap: anywhere;
+}
+.preset-library-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.preset-library-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+.preset-library .input-label select {
+  margin: 8px 0;
+  padding: 9px 11px;
+  max-width: 100%;
+  border: 1px solid #dbe4ee;
+  border-radius: 7px;
+}
