@@ -64,6 +64,7 @@ class SampleResult:
     tokens_used: int = 0
     error: str | None = None
     execution_error: str | None = None  # Generated code failure is a scored outcome.
+    measurement_provenance: dict[str, Any] = field(default_factory=dict)
     is_judge_corrected: bool = False  # Whether it was corrected by an AI judge
     judge_verdict: str | None = None
     evaluation_method: str = "regex"  # Evaluation method: regex, llm_judge, smart_parser
@@ -699,8 +700,24 @@ class BaseEvaluator(ABC):
                 except Exception:
                     pass
 
+        async def measure_sample(index: int) -> SampleResult:
+            first_response: list[Any] = []
+
+            async def tracked_response(*args, **kwargs):
+                response = await get_response_func(*args, **kwargs)
+                if not first_response:
+                    first_response.append(response)
+                return response
+
+            result = await self.evaluate_single(samples[index], tracked_response, index)
+            if first_response and isinstance(first_response[0], dict):
+                provenance = first_response[0].get("measurement_provenance")
+                if isinstance(provenance, dict):
+                    result.measurement_provenance = dict(provenance)
+            return result
+
         return await run_samples(
-            lambda index: self.evaluate_single(samples[index], get_response_func, index),
+            measure_sample,
             total=len(samples),
             concurrency=concurrency,
             restored=restored_results,

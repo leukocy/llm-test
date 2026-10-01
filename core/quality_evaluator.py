@@ -424,6 +424,13 @@ class QualityEvaluator:
                     "tps": 0,
                     "total_time_ms": 0,
                     "from_cache": True,
+                    "measurement_provenance": {
+                        "version": "quality-response-v1",
+                        "from_cache": True,
+                        "input_token_source": "tokenizer",
+                        "output_token_source": "tokenizer",
+                        "timing_clock": "local_cache",
+                    },
                 }
             else:
                 self._cache_stats["misses"] += 1
@@ -467,17 +474,31 @@ class QualityEvaluator:
                     total_time_ms = (end_time - start_time) * 1000
 
                 # Get token 数
-                input_tokens = usage_info.get("prompt_tokens", 0)
-                output_tokens = usage_info.get("completion_tokens", 0)
-
-                if input_tokens == 0 and cache_key:
-                    input_tokens = self.count_tokens(cache_key)
-
-                if output_tokens == 0 and content:
-                    output_tokens = self.count_tokens(content)
+                input_api = (
+                    type(usage_info.get("prompt_tokens")) is int
+                    and usage_info["prompt_tokens"] >= 0
+                )
+                output_api = (
+                    type(usage_info.get("completion_tokens")) is int
+                    and usage_info["completion_tokens"] >= 0
+                )
+                input_tokens = int(
+                    usage_info["prompt_tokens"]
+                    if input_api
+                    else self.count_tokens(cache_key)
+                    if cache_key
+                    else 0
+                )
+                output_tokens = int(
+                    usage_info["completion_tokens"]
+                    if output_api
+                    else self.count_tokens(content)
+                    if content
+                    else 0
+                )
 
                 # Calculate TPS
-                tps = 0
+                tps = 0.0
                 decode_time_ms = total_time_ms - ttft_ms if ttft_ms > 0 else total_time_ms
                 if decode_time_ms > 0 and output_tokens > 0:
                     tps = output_tokens / (decode_time_ms / 1000)
@@ -506,6 +527,13 @@ class QualityEvaluator:
                     "tps": tps,
                     "total_time_ms": total_time_ms,
                     "from_cache": False,
+                    "measurement_provenance": {
+                        "version": "quality-response-v1",
+                        "from_cache": False,
+                        "input_token_source": "api" if input_api else "tokenizer",
+                        "output_token_source": "api" if output_api else "tokenizer",
+                        "timing_clock": result.get("timing_clock", "unknown"),
+                    },
                 }
 
             except Exception as e:

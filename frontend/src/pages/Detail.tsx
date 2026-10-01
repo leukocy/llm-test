@@ -15,6 +15,7 @@ import { Status, MetricCard, Empty } from "../components";
 import { ScenarioAnalysis } from "../components/ScenarioAnalysis";
 import { StabilityTimeline } from "../components/StabilityTimeline";
 import { QualityAnalysis } from "./QualityAnalysis";
+import { QualityOverview } from "../components/QualityOverview";
 import { ReportEnvironmentCard } from "../components/ReportEnvironment";
 import { downloadFigurePng } from "../components/PlotlyFigure";
 import {
@@ -1038,8 +1039,27 @@ export function Detail({
         </section>
       )}
       {quality && (
+        <QualityOverview
+          report={quality}
+          onExportSummary={() => {
+            void downloadFile(
+              token,
+              `/api/v1/jobs/${job.job_id}/report/summary.csv`,
+              `llm-test-${shortId(job.job_id)}-summary.csv`,
+            ).catch((exc) => setError(String(exc)));
+          }}
+        />
+      )}
+      {quality && (
         <QualityAnalysis
           report={quality}
+          onExportSamples={() => {
+            void downloadFile(
+              token,
+              `/api/v1/jobs/${job.job_id}/report/samples.csv`,
+              `llm-test-${shortId(job.job_id)}-samples.csv`,
+            ).catch((exc) => setError(String(exc)));
+          }}
           onExportErrors={() => {
             void downloadFile(
               token,

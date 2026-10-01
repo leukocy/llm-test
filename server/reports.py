@@ -6,6 +6,11 @@ import json
 from html import escape
 from typing import Any
 
+from server.quality_analysis import (
+    quality_analysis,
+    quality_analysis_html,
+    quality_analysis_markdown,
+)
 from server.scenario_reports import METRICS, profile_svg, sampling_unit, scenario_analysis
 from server.specs import REPORT_ENVIRONMENT_FIELDS
 from server.time_series import REQUEST_METRICS, timeline_svg
@@ -339,6 +344,7 @@ def render_quality_markdown(job: dict[str, Any], report: dict[str, Any]) -> str:
         "\n".join(lines)
         + "\n"
         + checkpoint_markdown(report)
+        + quality_analysis_markdown(report.get("analysis") or quality_analysis(report))
         + report_environment_markdown(report.get("report_environment"))
     )
 
@@ -672,10 +678,15 @@ h1 {{ font-size:34px;letter-spacing:-.04em;margin:10px 0; }}
 .card p {{ color:#5c7286; }} dl {{ display:grid;grid-template-columns:145px 1fr;gap:12px;border-top:1px solid #e3eaf0;padding-top:17px; }}
 dt {{ color:#7c8da0; }} dd {{ margin:0;overflow-wrap:anywhere; }} code {{ overflow-wrap:anywhere; }}
 .note {{ background:#edf8f4;padding:18px;border-left:3px solid #2bb69b;line-height:1.6; }}
+table {{ width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums; }}
+th,td {{ padding:10px;text-align:left;border-bottom:1px solid #e3eaf0;white-space:nowrap; }}
+th {{ background:#edf5f4;color:#37615a; }} svg {{ width:100%;height:auto; }}
+@media(max-width:650px) {{ main {{ margin:0;padding:20px; }} dl {{ grid-template-columns:1fr; }} .card {{ padding:16px; }} }}
 @media print {{ body {{ background:white; }}main {{ margin:0;padding:0;box-shadow:none; }} }}
 </style></head><body><main><span class="eyebrow">LLM TEST / QUALITY REPORT</span>
 <h1>{safe(job["model_id"])}</h1><p class="muted">{safe(job["job_id"])} · {safe(job["status"])}</p>
 {"".join(cards) if cards else "<p>无可用数据集结果。</p>"}
+{quality_analysis_html(report.get("analysis") or quality_analysis(report))}
 {checkpoint_html(report)}
 {report_environment_html(report.get("report_environment"))}
 <p class="note">准确率只反映所列样本与评分口径。比较模型前请核对数据来源、样本指纹、few-shot 设置和样本数量。</p>

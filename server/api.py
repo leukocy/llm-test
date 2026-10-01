@@ -1517,6 +1517,12 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
                 raise HTTPException(422, "Dataset preparation receipts use JSON")
             return JSONResponse(payload)
         if isinstance(payload.get("datasets"), dict):
+            from server.quality_analysis import quality_analysis
+
+            try:
+                payload["analysis"] = quality_analysis(payload)
+            except (ValueError, TypeError, AttributeError) as exc:
+                raise HTTPException(422, "Quality report observations are invalid") from exc
             if format == "html":
                 return HTMLResponse(render_quality_html(job, payload))
             if format == "markdown":
@@ -1608,6 +1614,38 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             csv_content,
             media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition": f'attachment; filename="llm-test-{job_id}-errors.csv"'},
+        )
+
+    @app.get("/api/v1/jobs/{job_id}/report/summary.csv", dependencies=[auth])
+    def quality_summary_export(job_id: str):
+        from server.quality_export import quality_summary_csv
+
+        try:
+            content = quality_summary_csv(quality_payload(job_or_404(job_id)))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise HTTPException(422, "Quality report observations are invalid") from exc
+        return Response(
+            content,
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="llm-test-{job_id}-summary.csv"'
+            },
+        )
+
+    @app.get("/api/v1/jobs/{job_id}/report/samples.csv", dependencies=[auth])
+    def quality_samples_export(job_id: str):
+        from server.quality_export import quality_samples_csv
+
+        try:
+            content = quality_samples_csv(quality_payload(job_or_404(job_id)))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise HTTPException(422, "Quality report observations are invalid") from exc
+        return Response(
+            content,
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="llm-test-{job_id}-samples.csv"'
+            },
         )
 
     frontend = Path(__file__).resolve().parent.parent / "frontend" / "dist"

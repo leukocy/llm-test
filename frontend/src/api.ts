@@ -287,6 +287,7 @@ export type QualityReport = {
   job_id: string;
   model_id: string;
   report_environment?: ReportEnvironment | null;
+  analysis?: QualityReportAnalysis;
   datasets: Record<
     string,
     {
@@ -308,6 +309,8 @@ export type QualityReport = {
         predicted_answer: string;
         model_response: string;
         is_correct: boolean;
+        is_judge_corrected?: boolean;
+        judge_verdict?: string | null;
         category?: string;
         failure_category?: string;
         failure_analysis?: string;
@@ -317,6 +320,56 @@ export type QualityReport = {
         evaluation_method?: string;
         error?: string | null;
       }[];
+    }
+  >;
+};
+
+export type QualityMetricStats = {
+  count: number;
+  eligible: number;
+  mean: number | null;
+  median: number | null;
+  p95: number | null;
+  p99: number | null;
+  min: number | null;
+  max: number | null;
+  total: number | null;
+  sources: Record<string, number>;
+};
+export type QualityReportAnalysis = {
+  version: string;
+  notes: string[];
+  figures: Record<string, import("plotly.js-dist-min").Figure>;
+  datasets: Record<
+    string,
+    {
+      name: string;
+      model: string;
+      timestamp: string;
+      total: number | null;
+      correct: number | null;
+      accuracy: number | null;
+      ci95: number[] | null;
+      standard_correct: number | null;
+      judge_corrected: number | null;
+      duration_seconds: number | null;
+      detail_count: number;
+      complete: boolean;
+      cache_count: number;
+      unknown_cache: number;
+      request_errors: number;
+      non_error_fraction: number | null;
+      metrics: Record<string, QualityMetricStats>;
+      methods: Record<string, number>;
+      parsers: Record<string, number>;
+      warnings: string[];
+      confidence: {
+        count: number;
+        mean: number | null;
+        high: number;
+        low: number;
+      };
+      category_figure: import("plotly.js-dist-min").Figure;
     }
   >;
 };

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { QualityReport } from "../api";
 import { Empty, MetricCard } from "../components";
 import { formatNumber, formatPercent } from "../constants";
+import { PlotlyFigure } from "../components/PlotlyFigure";
 
 function wilson(successes: number, trials: number): [number, number] | null {
   if (!Number.isFinite(trials) || trials <= 0) return null;
@@ -18,15 +19,19 @@ function wilson(successes: number, trials: number): [number, number] | null {
 export function QualityAnalysis({
   report,
   onExportErrors,
+  onExportSamples,
 }: {
   report: QualityReport;
   onExportErrors: () => void;
+  onExportSamples: () => void;
 }) {
   const names = Object.keys(report.datasets);
   const [selectedName, setSelectedName] = useState(names[0] || "");
   const [category, setCategory] = useState("");
   const [search, setSearch] = useState("");
   const [selectedError, setSelectedError] = useState<number | null>(null);
+  const [view, setView] = useState("failures");
+  const [page, setPage] = useState(0);
   const name = report.datasets[selectedName] ? selectedName : names[0] || "";
   const dataset = report.datasets[name];
   const details = dataset?.details || [];
@@ -38,13 +43,16 @@ export function QualityAnalysis({
     [details],
   );
   const categories = useMemo(
-    () =>
-      [
-        ...new Set(failures.map(({ item }) => item.category || "未分类")),
-      ].sort(),
-    [failures],
+    () => [...new Set(details.map((item) => item.category || "未分类"))].sort(),
+    [details],
   );
-  const filtered = failures.filter(
+  const candidates =
+    view === "failures"
+      ? failures
+      : details
+          .map((item, index) => ({ item, index }))
+          .filter(({ item }) => view !== "judge" || item.is_judge_corrected);
+  const filtered = candidates.filter(
     ({ item }) =>
       (!category || (item.category || "未分类") === category) &&
       (!search ||
@@ -52,10 +60,15 @@ export function QualityAnalysis({
           .toLowerCase()
           .includes(search.toLowerCase())),
   );
-  const selected = failures.find(({ index }) => index === selectedError)?.item;
+  const selected = selectedError === null ? null : details[selectedError];
+  const pageCount = Math.max(1, Math.ceil(filtered.length / 50));
+  const currentPage = Math.min(page, pageCount - 1);
   if (!dataset)
     return <Empty title="没有质量评估样本" text="报告不包含可分析的数据集。" />;
-  const interval = wilson(dataset.correct_samples, dataset.total_samples);
+  const analysis = report.analysis?.datasets[name];
+  const interval = analysis
+    ? analysis.ci95
+    : wilson(dataset.correct_samples, dataset.total_samples);
   const provenance = (dataset.config.dataset_provenance || {}) as Record<
     string,
     unknown
@@ -97,6 +110,7 @@ export function QualityAnalysis({
             setCategory("");
             setSearch("");
             setSelectedError(null);
+            setPage(0);
           }}
         >
           {names.map((name) => (
@@ -109,31 +123,38 @@ export function QualityAnalysis({
         <MetricCard
           label="准确率"
           value={formatPercent(
-            dataset.total_samples
-              ? dataset.correct_samples / dataset.total_samples
-              : null,
+            analysis
+              ? analysis.accuracy
+              : dataset.total_samples
+                ? dataset.correct_samples / dataset.total_samples
+                : null,
           )}
           note={
             interval
               ? `95% Wilson ${formatPercent(interval[0])}–${formatPercent(interval[1])}`
-              : "无有效样本"
+              : "未通过完整评分核验，不计算区间"
           }
           accent
         />
         <MetricCard
-          label="有效样本"
+          label="记录样本"
           value={String(dataset.total_samples)}
           note={`${dataset.correct_samples} 条正确`}
         />
         <MetricCard
           label="首字延迟"
-          value={`${formatNumber(dataset.performance_stats?.avg_ttft_ms, 1)} ms`}
-          note="有效样本均值"
+          value={`${formatNumber(analysis ? analysis.metrics.ttft_ms.mean : dataset.performance_stats?.avg_ttft_ms, 1)} ms`}
+          note="有正值观测的样本均值"
         />
         <MetricCard
           label="生成速度"
-          value={formatNumber(dataset.performance_stats?.avg_tps, 1)}
-          note="tokens/s · 有效样本均值"
+          value={formatNumber(
+            analysis
+              ? analysis.metrics.tps.mean
+              : dataset.performance_stats?.avg_tps,
+            1,
+          )}
+          note="tokens/s · 单次响应均值"
         />
       </div>
       <div className="quality-analysis-grid">
@@ -169,6 +190,12 @@ export function QualityAnalysis({
           <p className="chart-caption">
             每一类独立计分；请结合样本数判断波动。
           </p>
+          {analysis && (
+            <PlotlyFigure
+              figure={analysis.category_figure}
+              ariaLabel="质量类别准确率图"
+            />
+          )}
         </section>
         <section className="surface quality-provenance">
           <div className="section-head">
@@ -234,6 +261,25 @@ export function QualityAnalysis({
             <Empty title="尚无评分方式记录" text="逐样本元数据缺失。" />
           )}
           <p className="chart-caption">只统计当前数据集的逐样本评分记录。</p>
+          {analysis && (
+            <>
+              <h3>答案解析方式</h3>
+              <div className="quality-count-list">
+                {Object.entries(analysis.parsers).map(([method, count]) => (
+                  <div key={method}>
+                    <span>{method}</span>
+                    <strong>{count} 条</strong>
+                  </div>
+                ))}
+              </div>
+              <p className="chart-caption">
+                正值解析置信度：{analysis.confidence.count} 条，均值{" "}
+                {formatPercent(analysis.confidence.mean)}；≥80%{" "}
+                {analysis.confidence.high} 条，&lt;50% {analysis.confidence.low}{" "}
+                条。未记录的默认零不推算置信度；解析置信度不是模型校准概率。
+              </p>
+            </>
+          )}
         </section>
         <section className="surface">
           <div className="section-head">
@@ -272,13 +318,48 @@ export function QualityAnalysis({
           <button className="button subtle" onClick={onExportErrors}>
             导出全部错误 CSV ↓
           </button>
+          <button className="button subtle" onClick={onExportSamples}>
+            导出全部样本 CSV ↓
+          </button>
         </div>
         <div className="quality-error-controls">
+          <select
+            aria-label="选择样本 ID"
+            value={selectedError === null ? "" : String(selectedError)}
+            onChange={(event) =>
+              setSelectedError(
+                event.target.value ? Number(event.target.value) : null,
+              )
+            }
+          >
+            <option value="">选择本页样本 ID</option>
+            {filtered
+              .slice(currentPage * 50, (currentPage + 1) * 50)
+              .map(({ item, index }) => (
+                <option key={index} value={index}>
+                  {item.sample_id}
+                </option>
+              ))}
+          </select>
+          <select
+            aria-label="样本查看范围"
+            value={view}
+            onChange={(event) => {
+              setView(event.target.value);
+              setPage(0);
+              setSelectedError(null);
+            }}
+          >
+            <option value="failures">错误样本</option>
+            <option value="all">全部样本</option>
+            <option value="judge">Judge 改判样本</option>
+          </select>
           <select
             aria-label="筛选错误类别"
             value={category}
             onChange={(event) => {
               setCategory(event.target.value);
+              setPage(0);
               setSelectedError(null);
             }}
           >
@@ -290,11 +371,15 @@ export function QualityAnalysis({
           <input
             aria-label="搜索错误样本"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(0);
+              setSelectedError(null);
+            }}
             placeholder="搜索题目、预测或样本 ID"
           />
           <span>
-            显示 {Math.min(filtered.length, 50)} / {filtered.length}
+            第 {currentPage + 1} / {pageCount} 页 · {filtered.length} 条
           </span>
         </div>
         {filtered.length ? (
@@ -311,34 +396,58 @@ export function QualityAnalysis({
                 </tr>
               </thead>
               <tbody>
-                {filtered.slice(0, 50).map(({ item, index }) => (
-                  <tr key={`${item.sample_id}-${index}`}>
-                    <td>
-                      <strong>{item.sample_id}</strong>
-                    </td>
-                    <td>{item.category || "未分类"}</td>
-                    <td className="quality-question">
-                      {item.question.slice(0, 110)}
-                      {item.question.length > 110 ? "…" : ""}
-                    </td>
-                    <td>{item.correct_answer || "—"}</td>
-                    <td>{item.predicted_answer || "—"}</td>
-                    <td>
-                      <button
-                        className="text-button"
-                        onClick={() => setSelectedError(index)}
-                      >
-                        查看 →
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filtered
+                  .slice(currentPage * 50, (currentPage + 1) * 50)
+                  .map(({ item, index }) => (
+                    <tr key={`${item.sample_id}-${index}`}>
+                      <td>
+                        <strong>{item.sample_id}</strong>
+                      </td>
+                      <td>{item.category || "未分类"}</td>
+                      <td className="quality-question">
+                        {item.question.slice(0, 110)}
+                        {item.question.length > 110 ? "…" : ""}
+                      </td>
+                      <td>{item.correct_answer || "—"}</td>
+                      <td>{item.predicted_answer || "—"}</td>
+                      <td>
+                        <button
+                          className="text-button"
+                          onClick={() => setSelectedError(index)}
+                        >
+                          查看 →
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
         ) : (
           <Empty title="当前筛选下没有错误样本" text="可调整类别或搜索条件。" />
         )}
+        <div className="api-form-actions">
+          <button
+            className="button subtle"
+            disabled={currentPage === 0}
+            onClick={() => {
+              setPage(currentPage - 1);
+              setSelectedError(null);
+            }}
+          >
+            上一页样本
+          </button>
+          <button
+            className="button subtle"
+            disabled={currentPage + 1 >= pageCount}
+            onClick={() => {
+              setPage(currentPage + 1);
+              setSelectedError(null);
+            }}
+          >
+            下一页样本
+          </button>
+        </div>
         {selected && (
           <div className="quality-sample">
             <div className="section-head">
@@ -367,6 +476,11 @@ export function QualityAnalysis({
               评分方式：{selected.evaluation_method || "未记录"} · 解析方式：
               {selected.answer_parse_method || "未记录"} · 解析置信度：
               {formatPercent(selected.answer_parse_confidence)}
+            </p>
+            <p>
+              最终判定：{selected.is_correct ? "正确" : "错误"} · Judge 改判：
+              {selected.is_judge_corrected ? "是" : "否"} · 复核原始判定：
+              {selected.judge_verdict || "未记录"}。自评复核不构成独立验证。
             </p>
             {(selected.failure_category ||
               selected.failure_analysis ||
