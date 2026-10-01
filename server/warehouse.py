@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from dataclasses import asdict, dataclass
 from math import isfinite
 from pathlib import Path
@@ -96,7 +97,7 @@ class WarehouseReader:
 
     def window(self, selection: WarehouseSelection) -> WarehouseWindow:
         where, params = self._where(selection)
-        with sqlite3.connect(self.path, timeout=30) as conn:
+        with closing(sqlite3.connect(self.path, timeout=30)) as conn, conn:
             conn.row_factory = sqlite3.Row
             matched = int(
                 conn.execute(f"SELECT COUNT(*) FROM test_runs {where}", params).fetchone()[0]
@@ -133,7 +134,7 @@ class WarehouseReader:
 
     def filter_options(self) -> dict[str, list[str]]:
         options: dict[str, list[str]] = {}
-        with sqlite3.connect(self.path, timeout=30) as conn:
+        with closing(sqlite3.connect(self.path, timeout=30)) as conn, conn:
             for field in ("model_id", "machine_id", "test_type", "external_level"):
                 rows = conn.execute(
                     f"SELECT DISTINCT {field} FROM test_runs "
@@ -148,7 +149,7 @@ class WarehouseReader:
         return options
 
     def detail(self, test_id: str) -> dict[str, Any]:
-        with sqlite3.connect(self.path, timeout=30) as conn:
+        with closing(sqlite3.connect(self.path, timeout=30)) as conn, conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute("SELECT * FROM test_runs WHERE test_id = ?", (test_id,)).fetchone()
         if row is None:

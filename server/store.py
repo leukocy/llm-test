@@ -58,11 +58,11 @@ class JobStore:
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(str(self.path), timeout=30, isolation_level=None)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA busy_timeout = 30000")
-        conn.execute("PRAGMA journal_mode = WAL")
         try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("PRAGMA busy_timeout = 30000")
+            conn.execute("PRAGMA journal_mode = WAL")
             yield conn
         finally:
             conn.close()

@@ -8,7 +8,7 @@ import os
 import re
 import sqlite3
 import threading
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any, Optional, cast
 
@@ -92,7 +92,7 @@ class Database:
         if self._initialized:
             return
 
-        with self._get_raw_connection() as conn:
+        with closing(self._get_raw_connection()) as conn, conn:
             create_tables(conn)
             # 执行迁移：补齐历史从未运行的 1.1.0，以及本次 1.2.0（老库才能拿到新列）。
             # 此前 run_migrations 是死代码（无调用方），现在补上。
@@ -105,10 +105,14 @@ class Database:
     def _get_raw_connection(self) -> sqlite3.Connection:
         """Get原始Connect（用于Initialize）"""
         conn = sqlite3.connect(str(self.db_path))
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.execute("PRAGMA synchronous=NORMAL")
-        conn.execute("PRAGMA cache_size=-64000")  # 64MB cache
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA cache_size=-64000")  # 64MB cache
+        except BaseException:
+            conn.close()
+            raise
         return conn
 
     @contextmanager

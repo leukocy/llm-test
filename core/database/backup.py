@@ -23,9 +23,7 @@ class DatabaseBackup:
     - RestoreBackup
     """
 
-    def __init__(
-        self, db_path: str = "data/benchmark.db", backup_dir: str = "data/backups"
-    ):
+    def __init__(self, db_path: str = "data/benchmark.db", backup_dir: str = "data/backups"):
         self.db_path = Path(db_path)
         self.backup_dir = Path(backup_dir)
         self.backup_dir.mkdir(parents=True, exist_ok=True)
@@ -71,13 +69,14 @@ class DatabaseBackup:
     def _backup_sqlite(self, backup_path: Path):
         """use SQLite API 进行Backup"""
         source = sqlite3.connect(str(self.db_path))
-        dest = sqlite3.connect(str(backup_path))
-
         try:
-            source.backup(dest)
+            dest = sqlite3.connect(str(backup_path))
+            try:
+                source.backup(dest)
+            finally:
+                dest.close()
         finally:
             source.close()
-            dest.close()
 
     def restore_backup(self, backup_path: Path) -> bool:
         """
@@ -172,7 +171,6 @@ class DatabaseBackup:
                 return True
 
         return False
-
 
     def get_backup_summary(self) -> dict:
         """GetBackup摘要"""
