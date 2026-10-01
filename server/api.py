@@ -569,6 +569,12 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             custom = []
         return {"builtin": builtin, "custom": custom}
 
+    @app.get("/api/v1/presets/templates", dependencies=[auth])
+    def preset_templates():
+        from server.preset_templates import builtin_templates
+
+        return {"items": builtin_templates()}
+
     @app.get("/api/v1/presets", dependencies=[auth])
     def presets():
         return {"items": store.list_presets()}

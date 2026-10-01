@@ -499,6 +499,24 @@ def write_dynamic_choices(name: str, commit: str) -> None:
     advanced = ast.parse(git("show", f"{commit}:ui/advanced_panels.py"))
     robustness = ast.parse(git("show", f"{commit}:core/robustness_tester.py"))
     logger = ast.parse(git("show", f"{commit}:utils/logger.py"))
+    preset_tree = ast.parse(git("show", f"{commit}:utils/test_config_manager.py"))
+    preset_function = next(
+        node
+        for node in preset_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "get_builtin_presets"
+    )
+    preset_return = next(node for node in preset_function.body if isinstance(node, ast.Return))
+    preset_calls = cast(ast.List, preset_return.value).elts
+    builtin_presets = [
+        {
+            **{
+                keyword.arg: ast.literal_eval(keyword.value)
+                for keyword in cast(ast.Call, call).keywords
+            },
+            "source": f"utils/test_config_manager.py:{call.lineno}",
+        }
+        for call in preset_calls
+    ]
     test_types = assigned_literal(sidebar, "_test_types")
     optional_types = []
     for node in ast.walk(sidebar):
@@ -514,6 +532,7 @@ def write_dynamic_choices(name: str, commit: str) -> None:
         "baseline_commit": commit,
         "builtin_providers": assigned_literal(settings, "PROVIDER_OPTIONS"),
         "builtin_models": assigned_literal(settings, "MODEL_OPTIONS"),
+        "builtin_presets": builtin_presets,
         "hf_model_mapping": assigned_literal(settings, "HF_MODEL_MAPPING"),
         "tokenizer_download_mapping": assigned_literal(settings, "TOKENIZER_HF_MAPPING"),
         "base_test_types": test_types,

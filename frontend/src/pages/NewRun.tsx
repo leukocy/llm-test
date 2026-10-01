@@ -1,3 +1,7 @@
+import {
+  BuiltinPresets,
+  type BuiltinTemplate,
+} from "../components/BuiltinPresets";
 import { PresetLibrary } from "../components/PresetLibrary";
 import { PresetTransfer } from "../components/PresetTransfer";
 import { useEffect, useMemo, useState } from "react";
@@ -341,6 +345,24 @@ export function NewRun({
     }
   }
 
+  function applyBuiltin(template: BuiltinTemplate) {
+    if (
+      !scenarios.some((item) => item.id === template.test_type) ||
+      !selectedEndpoint
+    )
+      return;
+    setPresetId("");
+    setPresetName(template.name);
+    setPresetDescription(template.description);
+    setPresetTags(template.tags.join(", "));
+    setPresetError("");
+    setType(template.test_type as JobType);
+    setParams(template.parameters);
+    setRaw(JSON.stringify(template.parameters, null, 2));
+    setRunConfig({ ...knobDefaults, ...template.run_config });
+    setProfile("custom");
+  }
+
   function applyPreset(preset: Preset) {
     if (
       !scenarios.some((item) => item.id === preset.test_type) ||
@@ -497,6 +519,12 @@ export function NewRun({
             onChange={(event) => setPresetTags(event.target.value)}
           />
         </label>
+        <BuiltinPresets
+          token={token}
+          busy={presetBusy}
+          canApply={!!selectedEndpoint}
+          onApply={applyBuiltin}
+        />
         <PresetLibrary
           presets={presets}
           busy={presetBusy}

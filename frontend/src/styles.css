@@ -3159,3 +3159,21 @@ textarea:focus {
   border: 1px solid #dbe4ee;
   border-radius: 7px;
 }
+
+.builtin-presets {
+  margin: 16px 0;
+  min-width: 0;
+}
+.builtin-presets select {
+  padding: 9px 11px;
+  border: 1px solid #dbe4ee;
+  border-radius: 7px;
+  max-width: 100%;
+}
+.builtin-preset-source {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
