@@ -45,6 +45,7 @@ export type PerturbResult = Snapshot & {
   status: "applied" | "unchanged" | "unsupported";
 };
 export type ReasoningResult = Snapshot & {
+  reasoning_analysis?: import("../../api").ReasoningAnalysisSummary;
   final_answer_correct: boolean | null;
   quality_score: Record<string, number | null>;
   steps: { step_number: number; content: string; step_type: string }[];

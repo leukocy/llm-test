@@ -1,3 +1,4 @@
+import { ReasoningAnalysis } from "../../components/ReasoningAnalysis";
 import { useState } from "react";
 import { useOfflineTool } from "../../hooks/useOfflineTool";
 import { MetricCard } from "../../components";
@@ -117,6 +118,9 @@ export function ReasoningDemo({ token }: { token: string }) {
               note="文本或有界数学规则比较"
             />
           </div>
+          {result.reasoning_analysis && (
+            <ReasoningAnalysis summary={result.reasoning_analysis} />
+          )}
           {result.failure_analysis && (
             <div className="gate-result">
               <strong>规则分析（{result.failure_category}）</strong>

@@ -8,6 +8,7 @@ from typing import Any
 from server.analytics import wilson_interval
 from server.failure_reports import failure_html, failure_markdown, failure_summary
 from server.observations import describe_values
+from server.reasoning_reports import reasoning_html, reasoning_markdown, reasoning_summary
 
 METRICS = {
     "ttft_ms": "首内容延迟 / ms",
@@ -166,6 +167,7 @@ def quality_analysis(report: dict) -> dict:
         )
         datasets[name] = {
             "failure_analysis": failure_summary(result),
+            "reasoning_analysis": reasoning_summary(rows),
             "name": name,
             "total": n if valid_counts else None,
             "model": str(result.get("model_id") or report.get("model_id") or "未记录"),
@@ -325,6 +327,10 @@ def quality_analysis_markdown(analysis: dict) -> str:
         )
     lines.extend(method_lines)
     lines.extend(
+        reasoning_markdown(name, dataset["reasoning_analysis"])
+        for name, dataset in analysis["datasets"].items()
+    )
+    lines.extend(
         failure_markdown(name, dataset["failure_analysis"])
         for name, dataset in analysis["datasets"].items()
     )
@@ -421,6 +427,10 @@ def quality_analysis_html(analysis: dict) -> str:
     )
     return (
         charts
+        + "".join(
+            reasoning_html(name, dataset["reasoning_analysis"])
+            for name, dataset in analysis["datasets"].items()
+        )
         + "".join(
             failure_html(name, dataset["failure_analysis"])
             for name, dataset in analysis["datasets"].items()

@@ -72,6 +72,7 @@ def quality_samples_csv(report: dict[str, Any]) -> str:
         "reasoning_quality",
         "reasoning_quality_overall",
         "reasoning_content",
+        "reasoning_assessment",
     )
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(fields)
@@ -80,6 +81,11 @@ def quality_samples_csv(report: dict[str, Any]) -> str:
     for name, result in report["datasets"].items():
         for sample in result.get("details", []):
             row = {"dataset": name, **sample}
+            row["reasoning_assessment"] = (
+                json.dumps(row.get("reasoning_assessment"), ensure_ascii=False, sort_keys=True)
+                if row.get("reasoning_assessment") is not None
+                else ""
+            )
             row["measurement_provenance"] = json.dumps(
                 row.get("measurement_provenance") or {}, ensure_ascii=False, sort_keys=True
             )

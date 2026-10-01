@@ -1,3 +1,4 @@
+import { ReasoningAnalysis } from "../components/ReasoningAnalysis";
 import { useMemo, useState } from "react";
 import type { QualityReport } from "../api";
 import { Empty, MetricCard } from "../components";
@@ -69,6 +70,19 @@ export function QualityAnalysis({
           .includes(search.toLowerCase())),
   );
   function score(item: (typeof details)[number]): number | null {
+    const recorded = item.reasoning_assessment;
+    if (
+      recorded?.version === "heuristic-reasoning-v1" &&
+      recorded.source === "local_rule_heuristics"
+    ) {
+      const value = recorded.overall;
+      return typeof value === "number" &&
+        Number.isFinite(value) &&
+        value >= 0 &&
+        value <= 10
+        ? value
+        : null;
+    }
     const value = item.reasoning_quality_overall ?? item.reasoning_quality;
     // Legacy dataclass zero is indistinguishable from an unmeasured default.
     return typeof value === "number" &&
@@ -362,6 +376,9 @@ export function QualityAnalysis({
           </p>
         </section>
       </div>
+      {analysis?.reasoning_analysis && (
+        <ReasoningAnalysis summary={analysis.reasoning_analysis} />
+      )}
       {analysis && <FailureAnalysis summary={analysis.failure_analysis} />}
       <section className="surface">
         <div className="section-head">

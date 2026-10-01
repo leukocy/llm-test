@@ -81,6 +81,8 @@ class SampleResult:
     reasoning_tokens: int = 0  # Reasoning token count
     ttut_ms: float = 0.0  # Time To User Text (first non-reasoning token)
 
+    reasoning_assessment: dict[str, Any] | None = None
+
     # Reasoning quality assessment
     reasoning_quality_overall: float = 0.0  # Overall reasoning quality (0-10)
     reasoning_coherence: float = 0.0  # Logical coherence (0-10)
@@ -717,6 +719,19 @@ class BaseEvaluator(ABC):
                 provenance = first_response[0].get("measurement_provenance")
                 if isinstance(provenance, dict):
                     result.measurement_provenance = dict(provenance)
+            from core.reasoning_assessment import assess_reasoning
+
+            result.reasoning_assessment = assess_reasoning(
+                result.question,
+                result.reasoning_content,
+                result.predicted_answer,
+                result.correct_answer,
+                (result.is_correct and not result.is_judge_corrected)
+                if result.correct_answer.strip() and not result.error
+                else None,
+            )
+            if result.reasoning_assessment["overall"] is not None:
+                result.reasoning_quality_overall = result.reasoning_assessment["overall"]
             return result
 
         return await run_samples(

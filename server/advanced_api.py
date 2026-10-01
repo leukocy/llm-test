@@ -87,7 +87,18 @@ def advanced_router() -> APIRouter:
             correct_answer=body.correct_answer,
             is_answer_correct=match if match is not None else False,
         )
+        from core.reasoning_assessment import assess_reasoning
+
+        assessment = assess_reasoning(
+            body.question, body.reasoning, body.final_answer, body.correct_answer, match
+        )
         out: dict[str, Any] = dataclasses.asdict(result)
+        from server.reasoning_reports import reasoning_summary
+
+        out["reasoning_assessment"] = assessment
+        out["reasoning_analysis"] = reasoning_summary([{"reasoning_assessment": assessment}])
+        out["quality_score"].update(assessment["dimensions"])
+        out["quality_score"]["overall"] = assessment["overall"]
         warnings = ["规则评分是启发式指标，不是经校准的能力评分；不调用 Judge 模型。"]
         if match is None:
             # Correctness-dependent scores cannot be inferred without a usable

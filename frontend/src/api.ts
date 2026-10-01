@@ -285,6 +285,27 @@ export type JobEvent = {
   to_status: string;
   created_at: number;
 };
+export type ReasoningAssessment = {
+  version: string;
+  source: string;
+  correctness_basis: string;
+  dimensions: Record<string, number | null>;
+  overall: number | null;
+  input_sha256: string;
+  weights: Record<string, number>;
+  status: string;
+};
+export type ReasoningAnalysisSummary = {
+  version: string;
+  source: string;
+  total: number;
+  ignored: number;
+  dimensions: Record<string, { label: string; n: number; mean: number | null }>;
+  radar_n: number;
+  note: string;
+  figure: import("plotly.js-dist-min").Figure | null;
+};
+
 export type QualityReport = {
   job_id: string;
   model_id: string;
@@ -314,6 +335,7 @@ export type QualityReport = {
         reasoning_content?: string;
         reasoning_quality?: number | null;
         reasoning_quality_overall?: number | null;
+        reasoning_assessment?: ReasoningAssessment | null;
         is_correct: boolean;
         is_judge_corrected?: boolean;
         judge_verdict?: string | null;
@@ -361,6 +383,7 @@ export type QualityReportAnalysis = {
       name: string;
       model: string;
       timestamp: string;
+      reasoning_analysis?: ReasoningAnalysisSummary;
       failure_analysis: {
         status: string;
         source: string;
