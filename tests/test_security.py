@@ -6,6 +6,7 @@ Run with: pytest tests/test_security.py -v
 This test suite verifies that security fixes are working correctly.
 """
 
+import ipaddress
 import os
 import tempfile
 
@@ -13,6 +14,7 @@ import httpx
 import pytest
 
 from core.dataset_loader import DatasetLoader
+from core.providers.factory import _validate_base_url
 from core.safe_executor import (
     SafeExecutionError,
     SandboxUnavailableError,
@@ -20,7 +22,12 @@ from core.safe_executor import (
     safe_eval_math,
     safe_exec_code,
 )
-from core.url_validator import SSRFError, is_safe_url, validate_and_normalize_url
+from core.url_validator import (
+    SSRFError,
+    is_safe_url,
+    parse_trusted_private_networks,
+    validate_and_normalize_url,
+)
 
 
 class TestSafeCodeExecution:
@@ -171,6 +178,43 @@ class TestSSRFProtection:
 
         is_safe, error = is_safe_url(url, allow_private=True, custom_safe_domains={"192.168.1.1"})
         assert is_safe is True
+
+    def test_trusted_private_cidr_is_scoped_and_requires_opt_in(self):
+        networks = parse_trusted_private_networks("192.168.199.0/24")
+        assert networks == {ipaddress.ip_network("192.168.199.0/24")}
+
+        allowed, error = is_safe_url(
+            "http://192.168.199.179:10814/v1",
+            allow_private=True,
+            trusted_private_networks=networks,
+        )
+        assert allowed is True and error is None
+
+        allowed, _ = is_safe_url(
+            "http://192.168.200.1:10814/v1",
+            allow_private=True,
+            trusted_private_networks=networks,
+        )
+        assert allowed is False
+
+        allowed, _ = is_safe_url(
+            "http://192.168.199.179:10814/v1", trusted_private_networks=networks
+        )
+        assert allowed is False
+
+    @pytest.mark.parametrize("value", ["0.0.0.0/0", "169.254.0.0/16", "192.168.1.3/24"])
+    def test_rejects_unsafe_or_noncanonical_trusted_networks(self, value):
+        with pytest.raises(SSRFError):
+            parse_trusted_private_networks(value)
+
+    def test_factory_uses_trusted_private_network_configuration(self, monkeypatch):
+        monkeypatch.setenv("LLM_TEST_ALLOW_PRIVATE_ENDPOINTS", "1")
+        monkeypatch.setenv("LLM_TEST_TRUSTED_API_NETWORKS", "192.168.199.0/24")
+        assert _validate_base_url("http://192.168.199.129:10814/v1") == (
+            "http://192.168.199.129:10814/v1"
+        )
+        with pytest.raises(SSRFError):
+            _validate_base_url("http://192.168.200.1:10814/v1")
 
     def test_blocks_invalid_protocols(self):
         """Test that non-http protocols are blocked."""

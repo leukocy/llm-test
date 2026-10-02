@@ -11,8 +11,8 @@
   访问日志的反向代理；不要仅通过设置 `BIND_HOST=0.0.0.0` 暴露界面。
 - 已知服务商 API 域名有内置允许列表。未知域名需由管理员加入
   `LLM_TEST_TRUSTED_API_HOSTS`（逗号分隔的精确主机名）。私网地址还需设置
-  `LLM_TEST_ALLOW_PRIVATE_ENDPOINTS=1`；除回环地址外，私网 IP 也必须加入
-  受信任主机列表。
+  `LLM_TEST_ALLOW_PRIVATE_ENDPOINTS=1`；私网 IP 可按主机加入该列表，或按
+  私网 CIDR 加入 `LLM_TEST_TRUSTED_API_NETWORKS`。网段配置拒绝公网和特殊用途网段。
 - 本地回环模型端点可直接使用。链路会拒绝非 HTTP(S) URL、URL 中的凭据、
   非规范 IP 别名、链路本地地址和元数据主机名。
 - URL 校验发生在连接前，不能单独防止 DNS 重绑定或被信任服务的重定向。

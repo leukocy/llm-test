@@ -32,8 +32,36 @@ DEFAULT_SAFE_DOMAINS = {
 }
 
 
+def parse_trusted_private_networks(
+    value: str,
+) -> set[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    """Parse administrator CIDRs, rejecting global and special-use networks."""
+    networks: set[ipaddress.IPv4Network | ipaddress.IPv6Network] = set()
+    for entry in value.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        try:
+            network = ipaddress.ip_network(entry, strict=True)
+        except ValueError as exc:
+            raise SSRFError("Invalid trusted API network CIDR") from exc
+        if (
+            not network.is_private
+            or network.is_loopback
+            or network.is_link_local
+            or network.is_multicast
+            or network.is_reserved
+        ):
+            raise SSRFError("Trusted API networks must be private, non-special-use CIDRs")
+        networks.add(network)
+    return networks
+
+
 def is_safe_url(
-    url: str, allow_private: bool = False, custom_safe_domains: set[str] | None = None
+    url: str,
+    allow_private: bool = False,
+    custom_safe_domains: set[str] | None = None,
+    trusted_private_networks: set[ipaddress.IPv4Network | ipaddress.IPv6Network] | None = None,
 ) -> tuple[bool, str | None]:
     """
     Validate a URL to prevent SSRF attacks.
@@ -94,7 +122,12 @@ def is_safe_url(
             return False, f"Special-use IP address is not allowed: {hostname}"
         if not address.is_global:
             if allow_private and (
-                address.is_loopback or (custom_safe_domains and hostname in custom_safe_domains)
+                address.is_loopback
+                or (custom_safe_domains and hostname in custom_safe_domains)
+                or any(
+                    address.version == network.version and address in network
+                    for network in trusted_private_networks or ()
+                )
             ):
                 return True, None
             return False, f"Private/internal IP address must be explicitly trusted: {hostname}"
@@ -138,6 +171,7 @@ def validate_and_normalize_url(
     allow_private: bool = False,
     require_https: bool = False,
     custom_safe_domains: set[str] | None = None,
+    trusted_private_networks: set[ipaddress.IPv4Network | ipaddress.IPv6Network] | None = None,
 ) -> str:
     """
     Validate and normalize a URL.
@@ -154,7 +188,10 @@ def validate_and_normalize_url(
         SSRFError: If URL is invalid or unsafe
     """
     is_safe, error = is_safe_url(
-        url, allow_private=allow_private, custom_safe_domains=custom_safe_domains
+        url,
+        allow_private=allow_private,
+        custom_safe_domains=custom_safe_domains,
+        trusted_private_networks=trusted_private_networks,
     )
     if not is_safe:
         raise SSRFError(f"URL validation failed: {error}")

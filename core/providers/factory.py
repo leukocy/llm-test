@@ -14,7 +14,12 @@ def _validate_base_url(api_base_url: str) -> str:
     """
     from urllib.parse import urlparse
 
-    from ..url_validator import SSRFError, is_safe_url, validate_and_normalize_url
+    from ..url_validator import (
+        SSRFError,
+        is_safe_url,
+        parse_trusted_private_networks,
+        validate_and_normalize_url,
+    )
 
     if not api_base_url:
         return api_base_url
@@ -40,8 +45,14 @@ def _validate_base_url(api_base_url: str) -> str:
         for host in os.environ.get("LLM_TEST_TRUSTED_API_HOSTS", "").split(",")
         if host.strip()
     }
+    trusted_networks = parse_trusted_private_networks(
+        os.environ.get("LLM_TEST_TRUSTED_API_NETWORKS", "")
+    )
     return validate_and_normalize_url(
-        api_base_url, allow_private=allow_private, custom_safe_domains=trusted_hosts
+        api_base_url,
+        allow_private=allow_private,
+        custom_safe_domains=trusted_hosts,
+        trusted_private_networks=trusted_networks,
     )
 
 

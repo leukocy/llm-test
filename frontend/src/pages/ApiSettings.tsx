@@ -509,8 +509,9 @@ export function ApiSettings({
             />
             <p>
               自定义主机需加入 <code>LLM_TEST_TRUSTED_API_HOSTS</code>
-              ；内网地址还需启用 <code>LLM_TEST_ALLOW_PRIVATE_ENDPOINTS=1</code>
-              ，然后重启容器。
+              ；私网 IP 或网段可加入 <code>LLM_TEST_TRUSTED_API_NETWORKS</code>
+              ，并启用 <code>LLM_TEST_ALLOW_PRIVATE_ENDPOINTS=1</code>{" "}
+              后重启容器。
             </p>
           </details>
           {error && (

@@ -77,7 +77,7 @@ FastAPI 控制 API ── SQLite WAL（任务、状态、审计、逐请求结�
 ## 启动
 
 1. 从 `config/endpoints.platform.example.json` 复制为 `config/endpoints.platform.json`。默认文件是空数组；如需由部署文件预设端点，可填写受信模型地址、模型 ID 与 API key 环境变量名，不要把密钥写入 JSON。
-2. 从 `.env.platform.example` 复制为 `.env.platform`，设置长度至少 32 字符的随机 `LLM_TEST_API_TOKEN`。建议同时设置独立的 `LLM_TEST_ENDPOINT_ENCRYPTION_KEY`（至少 32 字符），并在备份和恢复后保持不变；未设置时端点加密密钥由控制令牌派生，轮换令牌会使已保存的端点凭证无法解密。自定义主机需加入 `LLM_TEST_TRUSTED_API_HOSTS` 精确主机名；私有网络端点还需显式设置 `LLM_TEST_ALLOW_PRIVATE_ENDPOINTS=1`。
+2. 从 `.env.platform.example` 复制为 `.env.platform`，设置长度至少 32 字符的随机 `LLM_TEST_API_TOKEN`。建议同时设置独立的 `LLM_TEST_ENDPOINT_ENCRYPTION_KEY`（至少 32 字符），并在备份和恢复后保持不变；未设置时端点加密密钥由控制令牌派生，轮换令牌会使已保存的端点凭证无法解密。自定义主机需加入 `LLM_TEST_TRUSTED_API_HOSTS` 精确主机名；私有网络端点还需显式设置 `LLM_TEST_ALLOW_PRIVATE_ENDPOINTS=1`，并将目标私网 IP 或 CIDR 加入对应白名单。
 3. 运行 `docker compose -p llm-test-platform --env-file .env.platform -f compose.platform.yml up -d --build`。浏览器打开 `http://127.0.0.1:8000`，粘贴访问令牌，在“受测 API 设置”中保存地址、模型 ID 和 API key。默认仅监听本机；内网访问应通过企业反向代理提供 TLS 与访问控制。
 
 Compose 将 `${LLM_TEST_TOKENIZERS_DIR:-./tokenizers}` 只读挂入 API 和 worker；需要把已有 Tokenizer 放在项目外时，在 `.env.platform` 写入绝对目录，如 `/home/ai/llm-perf/tokenizers`。新下载保存到共享 `platform-cache` 卷的 `/app/cache/tokenizers`，容器重建仍保留，不覆盖已有文件。直接启动 API / worker 时，可把 `LLM_TEST_TOKENIZER_DOWNLOAD_ROOT` 设为双方可读写的绝对路径；默认使用 `$XDG_CACHE_HOME/llm-test/tokenizers` 或 `~/.cache/llm-test/tokenizers`。
