@@ -44,9 +44,18 @@ export function ApiSettings({
   const [measuringId, setMeasuringId] = useState("");
   const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
   const [discovering, setDiscovering] = useState(false);
+  const savedEndpoint = endpoints.find((item) => item.id === editingId);
+  const matchesSavedEndpoint =
+    !!savedEndpoint &&
+    savedEndpoint.provider === form.provider &&
+    savedEndpoint.api_base_url === form.api_base_url.trim();
+  const canDiscoverModels =
+    !!form.api_base_url.trim() &&
+    (!!form.api_key.trim() || matchesSavedEndpoint);
 
   function change<K extends keyof ApiForm>(key: K, value: ApiForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+    if (key !== "model_id") setDiscoveredModels([]);
     setError("");
     setNotice("");
   }
@@ -161,21 +170,42 @@ export function ApiSettings({
   }
 
   async function refreshModels() {
-    if (!editingId) return;
+    if (!canDiscoverModels) return;
     setDiscovering(true);
     setError("");
+    setNotice("");
     try {
-      const result = await api<{ items: string[]; truncated: boolean }>(
-        token,
-        `/api/v1/endpoints/${encodeURIComponent(editingId)}/models`,
-      );
+      const result =
+        matchesSavedEndpoint && !form.api_key.trim()
+          ? await api<{ items: string[]; truncated: boolean }>(
+              token,
+              `/api/v1/endpoints/${encodeURIComponent(editingId)}/models`,
+            )
+          : await api<{ items: string[]; truncated: boolean }>(
+              token,
+              "/api/v1/endpoints/models",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  provider: form.provider,
+                  api_base_url: form.api_base_url.trim(),
+                  api_key: form.api_key,
+                }),
+              },
+            );
       setDiscoveredModels(result.items);
-      setNotice(
-        result.items.length
-          ? `已读取 ${result.items.length} 个模型${result.truncated ? "（仅第一页）" : ""}；选择后请保存修改。`
-          : "端点返回空模型列表，请手动填写模型 ID。",
-      );
+      if (result.items.length === 1 && !form.model_id.trim()) {
+        change("model_id", result.items[0]);
+        setNotice(`已发现并填入模型 ${result.items[0]}。`);
+      } else if (result.items.length) {
+        setNotice(
+          `已读取 ${result.items.length} 个模型${result.truncated ? "（仅第一页）" : ""}；可从下方列表选择。`,
+        );
+      } else {
+        setNotice("端点返回空模型列表，请手动填写模型 ID。");
+      }
     } catch (exc) {
+      setDiscoveredModels([]);
       setError(exc instanceof Error ? exc.message : "无法读取模型列表");
     } finally {
       setDiscovering(false);
@@ -354,6 +384,9 @@ export function ApiSettings({
                 provider: template.provider,
                 api_base_url: template.url,
               }));
+              setDiscoveredModels([]);
+              setError("");
+              setNotice("");
             }}
           >
             <option value="">自定义 / 选择常用服务商</option>
@@ -411,39 +444,40 @@ export function ApiSettings({
               </option>
             ))}
           </select>
-          {editingId && (
+          <div className="api-model-id-row">
+            <input
+              id="api-model-id"
+              value={form.model_id}
+              placeholder="服务商提供的模型名称"
+              onChange={(event) => change("model_id", event.target.value)}
+            />
+            <button
+              className="button subtle"
+              disabled={discovering || busy || !canDiscoverModels}
+              onClick={() => void refreshModels()}
+            >
+              {discovering ? "读取中…" : "自动获取"}
+            </button>
+          </div>
+          {discoveredModels.length > 0 && (
             <div className="api-model-discovery">
-              <button
-                className="button subtle"
-                disabled={discovering || busy}
-                onClick={() => void refreshModels()}
+              <select
+                aria-label="服务商返回的模型"
+                value=""
+                onChange={(event) => change("model_id", event.target.value)}
               >
-                {discovering ? "读取中…" : "刷新服务商模型列表"}
-              </button>
-              {discoveredModels.length > 0 && (
-                <select
-                  aria-label="服务商返回的模型"
-                  value=""
-                  onChange={(event) => change("model_id", event.target.value)}
-                >
-                  <option value="">选择服务商返回的模型</option>
-                  {discoveredModels.map((model) => (
-                    <option key={model} value={model}>
-                      {model}
-                    </option>
-                  ))}
-                </select>
-              )}
+                <option value="">选择服务商返回的模型</option>
+                {discoveredModels.map((model) => (
+                  <option key={model} value={model}>
+                    {model}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
-          <input
-            id="api-model-id"
-            value={form.model_id}
-            placeholder="服务商提供的模型名称"
-            onChange={(event) => change("model_id", event.target.value)}
-          />
           <p className="api-secret-note">
-            可直接输入覆盖；刷新列表使用已保存端点的凭证，新增端点需先保存。
+            可直接输入或自动获取。新端点需填写地址和 API
+            key；编辑已保存端点且地址未变时可直接读取。
           </p>
           <label htmlFor="api-key">API key</label>
           <input

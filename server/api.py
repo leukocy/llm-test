@@ -219,6 +219,20 @@ class EndpointConfigBody(StrictSpec):
     api_key: str | None = Field(default=None, max_length=4096)
 
 
+class ModelDiscoverySubmission(StrictSpec):
+    provider: Literal["OpenAI", "Gemini", "Anthropic"]
+    api_base_url: str = Field(min_length=1, max_length=500)
+    api_key: str = Field(min_length=1, max_length=4096)  # pragma: allowlist secret
+
+    @model_validator(mode="after")
+    def validate_discovery_target(self) -> ModelDiscoverySubmission:
+        self.api_base_url = self.api_base_url.strip()
+        self.api_key = self.api_key.strip()
+        if not self.api_base_url or not self.api_key:
+            raise ValueError("API 地址和 API key 不能为空")
+        return self
+
+
 class TokenCountBody(StrictSpec):
     text: str = Field(min_length=1, max_length=10000)
     mode: Literal["local", "tiktoken", "characters"]
@@ -415,6 +429,24 @@ def create_app(settings: Settings | None = None, store: JobStore | None = None) 
             raise HTTPException(502, str(exc)) from exc
         except RuntimeError as exc:
             raise HTTPException(503, "Endpoint credential unavailable") from exc
+
+    @app.post("/api/v1/endpoints/models", dependencies=[auth])
+    async def discover_unsaved_endpoint_models(body: ModelDiscoverySubmission):
+        endpoint = Endpoint(
+            id="model-discovery",
+            label="Model discovery",
+            provider=body.provider,
+            api_base_url=body.api_base_url,
+            model_id="model-discovery",
+            api_key_env="MODEL_DISCOVERY_ONLY",  # pragma: allowlist secret
+            api_key_value=body.api_key,
+        )
+        try:
+            return await discover_models(endpoint)
+        except SSRFError as exc:
+            raise HTTPException(422, "Endpoint URL is not trusted") from exc
+        except ModelDiscoveryError as exc:
+            raise HTTPException(502, str(exc)) from exc
 
     @app.post("/api/v1/endpoints/{endpoint_id}/reference-latency", dependencies=[auth])
     async def endpoint_reference_latency(endpoint_id: str):

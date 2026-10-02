@@ -2662,11 +2662,20 @@ textarea:focus {
 }
 .tokenizer-count-actions,
 .api-model-discovery,
+.api-model-id-row,
 .log-export-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+.api-model-id-row input {
+  flex: 1;
+  min-width: 0;
+}
+.api-model-id-row .button {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .tokenizer-count-actions select {
   flex: 1;

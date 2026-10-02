@@ -197,6 +197,50 @@ def test_model_discovery_route_requires_auth_and_hides_credential(tmp_path: Path
     assert CONFIG["api_key"] not in reference.text
 
 
+def test_model_discovery_supports_unsaved_endpoint_without_persisting_credentials(
+    tmp_path: Path, monkeypatch
+):
+    client, _, _ = _platform(tmp_path)
+    observed = {}
+
+    async def fake_discovery(endpoint):
+        observed["provider"] = endpoint.provider
+        observed["base_url"] = endpoint.api_base_url
+        observed["api_key"] = endpoint.api_key()
+        return {"items": ["lab-model"], "truncated": False}
+
+    monkeypatch.setattr("server.api.discover_models", fake_discovery)
+    payload = {
+        "provider": CONFIG["provider"],
+        "api_base_url": CONFIG["api_base_url"],
+        "api_key": CONFIG["api_key"],
+    }
+    path = "/api/v1/endpoints/models"
+    assert client.post(path, json=payload).status_code == 401
+    response = client.post(path, json=payload, headers=HEADERS)
+    assert response.status_code == 200
+    assert response.json()["items"] == ["lab-model"]
+    assert CONFIG["api_key"] not in response.text
+    assert observed == {
+        "provider": CONFIG["provider"],
+        "base_url": CONFIG["api_base_url"],
+        "api_key": CONFIG["api_key"],
+    }
+    assert client.get("/api/v1/endpoints", headers=HEADERS).json()["items"] == []
+
+
+def test_unsaved_model_discovery_rejects_private_target_and_does_not_echo_key(tmp_path: Path):
+    client, _, _ = _platform(tmp_path)
+    payload = {
+        "provider": "OpenAI",
+        "api_base_url": "http://169.254.169.254/latest",
+        "api_key": CONFIG["api_key"],
+    }
+    response = client.post("/api/v1/endpoints/models", json=payload, headers=HEADERS)
+    assert response.status_code == 422
+    assert CONFIG["api_key"] not in response.text
+
+
 @pytest.mark.asyncio
 async def test_worker_reads_endpoint_added_after_settings_loaded(tmp_path: Path, monkeypatch):
     client, _, store = _platform(tmp_path)
