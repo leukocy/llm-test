@@ -49,9 +49,6 @@ export function ApiSettings({
     !!savedEndpoint &&
     savedEndpoint.provider === form.provider &&
     savedEndpoint.api_base_url === form.api_base_url.trim();
-  const canDiscoverModels =
-    !!form.api_base_url.trim() &&
-    (!!form.api_key.trim() || matchesSavedEndpoint);
 
   function change<K extends keyof ApiForm>(key: K, value: ApiForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -170,7 +167,14 @@ export function ApiSettings({
   }
 
   async function refreshModels() {
-    if (!canDiscoverModels) return;
+    if (!form.api_base_url.trim()) {
+      setError("请先填写 API Base URL。");
+      return;
+    }
+    if (!form.api_key.trim() && !matchesSavedEndpoint) {
+      setError("请先填写 API key；已保存端点且地址未变时可直接读取。");
+      return;
+    }
     setDiscovering(true);
     setError("");
     setNotice("");
@@ -453,7 +457,7 @@ export function ApiSettings({
             />
             <button
               className="button subtle"
-              disabled={discovering || busy || !canDiscoverModels}
+              disabled={discovering || busy}
               onClick={() => void refreshModels()}
             >
               {discovering ? "读取中…" : "自动获取"}
