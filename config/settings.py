@@ -44,6 +44,7 @@ MODEL_OPTIONS = [
     "stepfun-ai/Step-3.7-Flash",
     "google/gemma-4-31B-it",
     "tencent/Hy3",
+    "Qwen/Qwen3.8-27B",
 ]
 
 # --- HuggingFace Model映射 (用于自动Align) ---
@@ -76,6 +77,9 @@ HF_MODEL_MAPPING = {
     "llama": "./tokenizers/Llama-3.3-70B-Instruct",
     "mimo-v2.5": "./tokenizers/MiMo-V2.5",
     "mimo": "./tokenizers/MiMo-V2-Flash",
+    # Qwen3.8-27B:Qwen3.5 同代混合线性/全注意力架构(Qwen3_5ForConditionalGeneration)。
+    # 必须排在通用 "qwen" 之前——匹配按插入顺序取首个命中。
+    "qwen3.8": "./tokenizers/Qwen3.8-27B",
     "qwen": "./tokenizers/Qwen3-Next-80B-A3B-Instruct",
     "step-3.7": "./tokenizers/Step-3.7-Flash",
     "step-3.7-flash": "./tokenizers/Step-3.7-Flash",
@@ -102,6 +106,7 @@ TOKENIZER_SOURCES: dict[str, str | dict[str, str]] = {
     "Qwen3-Coder-480B-A35B-Instruct": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
     "Qwen3-Next-80B-A3B-Instruct": "Qwen/Qwen3-Next-80B-A3B-Instruct",
     "Qwen3-VL-32B-Instruct": "Qwen/Qwen3-VL-32B-Instruct",
+    "Qwen3.8-27B": "Qwen/Qwen3.8-27B",
     "Kimi-K2.5": "moonshotai/Kimi-K2.5",
     "Kimi-K2-Thinking": "moonshotai/Kimi-K2-Thinking",
     "Kimi-K2-Instruct-0905": "moonshotai/Kimi-K2-Instruct",

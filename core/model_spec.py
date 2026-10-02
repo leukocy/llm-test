@@ -461,6 +461,32 @@ MODEL_SPEC_REGISTRY: dict[str, ModelSpec] = {
         mtp_depth=1,
         mtp_method="Hunyuan-MTP",
     ),
+    # Qwen/Qwen3.8-27B:27B dense,Qwen3.5 同代架构(Qwen3_5ForConditionalGeneration)。
+    # 架构字段逐字取自 Qwen/Qwen3.8-27B/config.json 的 text_config。
+    # 64 层混合线性/全注意力(3 linear + 1 full 循环,full_attention_interval=4);
+    # GQA(24 q-head / 4 kv-head / head_dim 256),ctx 256K,vocab 248320;
+    # mtp_num_hidden_layers=1 → MTP 单层。官方权重 bf16(无 quantization_config)。
+    "qwen3.8": ModelSpec(
+        name="Qwen3.8-27B",
+        family="Qwen3.8",
+        architecture="dense",
+        total_params_b=27,
+        active_params_b=27,
+        num_layers=64,
+        hidden_size=5120,
+        num_attention_heads=24,
+        num_kv_heads=4,
+        head_dim=256,
+        intermediate_size=17408,
+        attention_type="gqa",
+        vocab_size=248320,
+        max_position_embeddings=262144,
+        weight_dtype="bf16",
+        kv_dtype="fp16",
+        supports_mtp=True,
+        mtp_depth=1,
+        mtp_method="Qwen3-MTP",
+    ),
 }
 
 
